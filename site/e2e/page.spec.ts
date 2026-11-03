@@ -721,14 +721,14 @@ test("a frame scrolled past holds still", async ({ page }) => {
   await expect.poll(() => heldIn(page, "hero")).toBe("false")
 })
 
-// Vercel's scripts themselves are only on Vercel, once the project has Web
-// Analytics and Speed Insights switched on; here they are missing files.
-test("the page counts its visit and its speed with Vercel's scripts, the app in it does not", async ({ page }) => {
-  const scripts = ['script[src="/_vercel/insights/script.js"]', 'script[src="/_vercel/speed-insights/script.js"]']
+// Cloudflare's counter loads only on reha.stream (src/page/analytics.ts):
+// here, as on a preview, neither the page nor the app in it adds it.
+test("the page counts no visit away from reha.stream, nor does the app in it", async ({ page }) => {
+  const beacon = 'script[src*="cloudflareinsights"]'
   await page.goto("/")
-  for (const script of scripts) await expect(page.locator(script)).toHaveCount(1)
   await expect.poll(() => sceneIn(page, "hero"), { timeout: 20_000 }).toBe("hero")
-  for (const script of scripts) await expect(frame(page, "hero").contentFrame().locator(script)).toHaveCount(0)
+  await expect(page.locator(beacon)).toHaveCount(0)
+  await expect(frame(page, "hero").contentFrame().locator(beacon)).toHaveCount(0)
 })
 
 // All of it is in the HTML as the build wrote it, for readers that run no

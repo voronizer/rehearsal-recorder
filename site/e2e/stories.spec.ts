@@ -269,13 +269,12 @@ test("the menu goes to the main page's parts from a story", async ({ page }) => 
   await expect(page.getByText("Open source, under the MIT license.")).toBeVisible()
 })
 
-// Vercel's scripts themselves are only on Vercel; here they are missing files.
-test("the new pages count their visits with Vercel's scripts", async ({ page }) => {
-  for (const path of ["/stories", MIXER]) {
+// As on the main page: Cloudflare's counter loads only on reha.stream.
+test("the new pages count no visit away from reha.stream", async ({ page }) => {
+  for (const path of ["/stories", MIXER, "/band-service"]) {
     await page.goto(path)
     await expect(page.locator('link[rel="canonical"]')).toHaveAttribute("href", `https://reha.stream${path}`)
-    await expect(page.locator('script[src="/_vercel/insights/script.js"]')).toHaveCount(1)
-    await expect(page.locator('script[src="/_vercel/speed-insights/script.js"]')).toHaveCount(1)
+    await expect(page.locator('script[src*="cloudflareinsights"]')).toHaveCount(0)
   }
 })
 

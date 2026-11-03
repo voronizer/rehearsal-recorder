@@ -3,6 +3,8 @@
 interface ImportMetaEnv {
   /** The release's tag, in a release's build; unset in a pull request's. */
   readonly VITE_SITE_VERSION?: string
+  /** The site's token in Cloudflare Web Analytics; unset, nothing is counted. */
+  readonly VITE_WEB_ANALYTICS_TOKEN?: string
 }
 
 /** CHANGELOG.md's section for the version the page is for: see vite.config.ts. */

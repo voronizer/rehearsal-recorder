@@ -1,10 +1,33 @@
-// The site's own address. A pull request's preview on Vercel, the project's
-// vercel.app address and a build on this computer load the same page, and
-// their visits are not visits to the site.
-export const SITE_HOST = "reha.stream"
+// Visits are counted by Cloudflare Web Analytics, which also measures how
+// fast the page loads for them. Only reha.stream's own visitors count: a
+// pull request's preview and a build on this computer load the same page.
+//
+// The page adds Cloudflare's script itself rather than letting Cloudflare
+// put it into every page it serves: then each frame of the app on the page
+// would count as a page view of its own. The token is the site's in
+// Cloudflare, the repository's variable WEB_ANALYTICS_TOKEN given to the
+// build (.github/actions/site); it is public by design, since every
+// visitor's browser sees it. Without one the site counts nothing.
 
-/** Vercel's analytics event as it is, on reha.stream; elsewhere null, which
- *  tells the script not to send it. */
-export function onlyOnSite<E extends { url: string }>(event: E): E | null {
-  return new URL(event.url).hostname === SITE_HOST ? event : null
+const SITE_HOST = "reha.stream"
+
+const BEACON = "https://static.cloudflareinsights.com/beacon.min.js"
+
+/** Cloudflare's script and its settings for a page at `host`, or null when
+ *  that page's visit is not counted. */
+export function beaconFor(host: string, token: string | undefined): { src: string; data: string } | null {
+  const t = token?.trim()
+  if (!t || host !== SITE_HOST) return null
+  return { src: BEACON, data: JSON.stringify({ token: t }) }
+}
+
+/** Starts counting this page's visit, on reha.stream. */
+export function countVisits(token = import.meta.env.VITE_WEB_ANALYTICS_TOKEN): void {
+  const beacon = beaconFor(location.hostname, token)
+  if (!beacon) return
+  const script = document.createElement("script")
+  script.defer = true
+  script.src = beacon.src
+  script.dataset.cfBeacon = beacon.data
+  document.head.append(script)
 }
