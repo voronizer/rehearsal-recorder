@@ -52,14 +52,14 @@ test("a change from РЭХА leaves a take the band deleted in the trash", async
 
   expect(await answer(r.put(`/api/reha/takes/${uid}`, takeMeta({ name: "Viasna 12b" })))).toEqual({
     status: 200,
-    body: { ok: true, in_trash: true },
+    body: { ok: true, in_trash: true, drift_gen: null },
   })
   // Its details are kept up to date, so it comes back as РЭХА has it.
   expect((await trash(alex)).takes).toMatchObject([{ uid, name: "Viasna 12b", by: "Ivan" }])
 
   expect(await answer(r.put(`/api/reha/takes/${uid}`, takeMeta({ name: "Viasna 12b", by_hand: true })))).toEqual({
     status: 200,
-    body: { ok: true, in_trash: false },
+    body: { ok: true, in_trash: false, drift_gen: null },
   })
   expect((await trash(alex)).takes).toEqual([])
 })
@@ -71,7 +71,7 @@ test("a take РЭХА removed comes out on any change, as before", async () => {
   expect((await r.del(`/api/reha/takes/${uid}`)).status).toBe(200)
   expect((await trash(alex)).takes).toMatchObject([{ uid, by: null }])
 
-  expect(await answer(r.put(`/api/reha/takes/${uid}`, takeMeta()))).toEqual({ status: 200, body: { ok: true, in_trash: false } })
+  expect(await answer(r.put(`/api/reha/takes/${uid}`, takeMeta()))).toEqual({ status: 200, body: { ok: true, in_trash: false, drift_gen: null } })
   expect((await trash(alex)).takes).toEqual([])
 })
 
@@ -141,7 +141,7 @@ test("a new take of a song in the trash brings the song back", async () => {
   const fresh = crypto.randomUUID()
   expect(await answer(r.put(`/api/reha/takes/${fresh}`, takeMeta({ song: "Pałyn", number: 3, name: "Pałyn 3" })))).toEqual({
     status: 200,
-    body: { ok: true, in_trash: false },
+    body: { ok: true, in_trash: false, drift_gen: null },
   })
   expect((await r.post(`/api/reha/takes/${fresh}/ready`, { gen: 1, what: "mp3" })).status).toBe(200)
   expect(await songCalled(alex, "Pałyn")).toMatchObject({ id, takes: 1 })
@@ -195,7 +195,7 @@ test("a status whose only song is in the trash goes, and the song takes the firs
   expect(await read(`/api/songs/${id}`, alex)).toMatchObject({ song: { status_id: learning.id } })
 })
 
-test("РЭХА lists its takes with what is up and whether each is in the trash", async () => {
+test("РЭХА lists its takes with what is up, whether each is in the trash, and whose tempo it has", async () => {
   const alex = await signInOwner()
   const r = await reha()
   const live = await shownTake({ number: 1, name: "Viasna 1" })
@@ -207,8 +207,8 @@ test("РЭХА lists its takes with what is up and whether each is in the trash"
   const byUid = (a: { uid: string }, b: { uid: string }) => a.uid.localeCompare(b.uid)
   expect(list.body.sort(byUid)).toEqual(
     [
-      { uid: live, trashed: false, mp3_gen: 1, flac_gen: null },
-      { uid: gone, trashed: true, mp3_gen: 1, flac_gen: null },
+      { uid: live, trashed: false, mp3_gen: 1, flac_gen: null, drift_gen: null },
+      { uid: gone, trashed: true, mp3_gen: 1, flac_gen: null, drift_gen: null },
     ].sort(byUid)
   )
 })
