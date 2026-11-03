@@ -18,10 +18,10 @@ opening.
   it. The service plays no click, so Master has no click button.
 - **Where the band drifted, in the band service.** On a computer, Master's
   row shows the click's bars and the band's tempo bar by bar, as in РЭХА's
-  player. РЭХА works the tempo out once a take's files are up and sends it
-  after them. Takes already in the service get it too: after the update,
-  РЭХА sends it for them in the background, for each take whose files are
-  still on this computer.
+  player. РЭХА works the tempo out once all of a take's files are up, the
+  FLAC files too, and sends it. Takes already in the service get it too:
+  after the update, РЭХА sends it for them in the background, for each take
+  whose files are still on this computer.
 - **M and S on one track take each other off.** **S** on a muted track turns
   its **M** off, and **M** on the soloed track turns its **S** off, in РЭХА
   and in the band service. Before, both could be on at once.

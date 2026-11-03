@@ -25,6 +25,8 @@ from rehearsal_recorder.audio.waveform import wav_peaks
 PEAKS = 1200
 
 # The signatures the service takes, as the metronome has them.
+# The most bars the service keeps for a take: an hour at 240 a minute is 3600 of 4/4.
+MAX_BARS = 20000
 SIGNATURES = ("4/4", "3/4", "2/4", "6/8")
 
 
@@ -137,29 +139,41 @@ def drift(answer):
     The band's tempo through a take as Api.take_drift answered it, the way
     the service keeps it: the times to a millisecond and the tempos to a
     hundredth, so an hour's bars stay small. None for an answer that is not
-    the take's: a count Record stopped, or one that could not read a file it
-    found.
+    the take's to keep: a count Record stopped, one that could not read the
+    take's files (they may be back later), or one the service would not take.
     """
     if not isinstance(answer, dict):
         return None
     if not answer.get("ok"):
         why = answer.get("why")
-        return {"ok": False, "why": why} if why in ("short", "no-beat", "missing") else None
-    aim = answer["aim"]
+        return {"ok": False, "why": why} if why in ("short", "no-beat") else None
 
     def tempo(t):
         return round(float(t), 2) if t is not None and math.isfinite(t) and t > 0 else None
 
-    return {
-        "ok": True,
-        "source": answer["source"],
-        "per_bar": answer["per_bar"],
-        "middle": round(float(answer["middle"]), 2),
-        "aim": {"tempo": float(aim["tempo"]), "signature": aim["signature"], "from": aim["from"],
-                "song": aim.get("song")},
-        "bars": [{"n": int(b["n"]), "start": round(float(b["start"]), 3), "end": round(float(b["end"]), 3),
-                  "tempo": tempo(b["tempo"])} for b in answer["bars"]],
-    }
+    def time(t):
+        t = float(t)
+        if not math.isfinite(t) or t < 0:
+            raise ValueError(t)
+        return round(t, 3)
+
+    try:
+        aim = answer["aim"]
+        middle, aimed = float(answer["middle"]), float(aim["tempo"])
+        bars = answer["bars"]
+        if not (math.isfinite(middle) and middle > 0 and math.isfinite(aimed) and aimed > 0) or len(bars) > MAX_BARS:
+            return None
+        return {
+            "ok": True,
+            "source": answer["source"],
+            "per_bar": answer["per_bar"],
+            "middle": round(middle, 2),
+            "aim": {"tempo": aimed, "signature": aim["signature"], "from": aim["from"], "song": aim.get("song")},
+            "bars": [{"n": int(b["n"]), "start": time(b["start"]), "end": time(b["end"]), "tempo": tempo(b["tempo"])}
+                     for b in bars],
+        }
+    except (KeyError, TypeError, ValueError, OverflowError):
+        return None
 
 
 def make(item, dst):

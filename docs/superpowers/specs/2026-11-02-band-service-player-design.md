@@ -283,9 +283,15 @@ the pictures change.
   `drift_gen` is sent no tempo.
 - **Takes sent before.** The hourly list says `drift_gen` too. A take whose
   MP3s are up for the generation РЭХА has, and whose tempo is not, is owed:
-  РЭХА sends its details again and then its tempo, in the background, one
-  take at a time, with no line in the sending list. While a take is being
-  recorded nothing is counted; it waits.
+  in the background, one take at a time, with no line in the sending list,
+  РЭХА sends its details again, as they were last sent with the click and
+  the notes' icons added (so the band's levels there stay), and then its
+  tempo. A take taken out or changed meanwhile is left to its own pass.
+  While a take is being recorded nothing is counted; it waits.
+- **What is not sent.** A count that could not read the files sends
+  nothing, and the take is asked for again an hour later. A tempo the
+  service turns down leaves the take up, and is not sent again in that
+  run. A new click, song or song's tempo in the details counts it again.
 - **The service.** A take keeps `meter`, `drift` and `drift_gen`
   (migration 0005). The take's page gives `drift` only when it is for the
   generation it shows. Master's lane shows when the take's click is known;

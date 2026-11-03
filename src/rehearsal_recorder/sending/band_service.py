@@ -115,8 +115,12 @@ class BandService:
         # before РЭХА counted it there. Each gets it on its own, with no line
         # in the list, once nothing else is waiting.
         self._owed = set()
+        # (take, generation) whose tempo the service turned down: not sent
+        # again in this run, unless the take changes.
+        self._drift_refused = set()
         self._active = None
-        # Files are being made: the names pass waits, since it moves folders.
+        # Files are being made, or a take's WAVs read for its tempo: the
+        # names pass waits, since it moves folders.
         self.making = False
         self._closing_anyway = False
         self._thread = None
@@ -303,6 +307,7 @@ class BandService:
                 "removed": True, "due": False, "error": None, "sent": None,
                 "mp3_gen": None, "flac_gen": None, "by_hand": False})
             entry = self._entries.pop(take_id, None)
+            self._owed.discard(take_id)
         if entry is not None:
             entry.discard()
         if row is None:
@@ -475,6 +480,8 @@ class BandService:
             entries, self._entries = list(self._entries.values()), {}
             self._later.clear()
             self._refused.clear()
+            self._owed.clear()
+            self._drift_refused.clear()
         for entry in entries:
             entry.discard()
         self._lib.drop_all_service_files()
@@ -503,6 +510,8 @@ class BandService:
             self._edits.clear()
             self._later.clear()
             self._refused.clear()
+            self._owed.clear()
+            self._drift_refused.clear()
         for entry in entries:
             entry.discard()
         shutil.rmtree(staging_root(), ignore_errors=True)
@@ -677,9 +686,10 @@ class BandService:
                         "mp3_gen": t.get("mp3_gen"), "flac_gen": t.get("flac_gen")})
                 self._line(row["take_id"], row["folder"], row["take_number"])
             elif ("drift_gen" in t and t.get("drift_gen") != row["gen"] and t.get("mp3_gen") == row["gen"]
-                  and not row["due"]):
-                # Up from before РЭХА sent the band's tempo. A service that
-                # does not say which it has is not asked to keep it.
+                  and not row["due"] and (row["take_id"], row["gen"]) not in self._drift_refused):
+                # Up from before РЭХА sent the band's tempo, or its count
+                # could not read the files last time. A service that does
+                # not say which it has is not asked to keep it.
                 self._owed.add(row["take_id"])
 
     def _delete(self, d):
@@ -801,8 +811,17 @@ class BandService:
                         lambda done: f"FLAC: {min(done, flacs)} of {flacs}", ".flac")
             client.ready(uid, gen, "flac")
             lib.change_service_row(take_id, lambda r: {"flac_gen": gen})
-        if isinstance(answer, dict) and "drift_gen" in answer and answer["drift_gen"] != gen:
-            self._send_drift(client, take_id, uid, gen, folder, number, entry)
+        # Counted again for a new click, song or song's tempo: what the line
+        # is measured against has moved.
+        sent = row["sent"] or {}
+        moved = any(sent.get(k) != meta.get(k) for k in ("meter", "song", "tempo"))
+        if isinstance(answer, dict) and "drift_gen" in answer and (answer["drift_gen"] != gen or moved):
+            try:
+                self._send_drift(client, take_id, uid, gen, folder, number, entry)
+            except (_Changed, _Paused, Offline):
+                raise
+            except Exception as e:  # noqa: BLE001 - the band can play the take all the same
+                print(f"The tempo of a take could not be sent to the band service: {e}", file=sys.stderr)
         self._owed.discard(take_id)
 
         with self._lock:
@@ -834,7 +853,9 @@ class BandService:
         which keeps its last answers, so a take just played is not counted
         again). It goes once the take's files are up, so the band hears the
         take without waiting for the count. Record stops the count, and the
-        take waits for the pass after the recording.
+        take waits for the pass after the recording. A count that could not
+        read the files sends nothing. One the service turns down is left out
+        for the rest of the run.
         """
         self._check(take_id, gen)
         take = self._lib.take(folder, number)
@@ -842,38 +863,59 @@ class BandService:
             raise _Changed()
         if entry is not None:
             entry.start(COUNTING_STEP)
-        answer = self.api.take_drift(take.get("tracks"), take.get("notes"), {
-            "tempo": take.get("tempo"), "signature": take.get("signature"),
-            "click": take.get("click") is True, "song": take.get("song")})
+        self.making = True
+        try:
+            answer = self.api.take_drift(take.get("tracks"), take.get("notes"), {
+                "tempo": take.get("tempo"), "signature": take.get("signature"),
+                "click": take.get("click") is True, "song": take.get("song")})
+        finally:
+            self.making = False
         if isinstance(answer, dict) and answer.get("why") == "recording":
             raise _Paused()
         kept = service_files.drift(answer)
-        if kept is not None:
+        if kept is None:
+            return
+        # A crop while it was counted: the count is the old files'.
+        self._check(take_id, gen)
+        try:
             client.put_drift(uid, gen, kept)
+        except Refused as e:
+            self._drift_refused.add((take_id, gen))
+            print(f"The band service turned down the tempo of a take: {e.words}", file=sys.stderr)
 
     def _catch_up(self, row):
         """
-        A take that went up before РЭХА sent the band's tempo gets it now,
-        with its details again, which bring its click and its notes' icons.
-        No line in the list: nothing the band waits for is held up, and
-        nothing they would need to do comes of it. No internet tries again
-        later; anything else leaves the take as it is.
+        A take that went up before РЭХА sent the band's tempo gets it now.
+        Its details go first, once: as they were last sent, with its click
+        and its notes' icons added, so the levels the band hears it at in the
+        service stay as they were. No line in the list: nothing the band
+        waits for is held up, and nothing they would need to do comes of it.
+        No internet tries again later. A take taken out, changed or due again
+        meanwhile is left to its own pass. A count that could not read the
+        files sends nothing, and the next look at the service, an hour on,
+        brings the take back here.
         """
-        take_id = row["take_id"]
+        take_id, gen = row["take_id"], row["gen"]
         try:
-            if not self._keyed():
+            row = self._check(take_id, gen)
+            if (row["due"] or row["error"] or row["mp3_gen"] != gen
+                    or row["uid"] in {d["uid"] for d in self._lib.service_deletes()}):
                 raise _Changed()
             take = self._lib.take(row["folder"], row["take_number"])
             if take is None:
                 raise _Changed()
-            # Nothing to move: the service shows this generation already.
-            meta = self._details(take, row["folder"], row["gen"], 0)
             client = self._client()
-            answer = client.put_take(row["uid"], {**meta, "by_hand": False})
-            if isinstance(answer, dict) and answer.get("in_trash"):
-                self._taken_out(take_id)
-            elif isinstance(answer, dict) and "drift_gen" in answer and answer["drift_gen"] != row["gen"]:
-                self._send_drift(client, take_id, row["uid"], row["gen"], row["folder"], row["take_number"])
+            sent = row["sent"]
+            if sent is not None and "meter" not in sent:
+                fresh = self._details(take, row["folder"], gen, 0)
+                # Nothing to move: the service shows this generation already.
+                details = {**sent, "cut_start": 0, "meter": fresh["meter"], "notes": fresh["notes"]}
+                answer = client.put_take(row["uid"], {**details, "by_hand": False})
+                self._lib.change_service_row(take_id, lambda r: {"sent": details} if r["gen"] == gen else {})
+                if isinstance(answer, dict) and answer.get("in_trash"):
+                    self._taken_out(take_id)
+                    raise _Changed()
+            self._send_drift(client, take_id, row["uid"], gen, row["folder"], row["take_number"])
             self._owed.discard(take_id)
         except _Paused:
             pass  # after the recording

@@ -808,8 +808,9 @@ they are not played; on a phone its row has the MIDI sign.
 
 On a computer, Master's row also shows where the band drifted, as in РЭХА
 (see [Where the band drifted](#where-the-band-drifted)), with the click's
-bars behind the line. РЭХА works the tempo out once a take's files are up and
-sends it after them, so the line comes a little after the take. For takes
+bars behind the line. РЭХА works the tempo out once all of a take's files are
+up, the FLAC files too, so the line can come a while after the band can play
+the take. For takes
 already in the service before you updated РЭХА, it does the same in the
 background, one take at a time; a take whose files are no longer on this
 computer gets no line. The service marks drift past 2%: **Drift shown past**

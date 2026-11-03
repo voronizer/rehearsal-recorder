@@ -184,7 +184,7 @@ export type Drift =
       aim: { tempo: number; signature: "4/4" | "3/4" | "2/4" | "6/8"; from: "click" | "take" | "song" | "middle"; song: string | null }
       bars: DriftBar[]
     }
-  | { ok: false; why: "short" | "no-beat" | "missing" }
+  | { ok: false; why: "short" | "no-beat" }
 
 export const rehearsal = sqliteTable("rehearsal", {
   uid: text("uid").primaryKey(),

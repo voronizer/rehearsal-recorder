@@ -9,8 +9,8 @@ export const Meter = z
   .openapi("Meter")
 
 /** The band's tempo through a take, bar by bar, as РЭХА counts it
- *  (take_drift, audio/drift.py), or why there is none: too short, no steady
- *  beat, or its files were not on РЭХА's disk. */
+ *  (take_drift, audio/drift.py), or why there is none: too short, or no
+ *  steady beat. */
 export const Drift = z
   .discriminatedUnion("ok", [
     z.object({
@@ -29,7 +29,7 @@ export const Drift = z
         .array(z.object({ n: z.int().min(1), start: z.number().min(0), end: z.number().min(0), tempo: z.number().positive().nullable() }))
         .max(20000),
     }),
-    z.object({ ok: z.literal(false), why: z.enum(["short", "no-beat", "missing"]) }),
+    z.object({ ok: z.literal(false), why: z.enum(["short", "no-beat"]) }),
   ])
   .openapi("Drift")
 

@@ -81,6 +81,8 @@ class FakeBandService:
         self.forget_after_parts = None
         # (status, words) every call is refused with, until set back to None.
         self.refuse = None
+        # (status, words) a take's tempo is refused with, until set back to None.
+        self.refuse_drift = None
         # Every call answered 426, until set back to False.
         self.too_old = False
         # Called with the call's words ("part <uid> <name> <n>") just before
@@ -219,6 +221,10 @@ class FakeBandService:
             return 200, {"ok": True, "in_trash": bool(stays), **gen}
         if method == "PUT" and rest == ["drift"] and self.keeps_tempo:
             data = json.loads(body)
+            if self.refuse_drift is not None:
+                self._said(f"refused drift {uid}")
+                status, words = self.refuse_drift
+                return status, {"error": words}
             with self._lock:
                 if uid not in self.takes:
                     return 404, {"error": "No such take"}
