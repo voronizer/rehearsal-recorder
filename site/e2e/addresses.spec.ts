@@ -1,11 +1,10 @@
+import { MAC_ZIP, WINDOWS_ZIP } from "../src/page/links.ts"
 import { test, expect } from "./fixtures.ts"
 
 // What reha.stream answers for each kind of address, as Cloudflare's own
 // local server answers it from wrangler.jsonc and the build's _redirects and
 // _headers. Each request stops at the first answer, so a redirect is seen
 // as itself.
-
-const ZIPS = "https://github.com/voronizer/rehearsal-recorder/releases/latest/download"
 
 const first = { maxRedirects: 0 }
 
@@ -15,16 +14,17 @@ test("the page and every page of stories answer at their own addresses", async (
   }
 })
 
+// The same zips the page's download buttons give.
 test("the short links send you to the latest zips on GitHub", async ({ request }) => {
   for (const [path, zip] of [
-    ["/mac", "RehearsalRecorder-macos.zip"],
-    ["/mac/", "RehearsalRecorder-macos.zip"],
-    ["/windows", "RehearsalRecorder-windows.zip"],
-    ["/windows/", "RehearsalRecorder-windows.zip"],
+    ["/mac", MAC_ZIP],
+    ["/mac/", MAC_ZIP],
+    ["/windows", WINDOWS_ZIP],
+    ["/windows/", WINDOWS_ZIP],
   ]) {
     const answer = await request.get(path, first)
     expect(answer.status(), path).toBe(307)
-    expect(answer.headers()["location"], path).toBe(`${ZIPS}/${zip}`)
+    expect(answer.headers()["location"], path).toBe(zip)
   }
 })
 

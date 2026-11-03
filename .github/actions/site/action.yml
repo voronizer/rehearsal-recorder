@@ -50,6 +50,13 @@ runs:
         VERSION: ${{ inputs.version }}
       run: echo "VITE_SITE_VERSION=$VERSION" >> "$GITHUB_ENV"
 
+    # A release's site without the token would go up counting nothing, and
+    # it would only show weeks later as no visits at all.
+    - name: Counter's token, in a release
+      if: inputs.version != '' && inputs.analytics-token == ''
+      shell: bash
+      run: echo "::warning::The repository variable WEB_ANALYTICS_TOKEN is not set, so reha.stream will count no visits."
+
     # For the build, which puts it into the page's counter, and for the
     # tests, which check the counter carries it on reha.stream
     # (site/e2e/count.spec.ts). Cloudflare's tokens are letters and digits;

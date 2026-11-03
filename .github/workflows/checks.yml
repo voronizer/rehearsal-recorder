@@ -425,6 +425,12 @@ jobs:
         with:
           node-version: "26"
 
+      # Wrangler and what it needs come from npm and run their own
+      # install scripts, so they are put in here, before any step that
+      # holds the Cloudflare token.
+      - name: Install wrangler
+        run: npm install --global --no-audit --no-fund "wrangler@$(cat site/wrangler-version)"
+
       - name: Deploy
         id: deploy
         working-directory: site
@@ -434,17 +440,16 @@ jobs:
           WRANGLER_SEND_METRICS: "false"
           PR: ${{ github.event.pull_request.number }}
         run: |
-          wrangler="wrangler@$(cat wrangler-version)"
-          npx --yes "$wrangler" deploy --env preview
+          wrangler deploy --env preview
           WRANGLER_OUTPUT_FILE_PATH="$RUNNER_TEMP/wrangler.ndjson" \
-            npx --yes "$wrangler" versions upload --env preview --preview-alias "pr-$PR"
+            wrangler versions upload --env preview --preview-alias "pr-$PR"
           url=$(node -e '
           const lines = require("fs").readFileSync(process.argv[1], "utf8").split("\n").filter(Boolean)
           const upload = lines.map((l) => JSON.parse(l)).find((e) => e.type === "version-upload")
           console.log(upload?.preview_alias_url ?? "")
           ' "$RUNNER_TEMP/wrangler.ndjson")
           if [ -z "$url" ]; then
-            echo "::error::Cloudflare gave the preview no address: the Cloudflare account has no workers.dev subdomain yet."
+            echo "::error::Cloudflare gave the preview no address. Check that the Cloudflare account has a workers.dev subdomain, and that Preview URLs are on for the Worker reha-stream-preview."
             exit 1
           fi
           echo "url=$url" >> "$GITHUB_OUTPUT"

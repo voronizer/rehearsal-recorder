@@ -278,6 +278,11 @@ jobs:
         with:
           node-version: "26"
 
+      # As in a pull request's preview: wrangler's own install scripts run
+      # here, before the step that holds the Cloudflare token.
+      - name: Install wrangler
+        run: npm install --global --no-audit --no-fund "wrangler@$(cat site/wrangler-version)"
+
       - name: Deploy
         working-directory: site
         env:
@@ -290,7 +295,7 @@ jobs:
             echo "::error::Deploying needs the repository secret CLOUDFLARE_API_TOKEN (and CLOUDFLARE_ACCOUNT_ID)."
             exit 1
           fi
-          npx --yes "wrangler@$(cat wrangler-version)" deploy --env=""
+          wrangler deploy --env=""
           echo "Deployed $TAG to https://reha.stream"
           echo "The site for $TAG is at https://reha.stream" >> "$GITHUB_STEP_SUMMARY"
 
