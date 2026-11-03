@@ -1,5 +1,6 @@
 /// <reference types="vitest/config" />
 import { defineConfig } from "vite"
+import { configDefaults } from "vitest/config"
 import react from "@vitejs/plugin-react"
 import tailwindcss from "@tailwindcss/vite"
 
@@ -20,9 +21,11 @@ export default defineConfig({
 
   // `npm test`: the files beside the code that need no browser, and the
   // design check's own (scripts/). The ones that need a browser are e2e/,
-  // under Playwright.
+  // under Playwright. The seam check's own tests call Python, which the
+  // interface's machines do not have: they run in .github/workflows/bridge.yml.
   test: {
     include: ["src/**/*.test.ts", "scripts/**/*.test.mjs"],
+    exclude: [...configDefaults.exclude, "scripts/bridge-check.test.mjs"],
   },
 
   // Development only (`npm run dev`, with `python3 -m rehearsal_recorder --dev`

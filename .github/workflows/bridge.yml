@@ -1,0 +1,61 @@
+# The seam between РЭХА's Python and its interface, on a pull request that
+# changes either side of it.
+#
+# The interface lists every call it may make of Python in ui/src/lib/api.ts.
+# Python answers them from the class Api in src/rehearsal_recorder/api.py,
+# and the interface's tests talk to a stand-in for it, ui/e2e/fake-bridge.js.
+# ui/scripts/bridge-check.mjs reads all three and fails on a listed call
+# that Python or the stand-in lacks, or a call of the stand-in's the list
+# lacks, naming each. It compares names only: what each call takes and
+# gives back is left to each side's own tests. Seconds, on one machine.
+#
+# One of five workflows, one for each part: Reha, Interface, Site, Service
+# and this one.
+
+name: Bridge
+
+on:
+  pull_request:
+    paths:
+      - src/rehearsal_recorder/api.py
+      - ui/src/lib/api.ts
+      - ui/e2e/fake-bridge.js
+      - ui/scripts/bridge-check.mjs
+      - ui/scripts/bridge-check.test.mjs
+      - .github/workflows/bridge.yml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: bridge-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  bridge:
+    name: bridge
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: ui
+    steps:
+      - uses: actions/checkout@v7
+
+      # Python reads its own file (ast), and Node the other two. Nothing is
+      # installed: the check uses what both come with.
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "26"
+
+      # The check's own tests, with Node's test runner: one of them calls
+      # Python, which the interface's machines do not have.
+      - name: The check's tests
+        run: node --test scripts/bridge-check.test.mjs
+
+      - name: Bridge check
+        run: npm run bridge-check
