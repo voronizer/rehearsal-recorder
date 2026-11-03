@@ -6,7 +6,7 @@
 // The version is the latest release's: every build on GitHub asks which one
 // that is (site.yml). A block marked for a newer version is left out
 // (markdown.ts), unless VITE_SITE_ALL_BLOCKS is 1, as in a pull request's
-// preview of the site after the next release.
+// test of the site after the next release.
 import changelog from "virtual:changelog"
 import { displayVersion, latestNews, latestVersion } from "./changelog"
 import type { PageFile } from "./files"

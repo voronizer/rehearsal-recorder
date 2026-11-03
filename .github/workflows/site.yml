@@ -13,7 +13,9 @@
 # Not after a merge that changes only ui/ or CHANGELOG.md: nearly every
 # merge does, and each would put the site up with an interface ahead of the
 # release people download. The next release puts them up. In a fork
-# nothing goes up: reha.stream is this repository's.
+# nothing goes up, since reha.stream is this repository's, and nothing runs
+# but a pull request's checks: a band that keeps a fork for its own band
+# service has no use for the site's tests after each Sync fork.
 #
 # Every build asks GitHub which release is the latest, and takes the
 # version and the news line from it (CHANGELOG.md). A block in site/content/
@@ -26,9 +28,8 @@
 #                         built and tested
 #   site · after release  the same with every block in, when one waits for
 #                         a version newer than the latest release
-#   site · preview        that build on Cloudflare at an address of its own,
-#                         only when site/, the build action or this file
-#                         changes (Alex, 2026-10-11)
+# Nothing from a pull request goes to Cloudflare (Alex, 2026-11-03): to see
+# the site before a merge, build it on a computer (CONTRIBUTING.md).
 
 name: Site
 
@@ -65,22 +66,19 @@ concurrency:
 jobs:
   # The latest release, which Playwright the site has (the site's jobs run
   # in Playwright's image for that version, and a job's image has to be
-  # known before the job starts), whether a block waits for a newer
-  # version, and whether a pull request gets a preview.
+  # known before the job starts), and whether a block waits for a newer
+  # version. In a fork, only on a pull request; every job after this one
+  # waits for it.
   which:
     name: which release
+    if: github.event_name == 'pull_request' || github.repository == 'voronizer/rehearsal-recorder'
     runs-on: ubuntu-latest
     outputs:
       tag: ${{ steps.release.outputs.tag }}
       playwright: ${{ steps.release.outputs.playwright }}
       waiting: ${{ steps.release.outputs.waiting }}
-      preview: ${{ steps.release.outputs.preview }}
     steps:
-      # Two commits: on a pull request, the merge and main under it, so the
-      # pull request's own changes are the difference between them.
       - uses: actions/checkout@v7
-        with:
-          fetch-depth: 2
 
       - uses: actions/setup-node@v7
         with:
@@ -94,7 +92,6 @@ jobs:
         id: release
         env:
           GH_TOKEN: ${{ github.token }}
-          EVENT: ${{ github.event_name }}
         run: |
           tag=$(gh release list --repo "$GITHUB_REPOSITORY" --exclude-drafts --exclude-pre-releases \
             --limit 100 --json tagName,isLatest --jq '.[] | select(.isLatest) | .tagName')
@@ -104,13 +101,8 @@ jobs:
             exit 1
           fi
           waiting=$(node site/scripts/waiting.mjs "$tag")
-          preview=false
-          if [ "$EVENT" = pull_request ] &&
-            git diff --name-only --no-renames HEAD^1 HEAD | grep -qE '^(site/|\.github/actions/site/|\.github/workflows/site\.yml$)'; then
-            preview=true
-          fi
-          echo "The latest release is ${tag:-not there}; Playwright $v; a block waits: $waiting; preview: $preview."
-          { echo "tag=$tag"; echo "playwright=$v"; echo "waiting=$waiting"; echo "preview=$preview"; } >> "$GITHUB_OUTPUT"
+          echo "The latest release is ${tag:-not there}; Playwright $v; a block waits: $waiting."
+          { echo "tag=$tag"; echo "playwright=$v"; echo "waiting=$waiting"; } >> "$GITHUB_OUTPUT"
 
   # The site as it goes up: the latest release's version, the blocks that
   # wait for a newer one left out. On a pull request, what goes up after
@@ -174,97 +166,24 @@ jobs:
           path: site/playwright-report/
           if-no-files-found: ignore
 
-  # A pull request's build as a preview on Cloudflare, never reha.stream:
-  # the Worker reha-stream-preview (the environment "preview" in
-  # site/wrangler.jsonc), which has no address of its own. Each pull request
-  # gets a version of it at an address of its own,
-  # pr-<number>-reha-stream-preview.<the account's subdomain>.workers.dev,
-  # open to anyone with the link; the pull request shows it as "View
-  # deployment". It is the site after the next release: site · after
-  # release's build when a block waits, site's otherwise. Every wrangler
-  # command here says --env preview, so nothing in a pull request reaches
-  # the site's own Worker. The first deploy makes the preview Worker and
-  # turns its version addresses on; later ones only make it the pull
-  # request's build, which nobody sees there.
-  #
-  # Only a pull request that changes the site itself gets one (Alex,
-  # 2026-10-11). Secrets reach a pull request only from a branch of this
-  # repository, so one from a fork or from Dependabot is built and tested
-  # and gets no preview; nor does one inside a fork, whose Cloudflare
-  # account has no reha-stream-preview. It needs the repository secrets
-  # CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID, as the deploy does.
-  preview:
-    name: site · preview
-    needs: [which, site, site-all]
-    if: >-
-      !cancelled() &&
-      github.event_name == 'pull_request' &&
-      github.repository == 'voronizer/rehearsal-recorder' &&
-      github.event.pull_request.head.repo.full_name == github.repository &&
-      github.actor != 'dependabot[bot]' &&
-      needs.which.outputs.preview == 'true' &&
-      needs.site.result == 'success' &&
-      (needs.site-all.result == 'success' || needs.site-all.result == 'skipped')
-    runs-on: ubuntu-latest
-    environment:
-      name: preview
-      url: ${{ steps.deploy.outputs.url }}
-    steps:
-      - uses: actions/download-artifact@v8
-        with:
-          name: ${{ needs.which.outputs.waiting == 'true' && 'site-all' || 'site' }}
-          path: site
-
-      - uses: actions/setup-node@v7
-        with:
-          node-version: "26"
-
-      # Wrangler and what it needs come from npm and run their own
-      # install scripts, so they are put in here, before any step that
-      # holds the Cloudflare token.
-      - name: Install wrangler
-        run: npm install --global --no-audit --no-fund "wrangler@$(cat site/wrangler-version)"
-
-      - name: Deploy
-        id: deploy
-        working-directory: site
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          WRANGLER_SEND_METRICS: "false"
-          PR: ${{ github.event.pull_request.number }}
-        run: |
-          wrangler deploy --env preview
-          WRANGLER_OUTPUT_FILE_PATH="$RUNNER_TEMP/wrangler.ndjson" \
-            wrangler versions upload --env preview --preview-alias "pr-$PR"
-          url=$(node -e '
-          const lines = require("fs").readFileSync(process.argv[1], "utf8").split("\n").filter(Boolean)
-          const upload = lines.map((l) => JSON.parse(l)).find((e) => e.type === "version-upload")
-          console.log(upload?.preview_alias_url ?? "")
-          ' "$RUNNER_TEMP/wrangler.ndjson")
-          if [ -z "$url" ]; then
-            echo "::error::Cloudflare gave the preview no address. Check that the Cloudflare account has a workers.dev subdomain, and that Preview URLs are on for the Worker reha-stream-preview."
-            exit 1
-          fi
-          echo "url=$url" >> "$GITHUB_OUTPUT"
-          echo "This pull request's site is at $url" >> "$GITHUB_STEP_SUMMARY"
-
   # The one place anything goes to reha.stream: the Worker reha-stream on
   # the owner's Cloudflare account (site/wrangler.jsonc), made of the files
   # the site job laid out, from main only, and only in this repository: a
-  # band's fork runs this workflow too, and reha.stream is not theirs. Cloudflare serves them as they
-  # are; the short links /mac and /windows and a year's cache for the
-  # build's hashed files are the build's _redirects and _headers. The
-  # deploy keeps reha.stream on the Worker. Cloudflare gives a name to a
-  # Worker only while no DNS record of its own holds it: 0.21.0's first
-  # deploy stopped on the old record for Vercel, which was deleted by hand.
+  # band's fork runs this workflow too, and reha.stream is not theirs.
+  # Cloudflare serves them as they are; the short links /mac and /windows
+  # and a year's cache for the build's hashed files are the build's
+  # _redirects and _headers. The deploy keeps reha.stream on the Worker.
+  # Cloudflare gives a name to a Worker only while no DNS record of its own
+  # holds it: 0.21.0's first deploy stopped on the old record for Vercel,
+  # which was deleted by hand.
   # www.reha.stream is not here: a redirect rule in Cloudflare sends it to
   # reha.stream.
   #
-  # --env="" names the site's own Worker out loud; the environment
-  # "preview" is pull requests'. It needs the repository secrets
-  # CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID, the band service's too.
-  # The page counts visits with Cloudflare Web Analytics (see
+  # It needs the secrets CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID,
+  # kept in the environment "production", which only main may use: no
+  # other branch's workflow can read them. The site's token is its own,
+  # with no rights to the band service's database and files. The page
+  # counts visits with Cloudflare Web Analytics (see
   # site/src/page/analytics.ts). One deploy at a time, and none is cut
   # short.
   deploy:
@@ -291,8 +210,9 @@ jobs:
         with:
           node-version: "26"
 
-      # As in a pull request's preview: wrangler's own install scripts run
-      # here, before the step that holds the Cloudflare token.
+      # Wrangler and what it needs come from npm and run their own install
+      # scripts, so they are put in here, before the step that holds the
+      # Cloudflare token.
       - name: Install wrangler
         run: npm install --global --no-audit --no-fund "wrangler@$(cat site/wrangler-version)"
 
@@ -305,9 +225,9 @@ jobs:
           TAG: ${{ needs.which.outputs.tag }}
         run: |
           if [ -z "$CLOUDFLARE_API_TOKEN" ]; then
-            echo "::error::Deploying needs the repository secret CLOUDFLARE_API_TOKEN (and CLOUDFLARE_ACCOUNT_ID)."
+            echo "::error::Deploying needs the secret CLOUDFLARE_API_TOKEN (and CLOUDFLARE_ACCOUNT_ID), in the environment production or the repository."
             exit 1
           fi
-          wrangler deploy --env=""
+          wrangler deploy
           echo "Deployed the site for ${TAG:-the newest version in CHANGELOG.md} to https://reha.stream"
           echo "The site for ${TAG:-the newest version in CHANGELOG.md} is at https://reha.stream" >> "$GITHUB_STEP_SUMMARY"

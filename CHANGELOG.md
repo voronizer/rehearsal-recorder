@@ -5,6 +5,20 @@ versioning](https://semver.org/): until 1.0 the shape of things can still
 move, though recordings on disk are never left behind — old rehearsals keep
 opening.
 
+## Unreleased
+
+- **A band's own service is set up on GitHub alone.** Whoever runs one for
+  their band now puts all its settings in their fork's settings on GitHub:
+  the owner's address, the address letters come from, both Cloudflare
+  tokens and the Telegram bot. The service makes its sign-in secret by
+  itself, and nothing is typed into Cloudflare's settings for the Worker any
+  more. When putting the service up fails, the run says which setting or
+  which tick on the token is missing. The steps are in the band service's
+  README.
+- **The band service sends at most 5 codes an hour to one address.**
+  Someone who knows a member's address can no longer fill their inbox with
+  codes, or try codes until one fits.
+
 ## 0.21.0
 
 - **Delete takes and songs in the band service.** ⋯ › **Delete take** is on

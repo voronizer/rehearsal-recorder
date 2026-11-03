@@ -1,9 +1,9 @@
 # The website, reha.stream (site/ in this repository), built and tested,
 # and laid out as the files that go up to Cloudflare, left as an artifact
 # (`site` unless said otherwise). Every build of it is site.yml's: a pull
-# request's, and the one before each deploy. Only that file's deploy job and
-# a pull request's preview put it on Cloudflare. The job checks out first,
-# and uploads the Playwright report itself if a step fails.
+# request's, and the one before each deploy. Only that file's deploy job
+# puts it on Cloudflare. The job checks out first, and uploads the
+# Playwright report itself if a step fails.
 #
 # The picture a chat shows for a link to the site, og.png, is drawn here
 # from the build (npm run og, after the build and before the tests), so it
@@ -53,8 +53,8 @@ runs:
         fi
         echo "VITE_SITE_VERSION=$VERSION" >> "$GITHUB_ENV"
 
-    # A pull request's preview shows the site as it will be after the next
-    # release: the blocks that wait for it are in.
+    # The site as it will be after the next release, for a pull request's
+    # test of it: the blocks that wait for it are in.
     - name: Every block
       if: inputs.all-blocks == 'true'
       shell: bash

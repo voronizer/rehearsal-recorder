@@ -6,8 +6,8 @@
 #
 # It goes up by itself after a merge into main that changes service/, ui/
 # (its pages draw with the interface's components) or this file, once its
-# checks pass. By hand, Actions -> Service -> Run workflow puts up the
-# branch picked, main unless another is. A band running its own copy does
+# checks pass. By hand, Actions -> Service -> Run workflow puts main up; on
+# another branch it only runs the checks. A band running its own copy does
 # the same in their fork (service/README.md, step 7), or presses Sync fork,
 # which puts the newer service up by itself once their Cloudflare token is
 # set. Being main's, the service is always ahead of any РЭХА that sends to
@@ -124,24 +124,17 @@ jobs:
           path: service/playwright-report/
           if-no-files-found: ignore
 
-  # The service on the owner's Cloudflare account, after its checks.
-  # service/scripts/deploy.mjs does the work: it makes the database, the
-  # bucket and the queue the first time, applies the migrations not applied
-  # yet and puts the Worker up. A migration is never undone: it only adds
-  # tables and columns, so the Worker before keeps working in the moments
-  # before the new one is up. It needs the repository secrets
-  # CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID, and the repository
-  # variable SERVICE_DOMAIN for the band's own address; without the token it
-  # says the service is not set up and succeeds, so a fork that does not
-  # run one stays green. One deploy at a time, and none is cut short.
-  deploy:
-    name: service · deploy
+  # The pages and the Worker as they go up, from main only, after the
+  # checks. Built on a machine of its own that never holds the Cloudflare
+  # token: the build runs hundreds of packages from npm, and a bad one could
+  # otherwise read the token. Left as the artifact service-build, with the
+  # version of wrangler in service/package-lock.json for the deploy, which
+  # installs nothing else.
+  build:
+    name: service · build
     needs: service
-    if: github.event_name != 'pull_request'
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
-    concurrency:
-      group: reha-band
-      cancel-in-progress: false
     steps:
       - uses: actions/checkout@v7
 
@@ -159,10 +152,84 @@ jobs:
           (cd ../ui && npm ci)
           npm ci
 
+      - name: Build
+        working-directory: service
+        run: |
+          npm run build
+          node -e '
+          const v = require("./package-lock.json").packages["node_modules/wrangler"]?.version ?? ""
+          if (!/^\d+\.\d+\.\d+$/.test(v)) { console.log("::error::No version of wrangler in service/package-lock.json."); process.exit(1) }
+          require("fs").writeFileSync("dist/wrangler-version", v + "\n")
+          '
+
+      # The build has files whose names start with a dot (.assetsignore):
+      # they go too.
+      - uses: actions/upload-artifact@v7
+        with:
+          name: service-build
+          path: service/dist/
+          include-hidden-files: true
+          if-no-files-found: error
+
+  # The service on the owner's Cloudflare account, from the build above.
+  # service/scripts/deploy.mjs does the work: it makes the database, the
+  # bucket and the queue the first time, applies the migrations not applied
+  # yet and puts the Worker up with its settings. A migration is never
+  # undone: it only adds tables and columns, so the Worker before keeps
+  # working in the moments before the new one is up. One deploy at a time,
+  # and none is cut short.
+  #
+  # It reads, from the repository's settings on GitHub: the secrets
+  # CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID, and the variable
+  # SERVICE_DOMAIN for the band's own address; the Worker's own settings,
+  # the variables OWNER_EMAIL and LETTERS_FROM and the secrets
+  # CF_ADDRESSES_TOKEN, TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID and
+  # OWNER_TELEGRAM_ID, each where it is set (service/README.md, step 6).
+  # Without the token it says the service is not set up and succeeds, so a
+  # fork that does not run one stays green.
+  #
+  # The environment "service" can hold the secrets instead of the
+  # repository, with a rule that only main may use them; then no other
+  # branch's workflow can read the token. In a fork that has no such
+  # environment, GitHub makes an empty one, and the repository's secrets
+  # are used.
+  deploy:
+    name: service · deploy
+    needs: build
+    runs-on: ubuntu-latest
+    environment: service
+    concurrency:
+      group: reha-band
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/download-artifact@v8
+        with:
+          name: service-build
+          path: service/dist
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "26"
+
+      # Wrangler and what it needs come from npm and run their own install
+      # scripts, so they are put in here, before the step that holds the
+      # Cloudflare token.
+      - name: Install wrangler
+        run: npm install --global --no-audit --no-fund "wrangler@$(cat service/dist/wrangler-version)"
+
       - name: Deploy
         working-directory: service
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           SERVICE_DOMAIN: ${{ vars.SERVICE_DOMAIN }}
-        run: npm run deploy
+          OWNER_EMAIL: ${{ vars.OWNER_EMAIL }}
+          LETTERS_FROM: ${{ vars.LETTERS_FROM }}
+          CF_ADDRESSES_TOKEN: ${{ secrets.CF_ADDRESSES_TOKEN }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          OWNER_TELEGRAM_ID: ${{ secrets.OWNER_TELEGRAM_ID }}
+          WRANGLER_SEND_METRICS: "false"
+        run: node scripts/deploy.mjs

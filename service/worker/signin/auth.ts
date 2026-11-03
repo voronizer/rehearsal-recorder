@@ -3,10 +3,11 @@ import { betterAuth, type BetterAuthOptions } from "better-auth"
 import { drizzleAdapter } from "better-auth/adapters/drizzle"
 import { APIError, createAuthMiddleware } from "better-auth/api"
 import { admin, emailOTP } from "better-auth/plugins"
-import { database } from "../shared/db"
+import { database, type Database } from "../shared/db"
 import type { Bindings } from "../shared/env"
 import * as schema from "../shared/schema"
 import { NO_TOKEN, NoAddressToken, type AddressList } from "./addresses"
+import { TOO_MANY_CODES, mayAskCode } from "./code-asks"
 import type { Letters } from "./letters"
 
 export type Parts = { letters: Letters; addresses: AddressList }
@@ -24,15 +25,18 @@ export const normaliseEmail = (s: string) => s.trim().toLowerCase()
 type HookContext = Parameters<Parameters<typeof createAuthMiddleware>[0]>[0]
 
 /**
- * Before a code is made: the owner's first request makes the owner, a
- * removed member gets the answer a member gets and no letter, and an
- * address Cloudflare has not had confirmed is put on its list again, so
- * Cloudflare sends its own letter again. An address not in the band goes
- * on to better-auth, which answers the same and sends nothing.
+ * Before a code is made: an address that asked for 5 codes this hour gets
+ * no more, whether or not it is in the band. Then the owner's first request
+ * makes the owner, a removed member gets the answer a member gets and no
+ * letter, and an address Cloudflare has not had confirmed is put on its
+ * list again, so Cloudflare sends its own letter again. An address not in
+ * the band goes on to better-auth, which answers the same and sends
+ * nothing.
  */
-async function beforeCode(ctx: HookContext, ownerEmail: string, addresses: AddressList) {
+async function beforeCode(ctx: HookContext, ownerEmail: string, addresses: AddressList, db: Database) {
   const email = normaliseEmail(String(ctx.body?.email ?? ""))
   const goOn = { context: { body: { ...ctx.body, email } } }
+  if (!(await mayAskCode(db, email))) throw new APIError("TOO_MANY_REQUESTS", { code: "TOO_MANY_CODES", message: TOO_MANY_CODES })
   const adapter = ctx.context.internalAdapter
   const found = await adapter.findUserByEmail(email)
   if (!found) {
@@ -57,13 +61,13 @@ async function beforeCode(ctx: HookContext, ownerEmail: string, addresses: Addre
  * members already in the band (no sign-up), a session of a year from the
  * last visit, the owner as its admin, and РЭХА's keys.
  */
-export function authOptions(origin: string, env: Pick<Bindings, "BETTER_AUTH_SECRET" | "OWNER_EMAIL">, parts: Parts, db: unknown) {
+export function authOptions(origin: string, env: Pick<Bindings, "BETTER_AUTH_SECRET" | "OWNER_EMAIL">, parts: Parts, db: Database) {
   const host = new URL(origin).host
   return {
     baseURL: origin,
     basePath: "/api/auth",
     secret: env.BETTER_AUTH_SECRET,
-    database: drizzleAdapter(db as never, { provider: "sqlite", schema }),
+    database: drizzleAdapter(db, { provider: "sqlite", schema }),
     session: { expiresIn: 365 * DAY, updateAge: DAY },
     // A Worker keeps nothing between requests, so the tries are counted in D1.
     rateLimit: { enabled: true, storage: "database" },
@@ -76,7 +80,7 @@ export function authOptions(origin: string, env: Pick<Bindings, "BETTER_AUTH_SEC
       // What sendVerificationOTP throws, better-auth only logs, so who gets a
       // code is settled here.
       before: createAuthMiddleware(async (ctx) => {
-        if (ctx.path === "/email-otp/send-verification-otp") return beforeCode(ctx, env.OWNER_EMAIL, parts.addresses)
+        if (ctx.path === "/email-otp/send-verification-otp") return beforeCode(ctx, env.OWNER_EMAIL, parts.addresses, db)
         if (ctx.path === "/sign-in/email-otp" && typeof ctx.body?.email === "string")
           return { context: { body: { ...ctx.body, email: normaliseEmail(ctx.body.email) } } }
       }),

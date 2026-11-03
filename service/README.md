@@ -51,79 +51,63 @@ that comes to about $3 a month. The domain you pay for to whoever sells it.
    left and turn it on. Cloudflare asks for a card or PayPal first, even
    though the first 10 GB are free. Without R2 the service cannot be put
    up.
-5. Make the token that puts the service up. A token is a long password for
-   one job, and Cloudflare shows it only once, so have step 6 open in
-   another tab. On the **Account API Tokens** page, press **Create Token**
-   and pick the template **Edit Cloudflare Workers**. Press the pencil on
-   the policy for your account and tick **Edit** for **D1** and for
-   **Queues**, which the template lacks. Leave the rest as it is, **No
-   expiration** too: a token that runs out would one day stop the service
-   being put up, with no warning. Press **Review token**, then **Create
-   token**, and copy the token. Cloudflare also shows an Access Key ID, a
-   Secret Access Key and an S3 endpoint; the service needs none of them.
+5. Make the two tokens. A token is a long password for one job, and
+   Cloudflare shows it only once, so have step 6 open in another tab.
+
+   The first token puts the service up. On the **Account API Tokens**
+   page, press **Create Token** and pick the template **Edit Cloudflare
+   Workers**. Press the pencil on the policy for your account and tick
+   **Edit** for **D1** and for **Queues**, which the template lacks. Leave
+   the rest as it is, **No expiration** too: a token that runs out would
+   one day stop the service being put up, with no warning. Press **Review
+   token**, then **Create token**, and copy the token. Cloudflare also
+   shows an Access Key ID, a Secret Access Key and an S3 endpoint; the
+   service needs none of them.
+
+   The second token lets the service keep Cloudflare's list of addresses
+   it may send letters to, and nothing else. Press **Create Token** again,
+   this time without a template, and give it one policy for your account:
+   **Email Routing Addresses** set to **Edit**.
 6. In your fork on GitHub, open **Settings › Secrets and variables ›
-   Actions**. Press **New repository secret** and add
-   `CLOUDFLARE_API_TOKEN`, the token, then `CLOUDFLARE_ACCOUNT_ID`, your
-   account's id
-   ([where Cloudflare shows it](https://developers.cloudflare.com/fundamentals/account/find-account-and-zone-ids/)).
-   To have the service at an address on your domain, such as
-   band.example.com, open the **Variables** tab, press **New repository
-   variable** and add that address as `SERVICE_DOMAIN`. It must be a
-   variable: the job does not look for it among the secrets. Without it
-   the service answers on workers.dev.
+   Actions**. Everything the service needs from you goes here. A secret
+   is hidden once saved; a variable stays readable, so you can check it
+   later.
+
+   Press **New repository secret** for each of these:
+   - `CLOUDFLARE_API_TOKEN`: the first token.
+   - `CLOUDFLARE_ACCOUNT_ID`: your account's id
+     ([where Cloudflare shows it](https://developers.cloudflare.com/fundamentals/account/find-account-and-zone-ids/)).
+   - `CF_ADDRESSES_TOKEN`: the second token.
+
+   Then open the **Variables** tab and press **New repository variable**
+   for each of these:
+   - `OWNER_EMAIL`: your own address. Whoever signs in with it is the
+     owner: they add the band's members and make keys for РЭХА on
+     **Members**.
+   - `LETTERS_FROM`: the address the letters come from, on your domain,
+     such as band@example.com.
+   - `SERVICE_DOMAIN`, if you want the service at an address on your
+     domain, such as band.example.com. Without it the service answers on
+     workers.dev.
+
+   The secret that signs the band's sign-ins is made by the service
+   itself, the first time it goes up.
 7. Put the service up: in your fork, open **Actions**. GitHub keeps a
    fork's workflows off until you press **I understand my workflows, go
    ahead and enable them**. Then pick **Service**, press **Run workflow**,
    leave the branch on `main` and press **Run workflow** again. When the
-   run turns green, the service is up.
-8. Give the service its settings in Cloudflare. First make a second token,
-   which lets the service keep Cloudflare's list of addresses it may send
-   letters to, and nothing else: on **Account API Tokens**, press **Create
-   Token** without a template and give it one policy for your account,
-   **Email Routing Addresses** set to **Edit**. Then open **Workers &
-   Pages**, then **reha-band**, then **Settings › Variables and Secrets**,
-   and add each of these as a secret:
-   - `OWNER_EMAIL`: your own address. Whoever signs in with it is the owner:
-     they add the band's members and make keys for РЭХА on **Members**.
-   - `LETTERS_FROM`: the address the letters come from, on your domain,
-     such as band@example.com.
-   - `BETTER_AUTH_SECRET`: 40 or so random letters and digits that nobody
-     ever types. It signs the band's sign-ins. On a Mac,
-     `openssl rand -hex 20` in Terminal makes one.
-   - `CF_ACCOUNT_ID`: your account's id again.
-   - `CF_ADDRESSES_TOKEN`: the second token.
-
-   Cloudflare then asks you to update your Wrangler configuration. There is
-   nothing to do: a deploy keeps these settings.
-9. This step is for the band's group in Telegram; skip it if you have
-   none. Write `/newbot` to @BotFather and give the bot a name and a
-   username that ends in `bot`; BotFather answers with the bot's token.
-   Add the bot to the group: tap the group's name, then **Add Members**,
-   and find the bot by its username. The group then says the bot “has no
-   access to messages”, which is right: it only writes there. In the
-   group, send `/start@` with the bot's username, such as
-   `/start@band_reha_bot`. A plain /start never reaches a bot that does
-   not read the group. Write the bot anything in a chat of its own too.
-   Then open `https://api.telegram.org/bot<the token>/getUpdates` in a
-   browser: each chat's id is the number after `"chat":{"id":`. The
-   group's id starts with a minus: copy it with the minus. Add three
-   more secrets: `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`, the group's id,
-   and `OWNER_TELEGRAM_ID`, your own. When something on the server fails,
-   the bot tells you alone.
-
-   That page's address holds the bot's token, so never share a picture of
-   it. If you did, `/revoke` in BotFather gives the bot a new token and
-   stops the old one.
-10. Open the service's address. Type your own address and press **Send
-    code**. The first time, Cloudflare sends a letter of its own: press
-    **Verify email address** in it, then **Send code** again. Type the six
-    digits from the service's letter, and tell it what the band should
-    call you. If no letter comes within a minute, press **Send code** once
-    more.
-11. On **Members**, press **Add member** for each of the band's addresses.
-    Cloudflare sends each of them its letter; once they have pressed the
-    button in it, they sign in the same way, with their own address.
-12. On **Members**, under **Keys for РЭХА**, type where the laptop lives,
+   run turns green, the service is up. If it turns red, open the run: the
+   red step says which setting or which tick on the token is missing.
+8. Open the service's address. Type your own address and press **Send
+   code**. The first time, Cloudflare sends a letter of its own: press
+   **Verify email address** in it, then **Send code** again. Type the six
+   digits from the service's letter, and tell it what the band should
+   call you. If no letter comes within a minute, press **Send code** once
+   more.
+9. On **Members**, press **Add member** for each of the band's addresses.
+   Cloudflare sends each of them its letter; once they have pressed the
+   button in it, they sign in the same way, with their own address.
+10. On **Members**, under **Keys for РЭХА**, type where the laptop lives,
     such as “Rehearsal room”, press **Make a key for РЭХА** and copy the
     key: it is shown only once. In РЭХА, open **Settings › Folders**, press
     **I have a band service key**, paste it and press **Connect**.
@@ -134,6 +118,35 @@ folder whenever you like.
 
 For a newer service later, press **Sync fork** on your fork's page. If no
 **Service** run starts by itself under **Actions**, run it as in step 7.
+
+To change a setting, change it on GitHub and run **Service** again. A
+setting you typed into the Worker in Cloudflare before stays as it is
+until you set the same one on GitHub; then GitHub's wins.
+
+### The band's group in Telegram
+
+The service can tell the band's group in Telegram about new takes, marks
+and comments, and tell you alone when something on the server fails. Skip
+this if you have no group.
+
+1. Write `/newbot` to @BotFather and give the bot a name and a username
+   that ends in `bot`; BotFather answers with the bot's token.
+2. Add the bot to the group: tap the group's name, then **Add Members**,
+   and find the bot by its username. The group then says the bot “has no
+   access to messages”, which is right: it only writes there.
+3. In the group, send `/start@` with the bot's username, such as
+   `/start@band_reha_bot`. A plain /start never reaches a bot that does
+   not read the group. Write the bot anything in a chat of its own too.
+4. Open `https://api.telegram.org/bot<the token>/getUpdates` in a
+   browser: each chat's id is the number after `"chat":{"id":`. The
+   group's id starts with a minus: copy it with the minus. That page's
+   address holds the bot's token, so never share a picture of it. If you
+   did, `/revoke` in BotFather gives the bot a new token and stops the
+   old one.
+5. In your fork's **Settings › Secrets and variables › Actions**, add
+   three secrets: `TELEGRAM_BOT_TOKEN`, the bot's token;
+   `TELEGRAM_CHAT_ID`, the group's id; and `OWNER_TELEGRAM_ID`, your own.
+   Then run **Service** again, as in step 7.
 
 ## Working on it
 
@@ -160,35 +173,52 @@ The pages use the interface's components and React from `../ui`, so run
 ## Going live
 
 A merge into main that changes `service/` or `ui/` (the pages draw with the
-interface's components) puts the service up, once its checks pass, in the
-job `service · deploy` (`.github/workflows/service.yml`), so the service
-is always main's. By hand, **Run workflow** under
-**Actions › Service** puts up the branch picked. The job runs `npm run
-deploy`, which is `scripts/deploy.mjs`:
+interface's components) puts the service up, once its checks pass
+(`.github/workflows/service.yml`), so the service is always main's. By
+hand, **Run workflow** under **Actions › Service** puts main up; on another
+branch it only runs the checks.
+
+Two jobs do it. `service · build` builds the pages and the Worker into
+`dist/` on a machine that never holds the Cloudflare token, since the build
+runs hundreds of packages from npm. `service · deploy` installs wrangler
+alone and runs `scripts/deploy.mjs` on that build:
 
 1. It finds the database `reha-band`, the bucket `reha-band` and the queue
    `reha-band-chat` on the account, and makes any that is missing.
 2. It writes the database's id, and the address when there is one, into
-   `wrangler.jsonc`. Only in the job's own copy: the file here keeps
+   the build's `dist/reha_band/wrangler.json`. `wrangler.jsonc` here keeps
    `local`.
-3. It builds the pages and the Worker, applies the migrations D1 has not
-   had yet, and puts the Worker up.
+3. It applies the migrations D1 has not had yet, and puts the Worker up
+   with the settings the repository has. When the Worker has no
+   `BETTER_AUTH_SECRET`, it makes one; one the Worker has is never
+   replaced, since a new one would sign the whole band out.
 
-The job needs, in the repository's settings on GitHub:
+When Cloudflare refuses a step, the job's error says which tick the token
+most likely lacks. On a computer, `npm run deploy` builds and then does the
+same, with the same settings in the shell's environment.
+
+The job reads, from the repository's settings on GitHub:
 
 - the secret `CLOUDFLARE_API_TOKEN`: a Cloudflare token that may edit
   Workers, D1, R2, Queues and the domain's Workers routes;
 - the secret `CLOUDFLARE_ACCOUNT_ID`, when the token reaches more than one
-  account;
+  account. It also goes to the Worker as `CF_ACCOUNT_ID`;
 - the variable `SERVICE_DOMAIN`, the band's address, such as
   `band.reha.stream`. With it the Worker answers there, and its workers.dev
-  address is turned off; without it, the Worker answers at workers.dev.
+  address is turned off; without it, the Worker answers at workers.dev;
+- the Worker's own settings, each where it is set: the variables
+  `OWNER_EMAIL` and `LETTERS_FROM`, and the secrets `CF_ADDRESSES_TOKEN`,
+  `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID` and `OWNER_TELEGRAM_ID`. They go
+  up with the Worker as its secrets. One the repository lacks stays as the
+  Worker has it, so settings typed into Cloudflare's dashboard still count.
 
 Without the token the job says the service is not set up, and the run stays
 green.
 
-The Worker's own settings (its address, owner, sender, bot) are set on the
-Worker in Cloudflare. A deploy keeps them as they are (`keep_vars`).
+The secrets can live in the environment `service` instead of the
+repository (**Settings › Environments** on GitHub), with **Deployment
+branches** set to `main` alone. Then a workflow on any other branch cannot
+read the token. reha.stream's own repository keeps them there.
 
 To change a table, change `worker/shared/schema.ts` and run `npm run
 migrations`; the schema and the new migration go in one commit. D1 has no

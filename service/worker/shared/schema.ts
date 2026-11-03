@@ -348,6 +348,17 @@ export const chat = sqliteTable("chat", {
   startedAt: text("started_at").notNull(),
 })
 
+/**
+ * How many sign-in codes each address asked for in the hour from `since`
+ * (milliseconds): 5 at most (signin/code-asks.ts). Any address typed in is
+ * counted, in the band or not, so the answer tells nobody which are.
+ */
+export const codeAsk = sqliteTable("code_ask", {
+  email: text("email").primaryKey(),
+  since: integer("since").notNull(),
+  count: integer("count").notNull(),
+})
+
 /** When the owner was last told of a failure of each route or job. */
 export const failureNotice = sqliteTable("failure_notice", {
   what: text("what").primaryKey(),

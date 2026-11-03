@@ -8,8 +8,8 @@ describe("beaconFor", () => {
       data: '{"token":"abc123"}',
     })
   })
-  it("counts nothing on a preview, the www address or a local build", () => {
-    expect(beaconFor("pr-12-reha-stream-preview.example.workers.dev", "abc123")).toBeNull()
+  it("counts nothing on workers.dev, the www address or a local build", () => {
+    expect(beaconFor("reha-stream.example.workers.dev", "abc123")).toBeNull()
     expect(beaconFor("www.reha.stream", "abc123")).toBeNull()
     expect(beaconFor("127.0.0.1", "abc123")).toBeNull()
     expect(beaconFor("localhost", "abc123")).toBeNull()

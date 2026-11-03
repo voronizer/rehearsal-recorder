@@ -1,60 +1,87 @@
-// Puts the band service up on the owner's Cloudflare account: the release's
-// `service · deploy` job runs it in service/, as `npm run deploy`.
+// Puts the band service up on the owner's Cloudflare account. In service.yml
+// the job `service · deploy` runs it in service/, with the pages and the
+// Worker already built into dist/ by `service · build` and wrangler alone
+// installed. On a computer, `npm run deploy` builds first.
 //
 // It needs CLOUDFLARE_API_TOKEN, and CLOUDFLARE_ACCOUNT_ID when the token
 // reaches more than one account; SERVICE_DOMAIN, when set, is the band's
 // address (such as band.example.com). Without a token it says so and
-// stops, so a release made before the service is set up is not red.
+// stops, so a fork that runs no service stays green.
+//
+// The Worker's settings come from the repository too, where it has them
+// (service/README.md, step 6): OWNER_EMAIL and LETTERS_FROM, the second
+// token CF_ADDRESSES_TOKEN, the bot's TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID
+// and OWNER_TELEGRAM_ID, and CF_ACCOUNT_ID, which is CLOUDFLARE_ACCOUNT_ID.
+// They go up with the Worker as its secrets. A setting the repository lacks
+// stays as the Worker has it, so one typed into Cloudflare's dashboard
+// still counts. BETTER_AUTH_SECRET, which signs the band's sign-ins, is
+// made here once, when the Worker has none; after that it is never
+// touched, since a new one would sign the whole band out.
 //
 // In order: the database, the bucket and the queue are found, or made when
-// there are none; the database's id and the address are written into
-// wrangler.jsonc (in the job's checkout only, never committed); the pages
-// and the Worker are built; the migrations not applied yet are applied; and
-// the Worker goes up. The Worker's own settings (its address, owner, sender,
-// bot) are set in Cloudflare and kept through a deploy by `keep_vars`.
+// there are none; the database's id and the address are written into the
+// build's wrangler.json; the migrations not applied yet are applied; and
+// the Worker goes up with its settings. When Cloudflare refuses a step, the
+// job says which tick the token most likely lacks.
 
 import { spawnSync } from "node:child_process"
-import { readFileSync, writeFileSync } from "node:fs"
+import { randomBytes } from "node:crypto"
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs"
+import { tmpdir } from "node:os"
+import { join } from "node:path"
 import { pathToFileURL } from "node:url"
 
 const DATABASE = "reha-band"
 const BUCKET = "reha-band"
 const QUEUE = "reha-band-chat"
-const CONFIG = "wrangler.jsonc"
+/** What `vite build` writes for the Worker: wrangler.jsonc as it goes up. */
+export const BUILT = "dist/reha_band/wrangler.json"
 
-/** wrangler.jsonc read as JSON: its comments left out, strings kept whole. */
-export function readConfig(text) {
-  let out = ""
-  for (let i = 0; i < text.length; i++) {
-    const ch = text[i]
-    if (ch === '"') {
-      const start = i
-      for (i++; i < text.length && text[i] !== '"'; i++) if (text[i] === "\\") i++
-      out += text.slice(start, i + 1)
-    } else if (ch === "/" && text[i + 1] === "/") {
-      while (i < text.length && text[i] !== "\n") i++
-      out += "\n"
-    } else if (ch === "/" && text[i + 1] === "*") {
-      i = text.indexOf("*/", i + 2) + 1
-      if (i === 0) throw new Error(`${CONFIG}: a comment is not closed`)
-    } else {
-      out += ch
-    }
-  }
-  return JSON.parse(out)
+/** The settings the repository may hold, each as the Worker names it. */
+const FROM_REPOSITORY = {
+  OWNER_EMAIL: "OWNER_EMAIL",
+  LETTERS_FROM: "LETTERS_FROM",
+  CF_ACCOUNT_ID: "CLOUDFLARE_ACCOUNT_ID",
+  CF_ADDRESSES_TOKEN: "CF_ADDRESSES_TOKEN",
+  TELEGRAM_BOT_TOKEN: "TELEGRAM_BOT_TOKEN",
+  TELEGRAM_CHAT_ID: "TELEGRAM_CHAT_ID",
+  OWNER_TELEGRAM_ID: "OWNER_TELEGRAM_ID",
 }
 
-/** Runs wrangler (or npm) and fails the job with it when it fails. */
-function run(command, args, { quiet = false } = {}) {
-  const done = spawnSync(command, args, {
+const ADDRESS = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+const CHAT = /^-?\d+$/
+/** What each setting must look like, and an example of one that does. */
+const SHAPES = {
+  OWNER_EMAIL: [ADDRESS, "an address alone, like you@example.com"],
+  LETTERS_FROM: [ADDRESS, "an address alone, like band@example.com"],
+  TELEGRAM_CHAT_ID: [CHAT, "a number, like -1001234567890"],
+  OWNER_TELEGRAM_ID: [CHAT, "a number, like 123456789"],
+}
+
+const STEP_5 = "service/README.md, step 5"
+const HINTS = {
+  token: `Cloudflare refused the token. Check that CLOUDFLARE_API_TOKEN holds the whole token, and that the token has Edit for D1 (${STEP_5}).`,
+  bucket: `Cloudflare did not make the bucket ${BUCKET}. Either R2 is not on for the account (service/README.md, step 4), or the token lacks Edit for Workers R2 Storage (${STEP_5}).`,
+  queue: `Cloudflare did not make the queue ${QUEUE}. The token needs Edit for Queues (${STEP_5}).`,
+  migrations: `The database's tables were not brought up to date. The token needs Edit for D1 (${STEP_5}).`,
+  settings: `Cloudflare did not show the Worker's settings. The token needs Edit for Workers Scripts (${STEP_5}).`,
+  deploy: `The Worker did not go up. The token needs Edit for Workers Scripts, and for an address of your own, Workers Routes on its domain (${STEP_5}).`,
+}
+
+/** Stops the job with `message`, as GitHub shows an error. */
+function stop(message) {
+  console.log(`::error::${message}`)
+  process.exit(1)
+}
+
+/** Runs wrangler and stops the job with `hint` when it fails. */
+function run(args, { quiet = false, hint } = {}) {
+  const done = spawnSync("wrangler", args, {
     stdio: ["ignore", quiet ? "pipe" : "inherit", "inherit"],
     encoding: "utf8",
   })
   if (done.error) throw done.error
-  if (done.status !== 0) {
-    console.log(`::error::${command} ${args.join(" ")} failed`)
-    process.exit(done.status ?? 1)
-  }
+  if (done.status !== 0) stop(hint ?? `wrangler ${args.join(" ")} failed`)
   return done.stdout ?? ""
 }
 
@@ -63,24 +90,55 @@ function exists(args) {
   return spawnSync("wrangler", args, { stdio: ["ignore", "ignore", "ignore"] }).status === 0
 }
 
-/** The D1 databases on the account. Wrangler can print a warning before
- *  the list, so the list is read from its first line that opens one. */
-function databases() {
-  const out = run("wrangler", ["d1", "list", "--json"], { quiet: true })
+/** The list wrangler printed as JSON, after any warning it printed first. */
+function listIn(out, what) {
   const start = out.search(/^\[/m)
-  if (start < 0) throw new Error("wrangler d1 list --json printed no list")
+  if (start < 0) throw new Error(`wrangler printed no list of ${what}`)
   return JSON.parse(out.slice(start, out.lastIndexOf("]") + 1))
 }
+
+const databases = () => listIn(run(["d1", "list", "--json"], { quiet: true, hint: HINTS.token }), "databases")
 
 function databaseId() {
   let found = databases().find((db) => db.name === DATABASE)
   if (!found) {
     console.log(`Making the database ${DATABASE}.`)
-    run("wrangler", ["d1", "create", DATABASE])
+    run(["d1", "create", DATABASE], { hint: HINTS.token })
     found = databases().find((db) => db.name === DATABASE)
     if (!found) throw new Error(`${DATABASE} was made but is not in the list`)
   }
   return found.uuid
+}
+
+/**
+ * The names of the Worker's secrets, or none for a Worker not made yet.
+ * Anything else stops the job: guessing "none" would make a new
+ * BETTER_AUTH_SECRET and sign the band out.
+ */
+function workerSecrets(name) {
+  const done = spawnSync("wrangler", ["secret", "list", "--name", name, "--config", BUILT], {
+    stdio: ["ignore", "pipe", "pipe"],
+    encoding: "utf8",
+  })
+  if (done.error) throw done.error
+  if (done.status === 0) return listIn(done.stdout, "secrets").map((s) => s.name)
+  const said = `${done.stdout ?? ""}${done.stderr ?? ""}`
+  process.stderr.write(said)
+  if (/Worker "[^"]+".* not found\./.test(said)) return []
+  stop(HINTS.settings)
+}
+
+/** The settings found in the repository, checked; stops at one that cannot be right. */
+export function repositorySettings(env) {
+  const settings = {}
+  for (const [name, from] of Object.entries(FROM_REPOSITORY)) {
+    const value = (env[from] ?? "").trim()
+    if (!value) continue
+    const shape = SHAPES[name]
+    if (shape && !shape[0].test(value)) stop(`${name} should be ${shape[1]}. Check it in the repository's settings on GitHub.`)
+    settings[name] = value
+  }
+  return settings
 }
 
 function main() {
@@ -91,34 +149,49 @@ function main() {
     return
   }
   const domain = (process.env.SERVICE_DOMAIN ?? "").trim()
-  if (domain && !/^[a-z0-9-]+(\.[a-z0-9-]+)+$/i.test(domain)) {
-    console.log(`::error::SERVICE_DOMAIN should be an address alone, like band.example.com, not ${domain}`)
-    process.exit(1)
-  }
+  if (domain && !/^[a-z0-9-]+(\.[a-z0-9-]+)+$/i.test(domain))
+    stop(`SERVICE_DOMAIN should be an address alone, like band.example.com, not ${domain}`)
+  if (!existsSync(BUILT)) stop(`There is no build to put up: ${BUILT} is missing. Run npm run build first.`)
+  const settings = repositorySettings(process.env)
 
   const id = databaseId()
   if (!exists(["r2", "bucket", "info", BUCKET])) {
     console.log(`Making the bucket ${BUCKET}.`)
-    run("wrangler", ["r2", "bucket", "create", BUCKET])
+    run(["r2", "bucket", "create", BUCKET], { hint: HINTS.bucket })
   }
   if (!exists(["queues", "info", QUEUE])) {
     console.log(`Making the queue ${QUEUE}.`)
-    run("wrangler", ["queues", "create", QUEUE])
+    run(["queues", "create", QUEUE], { hint: HINTS.queue })
   }
 
-  const config = readConfig(readFileSync(CONFIG, "utf8"))
+  const config = JSON.parse(readFileSync(BUILT, "utf8"))
   for (const db of config.d1_databases) if (db.database_name === DATABASE) db.database_id = id
   if (domain) {
     // One address for the band: a key carries it, and so does every letter.
     config.routes = [{ pattern: domain, custom_domain: true }]
     config.workers_dev = false
   }
-  writeFileSync(CONFIG, `// Written by scripts/deploy.mjs for this deploy.\n${JSON.stringify(config, null, 2)}\n`)
+  writeFileSync(BUILT, JSON.stringify(config, null, 2) + "\n")
 
-  run("npm", ["run", "build"])
+  if (!workerSecrets(config.name).includes("BETTER_AUTH_SECRET")) {
+    settings.BETTER_AUTH_SECRET = randomBytes(20).toString("hex")
+    console.log("The Worker has no BETTER_AUTH_SECRET yet: one was made for it.")
+  }
+  const names = Object.keys(settings)
+  console.log(names.length ? `Settings going up with the Worker: ${names.join(", ")}.` : "No settings from the repository.")
+
   // The migrations not applied yet, as D1's own d1_migrations table says.
-  run("wrangler", ["d1", "migrations", "apply", DATABASE, "--remote", "--config", CONFIG])
-  run("wrangler", ["deploy"])
+  run(["d1", "migrations", "apply", DATABASE, "--remote", "--config", BUILT], { hint: HINTS.migrations })
+
+  // The settings go in a file only this user can read, gone after the deploy.
+  const dir = mkdtempSync(join(tmpdir(), "reha-band-"))
+  const file = join(dir, "settings.json")
+  try {
+    writeFileSync(file, JSON.stringify(settings), { mode: 0o600 })
+    run(["deploy", "--config", BUILT, ...(names.length ? ["--secrets-file", file] : [])], { hint: HINTS.deploy })
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
+  }
   console.log(domain ? `The band service is up at https://${domain}` : "The band service is up on workers.dev.")
 }
 

@@ -18,6 +18,7 @@ import {
 } from "./helpers"
 
 const CONFIRM_FIRST = "First confirm your address: look for a letter from Cloudflare, then press Send code again"
+const TOO_MANY_CODES = "Too many codes for this address. Wait an hour, then press Send code again."
 const MINUTE = 60 * 1000
 const DAY = 24 * 60 * MINUTE
 
@@ -224,4 +225,60 @@ test("better-auth's own routes for keys, admin and passwords are not open", asyn
     }
   expect(await (await call("/api/keys", {}, owner)).json()).toEqual([])
   expect(await userRow("vera@example.com")).toMatchObject({ role: "user" })
+})
+
+test("an address gets 5 codes an hour, then waits for the hour to end", async () => {
+  vi.useFakeTimers({ toFake: ["Date"] })
+  const start = new Date("2026-11-03T12:00:00Z")
+  vi.setSystemTime(start)
+  const owner = await signInOwner()
+  expect((await post("/api/members", { email: "vik@example.com" }, owner)).status).toBe(200)
+  await confirm("vik@example.com")
+  const sentToVik = async () => (await letters()).filter((l) => l.to === "vik@example.com").length
+  const before = await sentToVik()
+
+  for (let i = 0; i < 5; i++) expect((await sendCode("vik@example.com")).status).toBe(200)
+  const sixth = await sendCode(" VIK@example.com ")
+  expect(sixth.status).toBe(429)
+  expect(await sixth.json()).toMatchObject({ code: "TOO_MANY_CODES", message: TOO_MANY_CODES })
+  expect(await sentToVik()).toBe(before + 5)
+
+  vi.setSystemTime(new Date(start.getTime() + 59 * MINUTE))
+  expect((await sendCode("vik@example.com")).status).toBe(429)
+  vi.setSystemTime(new Date(start.getTime() + 61 * MINUTE))
+  expect((await sendCode("vik@example.com")).status).toBe(200)
+  expect(await sentToVik()).toBe(before + 6)
+})
+
+test("an address not in the band is counted the same, so the answer gives nothing away", async () => {
+  for (let i = 0; i < 5; i++) {
+    const res = await sendCode("stranger@example.com")
+    expect(res.status).toBe(200)
+    expect(await res.json()).toEqual({ success: true })
+  }
+  const sixth = await sendCode("stranger@example.com")
+  expect(sixth.status).toBe(429)
+  expect(await sixth.json()).toMatchObject({ code: "TOO_MANY_CODES", message: TOO_MANY_CODES })
+  expect((await letters()).filter((l) => l.to === "stranger@example.com")).toEqual([])
+})
+
+test("the daily run forgets the counts whose hour is over", async () => {
+  vi.useFakeTimers({ toFake: ["Date"] })
+  const start = new Date("2026-11-03T12:00:00Z")
+  vi.setSystemTime(start)
+  await sendCode("old@example.com")
+  vi.setSystemTime(new Date(start.getTime() + 30 * MINUTE))
+  await sendCode("new@example.com")
+  vi.setSystemTime(new Date(start.getTime() + 61 * MINUTE))
+  const { default: worker } = await import("../worker/index")
+  await worker.scheduled({ cron: "17 4 * * *" } as never, env as never)
+  const kept = await env.DB.prepare("SELECT email FROM code_ask ORDER BY email").all<{ email: string }>()
+  expect(kept.results.map((r) => r.email)).toEqual(["new@example.com"])
+})
+
+test("every answer from the Worker says its files are what their type says", async () => {
+  expect((await call("/api/band")).headers.get("X-Content-Type-Options")).toBe("nosniff")
+  expect((await me()).headers.get("X-Content-Type-Options")).toBe("nosniff")
+  expect((await sendCode("nobody@example.com")).headers.get("X-Content-Type-Options")).toBe("nosniff")
+  expect((await call("/files/band/picture")).headers.get("X-Content-Type-Options")).toBe("nosniff")
 })
