@@ -67,9 +67,9 @@ request that touches `site/`, `ui/` or `CHANGELOG.md` builds it and runs its
 tests, so a change to the interface can break it.
 
 The stories' pages are written whole at build time, so `npm run dev` shows
-only the main page; build and preview to see a story. A new story also needs
-its name in the route in `site/vercel-config.json`, or reha.stream answers
-404 for it.
+only the main page; build and preview to see a story. `npm run preview` is
+Cloudflare's own local server, which answers each address as reha.stream
+does.
 
 ```bash
 cd ui && npm ci && cd ../site && npm ci

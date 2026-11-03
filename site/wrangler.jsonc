@@ -1,0 +1,29 @@
+// reha.stream: the site's built files, served by Cloudflare as they are,
+// with _redirects and _headers from the build (site/cloudflare/). No code
+// runs. Only the release puts this Worker up (release.yml, site · deploy,
+// with --env=""); it then answers at reha.stream and nowhere else.
+//
+// The environment "preview" is a Worker of its own, reha-stream-preview,
+// for pull requests' previews (checks.yml, site · preview): no address but
+// each version's, and routes set empty so reha.stream never comes along
+// from the top.
+//
+// Addresses: /stories serves stories.html; /stories/ and /stories.html
+// send the visitor to /stories (html_handling). An address that is no file
+// gets 404.html with status 404.
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "reha-stream",
+  "compatibility_date": "2026-10-15",
+  "assets": {
+    "directory": "./dist",
+    "html_handling": "auto-trailing-slash",
+    "not_found_handling": "404-page"
+  },
+  "workers_dev": false,
+  "preview_urls": false,
+  "routes": [{ "pattern": "reha.stream", "custom_domain": true }],
+  "env": {
+    "preview": { "routes": [], "workers_dev": false, "preview_urls": true }
+  }
+}

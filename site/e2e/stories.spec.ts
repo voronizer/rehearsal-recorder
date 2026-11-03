@@ -3,8 +3,8 @@ import { test, expect } from "./fixtures.ts"
 
 // Alex's stories: their page, each story, and the way to them. Each is
 // written into its HTML at build time (the stories() plugin in
-// vite.config.ts); here the preview server finds stories/x.html for
-// /stories/x by itself, as Vercel does through vercel-config.json.
+// vite.config.ts); Cloudflare finds stories/x.html for /stories/x by
+// itself, here as on reha.stream.
 
 const STORIES = [
   ["digital-mixer", "Record your band's rehearsal from a digital mixer"],

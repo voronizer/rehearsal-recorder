@@ -175,19 +175,42 @@ function stories(): Plugin {
   }
 }
 
+/**
+ * What Cloudflare does with an address before it looks for a file: the short
+ * links /mac and /windows (_redirects) and a year's cache for the build's
+ * hashed files (_headers), from site/cloudflare/ to the build's top, where
+ * Cloudflare reads them. Not in publicDir, which is the app's too.
+ */
+function cloudflare(): Plugin {
+  const dir = fileURLToPath(new URL("./cloudflare/", import.meta.url))
+  let ssr = false
+  return {
+    name: "site-cloudflare",
+    configResolved(config) {
+      ssr = !!config.build.ssr
+    },
+    generateBundle() {
+      if (ssr) return
+      for (const fileName of ["_redirects", "_headers"]) {
+        this.emitFile({ type: "asset", fileName, source: readFileSync(join(dir, fileName), "utf-8") })
+      }
+    },
+  }
+}
+
 // The website: a page (index.html) and the app in a frame (stage.html), both
 // drawn by the interface's own components. They are imported from ../ui/src
 // with the interface's `@/`, and run on the interface's own React, so there
 // is one copy of it, and draw its own icons; the site's package.json lists
 // neither. og.html is the link picture's page, which scripts/og.mjs
-// photographs into og.png, and 404.html what Vercel answers for an address
-// that is no file (see vercel-config.json). stories.html is the page of
+// photographs into og.png, and 404.html what Cloudflare answers for an
+// address that is no file (see wrangler.jsonc). stories.html is the page of
 // Alex's stories and the frame of each story's page (see stories() above).
 export default defineConfig({
   base: "/",
   // The app's icons: the favicon, and the logo its screens show.
   publicDir: ui("public"),
-  plugins: [react(), tailwindcss(), changelog(), storiesBlock(), seo(), stories()],
+  plugins: [react(), tailwindcss(), changelog(), storiesBlock(), seo(), stories(), cloudflare()],
   resolve: {
     alias: {
       "@": ui("src"),

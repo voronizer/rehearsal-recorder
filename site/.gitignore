@@ -1,6 +1,6 @@
 node_modules/
 dist/
-.vercel/
+.wrangler/
 playwright-report/
 test-results/
-vercel-upload/
+upload/
