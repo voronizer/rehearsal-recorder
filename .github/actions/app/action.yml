@@ -1,8 +1,8 @@
 # The app made ready and its Python suites run, on the machine the job is
-# on: what the app's checks (checks.yml) and the release's builds
-# (release.yml) both start with. The job checks out first, with the whole
-# history: the version comes from the release tag, and a shallow clone has
-# no tags and would build a 0.0.0.
+# on: what reha.yml's four jobs start with, the checks on a pull request
+# (app · macos, app · windows) and the release's builds. The job checks out
+# first, with the whole history: the version comes from the release tag,
+# and a shallow clone has no tags and would build a 0.0.0.
 
 name: The app, built and tested
 description: Builds the interface, installs the app and runs every Python suite.

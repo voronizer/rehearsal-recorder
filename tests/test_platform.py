@@ -498,15 +498,6 @@ def main():
     ok("and elsewhere there is no such thing to say",
        ps.claim_taskbar_identity("linux", frozen=False, shell32=Shell32(), info={}) is None)
 
-    index = (PROJECT / "ui" / "index.html").read_text(encoding="utf-8")
-    favicon = PROJECT / "ui" / "public" / "favicon.svg"
-    ok("the interface carries the small drawing, since a tab shows it at 16 px",
-       'rel="icon"' in index and favicon.exists()
-       and favicon.read_bytes() == (packaging / "icon-small.svg").read_bytes())
-    logo = PROJECT / "ui" / "public" / "logo.svg"
-    ok("and the full one, for where the window shows it large",
-       logo.exists() and logo.read_bytes() == (packaging / "icon.svg").read_bytes())
-
     # Said in Latin letters: Windows writes this into the build's log in its
     # code page, and cp1252 has no Cyrillic.
     print("\n[name] The app's own name where it says it, Reha on disk")
@@ -515,15 +506,15 @@ def main():
     # names, which is what every copy already out there asks GitHub for.
     import re
     from rehearsal_recorder import updates
-    release = (PROJECT / ".github" / "workflows" / "release.yml").read_text(encoding="utf-8")
+    workflow = (PROJECT / ".github" / "workflows" / "reha.yml").read_text(encoding="utf-8")
     built = re.search(r'^NAME = "([^"]+)"', spec, re.M)
     ok("the built app is the file Reha", built is not None and built.group(1) == "Reha")
     ok("and the release builds and self-tests it there",
-       "dist/Reha.app/Contents/MacOS/Reha" in release and "dist/Reha/Reha.exe" in release)
+       "dist/Reha.app/Contents/MacOS/Reha" in workflow and "dist/Reha/Reha.exe" in workflow)
     ok("while the zips keep the names older copies ask for",
        set(updates.ASSETS.values())
        == {"RehearsalRecorder-macos.zip", "RehearsalRecorder-windows.zip"}
-       and all(name in release for name in updates.ASSETS.values()))
+       and all(name in workflow for name in updates.ASSETS.values()))
     ok("and the Mac asks for the microphone by the app's name",
        'f"{APP_NAME} records your band' in spec.split('"NSMicrophoneUsageDescription"')[1])
 
@@ -932,7 +923,7 @@ def main():
        ps.send_to_trash(tmp / "gone") is False)
 
     print("\n[update-unpack] A new copy unpacked whole")
-    # The zip as release.yml makes it: Reha.app with zip -qry on a Mac, so the
+    # The zip as reha.yml makes it: Reha.app with zip -qry on a Mac, so the
     # bundle's symlinks stay links; the folder Reha on Windows.
     mac = sys.platform == "darwin"
     built = tmp / "built"

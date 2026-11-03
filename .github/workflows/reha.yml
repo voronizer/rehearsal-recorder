@@ -1,0 +1,296 @@
+# РЭХА itself: its Python suites on a pull request, and the apps people
+# download when a release is published.
+#
+# One of five workflows, one for each part: Reha, Interface, Site, Service
+# and Bridge.
+#
+# On a pull request that changes the Python side (src/, tests/, tools/,
+# packaging/ and the files that build it), the contract the band service
+# keeps with РЭХА (service/openapi.json), where the app finds its interface
+# (ui/vite.config.ts), the app's action or this file:
+#   app · macos, app · windows   the Python suites on both systems
+#
+# How to cut a release:
+#   1. Update CHANGELOG.md.
+#   2. On GitHub: Releases -> Draft a new release -> new tag (0.12.0) ->
+#      Publish.
+#   3. This runs. latest back hands GitHub's "Latest" back to the release
+#      before, so that while the zips are built, installed copies and the
+#      site's download buttons keep getting a release that has its zips.
+#   4. build · macos and build · windows attach the zips to the release.
+#   5. latest makes the new release "Latest" again, and starts Site on main
+#      (site.yml), which puts reha.stream up for it. If a build fails, the
+#      release before stays the latest, and the site stays as it is.
+# A pre-release builds and attaches its zips, and leaves "Latest" and the
+# site alone: the page's buttons download the latest release, which a
+# pre-release is not. The band service does not go up with a release: it
+# goes up after a merge that changes it (service.yml).
+#
+# By hand (Actions -> Reha -> Run workflow): Rehearse the builds. Both
+# builds, left as workflow artifacts; nothing is attached or put up.
+#
+# Nothing is built from a Linux machine and hoped for: a Mac build is made on
+# a Mac and a Windows build on Windows, because that is the only way either
+# can exist. Each one runs the test suites first and then runs --selftest on
+# the app it just produced: a build that cannot answer for itself is never
+# attached to a release. Two jobs and not a matrix, so that a skipped one
+# keeps its name.
+
+name: Reha
+
+on:
+  pull_request:
+    paths:
+      - src/**
+      - tests/**
+      - tools/**
+      - packaging/**
+      - pyproject.toml
+      - requirements.txt
+      - alembic.ini
+      - build.bat
+      - build.command
+      - service/openapi.json
+      - ui/vite.config.ts
+      - .github/actions/app/**
+      - .github/workflows/reha.yml
+  release:
+    types: [published]
+  workflow_dispatch:
+
+# Reading the repository is all the checks need. Said here because the
+# default token can write, and a pull request from a fork runs this
+# workflow; the release's jobs ask for what they write.
+permissions:
+  contents: read
+
+# A pull request's newer push replaces its older run; anything else runs to
+# its end.
+concurrency:
+  group: reha-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  # The app's Python suites on the two systems it is actually used on. They
+  # need no sound card, screen or microphone (PortAudio is stubbed where the
+  # audio is checked), so for a long time they ran on Linux, on the
+  # reasoning that what they test is the same everywhere and Linux is the
+  # quickest runner to get.
+  #
+  # It is not the same everywhere. A Mac's filesystem does not tell "Other"
+  # from "other" and Linux's does, so a check written against exactly that
+  # skipped itself on every push and reached main broken. Windows differs
+  # again: a file open for playing cannot be moved, cp1252 has no Cyrillic,
+  # and paths compare without case. Those branches are most of what breaks,
+  # and a runner that never takes them has nothing to say about them.
+  app-macos:
+    name: app · macos
+    if: github.event_name == 'pull_request'
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - uses: ./.github/actions/app
+
+      # The suites keep the MIDI library out so they never touch a port; this
+      # is the one place it runs for real. On macOS it makes a virtual port,
+      # plays 100 notes into it and pulls it; on Windows it lists what the
+      # system has. See the top of the script.
+      - name: The MIDI library on this machine
+        run: python tests/midi_live.py
+
+      # The entry point the docs tell people to use. Cheap, and it catches a
+      # package that imports from a clone but not once installed.
+      - name: Does it start
+        run: python -m rehearsal_recorder --selftest
+
+  app-windows:
+    name: app · windows
+    if: github.event_name == 'pull_request'
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - uses: ./.github/actions/app
+
+      - name: The MIDI library on this machine
+        run: python tests/midi_live.py
+
+      - name: Does it start
+        run: python -m rehearsal_recorder --selftest
+
+  # GitHub makes a newly published release "Latest" at once, before it has
+  # a zip. Installed copies look for their update in the latest release
+  # (updates.py) and the site's buttons download from it, so until both
+  # zips are attached the release before is made the latest again. The
+  # release before is the highest version of the others that is not a
+  # draft or a pre-release. If GitHub does not take it, the run stops here,
+  # before the builds.
+  latest-back:
+    name: latest back
+    if: github.event_name == 'release' && !github.event.release.prerelease
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: The release before is the latest
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.event.release.tag_name }}
+        run: |
+          previous=$(gh release list --repo "$GITHUB_REPOSITORY" --exclude-drafts --exclude-pre-releases \
+            --limit 100 --json tagName --jq '.[].tagName' | { grep -vxF "$TAG" || true; } | sort -V | tail -1)
+          if [ -z "$previous" ]; then
+            echo "::notice::No release before $TAG: it stays the latest while its zips are built."
+            exit 0
+          fi
+          gh release edit "$previous" --repo "$GITHUB_REPOSITORY" --latest
+          now=$(gh release view --repo "$GITHUB_REPOSITORY" --json tagName --jq .tagName)
+          if [ "$now" != "$previous" ]; then
+            echo "::error::GitHub still calls $now the latest release, not $previous."
+            exit 1
+          fi
+          echo "$previous is the latest release while $TAG's zips are built."
+
+  # A job runs after a skipped one only when its `if` says so, hence
+  # !cancelled(): latest back is skipped for a pre-release and by hand.
+  build-macos:
+    name: build · macos
+    needs: latest-back
+    if: ${{ !cancelled() && github.event_name != 'pull_request' && needs.latest-back.result != 'failure' }}
+    runs-on: macos-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      # The Python suites again, here on the system being shipped, the only
+      # place some of its platform branches are real, and the last check
+      # before people get the build: nothing is checked again on main. The
+      # interface's tests have nothing that differs between systems, and ran
+      # on the pull requests that changed it.
+      - uses: ./.github/actions/app
+        with:
+          also: pyinstaller
+
+      - name: Package
+        run: pyinstaller packaging/rehearsal-recorder.spec --noconfirm
+
+      # The question no source test can answer: did every native library
+      # actually make it into the bundle?
+      - name: Does the build have everything
+        run: dist/Reha.app/Contents/MacOS/Reha --selftest
+
+      # The app inside is Reha; the zip keeps its old name, which every copy
+      # already out there asks GitHub for when it looks for a newer version
+      # (updates.py).
+      - name: Zip it
+        run: |
+          cd dist
+          zip -qry ../RehearsalRecorder-macos.zip Reha.app
+          cd ..
+          ls -lh RehearsalRecorder-macos.zip
+
+      # Kept whether or not there is a release to attach to, so a rehearsal
+      # produces something to download too.
+      - uses: actions/upload-artifact@v7
+        with:
+          name: RehearsalRecorder-macos
+          path: RehearsalRecorder-macos.zip
+          if-no-files-found: error
+
+      # Only the file: the release itself, and which release is the latest,
+      # stay as they are.
+      - name: Attach it to the release
+        if: github.event_name == 'release'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.event.release.tag_name }}
+        run: gh release upload "$TAG" RehearsalRecorder-macos.zip --repo "$GITHUB_REPOSITORY" --clobber
+
+  build-windows:
+    name: build · windows
+    needs: latest-back
+    if: ${{ !cancelled() && github.event_name != 'pull_request' && needs.latest-back.result != 'failure' }}
+    runs-on: windows-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - uses: ./.github/actions/app
+        with:
+          also: pyinstaller
+
+      - name: Package
+        run: pyinstaller packaging/rehearsal-recorder.spec --noconfirm
+
+      # As a first download from reha.stream arrives: a browser marks the zip
+      # "from the internet", and Explorer passes the mark on to every file it
+      # unpacks. The self-test then loads the window's .NET libraries with the
+      # mark on, which only packaging/Reha.exe.config lets them do. A zip
+      # does not carry the mark, so the one attached below has none.
+      - name: Mark it as a browser's download
+        shell: pwsh
+        run: |
+          Get-ChildItem -Recurse -File dist/Reha | ForEach-Object {
+            Set-Content -LiteralPath $_.FullName -Stream Zone.Identifier -Value "[ZoneTransfer]`r`nZoneId=3"
+          }
+
+      - name: Does the build have everything
+        run: dist/Reha/Reha.exe --selftest
+
+      # Windows runners don't have `zip` on PATH (even under the bash shell),
+      # so this one uses PowerShell's Compress-Archive.
+      - name: Zip it
+        shell: pwsh
+        run: |
+          Compress-Archive -Path dist/Reha -DestinationPath RehearsalRecorder-windows.zip
+          Get-Item RehearsalRecorder-windows.zip | Format-List Name, Length
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: RehearsalRecorder-windows
+          path: RehearsalRecorder-windows.zip
+          if-no-files-found: error
+
+      - name: Attach it to the release
+        if: github.event_name == 'release'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.event.release.tag_name }}
+        run: gh release upload "$TAG" RehearsalRecorder-windows.zip --repo "$GITHUB_REPOSITORY" --clobber
+
+  # Both zips are attached: the new release is the latest again, and the
+  # site goes up for it. Site is started on main with this run's own token:
+  # a run by hand (workflow_dispatch) is the one kind that token may start.
+  # Not after a pre-release, and not when a build failed: a job with no
+  # status check in its `if` runs only when every job it needs succeeded.
+  latest:
+    name: latest
+    needs: [build-macos, build-windows]
+    if: github.event_name == 'release' && !github.event.release.prerelease
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      actions: write
+    steps:
+      - name: The new release is the latest, and the site goes up for it
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.event.release.tag_name }}
+        run: |
+          gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --latest
+          gh workflow run site.yml --repo "$GITHUB_REPOSITORY" --ref main
+          echo "$TAG is the latest release, with both zips; Site is putting reha.stream up for it." >> "$GITHUB_STEP_SUMMARY"
