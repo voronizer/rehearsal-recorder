@@ -5,7 +5,7 @@ versioning](https://semver.org/): until 1.0 the shape of things can still
 move, though recordings on disk are never left behind — old rehearsals keep
 opening.
 
-## Unreleased
+## 0.21.0
 
 - **Delete takes and songs in the band service.** ⋯ › **Delete take** is on
   every take, in its panel and on its page. ⋯ › **Delete song** now works on
