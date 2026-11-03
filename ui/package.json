@@ -8,6 +8,7 @@
     "build": "tsc -b && vite build",
     "lint": "oxlint",
     "design-check": "node scripts/design-check.mjs",
+    "bridge-check": "node scripts/bridge-check.mjs",
     "preview": "vite preview",
     "test": "vitest run",
     "test:e2e": "playwright test",

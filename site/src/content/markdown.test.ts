@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { inline, itemsByIds, leadAndBeats, parseDoc, sectionsByIds, sectionsByTitles } from "./markdown"
+import { inline, isNewer, itemsByIds, leadAndBeats, parseDoc, sectionsByIds, sectionsByTitles } from "./markdown"
 
 describe("parseDoc", () => {
   it("splits a file into its title, intro and sections", () => {
@@ -7,9 +7,10 @@ describe("parseDoc", () => {
       title: "T",
       intro: "Intro.",
       sections: [
-        { title: "A", id: "a", body: "One.", items: [] },
-        { title: "B", id: null, body: "Two.", items: [] },
+        { title: "A", id: "a", from: null, body: "One.", items: [] },
+        { title: "B", id: null, from: null, body: "Two.", items: [] },
       ],
+      waiting: [],
     })
   })
 
@@ -17,7 +18,8 @@ describe("parseDoc", () => {
     expect(parseDoc("# T\n\nIntro.\n\n<!-- Keep the ids.\n     In order. -->\n\n## A\nOne.")).toEqual({
       title: "T",
       intro: "Intro.",
-      sections: [{ title: "A", id: null, body: "One.", items: [] }],
+      sections: [{ title: "A", id: null, from: null, body: "One.", items: [] }],
+      waiting: [],
     })
   })
 
@@ -33,10 +35,10 @@ describe("parseDoc", () => {
     const [a, c] = parseDoc("## A {#a}\nLead.\n\n### B {#b}\nOne\nline.\n\n### D\nTwo.\n\n## C\nThree.").sections
     expect(a.body).toBe("Lead.")
     expect(a.items).toEqual([
-      { title: "B", id: "b", body: "One\nline.", items: [] },
-      { title: "D", id: null, body: "Two.", items: [] },
+      { title: "B", id: "b", from: null, body: "One\nline.", items: [] },
+      { title: "D", id: null, from: null, body: "Two.", items: [] },
     ])
-    expect(c).toEqual({ title: "C", id: null, body: "Three.", items: [] })
+    expect(c).toEqual({ title: "C", id: null, from: null, body: "Three.", items: [] })
   })
 
   it("keeps a ### line before any section as words", () => {
@@ -119,5 +121,78 @@ describe("sections of a file", () => {
     expect(() => sectionsByTitles("h.md", named, ["fine print"])).toThrow(
       "site/content/h.md: no section ## fine print"
     )
+  })
+})
+
+describe("blocks that wait for a version", () => {
+  const faq = "# Questions.\n\n## Old?\nYes.\n\n## New? {from 0.22.0}\nSoon.\n"
+  const story =
+    "# Story.\n\n## Before. {#before}\nLead.\n\n### One. {#one}\nA.\n\n### Two. {#two from 0.22.0}\nB.\n\n### Three. {#three}\nC.\n"
+
+  it("reads {from} and {#id from} in a heading", () => {
+    const [, question] = parseDoc(faq).sections
+    expect(question).toMatchObject({ title: "New?", id: null, from: "0.22.0" })
+    const [, item] = parseDoc(story).sections[0].items
+    expect(item).toMatchObject({ title: "Two.", id: "two", from: "0.22.0" })
+  })
+
+  it("leaves out what is newer than the release, and lists it", () => {
+    const before = parseDoc(faq, { release: "0.21.0" })
+    expect(before.sections.map((s) => s.title)).toEqual(["Old?"])
+    expect(before.waiting).toEqual([{ id: null, title: "New?", from: "0.22.0" }])
+    const items = parseDoc(story, { release: "0.21.0" })
+    expect(items.waiting).toEqual([{ id: "two", title: "Two.", from: "0.22.0" }])
+
+    const on = parseDoc(faq, { release: "0.22.0" })
+    expect(on.sections.map((s) => s.title)).toEqual(["Old?", "New?"])
+    expect(on.waiting).toEqual([])
+    expect(parseDoc(faq).sections).toHaveLength(2)
+    expect(parseDoc(faq).waiting).toEqual([])
+  })
+
+  it("keeps a waiting item's step and the other items", () => {
+    const doc = parseDoc(story, { release: "0.21.0" })
+    const [step] = sectionsByIds("story.md", doc, ["before"])
+    expect(step.body).toBe("Lead.")
+    expect(itemsByIds("story.md", step, ["one", "three"]).map((s) => s.body)).toEqual(["A.", "C."])
+  })
+
+  it("fails on a mark written wrong, naming the file and heading", () => {
+    for (const mark of ["{from 0.22}", "{from soon}", "{#id from}", "{later}"])
+      expect(() => parseDoc(`## Is it free? ${mark}\nYes.`, { file: "faq.md" }), mark).toThrow(
+        `site/content/faq.md: the heading "## Is it free? ${mark}" ends in ${mark}; a heading ends in {#id}, {from 0.22.0} or {#id from 0.22.0}`
+      )
+  })
+
+  it("reads a mark stuck to its title, and fails on braces left in a title", () => {
+    expect(parseDoc("## Is it free?{from 0.22.0}\nYes.").sections[0]).toMatchObject({ title: "Is it free?", from: "0.22.0" })
+    // An item's heading counts as one only under a section.
+    for (const [before, heading] of [
+      ["", "## Is it free? {from 0.22.0}."],
+      ["## Before.\n", "### Tap. {#tap} {from 0.22.0}"],
+      ["", "# Questions. {from 0.22.0}"],
+    ])
+      expect(() => parseDoc(`${before}${heading}\nYes.`, { file: "faq.md" }), heading).toThrow(
+        `site/content/faq.md: the heading "${heading}" has braces in its title; a heading ends in {#id}, {from 0.22.0} or {#id from 0.22.0}`
+      )
+    expect(parseDoc("## Is it free?{#free}\nYes.").sections[0]).toMatchObject({ title: "Is it free?", id: "free" })
+  })
+
+  it("fails when a block the page needs waits", () => {
+    const steps = parseDoc("## Later. {#later from 0.22.0}\nLead.", { release: "0.21.0" })
+    expect(() => sectionsByIds("story.md", steps, ["later"])).toThrow(
+      /\{#later\} waits for 0\.22\.0, but the page needs it; only a story item or a question can wait/
+    )
+    const hero = parseDoc("## eyebrow {from 0.22.0}\nFree.", { release: "0.21.0" })
+    expect(() => sectionsByTitles("hero.md", hero, ["eyebrow"])).toThrow(
+      "site/content/hero.md: ## eyebrow waits for 0.22.0, but the page needs it; only a story item or a question can wait"
+    )
+  })
+
+  it("compares versions by number", () => {
+    expect(isNewer("0.10.0", "0.9.0")).toBe(true)
+    expect(isNewer("0.21.0", "0.21.0")).toBe(false)
+    expect(isNewer("0.21.0", "0.22.0")).toBe(false)
+    expect(() => isNewer("v1", "0.1.0")).toThrow("v1 is not a version like 0.22.0")
   })
 })

@@ -1,11 +1,23 @@
 import { describe, expect, it } from "vitest"
 import changelog from "../../../CHANGELOG.md?raw"
-import { content, ITEMS, readContent, STEPS } from "./index"
-import { leadAndBeats } from "./markdown"
+import { readdirSync, readFileSync } from "node:fs"
+import { fileURLToPath } from "node:url"
+import faq from "../../content/faq.md?raw"
+import story from "../../content/story.md?raw"
+import { PAGE_FILES } from "./files"
+import { content, ITEMS, readContent, shows, STEPS } from "./index"
+import { leadAndBeats, parseDoc } from "./markdown"
 import { changelogHead, displayVersion, latestNews, latestVersion } from "./changelog"
 
 // What the build reads: the release's part of CHANGELOG.md (vite.config.ts).
 const head = changelogHead(changelog, import.meta.env.VITE_SITE_VERSION || undefined)
+
+// What this build leaves out, as it waits for a newer version: the counts
+// below are of every block in the file, waiting or not.
+const allBlocks = import.meta.env.VITE_SITE_ALL_BLOCKS === "1"
+const release = allBlocks ? null : content.version
+const waiting = parseDoc(story, { release }).waiting.map((w) => w.id)
+const questionsWaiting = parseDoc(faq, { release }).waiting.length
 
 // The words in site/content/, as the page will use them. An id spelt wrong
 // there fails here, naming the file, rather than leaving a tile blank.
@@ -23,10 +35,12 @@ describe("the site's content", () => {
 
   it("has each step's items, in order: its tiles, then its cards", () => {
     for (const [i, step] of content.story.steps.entries())
-      expect(step.items.map((item) => item.id), step.id).toEqual([...ITEMS[STEPS[i]]])
+      expect(step.items.map((item) => item.id), step.id).toEqual(
+        ITEMS[STEPS[i]].filter((id) => !waiting.includes(id))
+      )
     // 31 picked: these 29, and the controller's block and its fourth line;
     // then the backing track's and the lineups'.
-    expect(content.story.steps.flatMap((s) => s.items)).toHaveLength(31)
+    expect(content.story.steps.flatMap((s) => s.items)).toHaveLength(31 - waiting.length)
   })
 
   it("has a line for each step, and for each item a line and what the window says", () => {
@@ -88,7 +102,7 @@ describe("the site's content", () => {
   })
 
   it("has eleven questions, each with an answer, the name's first", () => {
-    expect(content.faq.questions).toHaveLength(11)
+    expect(content.faq.questions).toHaveLength(11 - questionsWaiting)
     expect(content.faq.questions[0].body).toContain("Belarusian for “echo”")
     // Sleep follows the laptop dying, the question it answers next.
     expect(content.faq.questions[8].title).toBe("What if the laptop dies in the middle of a take?")
@@ -116,6 +130,20 @@ describe("the site's content", () => {
     const tagged = readContent("v1.0.0")
     expect(tagged.version).toBe("1.0.0")
     expect(tagged.tag).toBe("v1.0.0")
+  })
+
+  it("shows every block of its own version", () => {
+    expect(shows(content.version)).toBe(true)
+    expect(shows("999.0.0")).toBe(allBlocks)
+  })
+
+  it("has {from} marks only in the files the main page reads", () => {
+    const dir = fileURLToPath(new URL("../../content/", import.meta.url))
+    const files = readdirSync(dir, { recursive: true, encoding: "utf8" }).filter((f) => f.endsWith(".md"))
+    const marked = files.filter((f) =>
+      /^#{1,3} .*\{(?:#[\w-]+\s+)?from\s[^}]*\}\s*$/m.test(readFileSync(`${dir}${f}`, "utf8"))
+    )
+    for (const file of marked) expect(PAGE_FILES, file).toContain(file)
   })
 
   it("still builds for a version CHANGELOG.md has no section for, with the newest news there is", () => {

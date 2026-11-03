@@ -1,5 +1,5 @@
 // Where the page sends people. The zips are the names the release workflow
-// gives them (.github/workflows/release.yml).
+// gives them (.github/workflows/reha.yml).
 export const REPO = "https://github.com/voronizer/rehearsal-recorder"
 export const RELEASES = `${REPO}/releases`
 export const MAC_ZIP = `${RELEASES}/latest/download/RehearsalRecorder-macos.zip`

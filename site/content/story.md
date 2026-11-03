@@ -6,7 +6,9 @@
      item's id says whether it is a tile or a card and what the app's
      window shows for it (site/src/page/evening.ts). An item has two
      paragraphs: its tile's or card's line, then what the window says
-     under the app once the item is picked. -->
+     under the app once the item is picked. An item that comes with a new
+     version of the app ends its heading in {#id from 0.22.0}: reha.stream
+     shows it from that release on. -->
 
 ## Before you play. {#before}
 

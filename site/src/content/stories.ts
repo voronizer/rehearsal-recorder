@@ -200,7 +200,7 @@ const INDEX = "site/content/stories.md"
 
 /** The stories by their files' names, and stories.md, as the pages use them. */
 export function readStories(files: Record<string, string>, index: string): StoriesContent {
-  const doc = parseDoc(index)
+  const doc = parseDoc(index, { file: "stories.md" })
   if (!doc.title) throw new Error(`${INDEX}: no # title`)
   const parts = sectionsByTitles("stories.md", doc, [
     "description",

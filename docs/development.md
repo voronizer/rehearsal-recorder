@@ -104,13 +104,41 @@ cd ui && npm run test:e2e            # the interface in a browser (build first)
 
 What each is for: [tests/README.md](../tests/README.md).
 
-CI (`.github/workflows/checks.yml`) runs the Python suites on macOS and on
-Windows, on every push to main and every pull request that changes more than
-the website. It runs them on both because the two systems disagree about the
+CI checks a pull request with the workflow of each part it changes, and
+leaves the rest. Each workflow lists its paths at the top of its file:
+
+| The pull request changes | Workflow | What runs |
+| --- | --- | --- |
+| The Python side: `src/`, `tests/`, `tools/`, `packaging/`, `pyproject.toml` and the build scripts; also `service/openapi.json` and `ui/vite.config.ts` | Reha, `reha.yml` | The Python suites on macOS and on Windows |
+| The interface, `ui/`, or the app's two icon drawings | Interface, `interface.yml` | The design check, the build, Vitest, the showcase, Playwright |
+| The website, `site/`; also `ui/` and `CHANGELOG.md` | Site, `site.yml` | The site built as it would go up after the merge, and tested; a preview when `site/` changes |
+| The band service, `service/`; also `ui/` | Service, `service.yml` | The service's tests, its build, Playwright |
+| Either side of the seam: `src/rehearsal_recorder/api.py`, `ui/src/lib/api.ts`, `ui/e2e/fake-bridge.js` | Bridge, `bridge.yml` | The seam check |
+
+A pull request that changes only the docs runs none of them. GitHub looks
+at only the first 300 files a pull request changes when it picks the
+workflows, so a larger one may skip a check it needs: split it. The Python
+suites run on both systems because the two systems disagree about the
 things this app does most: a filesystem that ignores case, a file that cannot
 be moved while it is open, a code page with no Cyrillic. The interface's tests run
 once, on Linux: they run in a browser against a faked Python side, and
 nothing in them depends on the system.
+
+A merge into main is not checked again for its own sake. The website and the
+band service go up by themselves after a merge that changes them, each
+checked once more right before. РЭХА goes out when a release is published.
+
+`cd ui && npm run bridge-check` is the seam check: it compares the calls the
+interface may make of Python (`PyApi` in `ui/src/lib/api.ts`) with Python's
+`Api` class and with the stand-in the interface's tests talk to. Run it after
+adding or renaming a call.
+
+A block on reha.stream can wait for a version of the app: a heading in
+`site/content/` that ends in `{from 0.22.0}`, or `{#id from 0.22.0}` where it
+has an id, stays off the site until that release is out. Only a story item
+or a question can wait. A content test of such a block checks it only where
+the build shows it: `shows("0.22.0")` in `site/src/content/index.ts` says
+whether it does.
 
 ## Packaging it into an app
 

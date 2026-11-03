@@ -73,9 +73,9 @@ that comes to about $3 a month. The domain you pay for to whoever sells it.
    the service answers on workers.dev.
 7. Put the service up: in your fork, open **Actions**. GitHub keeps a
    fork's workflows off until you press **I understand my workflows, go
-   ahead and enable them**. Then pick **Release**, press **Run workflow**,
-   choose **Put the service up again** and press **Run workflow** again.
-   When the run turns green, the service is up.
+   ahead and enable them**. Then pick **Service**, press **Run workflow**,
+   leave the branch on `main` and press **Run workflow** again. When the
+   run turns green, the service is up.
 8. Give the service its settings in Cloudflare. First make a second token,
    which lets the service keep Cloudflare's list of addresses it may send
    letters to, and nothing else: on **Account API Tokens**, press **Create
@@ -132,8 +132,8 @@ From then on, takes go to the band service. **Send takes to** in
 **Settings › Folders** switches between the band service and the cloud
 folder whenever you like.
 
-For a newer service later, press **Sync fork** on your fork's page, then
-run **Put the service up again** as in step 7.
+For a newer service later, press **Sync fork** on your fork's page. If no
+**Service** run starts by itself under **Actions**, run it as in step 7.
 
 ## Working on it
 
@@ -159,10 +159,12 @@ The pages use the interface's components and React from `../ui`, so run
 
 ## Going live
 
-A published release puts the service up, after the apps are built, in the
-job `service · deploy` (`.github/workflows/release.yml`). By hand, **Run
-workflow** with **Put the service up again** puts up the latest release's
-service, or the branch's when no release has it (in a fork). The job runs `npm run deploy`, which is `scripts/deploy.mjs`:
+A merge into main that changes `service/` or `ui/` (the pages draw with the
+interface's components) puts the service up, once its checks pass, in the
+job `service · deploy` (`.github/workflows/service.yml`), so the service
+is always main's. By hand, **Run workflow** under
+**Actions › Service** puts up the branch picked. The job runs `npm run
+deploy`, which is `scripts/deploy.mjs`:
 
 1. It finds the database `reha-band`, the bucket `reha-band` and the queue
    `reha-band-chat` on the account, and makes any that is missing.
@@ -182,8 +184,8 @@ The job needs, in the repository's settings on GitHub:
   `band.reha.stream`. With it the Worker answers there, and its workers.dev
   address is turned off; without it, the Worker answers at workers.dev.
 
-Without the token the job says the service is not set up, and the release
-stays green.
+Without the token the job says the service is not set up, and the run stays
+green.
 
 The Worker's own settings (its address, owner, sender, bot) are set on the
 Worker in Cloudflare. A deploy keeps them as they are (`keep_vars`).
@@ -193,8 +195,7 @@ migrations`; the schema and the new migration go in one commit. D1 has no
 way back: undoing a change is another migration, and D1's Time Travel can put
 the whole database back to an earlier minute, as far back as the account's
 Cloudflare plan keeps. A migration only adds tables and columns, so the
-Worker of the previous release keeps working in the moments before the new
-one is up.
+Worker before keeps working in the moments before the new one is up.
 
 `npm run test:deploy` checks the deploy script against a stand-in Wrangler.
 

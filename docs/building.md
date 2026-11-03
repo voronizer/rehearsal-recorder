@@ -97,10 +97,11 @@ Apple Developer certificate ($99/year) or an Authenticode certificate, so:
 Signing removes both. It is the only thing left between this and a clean
 double-click, and what it takes is buying the certificates.
 
-**Builds for both systems** are in `.github/workflows/release.yml`. Publish a
+**Builds for both systems** are in `.github/workflows/reha.yml`. Publish a
 release on GitHub and it builds on a real Mac and a real Windows machine,
 runs every test suite plus `--selftest` on the app it just made, and attaches
-the zips to that release, then puts the website up for it. Run by hand, it
-asks what to do: **Rehearse the builds** (the default) runs the same builds
-without cutting a release, leaving them as workflow artifacts; **Put the site
-up again** deploys the latest release's website once more.
+the zips to that release. Until both zips are there, the release before
+stays “Latest”, so nobody is offered a version without its zip; then the new
+one is “Latest” again and the website goes up for it. Run by hand (Actions ›
+**Reha** › **Run workflow**, **Rehearse the builds**), it runs the same
+builds without cutting a release and leaves them as workflow artifacts.

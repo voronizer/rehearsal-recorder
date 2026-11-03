@@ -1169,7 +1169,6 @@ type PyApi = {
     deviceIndex: number | null
   ): Promise<LineupsAnswer>
   delete_lineup(name: string, deviceIndex: number | null): Promise<LineupsAnswer>
-  media_url(absPath: string): Promise<string | null>
   /** A track's address, length and waveform. A range narrows the waveform to
    *  the part on screen; the lengths returned are always the whole file's. */
   take_media(
@@ -1734,7 +1733,6 @@ const ANSWERS_WITH_A_VALUE = new Set<keyof PyApi>([
   "list_input_devices",
   "list_output_devices",
   "load_default_tracks",
-  "media_url",
   "take_media",
   "session_state",
   "get_levels",

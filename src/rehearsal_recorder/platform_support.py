@@ -535,7 +535,7 @@ def hide_folder(path, system=sys.platform, kernel32=None):
 def unpack_app(archive, into, system=sys.platform, run=None):
     """
     Unpacks a release zip and returns the new copy in it: Reha.app on a Mac,
-    the folder Reha on Windows, as release.yml packs them.
+    the folder Reha on Windows, as reha.yml packs them.
 
     A Mac uses ditto, which keeps the bundle's symlinks and the executable
     bit; Python's zipfile writes a link as a small file and drops the bit, and

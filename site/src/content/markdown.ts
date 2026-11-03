@@ -3,11 +3,32 @@
 // section, a `- ` list, and inline bold, emphasis, code and links. The
 // page's words are short; a full Markdown library would be most of what the
 // page downloads.
+//
+// A block can wait for a version: a heading that ends in `{from 0.22.0}`, or
+// `{#id from 0.22.0}` where it has an id, is left out of a build for an
+// older release. A feature's block is then merged with the feature, and
+// reha.stream shows it from the day that release comes out, since the
+// release puts the site up again. Only a story item or a question can wait:
+// the page needs the rest.
 
 /** A `##` section: its words before its first `###`, and its `###` items,
- *  each a section of its own (with no items). */
-export type Section = { title: string; id: string | null; body: string; items: Section[] }
-export type Doc = { title: string | null; intro: string; sections: Section[] }
+ *  each a section of its own (with no items). `from` is the version it
+ *  waits for. */
+export type Section = { title: string; id: string | null; from: string | null; body: string; items: Section[] }
+/** A section or item a build left out, as it waits for a newer version. */
+export type Waiting = { id: string | null; title: string; from: string }
+export type Doc = { title: string | null; intro: string; sections: Section[]; waiting: Waiting[] }
+
+const VERSION = /^\d+\.\d+\.\d+$/
+const MARKS = "a heading ends in {#id}, {from 0.22.0} or {#id from 0.22.0}"
+
+/** Whether version a comes after b, both as 0.22.0. */
+export function isNewer(a: string, b: string): boolean {
+  for (const v of [a, b]) if (!VERSION.test(v)) throw new Error(`${v} is not a version like 0.22.0`)
+  const [x, y] = [a, b].map((v) => v.split(".").map(Number))
+  for (let i = 0; i < 3; i++) if (x[i] !== y[i]) return x[i] > y[i]
+  return false
+}
 
 /** The text without its <!-- comments -->, however they nest. */
 function withoutComments(text: string): string {
@@ -19,21 +40,40 @@ function withoutComments(text: string): string {
   return text
 }
 
-export function parseDoc(md: string): Doc {
+/**
+ * A file as its title, intro and sections. With a release, the sections and
+ * items that wait for a newer version are left out and listed in `waiting`;
+ * without one, every block stays. With the file's name, an error names it.
+ */
+export function parseDoc(md: string, { release = null, file }: { release?: string | null; file?: string } = {}): Doc {
+  const at = file ? `${where(file)}: ` : ""
   let title: string | null = null
   const intro: string[] = []
-  type Open = { title: string; id: string | null; lines: string[]; items: Open[] }
+  type Open = { title: string; id: string | null; from: string | null; lines: string[]; items: Open[] }
   const sections: Open[] = []
   let lines = intro
   const text = withoutComments(md.replace(/\r\n/g, "\n"))
   for (const line of text.split("\n")) {
     const h1 = /^# (.+)$/.exec(line)
-    const h = /^(##|###) (.+?)(?:\s+\{#([\w-]+)\})?\s*$/.exec(line)
+    const h = /^(##|###) (.+?)(?:\s*\{([^{}]*)\})?\s*$/.exec(line)
     const section = sections[sections.length - 1]
+    // Braces left in a title are a mark the page would show as words, and
+    // whose block would not wait.
+    const braces = (title: string) => {
+      if (/[{}]/.test(title))
+        throw new Error(`${at}the heading "${line.trim()}" has braces in its title; ${MARKS}`)
+    }
     if (h1 && title === null && sections.length === 0) {
+      braces(h1[1])
       title = h1[1].trim()
     } else if (h && (h[1] === "##" || section)) {
-      const open: Open = { title: h[2].trim(), id: h[3] ?? null, lines: [], items: [] }
+      braces(h[2])
+      const mark = h[3] === undefined ? null : /^(?:#([\w-]+))?(?:\s*\bfrom (\d+\.\d+\.\d+))?$/.exec(h[3].trim())
+      if (h[3] !== undefined && (!mark || (!mark[1] && !mark[2])))
+        throw new Error(
+          `${at}the heading "${line.trim()}" ends in {${h[3]}}; ${MARKS}`
+        )
+      const open: Open = { title: h[2].trim(), id: mark?.[1] ?? null, from: mark?.[2] ?? null, lines: [], items: [] }
       if (h[1] === "##") sections.push(open)
       else section.items.push(open)
       lines = open.lines
@@ -42,13 +82,20 @@ export function parseDoc(md: string): Doc {
     }
   }
   const tidy = (ls: string[]) => ls.join("\n").replace(/\n{3,}/g, "\n\n").trim()
-  const close = ({ title, id, lines, items }: Open): Section => ({
+  const waiting: Waiting[] = []
+  const shown = (open: Open) => {
+    if (release === null || open.from === null || !isNewer(open.from, release)) return true
+    waiting.push({ id: open.id, title: open.title, from: open.from })
+    return false
+  }
+  const close = ({ title, id, from, lines, items }: Open): Section => ({
     title,
     id,
+    from,
     body: tidy(lines),
-    items: items.map(close),
+    items: items.filter(shown).map(close),
   })
-  return { title, intro: tidy(intro), sections: sections.map(close) }
+  return { title, intro: tidy(intro), sections: sections.filter(shown).map(close), waiting }
 }
 
 const escape = (s: string) =>
@@ -108,7 +155,17 @@ const where = (file: string) => `site/content/${file}`
  * moved fails the tests (index.test.ts), not a tile left blank.
  */
 export function sectionsByIds(file: string, doc: Doc, ids: readonly string[]): Section[] {
+  for (const id of ids) needed(file, doc, (w) => w.id === id, `{#${id}}`)
   return byIds(`${where(file)}:`, "section", doc.sections, ids)
+}
+
+/** A block the page needs cannot wait: say so, rather than that it is missing. */
+function needed(file: string, doc: Doc, is: (w: Waiting) => boolean, name: string) {
+  const w = doc.waiting.find(is)
+  if (w)
+    throw new Error(
+      `${where(file)}: ${name} waits for ${w.from}, but the page needs it; only a story item or a question can wait`
+    )
 }
 
 /** The same for a section's `###` items. */
@@ -135,6 +192,7 @@ export function sectionsByTitles<T extends string>(
 ): Record<T, string> {
   const out = {} as Record<T, string>
   for (const title of titles) {
+    needed(file, doc, (w) => w.title === title, `## ${title}`)
     const section = doc.sections.find((s) => s.title === title)
     if (!section) throw new Error(`${where(file)}: no section ## ${title}`)
     out[title] = section.body

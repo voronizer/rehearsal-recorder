@@ -2,9 +2,15 @@
 // words, and CHANGELOG.md for its version and news (only that version's
 // section: see vite.config.ts). A file that does not have what the page
 // needs fails `npm test`, naming the file, and so the site's CI.
+//
+// The version is the latest release's: every build on GitHub asks which one
+// that is (site.yml). A block marked for a newer version is left out
+// (markdown.ts), unless VITE_SITE_ALL_BLOCKS is 1, as in a pull request's
+// preview of the site after the next release.
 import changelog from "virtual:changelog"
 import { displayVersion, latestNews, latestVersion } from "./changelog"
-import { itemsByIds, parseDoc, sectionsByIds, sectionsByTitles, type Doc, type Section } from "./markdown"
+import type { PageFile } from "./files"
+import { isNewer, itemsByIds, parseDoc, sectionsByIds, sectionsByTitles, type Doc, type Section } from "./markdown"
 
 export type { Section } from "./markdown"
 
@@ -63,19 +69,22 @@ const files = import.meta.glob<string>(["../../content/*.md", "!../../content/st
   eager: true,
 })
 
-function doc(name: string): Doc {
+function readDoc(name: PageFile, release: string | null): Doc {
   const text = files[`../../content/${name}`]
   if (text === undefined) throw new Error(`site/content/${name} is missing`)
-  const parsed = parseDoc(text)
+  const parsed = parseDoc(text, { release, file: name })
   if (!parsed.title) throw new Error(`site/content/${name}: no # title`)
   return parsed
 }
 
 /** The content for a release with this tag, or, without one, for the newest
- *  version in CHANGELOG.md (a pull request's build, or a local one). */
-export function readContent(tagFromRelease?: string): SiteContent {
+ *  version in CHANGELOG.md (a local build, or one in a repository with no
+ *  release). With allBlocks, the blocks that wait for a newer version too. */
+export function readContent(tagFromRelease?: string, allBlocks = false): SiteContent {
   const tag = tagFromRelease || latestVersion(changelog)
   const version = displayVersion(tag)
+  const release = allBlocks ? null : version
+  const doc = (name: PageFile) => readDoc(name, release)
   // Tags are bare (0.11.0), so an older version's tag is its version.
   const latest = latestNews(changelog)
   const news = latest && { ...latest, tag: latest.version === version ? tag : latest.version }
@@ -90,11 +99,12 @@ export function readContent(tagFromRelease?: string): SiteContent {
   const controller = doc("controller.md")
   const controllerParts = sectionsByTitles("controller.md", controller, ["fine print", "link", "photo"])
   const story = doc("story.md")
+  const waits = (id: string) => story.waiting.some((w) => w.id === id)
   const steps = sectionsByIds("story.md", story, STEPS).map((step) => ({
     id: step.id as Step,
     title: step.title,
     body: step.body,
-    items: itemsByIds("story.md", step, ITEMS[step.id as Step]).map(item),
+    items: itemsByIds("story.md", step, ITEMS[step.id as Step].filter((id) => !waits(id))).map(item),
   }))
   const faq = doc("faq.md")
   const notFound = doc("notfound.md")
@@ -137,4 +147,12 @@ function item(section: Section): Item {
   return { id: section.id as ItemId, title: section.title, line, more }
 }
 
-export const content: SiteContent = readContent(import.meta.env.VITE_SITE_VERSION)
+const allBlocks = import.meta.env.VITE_SITE_ALL_BLOCKS === "1"
+
+export const content: SiteContent = readContent(import.meta.env.VITE_SITE_VERSION, allBlocks)
+
+/** Whether this build shows a block marked {from} this version: for the
+ *  tests of a block that waits, which check it only where it is shown. */
+export function shows(from: string): boolean {
+  return allBlocks || !isNewer(from, content.version)
+}

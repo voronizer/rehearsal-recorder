@@ -47,9 +47,11 @@ and as on the Mac and on Windows.
 python tests/run_all.py
 ```
 
-They must pass before a pull request, and they run on every push. They are
-plain scripts rather than pytest modules. [tests/README.md](tests/README.md)
-explains why, and what each one covers.
+They must pass before a pull request, and CI runs them on every pull
+request that changes the Python side (`docs/development.md` says which
+changes run which checks). They are plain scripts rather than pytest
+modules. [tests/README.md](tests/README.md) explains why, and what each one
+covers.
 
 If you fix a bug, make the suite fail first. Several things in here were only
 fixed for good once a test reproduced them: the player's open/close race, for
@@ -109,13 +111,21 @@ If the repository is not pushed anywhere yet, start with
 1. Update `CHANGELOG.md`.
 2. GitHub → Releases → Draft a new release → new tag (`0.2.0`, no `v`, to
    match the tags already there) → Publish.
-3. `.github/workflows/release.yml` builds on a real Mac and a real Windows
-   machine, runs every suite plus `--selftest` on the built app, and attaches
-   the zips to the release.
-4. Then the same workflow puts the website up for that release (its `site`
-   and `site · deploy` jobs), unless it is a pre-release. The page's news
-   line is the bold start of the first item in that version's section of
-   `CHANGELOG.md`; without one it just says which version is new.
+3. `.github/workflows/reha.yml` starts. First it makes the release before
+   “Latest” again, so installed copies and the website's download buttons
+   keep getting a version that has its zips. Then it builds on a real Mac
+   and a real Windows machine, runs every suite plus `--selftest` on the
+   built app, and attaches the zips to the release.
+4. Once both zips are attached, the new release is “Latest” again, and the
+   website goes up for it (`site.yml`). If a build fails, the release before
+   stays “Latest”. A pre-release gets its zips and leaves “Latest” and the
+   website alone. The page's news line is the bold start of the first item
+   in that version's section of `CHANGELOG.md`; without one it just says
+   which version is new.
+
+The band service goes up after a merge into main that changes it
+(`service.yml`), and the website after one that changes the website
+(`site.yml`).
 
 There is no version number to bump anywhere: the tag is the version.
 setuptools-scm reads it at build time and writes it into the package, which
