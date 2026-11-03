@@ -115,7 +115,9 @@ leaves the rest. Each workflow lists its paths at the top of its file:
 | The band service, `service/`; also `ui/` | Service, `service.yml` | The service's tests, its build, Playwright |
 | Either side of the seam: `src/rehearsal_recorder/api.py`, `ui/src/lib/api.ts`, `ui/e2e/fake-bridge.js` | Bridge, `bridge.yml` | The seam check |
 
-A pull request that changes only the docs runs none of them. The Python
+A pull request that changes only the docs runs none of them. GitHub looks
+at only the first 300 files a pull request changes when it picks the
+workflows, so a larger one may skip a check it needs: split it. The Python
 suites run on both systems because the two systems disagree about the
 things this app does most: a filesystem that ignores case, a file that cannot
 be moved while it is open, a code page with no Cyrillic. The interface's tests run
@@ -134,7 +136,9 @@ adding or renaming a call.
 A block on reha.stream can wait for a version of the app: a heading in
 `site/content/` that ends in `{from 0.22.0}`, or `{#id from 0.22.0}` where it
 has an id, stays off the site until that release is out. Only a story item
-or a question can wait.
+or a question can wait. A content test of such a block checks it only where
+the build shows it: `shows("0.22.0")` in `site/src/content/index.ts` says
+whether it does.
 
 ## Packaging it into an app
 

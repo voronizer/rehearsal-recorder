@@ -20,6 +20,7 @@ export type Waiting = { id: string | null; title: string; from: string }
 export type Doc = { title: string | null; intro: string; sections: Section[]; waiting: Waiting[] }
 
 const VERSION = /^\d+\.\d+\.\d+$/
+const MARKS = "a heading ends in {#id}, {from 0.22.0} or {#id from 0.22.0}"
 
 /** Whether version a comes after b, both as 0.22.0. */
 export function isNewer(a: string, b: string): boolean {
@@ -54,15 +55,23 @@ export function parseDoc(md: string, { release = null, file }: { release?: strin
   const text = withoutComments(md.replace(/\r\n/g, "\n"))
   for (const line of text.split("\n")) {
     const h1 = /^# (.+)$/.exec(line)
-    const h = /^(##|###) (.+?)(?:\s+\{([^{}]*)\})?\s*$/.exec(line)
+    const h = /^(##|###) (.+?)(?:\s*\{([^{}]*)\})?\s*$/.exec(line)
     const section = sections[sections.length - 1]
+    // Braces left in a title are a mark the page would show as words, and
+    // whose block would not wait.
+    const braces = (title: string) => {
+      if (/[{}]/.test(title))
+        throw new Error(`${at}the heading "${line.trim()}" has braces in its title; ${MARKS}`)
+    }
     if (h1 && title === null && sections.length === 0) {
+      braces(h1[1])
       title = h1[1].trim()
     } else if (h && (h[1] === "##" || section)) {
+      braces(h[2])
       const mark = h[3] === undefined ? null : /^(?:#([\w-]+))?(?:\s*\bfrom (\d+\.\d+\.\d+))?$/.exec(h[3].trim())
       if (h[3] !== undefined && (!mark || (!mark[1] && !mark[2])))
         throw new Error(
-          `${at}the heading "${line.trim()}" ends in {${h[3]}}; a heading ends in {#id}, {from 0.22.0} or {#id from 0.22.0}`
+          `${at}the heading "${line.trim()}" ends in {${h[3]}}; ${MARKS}`
         )
       const open: Open = { title: h[2].trim(), id: mark?.[1] ?? null, from: mark?.[2] ?? null, lines: [], items: [] }
       if (h[1] === "##") sections.push(open)

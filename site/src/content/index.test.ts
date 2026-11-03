@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest"
 import changelog from "../../../CHANGELOG.md?raw"
 import { readdirSync, readFileSync } from "node:fs"
 import { fileURLToPath } from "node:url"
+import faq from "../../content/faq.md?raw"
 import story from "../../content/story.md?raw"
 import { PAGE_FILES } from "./files"
 import { content, ITEMS, readContent, shows, STEPS } from "./index"
@@ -11,9 +12,12 @@ import { changelogHead, displayVersion, latestNews, latestVersion } from "./chan
 // What the build reads: the release's part of CHANGELOG.md (vite.config.ts).
 const head = changelogHead(changelog, import.meta.env.VITE_SITE_VERSION || undefined)
 
-// The story items this build leaves out, as they wait for a newer version.
+// What this build leaves out, as it waits for a newer version: the counts
+// below are of every block in the file, waiting or not.
 const allBlocks = import.meta.env.VITE_SITE_ALL_BLOCKS === "1"
-const waiting = parseDoc(story, { release: allBlocks ? null : content.version }).waiting.map((w) => w.id)
+const release = allBlocks ? null : content.version
+const waiting = parseDoc(story, { release }).waiting.map((w) => w.id)
+const questionsWaiting = parseDoc(faq, { release }).waiting.length
 
 // The words in site/content/, as the page will use them. An id spelt wrong
 // there fails here, naming the file, rather than leaving a tile blank.
@@ -36,7 +40,7 @@ describe("the site's content", () => {
       )
     // 31 picked: these 29, and the controller's block and its fourth line;
     // then the backing track's and the lineups'.
-    expect(content.story.steps.flatMap((s) => s.items)).toHaveLength(31)
+    expect(content.story.steps.flatMap((s) => s.items)).toHaveLength(31 - waiting.length)
   })
 
   it("has a line for each step, and for each item a line and what the window says", () => {
@@ -98,7 +102,7 @@ describe("the site's content", () => {
   })
 
   it("has eleven questions, each with an answer, the name's first", () => {
-    expect(content.faq.questions).toHaveLength(11)
+    expect(content.faq.questions).toHaveLength(11 - questionsWaiting)
     expect(content.faq.questions[0].body).toContain("Belarusian for “echo”")
     // Sleep follows the laptop dying, the question it answers next.
     expect(content.faq.questions[8].title).toBe("What if the laptop dies in the middle of a take?")
@@ -137,7 +141,7 @@ describe("the site's content", () => {
     const dir = fileURLToPath(new URL("../../content/", import.meta.url))
     const files = readdirSync(dir, { recursive: true, encoding: "utf8" }).filter((f) => f.endsWith(".md"))
     const marked = files.filter((f) =>
-      /^#{2,3} .*\{[^}]*\bfrom\b[^}]*\}\s*$/m.test(readFileSync(`${dir}${f}`, "utf8"))
+      /^#{1,3} .*\{(?:#[\w-]+\s+)?from\s[^}]*\}\s*$/m.test(readFileSync(`${dir}${f}`, "utf8"))
     )
     for (const file of marked) expect(PAGE_FILES, file).toContain(file)
   })

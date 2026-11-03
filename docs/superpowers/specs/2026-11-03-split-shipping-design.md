@@ -295,7 +295,9 @@ comes out of `api.ts` (line 1172, and `ANSWERS_WITH_A_VALUE` at line 1737).
 - Whether "latest" stays on the previous release once the release run hands
   it back. GitHub documents setting it on any published release, not this
   order of events. The first release after the merge shows it; if the step
-  fails, the run is red and stops before the builds.
+  fails, the run is red, and the builds still go on, so the new release,
+  still the latest, gets its zips (changed in the final review: stopping
+  before the builds would leave it without zips until a re-run).
 - How long the newest release is "latest" before the hand-back: the time
   GitHub takes to start the run, not measured. Seconds as a rule.
 

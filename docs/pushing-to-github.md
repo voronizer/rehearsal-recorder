@@ -14,7 +14,9 @@ it needs is somewhere to push it.
    git push -u origin main
    ```
 
-3. The tests run straight away, on that first push: see the Actions tab.
+3. On that first push the website's and the band service's checks run: see
+   the **Actions** tab. РЭХА's own checks run on each pull request that
+   changes it.
 
 ## Making a release with downloadable apps
 
@@ -23,11 +25,11 @@ it needs is somewhere to push it.
    type `0.1.0` (no `v`) → **Create new tag on publish** → write what changed →
    **Publish release**.
 3. `reha.yml` starts. For the few minutes the builds take, it makes the
-   release before “Latest” again, so the download buttons and the app's own
-   update check keep offering a version that has its zips. It builds on a
-   real Mac and a real Windows machine, runs every Python suite on each,
-   packages the app, and runs the app's own `--selftest` on the result.
-   Roughly ten minutes.
+   release before (when there is one) “Latest” again, so the download
+   buttons and the app's own update check keep offering a version that has
+   its zips. It builds on a real Mac and a real Windows machine, runs every
+   Python suite on each, packages the app, and runs the app's own
+   `--selftest` on the result. Roughly ten minutes.
 4. The two zips appear on the release page. That is what people download.
    The release is “Latest” again, and the website goes up for it.
 

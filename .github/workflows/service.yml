@@ -35,10 +35,12 @@ on:
 permissions:
   contents: read
 
-# A pull request's newer push replaces its older run; anything else runs to
-# its end.
+# A pull request's newer push replaces its older run. On a branch the runs
+# go one after another, each to its end, so an older run never puts the
+# service up after a newer one; of those waiting, only the newest is kept,
+# and it has everything the others had.
 concurrency:
-  group: service-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
+  group: service-${{ github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:

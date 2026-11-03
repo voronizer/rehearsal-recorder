@@ -49,8 +49,9 @@ python tests/run_all.py
 
 They must pass before a pull request, and CI runs them on every pull
 request that changes the Python side (`docs/development.md` says which
-changes run which checks). They are plain scripts rather than pytest modules. [tests/README.md](tests/README.md)
-explains why, and what each one covers.
+changes run which checks). They are plain scripts rather than pytest
+modules. [tests/README.md](tests/README.md) explains why, and what each one
+covers.
 
 If you fix a bug, make the suite fail first. Several things in here were only
 fixed for good once a test reproduced them: the player's open/close race, for

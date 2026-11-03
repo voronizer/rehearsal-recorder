@@ -34,6 +34,13 @@ test("pyApiNames reads plain and generic calls", () => {
   assert.deepEqual(pyApiNames(source), ["get_x", "set_y"])
 })
 
+test("pyApiNames refuses a member it cannot read as a call", () => {
+  for (const line of ["  get_x?(): Promise<X>", "  get_x: () => Promise<X>"])
+    assert.throws(() => pyApiNames(`type PyApi = {\n  ok(): void\n${line}\n}\n`), {
+      message: `ui/src/lib/api.ts: PyApi's line "${line.trim()}" is not a call the seam check can read; write it as get_x(…)`,
+    })
+})
+
 test("pyApiNames names the file when PyApi is missing", () => {
   assert.throws(() => pyApiNames("type Other = {\n  a(): void\n}\n"), /ui\/src\/lib\/api\.ts has no type PyApi/)
 })

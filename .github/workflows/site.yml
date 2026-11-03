@@ -12,7 +12,8 @@
 #     branch it builds and tests, and puts nothing up.
 # Not after a merge that changes only ui/ or CHANGELOG.md: nearly every
 # merge does, and each would put the site up with an interface ahead of the
-# release people download. The next release puts them up.
+# release people download. The next release puts them up. In a fork
+# nothing goes up: reha.stream is this repository's.
 #
 # Every build asks GitHub which release is the latest, and takes the
 # version and the news line from it (CHANGELOG.md). A block in site/content/
@@ -53,10 +54,12 @@ on:
 permissions:
   contents: read
 
-# A pull request's newer push replaces its older run; anything else runs to
-# its end.
+# A pull request's newer push replaces its older run. On main the runs go
+# one after another, each to its end, so an older run never puts the site
+# up after a newer one; of those waiting, only the newest is kept, and it
+# has everything the others had.
 concurrency:
-  group: site-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
+  group: site-${{ github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
@@ -84,14 +87,17 @@ jobs:
           node-version: "26"
 
       # A repository with no release yet (a fork, say) has no latest: the
-      # site then takes the newest version in CHANGELOG.md.
+      # site then takes the newest version in CHANGELOG.md. Any other
+      # trouble asking GitHub stops the run, rather than put the site up
+      # for a version that may not be out yet.
       - name: Which release
         id: release
         env:
           GH_TOKEN: ${{ github.token }}
           EVENT: ${{ github.event_name }}
         run: |
-          tag=$(gh release view --repo "$GITHUB_REPOSITORY" --json tagName --jq .tagName 2>/dev/null || true)
+          tag=$(gh release list --repo "$GITHUB_REPOSITORY" --exclude-drafts --exclude-pre-releases \
+            --limit 100 --json tagName,isLatest --jq '.[] | select(.isLatest) | .tagName')
           v=$(jq -r '.packages["node_modules/@playwright/test"].version // empty' site/package-lock.json)
           if ! [[ "$v" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
             echo "::error::No version of @playwright/test in site/package-lock.json."
@@ -100,7 +106,7 @@ jobs:
           waiting=$(node site/scripts/waiting.mjs "$tag")
           preview=false
           if [ "$EVENT" = pull_request ] &&
-            git diff --name-only HEAD^1 HEAD | grep -qE '^(site/|\.github/actions/site/|\.github/workflows/site\.yml$)'; then
+            git diff --name-only --no-renames HEAD^1 HEAD | grep -qE '^(site/|\.github/actions/site/|\.github/workflows/site\.yml$)'; then
             preview=true
           fi
           echo "The latest release is ${tag:-not there}; Playwright $v; a block waits: $waiting; preview: $preview."
@@ -184,7 +190,8 @@ jobs:
   # Only a pull request that changes the site itself gets one (Alex,
   # 2026-10-11). Secrets reach a pull request only from a branch of this
   # repository, so one from a fork or from Dependabot is built and tested
-  # and gets no preview. It needs the repository secrets
+  # and gets no preview; nor does one inside a fork, whose Cloudflare
+  # account has no reha-stream-preview. It needs the repository secrets
   # CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID, as the deploy does.
   preview:
     name: site · preview
@@ -192,6 +199,7 @@ jobs:
     if: >-
       !cancelled() &&
       github.event_name == 'pull_request' &&
+      github.repository == 'voronizer/rehearsal-recorder' &&
       github.event.pull_request.head.repo.full_name == github.repository &&
       github.actor != 'dependabot[bot]' &&
       needs.which.outputs.preview == 'true' &&
@@ -243,7 +251,8 @@ jobs:
 
   # The one place anything goes to reha.stream: the Worker reha-stream on
   # the owner's Cloudflare account (site/wrangler.jsonc), made of the files
-  # the site job laid out, from main only. Cloudflare serves them as they
+  # the site job laid out, from main only, and only in this repository: a
+  # band's fork runs this workflow too, and reha.stream is not theirs. Cloudflare serves them as they
   # are; the short links /mac and /windows and a year's cache for the
   # build's hashed files are the build's _redirects and _headers. The
   # deploy keeps reha.stream on the Worker. Cloudflare gives a name to a
@@ -261,7 +270,10 @@ jobs:
   deploy:
     name: site · deploy
     needs: [which, site]
-    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    if: >-
+      github.event_name != 'pull_request' &&
+      github.ref == 'refs/heads/main' &&
+      github.repository == 'voronizer/rehearsal-recorder'
     runs-on: ubuntu-latest
     concurrency:
       group: reha-stream

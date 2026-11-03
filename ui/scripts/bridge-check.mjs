@@ -37,6 +37,14 @@ export function pyApiNames(source) {
       if (/^\}/.test(line)) break
       const call = /^ {2}([A-Za-z_]\w*)\s*[<(]/.exec(line)
       if (call) names.push(call[1])
+      // Anything else two spaces in that starts with a name is a member the
+      // check would miss without a word.
+      else if (/^ {2}[A-Za-z_]/.test(line)) {
+        const name = /^ {2}([A-Za-z_]\w*)/.exec(line)[1]
+        throw new Error(
+          `${LIST}: PyApi's line "${line.trim()}" is not a call the seam check can read; write it as ${name}(…)`
+        )
+      }
     }
   if (!names.length) throw new Error(`${LIST} has no type PyApi`)
   return names

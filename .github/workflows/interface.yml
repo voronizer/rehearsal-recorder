@@ -67,8 +67,8 @@ jobs:
   # 2026-10-17 that took the whole check from 9 minutes to under 4 (two
   # machines: 4.6); a fourth would gain little. The steps are written once,
   # under &interface, and the other two jobs take them as they are
-  # (*interface); PART tells the three apart. What needs no browser runs in the first part
-  # alone.
+  # (*interface); PART tells the three apart. What needs no browser runs in
+  # the first part alone.
   #
   # Three jobs and not a matrix, as with the app's (reha.yml), so that a
   # skipped one keeps its name.

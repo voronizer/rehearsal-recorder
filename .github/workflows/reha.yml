@@ -134,27 +134,58 @@ jobs:
   # GitHub makes a newly published release "Latest" at once, before it has
   # a zip. Installed copies look for their update in the latest release
   # (updates.py) and the site's buttons download from it, so until both
-  # zips are attached the release before is made the latest again. The
-  # release before is the highest version of the others that is not a
-  # draft or a pre-release. If GitHub does not take it, the run stops here,
-  # before the builds.
+  # zips are attached the release before is made the latest again: the
+  # highest version of the others that has both zips and is not a draft or
+  # a pre-release. If GitHub does not take it, the job is red and the
+  # builds go on, so the new release, still the latest, gets its zips.
+  #
+  # Publish makes the release the latest unless "Set as the latest release"
+  # is unticked. Unticked, the release is left as it is, and the site is
+  # not put up for it.
   latest-back:
     name: latest back
     if: github.event_name == 'release' && !github.event.release.prerelease
     runs-on: ubuntu-latest
     permissions:
       contents: write
+    outputs:
+      ours: ${{ steps.ours.outputs.ours }}
     steps:
-      - name: The release before is the latest
+      - name: Is this release the latest
+        id: ours
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ github.event.release.tag_name }}
         run: |
-          previous=$(gh release list --repo "$GITHUB_REPOSITORY" --exclude-drafts --exclude-pre-releases \
-            --limit 100 --json tagName --jq '.[].tagName' | { grep -vxF "$TAG" || true; } | sort -V | tail -1)
+          latest=$(gh release list --repo "$GITHUB_REPOSITORY" --exclude-drafts --exclude-pre-releases \
+            --limit 100 --json tagName,isLatest --jq '.[] | select(.isLatest) | .tagName')
+          if [ "$latest" = "$TAG" ]; then
+            echo "ours=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::notice::$TAG was published without being made the latest release, so it stays as it is, and the site is not put up for it."
+            echo "ours=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: The release before is the latest
+        if: steps.ours.outputs.ours == 'true'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.event.release.tag_name }}
+        run: |
+          tags=$(gh release list --repo "$GITHUB_REPOSITORY" --exclude-drafts --exclude-pre-releases \
+            --limit 100 --json tagName --jq '.[].tagName')
+          previous=""
+          for tag in $(grep -vxF "$TAG" <<<"$tags" | sort -rV); do
+            zips=$(gh release view "$tag" --repo "$GITHUB_REPOSITORY" --json assets --jq '.assets[].name')
+            if grep -qxF RehearsalRecorder-macos.zip <<<"$zips" && grep -qxF RehearsalRecorder-windows.zip <<<"$zips"; then
+              previous=$tag
+              break
+            fi
+          done
           if [ -z "$previous" ]; then
-            echo "::notice::No release before $TAG: it stays the latest while its zips are built."
+            echo "::notice::No release before $TAG has both zips: $TAG stays the latest while its own are built."
             exit 0
           fi
           gh release edit "$previous" --repo "$GITHUB_REPOSITORY" --latest
@@ -165,12 +196,13 @@ jobs:
           fi
           echo "$previous is the latest release while $TAG's zips are built."
 
-  # A job runs after a skipped one only when its `if` says so, hence
-  # !cancelled(): latest back is skipped for a pre-release and by hand.
+  # A job runs after a skipped or failed one only when its `if` says so,
+  # hence !cancelled(): latest back is skipped for a pre-release and by
+  # hand, and a failed one still lets the zips be built.
   build-macos:
     name: build · macos
     needs: latest-back
-    if: ${{ !cancelled() && github.event_name != 'pull_request' && needs.latest-back.result != 'failure' }}
+    if: ${{ !cancelled() && github.event_name != 'pull_request' }}
     runs-on: macos-latest
     permissions:
       contents: write
@@ -226,7 +258,7 @@ jobs:
   build-windows:
     name: build · windows
     needs: latest-back
-    if: ${{ !cancelled() && github.event_name != 'pull_request' && needs.latest-back.result != 'failure' }}
+    if: ${{ !cancelled() && github.event_name != 'pull_request' }}
     runs-on: windows-latest
     permissions:
       contents: write
@@ -282,12 +314,16 @@ jobs:
   # Both zips are attached: the new release is the latest again, and the
   # site goes up for it. Site is started on main with this run's own token:
   # a run by hand (workflow_dispatch) is the one kind that token may start.
-  # Not after a pre-release, and not when a build failed: a job with no
-  # status check in its `if` runs only when every job it needs succeeded.
+  # Not after a pre-release, not for a release published without being the
+  # latest, and not when a build failed.
   latest:
     name: latest
-    needs: [build-macos, build-windows]
-    if: github.event_name == 'release' && !github.event.release.prerelease
+    needs: [latest-back, build-macos, build-windows]
+    if: >-
+      !cancelled() &&
+      github.event_name == 'release' && !github.event.release.prerelease &&
+      needs.latest-back.outputs.ours == 'true' &&
+      needs.build-macos.result == 'success' && needs.build-windows.result == 'success'
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -300,5 +336,10 @@ jobs:
           TAG: ${{ github.event.release.tag_name }}
         run: |
           gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --latest
+          now=$(gh release view --repo "$GITHUB_REPOSITORY" --json tagName --jq .tagName)
+          if [ "$now" != "$TAG" ]; then
+            echo "::error::GitHub still calls $now the latest release, not $TAG."
+            exit 1
+          fi
           gh workflow run site.yml --repo "$GITHUB_REPOSITORY" --ref main
           echo "$TAG is the latest release, with both zips; Site is putting reha.stream up for it." >> "$GITHUB_STEP_SUMMARY"

@@ -164,6 +164,20 @@ describe("blocks that wait for a version", () => {
       )
   })
 
+  it("reads a mark stuck to its title, and fails on braces left in a title", () => {
+    expect(parseDoc("## Is it free?{from 0.22.0}\nYes.").sections[0]).toMatchObject({ title: "Is it free?", from: "0.22.0" })
+    // An item's heading counts as one only under a section.
+    for (const [before, heading] of [
+      ["", "## Is it free? {from 0.22.0}."],
+      ["## Before.\n", "### Tap. {#tap} {from 0.22.0}"],
+      ["", "# Questions. {from 0.22.0}"],
+    ])
+      expect(() => parseDoc(`${before}${heading}\nYes.`, { file: "faq.md" }), heading).toThrow(
+        `site/content/faq.md: the heading "${heading}" has braces in its title; a heading ends in {#id}, {from 0.22.0} or {#id from 0.22.0}`
+      )
+    expect(parseDoc("## Is it free?{#free}\nYes.").sections[0]).toMatchObject({ title: "Is it free?", id: "free" })
+  })
+
   it("fails when a block the page needs waits", () => {
     const steps = parseDoc("## Later. {#later from 0.22.0}\nLead.", { release: "0.21.0" })
     expect(() => sectionsByIds("story.md", steps, ["later"])).toThrow(
