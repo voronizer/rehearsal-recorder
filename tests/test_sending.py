@@ -574,6 +574,96 @@ def run(tmp, fake):
     ok("an old REHA is told to update",
        entry.get("state") == "failed" and entry.get("error") == "Update РЭХА to send takes here")
 
+    print("\n[9] The band's tempo along Master")
+    ok("a click take's details carry its tempo, signature and click",
+       service_files.meter({"tempo": 96, "signature": "6/8", "click": True})
+       == {"tempo": 96.0, "signature": "6/8", "click": True})
+    ok("a take recorded with the click off has its tempo and no click",
+       service_files.meter({"tempo": 96, "signature": "3/4", "click": False})
+       == {"tempo": 96.0, "signature": "3/4", "click": False})
+    ok("a take with no tempo, or one the service would not take, sends neither",
+       service_files.meter({"tempo": None, "signature": None, "click": True})
+       == service_files.meter({"tempo": 120, "signature": "5/4", "click": True})
+       == {"tempo": None, "signature": None, "click": False})
+    with_notes = {"take_number": 3, "name": "Lieta 1", "song": "Lieta", "duration_sec": 30, "starred": False,
+                  "tracks": [{"name": "Bass", "file": "b.wav", "icon": "bass"}],
+                  "notes": [{"name": "Drums", "file": "d.mid", "icon": "drums"}, {"name": "Keys", "file": "k.mid"}]}
+    ok("each .mid goes with its track's icon",
+       service_files.meta(with_notes, {"id": 1, "created_at": "2026-11-03", "name": "Thursday"}, [], {}, 1, 0)["notes"]
+       == [{"position": 2, "name": "Drums", "file": "2.mid", "icon": "drums"},
+           {"position": 3, "name": "Keys", "file": "3.mid", "icon": None}])
+    ok("a count Record stopped is not the take's tempo",
+       service_files.drift({"ok": False, "why": "recording"}) is None
+       and service_files.drift({"ok": False, "why": "short"}) == {"ok": False, "why": "short"})
+
+    bars = {"ok": True, "source": "drums", "per_bar": 4, "tempo": 120.0, "middle": 120.3712,
+            "aim": {"tempo": 120, "signature": "4/4", "from": "click", "song": None},
+            "bars": [{"n": 1, "start": 0.0004, "end": 2.00049, "tempo": 119.8765},
+                     {"n": 2, "start": 2.00049, "end": 4.0, "tempo": None}]}
+    sent_bars = {"ok": True, "source": "drums", "per_bar": 4, "middle": 120.37,
+                 "aim": {"tempo": 120.0, "signature": "4/4", "from": "click", "song": None},
+                 "bars": [{"n": 1, "start": 0.0, "end": 2.0, "tempo": 119.88},
+                          {"n": 2, "start": 2.0, "end": 4.0, "tempo": None}]}
+    counted = []
+    answers = [bars]
+
+    def take_drift(tracks, notes, meter):
+        counted.append({"tracks": [t["name"] for t in tracks], "meter": meter})
+        return answers[0]
+
+    real_drift = api.take_drift
+    api.take_drift = take_drift
+    try:
+        n12 = keep("Lieta", band=["Drums", "Bass"])
+        drain()
+        uid12 = uid_of(n12)
+        ok("a take's tempo goes once its files are up",
+           fake.drifts.get(uid12) == {"gen": 1, "drift": sent_bars}
+           and fake.order.index(f"drift {uid12} 1") > fake.order.index(f"ready {uid12} flac 1"))
+        ok("counted from the take's tracks and its click, as the player counts it",
+           counted[-1] == {"tracks": ["Drums", "Bass"],
+                           "meter": {"tempo": None, "signature": None, "click": False, "song": "Lieta"}})
+        ok("its details carry its click", fake.takes[uid12]["meter"] == {"tempo": None, "signature": None, "click": False})
+        before = len(counted)
+        service().edited(folder(), n12)
+        drain()
+        ok("details sent again do not count the tempo again", len(counted) == before and fake.count(f"put {uid12}") == 2)
+
+        answers[0] = {"ok": False, "why": "recording"}
+        n13 = keep("Lieta", band=["Drums"])
+        for _ in range(40):
+            service().run_next()
+            if fake.count(f"ready {uid_of(n13)} flac") == 1:
+                break
+        service().run_next()
+        row13 = api._lib.service_row(folder(), n13)
+        ok("a count Record stopped leaves the take to go on after the recording",
+           uid_of(n13) not in fake.drifts and row13["due"]
+           and any(e["take_number"] == n13 and e["step"] == band_service.RECORDING_STEP for e in entries()))
+        answers[0] = bars
+        drain()
+        ok("and it goes then", fake.drifts.get(uid_of(n13), {}).get("gen") == 1)
+
+        fake.keeps_tempo = False
+        answers[0] = {"ok": False, "why": "no-beat"}
+        n14 = keep("Lieta", band=["Drums"])
+        drain()
+        uid14 = uid_of(n14)
+        ok("a service from before the tempo is not sent it", f"drift {uid14} 1" not in fake.order)
+        fake.keeps_tempo = True
+        lines = len(entries())
+        service()._next_check = 0
+        drain()
+        ok("a take up from before gets its tempo after the next look at the service, with no line in the list",
+           fake.drifts.get(uid14) == {"gen": 1, "drift": {"ok": False, "why": "no-beat"}}
+           and fake.count(f"put {uid14}") == 2 and len(entries()) == lines)
+        puts = fake.count("put ")
+        service()._next_check = 0
+        drain()
+        ok("and one that has it is left alone", fake.count("put ") == puts)
+    finally:
+        api.take_drift = real_drift
+
     ok("every request matches the service's description", fake.mismatches == [])
     # Cloudflare's Browser Integrity Check turns away Python-urllib/3.x.
     ok("REHA names itself in every request, not as Python",

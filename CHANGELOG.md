@@ -15,7 +15,20 @@ opening.
 - **Master in the band service.** Under the tracks, **Master** turns the
   whole take up or down and shows how loud it all comes out. The level is
   kept on that phone or computer for the next take, and nobody else hears
-  it. The service has no click, so Master has no click button.
+  it. The service plays no click, so Master has no click button.
+- **Where the band drifted, in the band service.** On a computer, Master's
+  row shows the click's bars and the band's tempo bar by bar, as in РЭХА's
+  player. РЭХА works the tempo out once a take's files are up and sends it
+  after them. Takes already in the service get it too: after the update,
+  РЭХА sends it for them in the background, for each take whose files are
+  still on this computer.
+- **M and S on one track take each other off.** **S** on a muted track turns
+  its **M** off, and **M** on the soloed track turns its **S** off, in РЭХА
+  and in the band service. Before, both could be on at once.
+- **A track's notes go paler with its sound.** In the player, a track's MIDI
+  notes go paler when the track is muted or another track is soloed, as its
+  waveform does. Notes of a track on **MIDI** go paler while any track is
+  soloed. The same in the band service, on a phone too.
 
 ## 0.21.0
 

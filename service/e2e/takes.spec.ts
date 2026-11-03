@@ -18,11 +18,19 @@ test.describe("as Alex", () => {
     const kit = player.locator('[data-notes-lane="Drums"]')
     for (const row of ["Hi-hat", "Snare", "Kick"]) await expect(kit.getByText(row, { exact: true })).toBeVisible()
     await expect(kit).not.toContainText("Notes file")
-    // Master: how loud the take plays here, and no click, which the service does not play.
+    // Master: how loud the take plays here, and no click button, as the
+    // service plays no click; its lane has the click's bars and the band's
+    // tempo through them, as РЭХА counted it.
     const master = player.locator("[data-master-group]")
     await expect(master.getByRole("slider", { name: "Master volume" })).toBeVisible()
     await expect(master.getByRole("meter", { name: "Master level" })).toBeVisible()
     await expect(page.getByRole("button", { name: "Click with the take" })).toHaveCount(0)
+    const lane = master.locator("[data-master-lane]")
+    await expect(lane.locator("[data-click-tag]")).toHaveText("Click 120 bpm · 4/4")
+    expect(await lane.locator("[data-click-line]").count()).toBeGreaterThan(0)
+    await expect(lane.locator("[data-drift-line]")).toBeVisible()
+    await expect(lane.locator("[data-drift-chip]")).toHaveText(["+6"])
+    await expect(lane).toHaveAttribute("aria-label", "Click 120 bpm · 4/4. Tempo: ahead 6 bpm, bars 3 to 5.")
     // РЭХА's balance came with the take.
     await expect(player.getByRole("slider", { name: "Vocals volume" })).toHaveAttribute("aria-valuetext", "70%")
     await expect(player.getByRole("slider", { name: "Bass volume" })).toHaveAttribute("aria-valuetext", "100%")
@@ -33,9 +41,21 @@ test.describe("as Alex", () => {
     const solo = player.getByRole("button", { name: "Solo Bass" })
     await solo.click()
     await expect(solo).toHaveAttribute("aria-pressed", "true")
+    // The drums' notes go pale with their sound while the bass plays alone.
+    await expect(kit).toHaveAttribute("data-dimmed", "true")
     await solo.click()
     await expect(solo).toHaveAttribute("aria-pressed", "false")
+    await expect(kit).not.toHaveAttribute("data-dimmed")
     await expect(mute).toHaveAttribute("aria-pressed", "true")
+
+    // On one track, S takes M off and M takes S off.
+    const soloVocals = player.getByRole("button", { name: "Solo Vocals" })
+    await soloVocals.click()
+    await expect(soloVocals).toHaveAttribute("aria-pressed", "true")
+    await expect(mute).toHaveAttribute("aria-pressed", "false")
+    await mute.click()
+    await expect(mute).toHaveAttribute("aria-pressed", "true")
+    await expect(soloVocals).toHaveAttribute("aria-pressed", "false")
   })
 
   test("a take plays, its time moves, and a press on the lanes moves the playhead", async ({ page }) => {
@@ -81,10 +101,22 @@ test.describe("as Alex", () => {
     await expect(lanes.nth(2)).toHaveAttribute("data-lane-row", "Keys")
     await expect(lanes.nth(2)).not.toHaveAttribute("data-paired")
     await expect(lanes.nth(2).locator("[data-notes-plate]")).toContainText("Keys")
+    await expect(lanes.nth(2).locator("[data-notes-plate] [data-icon]")).toHaveAttribute("data-icon", "keys")
     // A chord in the octave of middle C.
     const keys = page.locator('[data-notes-lane="Keys"]')
     await expect(keys.getByText("C4", { exact: true })).toBeVisible()
     await expect(keys).not.toContainText("Notes file")
+    // Another track's S leaves the keys' notes out of what is heard: pale.
+    await expect(keys).not.toHaveAttribute("data-dimmed")
+    await page.getByRole("button", { name: "Solo Drums" }).click()
+    await expect(keys).toHaveAttribute("data-dimmed", "true")
+  })
+
+  test("a take sent by REHA 0.21 has Master with no lane: its click was not sent", async ({ page }) => {
+    await page.goto(`/takes/${band().takes["Pałyn 9"]}`)
+    const master = page.locator("[data-take-player] [data-master-group]")
+    await expect(master.getByRole("slider", { name: "Master volume" })).toBeVisible()
+    await expect(master.locator("[data-master-lane]")).toHaveCount(0)
   })
 
   test("Master's level is kept on this device for the next take", async ({ page }) => {
@@ -163,6 +195,9 @@ test.describe("as Alex on a phone", () => {
     await expect(rows.nth(2)).toHaveAttribute("data-desk-row", "Keys")
     await expect(rows.nth(2)).toContainText("Saved as .mid, not played here")
     await expect(rows.nth(2).getByRole("slider")).toHaveCount(0)
+    await expect(rows.nth(2)).not.toHaveAttribute("data-dimmed")
+    await tracks.getByRole("button", { name: "Solo Drums" }).click()
+    await expect(rows.nth(2)).toHaveAttribute("data-dimmed", "true")
   })
 })
 
@@ -246,6 +281,12 @@ test.describe("as Ira", () => {
     await expect(panel.getByRole("button", { name: /^Pause “Pałyn 3”/ })).toBeVisible()
     await expect(solo).toHaveAttribute("aria-pressed", "true")
     await expect(panel.getByRole("group", { name: "Drums" })).toHaveAttribute("data-heard", "false")
+    // M on the soloed track takes its S off.
+    const mute = panel.getByRole("button", { name: "Mute Bass" })
+    await mute.click()
+    await expect(mute).toHaveAttribute("aria-pressed", "true")
+    await expect(solo).toHaveAttribute("aria-pressed", "false")
+    await expect(panel.getByRole("group", { name: "Drums" })).toHaveAttribute("data-heard", "true")
   })
 
   test("a star shows at once and stays after a reload", async ({ page }) => {

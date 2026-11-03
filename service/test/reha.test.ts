@@ -6,7 +6,7 @@ import { loadMarks } from "../worker/marks/view"
 import { database } from "../worker/shared/db"
 import { take } from "../worker/shared/schema"
 import { purgeTrash } from "../worker/takes/purge"
-import { TAKE, reha, shownTake, takeMeta } from "./helpers"
+import { TAKE, call, reha, shownTake, signInOwner, takeMeta } from "./helpers"
 
 const MiB = 1024 * 1024
 const PART = 10 * MiB
@@ -427,4 +427,82 @@ test("a day's emptying of the trash deletes 20 takes at most, the rest the next 
   expect(await purgeTrash(env as unknown as Bindings)).toBe(2)
   expect(await left()).toBe(0)
   vi.useRealTimers()
+})
+
+/** Four bars of 4/4 at 120, the third a little ahead, as РЭХА counts them. */
+const DRIFT = {
+  ok: true,
+  source: "drums",
+  per_bar: 2,
+  middle: 120.4,
+  aim: { tempo: 120, signature: "4/4", from: "click", song: null },
+  bars: [
+    { n: 1, start: 0, end: 2, tempo: 119.8 },
+    { n: 2, start: 2, end: 4, tempo: 120.2 },
+    { n: 3, start: 4, end: 5.9, tempo: 126.3 },
+    { n: 4, start: 5.9, end: 7.9, tempo: null },
+  ],
+}
+
+test("a take's click comes with its details, and one sent without it keeps what it had", async () => {
+  const r = await reha()
+  const meter = { tempo: 120, signature: "4/4", click: true }
+  expect((await r.put(`/api/reha/takes/${TAKE}`, takeMeta({ meter }))).status).toBe(200)
+  expect(JSON.parse((await takeRow())!.meter as string)).toEqual(meter)
+  // REHA 0.21 sends no click.
+  expect((await r.put(`/api/reha/takes/${TAKE}`, takeMeta({ starred: true }))).status).toBe(200)
+  expect(JSON.parse((await takeRow())!.meter as string)).toEqual(meter)
+  // A take recorded with the click off has a tempo all the same.
+  expect((await r.put(`/api/reha/takes/${TAKE}`, takeMeta({ meter: { ...meter, click: false } }))).status).toBe(200)
+  expect(JSON.parse((await takeRow())!.meter as string)).toMatchObject({ click: false })
+  expect((await r.put(`/api/reha/takes/${TAKE}`, takeMeta({ meter: { ...meter, signature: "5/4" } }))).status).toBe(400)
+})
+
+test("the tempo through a take is kept for the generation REHA counted it for", async () => {
+  const r = await reha()
+  const put = async (meta = {}) => (await (await r.put(`/api/reha/takes/${TAKE}`, takeMeta(meta))).json()) as { drift_gen: number | null }
+  const listed = async () => ((await (await r.get("/api/reha/takes")).json()) as { uid: string; drift_gen: number | null }[])[0]
+  expect(await put()).toMatchObject({ drift_gen: null })
+  expect(await listed()).toMatchObject({ uid: TAKE, drift_gen: null })
+
+  expect((await r.put(`/api/reha/takes/${TAKE}/drift`, { gen: 1, drift: DRIFT })).status).toBe(200)
+  expect(JSON.parse((await takeRow())!.drift as string)).toEqual(DRIFT)
+  expect(await put({ starred: true })).toMatchObject({ drift_gen: 1 })
+  expect(await listed()).toMatchObject({ drift_gen: 1 })
+
+  // A crop: the tempo of the generation before is not that of the new one.
+  await put({ gen: 2 })
+  expect((await r.put(`/api/reha/takes/${TAKE}/drift`, { gen: 1, drift: { ok: false, why: "short" } })).status).toBe(200)
+  expect(await takeRow()).toMatchObject({ drift_gen: 1 })
+  expect((await r.put(`/api/reha/takes/${TAKE}/drift`, { gen: 2, drift: { ok: false, why: "no-beat" } })).status).toBe(200)
+  expect(await takeRow()).toMatchObject({ drift_gen: 2, drift: JSON.stringify({ ok: false, why: "no-beat" }) })
+
+  expect((await r.put(`/api/reha/takes/${crypto.randomUUID()}/drift`, { gen: 1, drift: DRIFT })).status).toBe(404)
+  expect((await r.put(`/api/reha/takes/${TAKE}/drift`, { gen: 2, drift: { ok: false, why: "recording" } })).status).toBe(400)
+})
+
+test("the take's page has its click, its notes' icons, and the tempo of the generation the band hears", async () => {
+  const owner = await signInOwner()
+  const r = await reha()
+  const meter = { tempo: 120, signature: "4/4", click: true }
+  const notes = [{ position: 2, name: "Drums", file: "2.mid", icon: "drums" }]
+  const uid = await shownTake({ meter, notes })
+  const page = async () =>
+    (await (await call(`/api/takes/${uid}`, {}, owner)).json()) as { meter: unknown; drift: unknown; notes: unknown }
+  expect(await page()).toMatchObject({ meter, drift: null, notes: [{ position: 2, name: "Drums", icon: "drums" }] })
+
+  expect((await r.put(`/api/reha/takes/${uid}/drift`, { gen: 1, drift: DRIFT })).status).toBe(200)
+  expect(await page()).toMatchObject({ drift: DRIFT })
+
+  // A crop on its way: the band still hears generation 1, and its tempo.
+  const { putTake } = await import("../worker/takes/store")
+  await putTake(env as never, uid, takeMeta({ gen: 2, meter, notes }) as never)
+  expect(await page()).toMatchObject({ drift: DRIFT })
+  expect((await r.put(`/api/reha/takes/${uid}/drift`, { gen: 2, drift: { ok: false, why: "short" } })).status).toBe(200)
+  // Counted for files the band does not hear yet.
+  expect(await page()).toMatchObject({ drift: null })
+
+  // A take from REHA 0.21 has no click and no icons.
+  const old = await shownTake({ notes: [{ position: 2, name: "Keys", file: "2.mid" }] })
+  expect(await (await call(`/api/takes/${old}`, {}, owner)).json()).toMatchObject({ meter: null, notes: [{ icon: null }] })
 })

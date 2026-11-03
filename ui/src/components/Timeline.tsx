@@ -89,11 +89,14 @@ export function Timeline({
   click = true,
 }: {
   player: MultitrackPlayer
-  /** Master's click: its button after the name and its lane. The band's
-   *  service plays no click, so its Master row is the plate alone. */
+  /** Master's click button, after its name. The band's service plays no
+   *  click, so it has none; its Master lane is there all the same, for a
+   *  take whose click it knows. */
   click?: boolean
   /** The take's click, for Master's button and lane: its tempo and
-   *  signature, and whether it was recorded to the click. */
+   *  signature, and whether it was recorded to the click. Null where it is
+   *  not known, as for a take the band's service had from РЭХА 0.21: with
+   *  no click button either, Master is then its plate alone. */
   take?: TakeClick | null
   /** The band's tempo through the take, drawn along Master's lane. */
   drift?: DriftView | null
@@ -537,6 +540,11 @@ export function Timeline({
                   const paired = before?.kind === "audio" && before.name === lane.name
                   const read = notesRead?.get(lane.name)
                   const port = lane.kind === "notes" ? lane.notes.port : lane.missing.port
+                  // Dimmed with its track's audio above it; a track of notes
+                  // alone has no M or S, so another track's S dims it.
+                  const dimmed = paired
+                    ? player.isMuted(lane.name) || (player.hasSolo && !player.isSoloed(lane.name))
+                    : player.hasSolo
                   // As tall as its plate, which a long name or port makes
                   // taller and which is never less than six drum rows' names
                   // and the well round them need (NotesPlate).
@@ -566,7 +574,8 @@ export function Timeline({
                           duration={duration}
                           view={{ from, to }}
                           playhead={position}
-                          className={cn("h-full", paired && "rounded-t-none border-t")}
+                          dimmed={dimmed}
+                          className={cn("h-full", paired && "rounded-t-none border-t", dimmed && "opacity-60")}
                         />
                       </div>
                     </div>
@@ -696,9 +705,10 @@ export function Timeline({
             </div>
             {/* A press here is one on the tracks: the surface above takes
                 the pointer from it (onPointerDown captures it there), so a
-                drag sets the region and a click moves the playhead. With no
-                click, the group's fill: nothing to draw there. */}
-            {click && (
+                drag sets the region and a click moves the playhead. With
+                nothing known of the take's click, the group's fill: nothing
+                to draw there. */}
+            {(click || take !== null) && (
               <div
                 className="min-w-0 cursor-crosshair py-[3px] select-none"
                 style={{ touchAction: "none" }}

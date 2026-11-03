@@ -189,6 +189,15 @@ test("repeat, M and S set while another take plays go with the take when it play
   expect(await sound.state()).toMatchObject({ position: 2, loop: { a: 2, b: 5 }, muted: ["Bass"], soloed: "Guitar" })
 })
 
+test("M and S on one track take each other off while another take plays, as they do in the player", async () => {
+  const sound = serviceSound(take, one(null))
+  await sound.setMuted("Bass", true)
+  await sound.setSolo("Bass")
+  expect(sound.setup()).toMatchObject({ muted: [], solo: 0 })
+  await sound.setMuted("Bass", true)
+  expect(sound.setup()).toMatchObject({ muted: [0], solo: null })
+})
+
 test("Master's level comes with the take as it opens, and a poll leaves the fader where the hand has it", async () => {
   const sound = serviceSound(take, one(player({ playing: true })))
   expect(await sound.open(sound.tracks)).toMatchObject({ master: 0.6 })

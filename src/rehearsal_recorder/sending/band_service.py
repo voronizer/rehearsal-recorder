@@ -49,6 +49,9 @@ NO_KEY = "No band service key"
 CLOSING_JS = "window.__rehaClosing ? (window.__rehaClosing(), true) : false"
 # A take's line while a take records: its sending waits.
 RECORDING_STEP = "A take is recording: carries on after it"
+# A take's line while the band's tempo through it is counted, as the
+# player's Master lane says it.
+COUNTING_STEP = "Counting the tempo"
 # What a band service is and how to run one, for Settings › Folders.
 SERVICE_HELP_URL = "https://reha.stream/band-service"
 
@@ -108,6 +111,10 @@ class BandService:
         self._refused = set()
         # When to ask the service which takes it has: at once, the first time.
         self._next_check = 0.0
+        # Takes up in the service without the band's tempo through them: sent
+        # before РЭХА counted it there. Each gets it on its own, with no line
+        # in the list, once nothing else is waiting.
+        self._owed = set()
         self._active = None
         # Files are being made: the names pass waits, since it moves folders.
         self.making = False
@@ -591,9 +598,13 @@ class BandService:
         for d in self._deletes():
             if self._later.get(("delete", d["uid"]), 0) <= now:
                 return self._delete(d)
-        for row in self._lib.service_rows():
+        rows = self._lib.service_rows()
+        for row in rows:
             if row["due"] and self._later.get(row["take_id"], 0) <= now:
                 return self._send_take(row)
+        for row in rows:
+            if row["take_id"] in self._owed and self._later.get(("drift", row["take_id"]), 0) <= now:
+                return self._catch_up(row)
         return False
 
     def start(self):
@@ -665,6 +676,11 @@ class BandService:
                         "removed": False, "due": True, "error": None,
                         "mp3_gen": t.get("mp3_gen"), "flac_gen": t.get("flac_gen")})
                 self._line(row["take_id"], row["folder"], row["take_number"])
+            elif ("drift_gen" in t and t.get("drift_gen") != row["gen"] and t.get("mp3_gen") == row["gen"]
+                  and not row["due"]):
+                # Up from before РЭХА sent the band's tempo. A service that
+                # does not say which it has is not asked to keep it.
+                self._owed.add(row["take_id"])
 
     def _delete(self, d):
         uid = d["uid"]
@@ -750,14 +766,8 @@ class BandService:
             raise _Changed()
         client = self._client()
         entry.start("Sending the details")
-        ref = lib.rehearsal_ref(folder) or {}
-        rehearsal = {"id": ref.get("id"), "created_at": ref.get("created_at", ""),
-                     "name": (lib.rehearsal(folder) or {}).get("name", "")}
         cut = float(row["pending_cut"] or 0)
-        # The song's tempo as it is now: the band service keeps it for the song.
-        tempo = lib.song_tempos().get(take.get("song") or "", (None, None))[0]
-        meta = service_files.meta(take, rehearsal, lib.labels(),
-                                  self.api._config.get("volumes", {}), gen, cut, tempo)
+        meta = self._details(take, folder, gen, cut)
         answer = client.put_take(uid, {**meta, "by_hand": bool(row["by_hand"])})
         if row["by_hand"]:
             lib.change_service_row(take_id, lambda r: {"by_hand": False})
@@ -791,6 +801,9 @@ class BandService:
                         lambda done: f"FLAC: {min(done, flacs)} of {flacs}", ".flac")
             client.ready(uid, gen, "flac")
             lib.change_service_row(take_id, lambda r: {"flac_gen": gen})
+        if isinstance(answer, dict) and "drift_gen" in answer and answer["drift_gen"] != gen:
+            self._send_drift(client, take_id, uid, gen, folder, number, entry)
+        self._owed.discard(take_id)
 
         with self._lock:
             if self._edits.get(take_id, 0) != edits:
@@ -803,6 +816,75 @@ class BandService:
         lib.drop_service_files(take_id)
         shutil.rmtree(staging_root() / uid, ignore_errors=True)
         entry.done("MP3 and FLAC of every track")
+
+    def _details(self, take, folder, gen, cut):
+        """The take's details as the service takes them (service_files.meta)."""
+        lib = self.api._lib
+        ref = lib.rehearsal_ref(folder) or {}
+        rehearsal = {"id": ref.get("id"), "created_at": ref.get("created_at", ""),
+                     "name": (lib.rehearsal(folder) or {}).get("name", "")}
+        # The song's tempo as it is now: the band service keeps it for the song.
+        tempo = lib.song_tempos().get(take.get("song") or "", (None, None))[0]
+        return service_files.meta(take, rehearsal, lib.labels(), self.api._config.get("volumes", {}), gen, cut, tempo)
+
+    def _send_drift(self, client, take_id, uid, gen, folder, number, entry=None):
+        """
+        The band's tempo through the take, for the line along Master's lane
+        in the service: counted here as the player counts it (Api.take_drift,
+        which keeps its last answers, so a take just played is not counted
+        again). It goes once the take's files are up, so the band hears the
+        take without waiting for the count. Record stops the count, and the
+        take waits for the pass after the recording.
+        """
+        self._check(take_id, gen)
+        take = self._lib.take(folder, number)
+        if take is None:
+            raise _Changed()
+        if entry is not None:
+            entry.start(COUNTING_STEP)
+        answer = self.api.take_drift(take.get("tracks"), take.get("notes"), {
+            "tempo": take.get("tempo"), "signature": take.get("signature"),
+            "click": take.get("click") is True, "song": take.get("song")})
+        if isinstance(answer, dict) and answer.get("why") == "recording":
+            raise _Paused()
+        kept = service_files.drift(answer)
+        if kept is not None:
+            client.put_drift(uid, gen, kept)
+
+    def _catch_up(self, row):
+        """
+        A take that went up before РЭХА sent the band's tempo gets it now,
+        with its details again, which bring its click and its notes' icons.
+        No line in the list: nothing the band waits for is held up, and
+        nothing they would need to do comes of it. No internet tries again
+        later; anything else leaves the take as it is.
+        """
+        take_id = row["take_id"]
+        try:
+            if not self._keyed():
+                raise _Changed()
+            take = self._lib.take(row["folder"], row["take_number"])
+            if take is None:
+                raise _Changed()
+            # Nothing to move: the service shows this generation already.
+            meta = self._details(take, row["folder"], row["gen"], 0)
+            client = self._client()
+            answer = client.put_take(row["uid"], {**meta, "by_hand": False})
+            if isinstance(answer, dict) and answer.get("in_trash"):
+                self._taken_out(take_id)
+            elif isinstance(answer, dict) and "drift_gen" in answer and answer["drift_gen"] != row["gen"]:
+                self._send_drift(client, take_id, row["uid"], row["gen"], row["folder"], row["take_number"])
+            self._owed.discard(take_id)
+        except _Paused:
+            pass  # after the recording
+        except Offline:
+            self._later[("drift", take_id)] = time.monotonic() + self.RETRY_SEC
+        except _Changed:
+            self._owed.discard(take_id)
+        except Exception as e:  # noqa: BLE001 - one take's tempo must not stop the takes after it
+            print(f"The tempo of a take could not be sent to the band service: {e}", file=sys.stderr)
+            self._owed.discard(take_id)
+        return True
 
     def _make(self, take_id, uid, gen, take, kinds, entry):
         """The files of these kinds, made once: one made already, for an

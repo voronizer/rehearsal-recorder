@@ -6,6 +6,7 @@ import { errors, json, newApp, Ok } from "../shared/openapi"
 import { loadMarks, MarkView } from "../marks/view"
 import { rehearsal, song, star, take, user } from "../shared/schema"
 import { needMember } from "../signin/guards"
+import { Drift, Meter } from "./meta"
 import { bare, initial, shownName, takeRows, TakeRow, type Loaded } from "./rows"
 import { songBack, toTrash } from "./store"
 import { fillShapes } from "./shape"
@@ -36,6 +37,14 @@ const TakePage = z
     starred_at_rehearsal: z.boolean(),
     /** Its marks by their moment, each with the comments under it. */
     marks: z.array(MarkView),
+    /** The tracks that recorded notes, with the track's icon: null for one
+     *  РЭХА 0.21 or older sent. */
+    notes: z.array(z.object({ position: z.number(), name: z.string(), icon: z.string().nullable() })),
+    /** Its click, for Master's stripes; null for a take РЭХА 0.21 or older sent. */
+    meter: Meter.nullable(),
+    /** The band's tempo through the generation the band hears; null until
+     *  РЭХА has counted it. */
+    drift: Drift.nullable(),
     /** What **Download tracks** offers; `mid` is null for a track with no notes. */
     files: z.array(
       z.object({ position: z.number(), name: z.string(), mp3: z.boolean(), flac: z.boolean(), mid: z.boolean().nullable() })
@@ -150,6 +159,10 @@ export const takeRoutes = newApp()
           starred_by_me: stars.some((s) => s.memberId === c.var.member.id),
           starred_at_rehearsal: t.starredAtRehearsal,
           marks: marks.sort((a, b) => a.at - b.at || a.id - b.id),
+          notes: t.notes.map((n) => ({ position: n.position, name: n.name, icon: n.icon ?? null })),
+          meter: t.meter,
+          // Counted for a generation the band does not hear yet, or no more.
+          drift: t.driftGen === gen ? t.drift : null,
           files,
           flac_coming: files.some((f) => f.mp3) && !flacUp,
           trashed_at: t.trashedAt,

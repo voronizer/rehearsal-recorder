@@ -11,6 +11,7 @@ its notes, numbered on from there.
 """
 
 import json
+import math
 import os
 import shutil
 import uuid
@@ -22,6 +23,9 @@ from rehearsal_recorder.audio.waveform import wav_peaks
 # How many numbers a waveform has: the same for a take of a minute or of
 # ten, which the pages stretch to their width.
 PEAKS = 1200
+
+# The signatures the service takes, as the metronome has them.
+SIGNATURES = ("4/4", "3/4", "2/4", "6/8")
 
 
 class CannotMake(Exception):
@@ -107,10 +111,54 @@ def meta(take, rehearsal, labels, volumes, gen, cut_start, tempo=None):
         "tracks": [{"position": i, "name": t["name"], "icon": t.get("icon"),
                     "files": [f"{i}.mp3", f"{i}.flac", f"{i}.peaks"]}
                    for i, t in enumerate(audio, 1)],
-        "notes": [{"position": len(audio) + i, "name": n["name"], "file": f"{len(audio) + i}.mid"}
+        "notes": [{"position": len(audio) + i, "name": n["name"], "file": f"{len(audio) + i}.mid",
+                   "icon": n.get("icon")}
                   for i, n in enumerate(_notes(take), 1)],
         "marks": marks,
         "tempo": None if tempo is None else float(tempo),
+        "meter": meter(take),
+    }
+
+
+def meter(take):
+    """The take's click as the service keeps it, for the stripes along
+    Master's lane: its tempo and signature, or neither, and whether it was
+    recorded to the click."""
+    tempo, signature = take.get("tempo"), take.get("signature")
+    if (isinstance(tempo, bool) or not isinstance(tempo, (int, float)) or not 0 < tempo <= 999
+            or signature not in SIGNATURES):
+        tempo = signature = None
+    return {"tempo": None if tempo is None else float(tempo), "signature": signature,
+            "click": bool(take.get("click")) and tempo is not None}
+
+
+def drift(answer):
+    """
+    The band's tempo through a take as Api.take_drift answered it, the way
+    the service keeps it: the times to a millisecond and the tempos to a
+    hundredth, so an hour's bars stay small. None for an answer that is not
+    the take's: a count Record stopped, or one that could not read a file it
+    found.
+    """
+    if not isinstance(answer, dict):
+        return None
+    if not answer.get("ok"):
+        why = answer.get("why")
+        return {"ok": False, "why": why} if why in ("short", "no-beat", "missing") else None
+    aim = answer["aim"]
+
+    def tempo(t):
+        return round(float(t), 2) if t is not None and math.isfinite(t) and t > 0 else None
+
+    return {
+        "ok": True,
+        "source": answer["source"],
+        "per_bar": answer["per_bar"],
+        "middle": round(float(answer["middle"]), 2),
+        "aim": {"tempo": float(aim["tempo"]), "signature": aim["signature"], "from": aim["from"],
+                "song": aim.get("song")},
+        "bars": [{"n": int(b["n"]), "start": round(float(b["start"]), 3), "end": round(float(b["end"]), 3),
+                  "tempo": tempo(b["tempo"])} for b in answer["bars"]],
     }
 
 

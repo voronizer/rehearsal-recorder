@@ -264,3 +264,46 @@ zoom on a phone.
 10. Until a stretch of the MP3 has come, the zoomed wave is the coarse one.
 11. The pictures: `lanes` on a phone with the guitar's level up; the rest
     of the take's page taken again as they are.
+
+## Addendum, 2026-11-03: the band's tempo along Master, M and S, the notes
+
+Alex's picks, 22:24 to 22:30 UTC: РЭХА counts the tempo and sends it; on
+one track M and S take each other off (#131), in РЭХА and in the service;
+a track's notes go paler with its sound; Master's lane in the service is
+РЭХА's, click stripes included, with no click button; on reha.stream only
+the pictures change.
+
+- **Sending.** The take's details carry its click (`meter`: tempo,
+  signature, whether it was recorded to the click) and each .mid's icon.
+  After a take's MP3s and FLAC files are up, РЭХА counts the tempo
+  (`take_drift`, the same as for its own player) and sends it with
+  `PUT /api/reha/takes/{uid}/drift`, for that generation. The answer to the
+  details says `drift_gen`, the generation whose tempo the service has, so a
+  new ★ or mark does not count it again. A service that does not say
+  `drift_gen` is sent no tempo.
+- **Takes sent before.** The hourly list says `drift_gen` too. A take whose
+  MP3s are up for the generation РЭХА has, and whose tempo is not, is owed:
+  РЭХА sends its details again and then its tempo, in the background, one
+  take at a time, with no line in the sending list. While a take is being
+  recorded nothing is counted; it waits.
+- **The service.** A take keeps `meter`, `drift` and `drift_gen`
+  (migration 0005). The take's page gives `drift` only when it is for the
+  generation it shows. Master's lane shows when the take's click is known;
+  a take sent by РЭХА 0.21 has no lane until РЭХА sends it again.
+- **M and S.** One rule, `desk.ts` in the service and the player in
+  Python: S on a muted track turns its M off, M on the soloed track turns
+  its S off.
+- **The notes.** A notes lane under its track goes paler as the track's
+  waveform does; a lane of notes alone, and the phone's row of notes alone,
+  while any track is soloed.
+
+Calls to review:
+
+12. The service marks drift past 2%; **Drift shown past** stays a setting
+    in РЭХА only.
+13. No tempo when the take's files are gone from РЭХА's computer, and none
+    on a phone, which has no lanes.
+14. A take sent by РЭХА 0.21 shows no lane rather than “No click”, as its
+    click is not known.
+15. Each .mid's icon now goes with the details, so a track of notes alone
+    has its own icon in the service, not a blank one.

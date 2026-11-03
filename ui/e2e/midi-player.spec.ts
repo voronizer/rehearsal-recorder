@@ -280,6 +280,27 @@ test.describe("notes in the player", () => {
     ])
   })
 
+  test("a track's notes go pale with its sound, and notes alone under another track's S", async ({
+    page,
+  }) => {
+    await review(page)
+    await expect(notesLane(page, "Drums")).not.toHaveAttribute("data-dimmed")
+    await expect(notesLane(page, "Keys")).not.toHaveAttribute("data-dimmed")
+
+    await page.getByRole("button", { name: "Mute Drums" }).click()
+    await expect(notesLane(page, "Drums")).toHaveAttribute("data-dimmed")
+    await expect(notesLane(page, "Keys")).not.toHaveAttribute("data-dimmed")
+    await page.getByRole("button", { name: "Mute Drums" }).click()
+
+    await page.getByRole("button", { name: "Solo Gtr" }).click()
+    await expect(notesLane(page, "Drums")).toHaveAttribute("data-dimmed")
+    await expect(notesLane(page, "Keys")).toHaveAttribute("data-dimmed")
+
+    await page.getByRole("button", { name: "Solo Drums" }).click()
+    await expect(notesLane(page, "Drums")).not.toHaveAttribute("data-dimmed")
+    await expect(notesLane(page, "Keys")).toHaveAttribute("data-dimmed")
+  })
+
   test("a notes file that cannot be read says so in its lane, and the take still plays", async ({
     page,
   }) => {

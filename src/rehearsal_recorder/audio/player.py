@@ -538,15 +538,23 @@ class TakePlayer:
                 if t.name == name:
                     t.volume = float(min(1.0, max(0.0, volume)))
 
+    # M and S on one track take each other off, so both are never lit and
+    # what plays is what the buttons show.
+
     def set_muted(self, name, muted):
         with self._lock:
             for t in self.tracks:
                 if t.name == name:
                     t.muted = bool(muted)
+            if muted and self._soloed == name:
+                self._soloed = None
 
     def set_solo(self, name):
         with self._lock:
             self._soloed = name
+            for t in self.tracks:
+                if t.name == name:
+                    t.muted = False
 
     def set_master_muted(self, muted):
         with self._lock:
