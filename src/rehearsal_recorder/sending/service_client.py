@@ -144,6 +144,8 @@ class ServiceClient:
                 said = _json(_read(e))
             except ValueError:  # a page of HTML from a proxy, say
                 said = {}
+            if not isinstance(said, dict):
+                said = {}
             words = said.get("error") if isinstance(said.get("error"), str) else None
             if e.code == 404 and said.get("gone"):
                 raise Gone(words or "This upload is gone") from None

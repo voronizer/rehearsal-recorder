@@ -167,7 +167,13 @@ class BandService:
         """
         row = self._lib.service_row(folder, take_number)
         if row is not None and row["removed"]:
-            return  # taken out by hand: nothing of it goes until it is sent again
+            # Taken out: nothing of it goes until it is back. A crop still
+            # makes a new generation, so the take goes up as cropped then,
+            # with the band's comments moved back by it.
+            if cut_start is not None:
+                self._lib.change_service_row(row["take_id"], lambda r: {
+                    "gen": r["gen"] + 1, "pending_cut": float(r["pending_cut"] or 0) + float(cut_start)})
+            return
         if row is None:
             session = self.api._session
             if session is not None and Path(session["folder"]) == Path(folder):
@@ -272,6 +278,9 @@ class BandService:
             return refused
         row = self._lib.service_row(folder, take_number)
         if row is not None and not row["removed"]:
+            # The delete first, so the hourly check never reads the take as
+            # taken out with no delete on its way and sends it again.
+            self._lib.add_service_delete(row["uid"], take["name"])
             self._taken_out(row["take_id"])
             self._to_trash(row["take_id"], row["uid"], take["name"])
         return {"ok": True, "take": self._lib.take(folder, take_number)}
@@ -618,8 +627,9 @@ class BandService:
         A take the band deleted there, or the service deleted for good, is
         taken out here. A take РЭХА had taken out that is back there (someone
         pressed Restore) is sent again: only what of it is not up goes, and
-        its changes follow from then on. A take whose delete has not reached
-        the service yet is left as it is. No internet asks again soon; a
+        its changes follow from then on. A take the service has without the
+        MP3s РЭХА sent has them sent again. A take whose delete has not
+        reached the service yet is left as it is. No internet asks again soon; a
         service that turned the question down is asked again in an hour.
         """
         try:
@@ -630,17 +640,25 @@ class BandService:
         except (Refused, Gone):
             return
         there = {t["uid"]: t for t in listed}
+        # The rows first, then the deletes: Remove from the band service
+        # writes its delete down before a row can read as taken out.
+        rows = self._lib.service_rows()
         on_the_way = {d["uid"] for d in self._lib.service_deletes()}
-        for row in self._lib.service_rows():
+        for row in rows:
             if row["uid"] in on_the_way:
                 continue
             t = there.get(row["uid"])
             if t is None or t.get("trashed"):
                 # Gone for good there only once it was ever up: one on its
-                # first way has not reached the service yet.
-                if not row["removed"] and (t is not None or row["mp3_gen"] is not None):
+                # first way has not reached the service yet. One just sent
+                # by hand comes out of the trash with its details.
+                if not row["removed"] and not row["by_hand"] and (t is not None or row["mp3_gen"] is not None):
                     self._taken_out(row["take_id"])
-            elif row["removed"]:
+            elif row["removed"] or (row["mp3_gen"] or 0) > (t.get("mp3_gen") or 0):
+                # Back in the service, or there without the MP3s РЭХА sent:
+                # what of it is not up goes (again).
+                if row["take_id"] == self._active:
+                    continue  # a pass is sending it now, and knows better
                 with self._lock:
                     self._edits[row["take_id"]] = self._edits.get(row["take_id"], 0) + 1
                     self._lib.change_service_row(row["take_id"], lambda r, t=t: {
