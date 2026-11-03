@@ -10,7 +10,8 @@ the merge.
 After this work each part goes out on its own, and a pull request runs only
 the checks of the parts it touches.
 
-The plan is written once Alex approves this spec.
+Alex approved this spec on 3 November at 14:16 («ок»). The plan:
+`docs/superpowers/plans/2026-11-03-split-shipping.md`.
 
 ## Alex's picks
 
