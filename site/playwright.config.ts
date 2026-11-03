@@ -3,6 +3,9 @@ import { defineConfig, devices } from "@playwright/test"
 // The built site in a real browser: the page, and the app in its frames on
 // the fake Python side. It serves site/dist, so build first, and draw the
 // link picture into it: npm run build && npm run og && npm run test:e2e.
+// npm run preview is Cloudflare's own local server (wrangler dev, with
+// wrangler.jsonc), so the tests see each address as reha.stream answers it:
+// the short links, the pages without .html, the 404 page.
 
 const PORT = 4179
 
@@ -27,7 +30,8 @@ export default defineConfig({
   ],
   webServer: {
     command: "npm run preview",
-    url: `http://127.0.0.1:${PORT}/index.html`,
+    url: `http://127.0.0.1:${PORT}/`,
+    env: { WRANGLER_SEND_METRICS: "false" },
     reuseExistingServer: !process.env.CI,
   },
 })

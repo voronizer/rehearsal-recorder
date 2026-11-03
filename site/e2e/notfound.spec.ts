@@ -1,10 +1,12 @@
 import { test, expect } from "./fixtures.ts"
 
-// The page Vercel answers with for an address that is no file of the site
-// (vercel-config.json). Here it is opened by its own name.
+// The page Cloudflare answers with for an address that is no file of the
+// site (not_found_handling in wrangler.jsonc), opened as a visitor meets it.
+const MISSING = "/no-such-take"
 
 test("the 404 page says nothing was recorded here, and goes back", async ({ page }) => {
-  await page.goto("/404.html")
+  const answer = await page.goto(MISSING)
+  expect(answer?.status()).toBe(404)
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("Nothing was recorded here")
   await expect(page.getByRole("link", { name: "Go to the main page" })).toHaveAttribute("href", "/")
   await expect(page.getByRole("link", { name: "How it works" })).toHaveAttribute("href", "/#how")
@@ -13,7 +15,7 @@ test("the 404 page says nothing was recorded here, and goes back", async ({ page
 })
 
 test("its take is Take 404, four minutes and four seconds of nothing", async ({ page }) => {
-  await page.goto("/404.html")
+  await page.goto(MISSING)
   const take = page.getByRole("img", { name: /^Take 404/ })
   await expect(take.getByText("Take 404")).toBeVisible()
   await expect(take.getByText("0:00 / 4:04")).toBeVisible()
@@ -34,7 +36,7 @@ test("the page shows with its take whole, and nothing moves after", async ({ pag
     }
     new MutationObserver(look).observe(document, { subtree: true, childList: true, attributes: true })
   })
-  await page.goto("/404.html")
+  await page.goto(MISSING)
   await expect(page.getByText("0:00 / 4:04")).toBeVisible()
   const heights = await page.evaluate(() => (window as unknown as { __heights__: number[] }).__heights__)
   expect(heights.length).toBeGreaterThan(0)
@@ -42,7 +44,7 @@ test("the page shows with its take whole, and nothing moves after", async ({ pag
 })
 
 test("its take does not take the page's keys", async ({ page }) => {
-  await page.goto("/404.html")
+  await page.goto(MISSING)
   await expect(page.getByText("0:00 / 4:04")).toBeVisible()
   await page.keyboard.press("Shift+?")
   await page.keyboard.press("r")
@@ -54,7 +56,7 @@ test.describe("with script off", () => {
   test.use({ javaScriptEnabled: false })
 
   test("the 404 page still says so, and links back", async ({ page }) => {
-    await page.goto("/404.html")
+    await page.goto(MISSING)
     await expect(page.getByRole("heading", { level: 1 })).toHaveText("Nothing was recorded here")
     await expect(page.getByRole("link", { name: "Go to the main page" })).toHaveAttribute("href", "/")
   })
@@ -64,7 +66,7 @@ test.describe("on a phone", () => {
   test.use({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true })
 
   test("the 404 page fits, with the take under the button", async ({ page }) => {
-    await page.goto("/404.html")
+    await page.goto(MISSING)
     await expect(page.getByText("0:00 / 4:04")).toBeVisible()
     expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390)
     const button = (await page.getByRole("link", { name: "Go to the main page" }).boundingBox())!
@@ -75,7 +77,7 @@ test.describe("on a phone", () => {
   // In the app the master holds to the bottom of the window; on the page it
   // stays under the tracks, and does not hide one as the page scrolls.
   test("the take's master is under its four tracks", async ({ page }) => {
-    await page.goto("/404.html")
+    await page.goto(MISSING)
     const take = page.getByRole("img", { name: /^Take 404/ })
     await expect(take.getByText("0:00 / 4:04")).toBeVisible()
     const vocals = (await take.getByText("Vocals", { exact: true }).boundingBox())!

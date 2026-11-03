@@ -171,7 +171,9 @@ export function LiveFrame({
           <iframe
             key={f.key}
             ref={(el) => void (el ? els.current.set(f.key, el) : els.current.delete(f.key))}
-            src={`/stage.html#${f.hash}`}
+            // stage.html by its address on Cloudflare: /stage.html would only
+            // send the frame on to /stage first (wrangler.jsonc).
+            src={`/stage#${f.hash}`}
             title={i === 0 ? title : `${title}, starting again`}
             tabIndex={interactive ? undefined : -1}
             loading={lazy && f.key === 0 ? "lazy" : undefined}

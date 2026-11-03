@@ -1,0 +1,7 @@
+# The short links people are given: each to the latest release's zip on
+# GitHub. The zips keep these names for good (installed copies find their
+# updates by them). 307, so a link is never kept as moved for good.
+/mac https://github.com/voronizer/rehearsal-recorder/releases/latest/download/RehearsalRecorder-macos.zip 307
+/mac/ https://github.com/voronizer/rehearsal-recorder/releases/latest/download/RehearsalRecorder-macos.zip 307
+/windows https://github.com/voronizer/rehearsal-recorder/releases/latest/download/RehearsalRecorder-windows.zip 307
+/windows/ https://github.com/voronizer/rehearsal-recorder/releases/latest/download/RehearsalRecorder-windows.zip 307

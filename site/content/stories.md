@@ -35,7 +35,7 @@ Also:
 
 <!-- A story's file name, a line each, in the order they were written: the
      tempo and metronome stories each pick up from the one before. A new
-     story goes at the end, and into the route in site/vercel-config.json. -->
+     story goes at the end; reha.stream finds its page by itself. -->
 
 - digital-mixer
 - tempo-drift

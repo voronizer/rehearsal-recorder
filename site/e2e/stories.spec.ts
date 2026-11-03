@@ -3,8 +3,8 @@ import { test, expect } from "./fixtures.ts"
 
 // Alex's stories: their page, each story, and the way to them. Each is
 // written into its HTML at build time (the stories() plugin in
-// vite.config.ts); here the preview server finds stories/x.html for
-// /stories/x by itself, as Vercel does through vercel-config.json.
+// vite.config.ts); Cloudflare finds stories/x.html for /stories/x by
+// itself, here as on reha.stream.
 
 const STORIES = [
   ["digital-mixer", "Record your band's rehearsal from a digital mixer"],
@@ -269,13 +269,12 @@ test("the menu goes to the main page's parts from a story", async ({ page }) => 
   await expect(page.getByText("Open source, under the MIT license.")).toBeVisible()
 })
 
-// Vercel's scripts themselves are only on Vercel; here they are missing files.
-test("the new pages count their visits with Vercel's scripts", async ({ page }) => {
-  for (const path of ["/stories", MIXER]) {
+// As on the main page: Cloudflare's counter loads only on reha.stream.
+test("the new pages count no visit away from reha.stream", async ({ page }) => {
+  for (const path of ["/stories", MIXER, "/band-service"]) {
     await page.goto(path)
     await expect(page.locator('link[rel="canonical"]')).toHaveAttribute("href", `https://reha.stream${path}`)
-    await expect(page.locator('script[src="/_vercel/insights/script.js"]')).toHaveCount(1)
-    await expect(page.locator('script[src="/_vercel/speed-insights/script.js"]')).toHaveCount(1)
+    await expect(page.locator('script[src*="cloudflareinsights"]')).toHaveCount(0)
   }
 })
 

@@ -24,7 +24,7 @@ async function clock(page: Page): Promise<number> {
 }
 
 test("the hero plays the bridge of Pałyn 2 on repeat", async ({ page }) => {
-  await page.goto("/stage.html#hero")
+  await page.goto("/stage#hero")
   await expect.poll(() => scene(page), { timeout: 20_000 }).toBe("hero")
   await expect(page.getByRole("button", { name: "Pause" })).toBeVisible()
   const song = await page.evaluate(() => {
@@ -42,7 +42,7 @@ test("the hero plays the bridge of Pałyn 2 on repeat", async ({ page }) => {
 })
 
 test("held, the hero stands still, and goes on when let go", async ({ page }) => {
-  await page.goto("/stage.html#hero")
+  await page.goto("/stage#hero")
   await expect.poll(() => scene(page), { timeout: 20_000 }).toBe("hero")
   await post(page, { type: "rr-hold", hold: true })
   await expect.poll(() => page.evaluate(() => document.documentElement.dataset.held)).toBe("true")
@@ -54,7 +54,7 @@ test("held, the hero stands still, and goes on when let go", async ({ page }) =>
 })
 
 test("the story goes through its four steps", async ({ page }) => {
-  await page.goto("/stage.html#story")
+  await page.goto("/stage#story")
   // The rehearsal named, its tracks checked, last week's take heard, then
   // Start, and Pałyn picked with its tempo.
   await step(page, 0)
@@ -96,7 +96,7 @@ test("the story goes through its four steps", async ({ page }) => {
 })
 
 test("a moment keeps the app there until the page asks for one after it", async ({ page }) => {
-  await page.goto("/stage.html#story")
+  await page.goto("/stage#story")
   await moment(page, 1, 1)
   await expect.poll(() => held(page), { timeout: 30_000 }).toBe("1.1")
   await expect(page.getByRole("button", { name: /^Stop/ })).toBeVisible()
@@ -109,7 +109,7 @@ test("a moment keeps the app there until the page asks for one after it", async 
 })
 
 test("a moment behind the app starts the story again, and walks to it", async ({ page }) => {
-  await page.goto("/stage.html#story")
+  await page.goto("/stage#story")
   await moment(page, 1, 0)
   await expect.poll(() => held(page), { timeout: 30_000 }).toBe("1.0")
   await moment(page, 0, 3)
@@ -118,7 +118,7 @@ test("a moment behind the app starts the story again, and walks to it", async ({
 })
 
 test("a moment asked for while the app pauses at it keeps it there, without starting again", async ({ page }) => {
-  await page.goto("/stage.html#story")
+  await page.goto("/stage#story")
   await step(page, 0)
   const playing = page.locator("[aria-label='Last time'] button[aria-label^='Pause Pałyn 7']")
   await expect(playing).toBeVisible({ timeout: 30_000 })
@@ -131,7 +131,7 @@ test("a moment asked for while the app pauses at it keeps it there, without star
 })
 
 test("the check's moment waits until the check has begun, however slow it is to open", async ({ page }) => {
-  await page.goto("/stage.html#story")
+  await page.goto("/stage#story")
   // The fake waits on window.__HOLD__[name] before it answers (see
   // fake-bridge.js): here, something that says when the check's opening
   // has been asked for, and holds it until it is let go.
@@ -190,7 +190,7 @@ test("the moments of last week's Palyn, Palyn picked with its 128 bpm by the arr
       })
     }).observe(document, { attributeFilter: ["data-moment"], subtree: true })
   })
-  await page.goto("/stage.html#story")
+  await page.goto("/stage#story")
   for (const [s, b] of [
     [0, 3],
     [0, 4],
@@ -228,7 +228,7 @@ test("the second step counts in whatever a visitor switched off in another frame
         w.__countIn.push(Boolean(document.querySelector("[data-count-in]")))
     })
   })
-  await page.goto("/stage.html#story")
+  await page.goto("/stage#story")
   await expect.poll(() => page.evaluate(() => "pywebview" in window)).toBe(true)
   await page.evaluate(() =>
     localStorage.setItem("mock-python-config", JSON.stringify({ metronome_on: false, count_in_bars: 0 }))
@@ -239,7 +239,7 @@ test("the second step counts in whatever a visitor switched off in another frame
 })
 
 test("the second step gets to the take with no click to count it in", async ({ page }) => {
-  await page.goto("/stage.html#story")
+  await page.goto("/stage#story")
   await expect.poll(() => page.evaluate(() => "pywebview" in window)).toBe(true)
   await page.evaluate(() =>
     (window as unknown as { pywebview: { api: { metronome_set_on: (on: boolean) => Promise<unknown> } } })
@@ -267,14 +267,14 @@ test("the story waits for the songs beside the field before the arrow key", asyn
       clearInterval(slow)
     }, 1)
   })
-  await page.goto("/stage.html#story")
+  await page.goto("/stage#story")
   await step(page, 1)
   await expect.poll(() => scene(page), { timeout: 30_000 }).toBe("during")
 })
 
 // The band comes in on the bar after the count-in, and the guitarist with it.
 test("the guitar clips only once the count-in is over", async ({ page }) => {
-  await page.goto("/stage.html#story")
+  await page.goto("/stage#story")
   await step(page, 1)
   const countIn = page.locator("[data-count-in]")
   await countIn.waitFor({ timeout: 30_000 })
@@ -294,7 +294,7 @@ test("the story tells the page each line as it gets to it", async ({ page }) => 
       if (e.data?.type === "rr-beat") w.__beats.push([e.data.step, e.data.beat])
     })
   })
-  await page.goto("/stage.html#story")
+  await page.goto("/stage#story")
   await step(page, 3)
   const beats = () => page.evaluate(() => (window as unknown as { __beats: number[][] }).__beats)
   await expect.poll(async () => (await beats()).length, { timeout: 90_000 }).toBe(17)
@@ -307,14 +307,14 @@ test("the story finds the marks grouped by rehearsal, whatever was kept", async 
   await page.addInitScript(() =>
     localStorage.setItem("mock-python-config", JSON.stringify({ marks_grouping: "song" }))
   )
-  await page.goto("/stage.html#story")
+  await page.goto("/stage#story")
   await moment(page, 3, 2)
   await expect.poll(() => held(page), { timeout: 40_000 }).toBe("3.2")
   await expect(page.locator("[data-song-head] h2")).toHaveText("Pałyn")
 })
 
 test("a jump from the first step to the last ends on the last", async ({ page }) => {
-  await page.goto("/stage.html#story")
+  await page.goto("/stage#story")
   await step(page, 0)
   await step(page, 3)
   await expect.poll(() => scene(page), { timeout: 60_000 }).toBe("later")
@@ -323,7 +323,7 @@ test("a jump from the first step to the last ends on the last", async ({ page })
 })
 
 test("a step back starts the story again", async ({ page }) => {
-  await page.goto("/stage.html#story")
+  await page.goto("/stage#story")
   await step(page, 2)
   await expect.poll(() => scene(page), { timeout: 40_000 }).toBe("after")
   await step(page, 0)
