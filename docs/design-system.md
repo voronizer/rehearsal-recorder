@@ -929,7 +929,7 @@ as the `cn` import.
   it is not published, neither in pull request previews nor on reha.stream.
   CI builds it, so a story that does not build fails the pull request.
 - **K3. CI refuses what breaks the rules**, with `npm run design-check`, the
-  Design check step of the interface job in `.github/workflows/checks.yml`. A
+  Design check step of the interface jobs in `.github/workflows/interface.yml`. A
   rule that lives only in a document wears away one screen at a time; the
   check names the line on the pull request, before a reviewer has to.
   Spacing is not checked (F8).

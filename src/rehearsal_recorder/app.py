@@ -418,7 +418,7 @@ def selftest():
         # lost a .NET library fails here and not on a band's laptop. .NET
         # also refuses them while they carry a browser's "from the internet"
         # mark, unless Reha.exe.config beside the program lets it (the file
-        # says why); release.yml marks the build that way before asking.
+        # says why); reha.yml marks the build that way before asking.
         from pathlib import Path
 
         if getattr(sys, "frozen", False):

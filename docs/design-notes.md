@@ -94,7 +94,7 @@ choose again rather than recorded from the wrong card.
 `tests/test_platform.py` drives the code into each shape (no recycle bin, no
 encoder, Windows naming rules) and checks it takes the right branch. CI runs
 every Python suite on Windows too (`app · windows` in
-`.github/workflows/checks.yml`), and the release builds and checks the Windows
+`.github/workflows/reha.yml`), and the release builds and checks the Windows
 app there.
 
 ## Long work, and how far along it is

@@ -1,0 +1,166 @@
+# The band service (service/): its checks on a pull request, and putting it
+# up on Cloudflare.
+#
+# One of five workflows, one for each part: Reha, Interface, Site, Service
+# and Bridge.
+#
+# It goes up by itself after a merge into main that changes service/, ui/
+# (its pages draw with the interface's components) or this file, once its
+# checks pass. By hand, Actions -> Service -> Run workflow puts up the
+# branch picked, main unless another is. A band running its own copy does
+# the same in their fork (service/README.md, step 7), or presses Sync fork,
+# which puts the newer service up by itself once their Cloudflare token is
+# set. Being main's, the service is always ahead of any РЭХА that sends to
+# it; it still takes requests from copies of РЭХА that have not updated.
+
+name: Service
+
+on:
+  pull_request:
+    paths:
+      - service/**
+      - ui/**
+      - .github/workflows/service.yml
+  push:
+    branches: [main]
+    paths:
+      - service/**
+      - ui/**
+      - .github/workflows/service.yml
+  workflow_dispatch:
+
+# Reading the repository is all these need, bar the deploy, which reads its
+# own secrets. Said here because the default token can write, and a pull
+# request from a fork runs this workflow.
+permissions:
+  contents: read
+
+# A pull request's newer push replaces its older run; anything else runs to
+# its end.
+concurrency:
+  group: service-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  # Which Playwright the service has in its lock file: its job runs in
+  # Playwright's own image for that version
+  # (mcr.microsoft.com/playwright:v<version>-noble), which has the browser
+  # and everything it needs, and a job's image has to be known before the
+  # job starts.
+  playwright:
+    name: which playwright
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Playwright's version
+        id: version
+        run: |
+          v=$(jq -r '.packages["node_modules/@playwright/test"].version // empty' service/package-lock.json)
+          if ! [[ "$v" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::No version of @playwright/test in service/package-lock.json."
+            exit 1
+          fi
+          echo "Playwright $v"
+          echo "version=$v" >> "$GITHUB_OUTPUT"
+
+  # The band service (service/): the Worker's tests inside the Workers
+  # runtime, the deploy script against a stand-in Wrangler, the build, and
+  # its pages in a browser against the Worker run on this machine, with
+  # stand-ins for letters and Telegram. Its pages import the interface's
+  # components and React from ui/, so ui/ is installed first. In
+  # Playwright's image, run as the machine's user (1001), who owns the
+  # checkout.
+  service:
+    name: service
+    needs: playwright
+    runs-on: ubuntu-latest
+    container:
+      image: mcr.microsoft.com/playwright:v${{ needs.playwright.outputs.version }}-noble
+      options: --user 1001
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: service
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "26"
+          cache: npm
+          cache-dependency-path: |
+            ui/package-lock.json
+            service/package-lock.json
+
+      - name: Install
+        run: |
+          (cd ../ui && npm ci)
+          npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Vitest
+        run: npx vitest run
+
+      - name: The deploy script
+        run: npm run test:deploy
+
+      - name: Build
+        run: npm run build
+
+      - name: Playwright
+        run: npx playwright test
+
+      - uses: actions/upload-artifact@v7
+        if: failure()
+        with:
+          name: service-playwright-report
+          path: service/playwright-report/
+          if-no-files-found: ignore
+
+  # The service on the owner's Cloudflare account, after its checks.
+  # service/scripts/deploy.mjs does the work: it makes the database, the
+  # bucket and the queue the first time, applies the migrations not applied
+  # yet and puts the Worker up. A migration is never undone: it only adds
+  # tables and columns, so the Worker before keeps working in the moments
+  # before the new one is up. It needs the repository secrets
+  # CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID, and the repository
+  # variable SERVICE_DOMAIN for the band's own address; without the token it
+  # says the service is not set up and succeeds, so a fork that does not
+  # run one stays green. One deploy at a time, and none is cut short.
+  deploy:
+    name: service · deploy
+    needs: service
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    concurrency:
+      group: reha-band
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "26"
+          cache: npm
+          cache-dependency-path: |
+            ui/package-lock.json
+            service/package-lock.json
+
+      - name: Install
+        working-directory: service
+        run: |
+          (cd ../ui && npm ci)
+          npm ci
+
+      - name: Deploy
+        working-directory: service
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          SERVICE_DOMAIN: ${{ vars.SERVICE_DOMAIN }}
+        run: npm run deploy

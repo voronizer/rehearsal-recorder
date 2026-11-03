@@ -26,7 +26,7 @@
 # pre-release is not. The band service does not go up with a release: it
 # goes up after a merge that changes it (service.yml).
 #
-# By hand (Actions -> Reha -> Run workflow): Rehearse the builds. Both
+# By hand (Actions -> Reha -> Run workflow), Rehearse the builds: both
 # builds, left as workflow artifacts; nothing is attached or put up.
 #
 # Nothing is built from a Linux machine and hoped for: a Mac build is made on
@@ -56,7 +56,15 @@ on:
       - .github/workflows/reha.yml
   release:
     types: [published]
+  # One thing to do by hand, named so the button says what it does.
   workflow_dispatch:
+    inputs:
+      what:
+        description: What to do
+        type: choice
+        options:
+          - Rehearse the builds
+        default: Rehearse the builds
 
 # Reading the repository is all the checks need. Said here because the
 # default token can write, and a pull request from a fork runs this

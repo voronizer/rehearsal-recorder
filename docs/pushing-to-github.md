@@ -22,13 +22,17 @@ it needs is somewhere to push it.
 2. GitHub → **Releases** → **Draft a new release** → **Choose a tag** →
    type `0.1.0` (no `v`) → **Create new tag on publish** → write what changed →
    **Publish release**.
-3. `release.yml` starts. It builds on a real Mac and a real Windows machine,
-   runs every Python suite on each, packages the app, and runs the app's
-   own `--selftest` on the result. Roughly ten minutes.
+3. `reha.yml` starts. For the few minutes the builds take, it makes the
+   release before “Latest” again, so the download buttons and the app's own
+   update check keep offering a version that has its zips. It builds on a
+   real Mac and a real Windows machine, runs every Python suite on each,
+   packages the app, and runs the app's own `--selftest` on the result.
+   Roughly ten minutes.
 4. The two zips appear on the release page. That is what people download.
+   The release is “Latest” again, and the website goes up for it.
 
-To try the whole thing without publishing anything: Actions → Release → **Run
-workflow**, with **Rehearse the builds** chosen. It runs the same build and
+To try the whole thing without publishing anything: Actions → **Reha** →
+**Run workflow**, with **Rehearse the builds** chosen. It runs the same build and
 the same checks, but leaves the zips as workflow artifacts instead of
 attaching them to a release.
 
@@ -37,4 +41,4 @@ attaching them to a release.
 **Neither build is signed.** Users get one warning on first launch: on macOS
 right-click → Open, on Windows "More info" → "Run anyway". Signing needs an
 Apple Developer account ($99/year) and an Authenticode certificate. Both fit
-into `release.yml` as extra steps and repository secrets when you want them.
+into `reha.yml` as extra steps and repository secrets when you want them.
