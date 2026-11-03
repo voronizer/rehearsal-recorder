@@ -352,6 +352,10 @@ class ServiceCopy(Base):
     # row stays for its uid, so sending it again brings back the same take,
     # comments and all. Nothing about it goes until it is sent again.
     removed: Mapped[bool] = mapped_column(Boolean, default=False)
+    # Sent by hand (the cloud button, Send starred, Retry), until its
+    # details have gone: only such a take comes out of the service's trash
+    # when someone in the band deleted it there (migration 0013).
+    by_hand: Mapped[bool] = mapped_column(Boolean, default=False)
 
     take: Mapped[Take] = relationship(back_populates="service_copy")
 

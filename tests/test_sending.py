@@ -13,6 +13,7 @@ nothing races it.
 import sys
 import tempfile
 import threading
+import time
 from pathlib import Path
 
 try:
@@ -395,7 +396,73 @@ def run(tmp, fake):
        again["ok"] and uid_of(n1) == uid1 and not fake.takes[uid1]["trashed"]
        and take(n1)["service"] == {"up": True, "flac": True, "error": None})
 
-    print("\n[6] Closing")
+    print("\n[6] Deleted in the band service")
+    n_del = keep("Viasna", band=["Drums"])
+    uid_del = uid_of(n_del)
+    drain()
+    fake.delete_in_service(uid_del)
+    starts = fake.count(f"start {uid_del}")
+    cropped = api.crop_take(folder(), n_del, 2.0, 12.0)
+    drain()
+    api.end_trash(cropped["undo"])
+    ok("a change of a take deleted in the service marks it taken out",
+       cropped["ok"] and take(n_del)["service"] is None and fake.takes[uid_del]["trashed"]
+       and fake.count(f"start {uid_del}") == starts)
+    ok("and nothing of it is left to send", api.sending_left() == {"takes": 0, "bytes": 0})
+
+    back = api.share_take(folder(), n_del)
+    drain()
+    ok("the cloud button brings it back, sent by hand",
+       back["ok"] and fake.takes[uid_del].get("by_hand") is True and not fake.takes[uid_del]["trashed"]
+       and take(n_del)["service"] == {"up": True, "flac": True, "error": None})
+    api.rename_take(folder(), n_del, "Kupalle")
+    drain()
+    ok("a change after that is not by hand",
+       fake.takes[uid_del].get("by_hand") is False and fake.takes[uid_del]["song"] == "Kupalle")
+
+    fake.delete_in_service(uid_del)
+    puts = fake.count(f"put {uid_del}")
+    service()._next_check = 0
+    drain()
+    ok("the check finds a take deleted in the service",
+       take(n_del)["service"] is None and fake.count(f"put {uid_del}") == puts)
+
+    starts = fake.count(f"start {uid_del}")
+    fake.restore_in_service(uid_del)
+    service()._next_check = 0
+    drain()
+    ok("the check finds a take restored in the service, and sends no file again",
+       take(n_del)["service"] == {"up": True, "flac": True, "error": None}
+       and fake.count(f"start {uid_del}") == starts and fake.count(f"put {uid_del}") == puts + 1)
+
+    api.unshare_take(folder(), n_del)
+    # Its delete has not reached the service when the check asks.
+    service()._later[("delete", uid_del)] = time.monotonic() + 3600
+    service()._next_check = 0
+    drain()
+    ok("the check leaves a take removed here before its delete went",
+       take(n_del)["service"] is None and not fake.takes[uid_del]["trashed"])
+    service()._later.pop(("delete", uid_del))
+    drain()
+    ok("and the delete goes after", fake.takes[uid_del]["trashed"])
+
+    n_old = keep("Palyn", band=["Drums"])
+    uid_old = uid_of(n_old)
+    drain()
+    # Deleted for good after 30 days in the trash, while REHA was off.
+    with fake._lock:
+        fake.takes.pop(uid_old)
+    api.rename_take(folder(), n_old, "Kupalle")
+    puts = fake.count(f"put {uid_old}")
+    _, api3 = fresh_api(tmp)
+    api3._session = {**api._session}
+    drain(api3)
+    ok("a take the service no longer has is marked taken out at start, before any send",
+       take(n_old, api3)["service"] is None and fake.count(f"put {uid_old}") == puts
+       and uid_old not in fake.takes)
+    api = api3
+
+    print("\n[7] Closing")
     window = Window()
     api._window = window
     n10 = keep("Viasna", band=["Drums"])
@@ -412,7 +479,7 @@ def run(tmp, fake):
     api.close_anyway()
     ok("close anyway closes", window.destroyed.wait(5) and api.window_closing() is True)
 
-    print("\n[7] Disconnect, and the switch")
+    print("\n[8] Disconnect, and the switch")
     ok("disconnect keeps what is in the service and sends nothing more",
        api.disconnect_service() == {"ok": True} and api.sending_left() == {"takes": 0, "bytes": 0}
        and uid_of(n10) is not None and uid_of(n_make) == uid_make

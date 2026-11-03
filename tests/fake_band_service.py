@@ -12,7 +12,8 @@ service would not take.
 
 It can be told to drop the connection unanswered, to keep a part and then
 drop it, to forget its uploads, to refuse with words, or to say РЭХА is too
-old.
+old. A test can delete a take as someone in the band does, and press
+Restore on it.
 """
 
 import json
@@ -49,15 +50,18 @@ class FakeBandService:
     def __init__(self):
         self._spec = OpenAPI.from_file_path(str(SPEC))
         self._lock = threading.Lock()
-        # uid: the TakeMeta as last sent, with "trashed".
+        # uid: the TakeMeta as last sent, with "trashed", and "trashed_by"
+        # (who deleted it in the service; None when РЭХА removed it).
         self.takes = {}
+        # uid: {"mp3": gen, "flac": gen}, the generations whose files are up.
+        self.gens = {}
         # upload_id: {"uid", "gen", "name", "size", "parts": {number: bytes}}
         self.uploads = {}
         # "uid/gen/name": the file's bytes, once its upload is done.
         self.files = {}
         # What came, in order: "put <uid>", "start <uid> <name>", "part <uid>
         # <name> <number>", "file <uid> <name>", "ready <uid> <what>",
-        # "delete <uid>".
+        # "delete <uid>", "list".
         self.order = []
         self.mismatches = []
         # Every User-Agent a request came with.
@@ -130,6 +134,16 @@ class FakeBandService:
                     out[name] = data
             return out
 
+    def delete_in_service(self, uid):
+        """Someone in the band presses Delete take."""
+        with self._lock:
+            self.takes[uid].update(trashed=True, trashed_by="Ira")
+
+    def restore_in_service(self, uid):
+        """Someone in the band presses Restore in the Trash."""
+        with self._lock:
+            self.takes[uid].update(trashed=False, trashed_by=None)
+
     # ---------- answering ----------
 
     def _answer(self, h):
@@ -177,6 +191,12 @@ class FakeBandService:
     def _route(self, method, parts, q, body):
         if method == "GET" and parts == ["hello"]:
             return 200, {"ok": True}
+        if method == "GET" and parts == ["takes"]:
+            with self._lock:
+                listed = [{"uid": uid, "trashed": t["trashed"], "mp3_gen": self.gens.get(uid, {}).get("mp3"),
+                           "flac_gen": self.gens.get(uid, {}).get("flac")} for uid, t in self.takes.items()]
+            self._said("list")
+            return 200, listed
         if parts[:1] != ["takes"] or len(parts) < 2:
             return 404, {"error": "No such call"}
         uid = parts[1]
@@ -184,9 +204,12 @@ class FakeBandService:
         if method == "PUT" and not rest:
             meta = json.loads(body)
             with self._lock:
-                self.takes[uid] = {**meta, "trashed": False}
+                was = self.takes.get(uid) or {}
+                # One the band deleted comes out of the trash only when sent by hand.
+                stays = was.get("trashed") and was.get("trashed_by") and not meta.get("by_hand")
+                self.takes[uid] = {**meta, "trashed": bool(stays), "trashed_by": was.get("trashed_by") if stays else None}
             self._said(f"put {uid}")
-            return 200, {"ok": True}
+            return 200, {"ok": True, "in_trash": bool(stays)}
         if method == "DELETE" and not rest:
             with self._lock:
                 if uid in self.takes:
@@ -195,6 +218,8 @@ class FakeBandService:
             return 200, {"ok": True}
         if method == "POST" and rest == ["ready"]:
             data = json.loads(body)
+            with self._lock:
+                self.gens.setdefault(uid, {})[data["what"]] = data["gen"]
             self._said(f"ready {uid} {data['what']} {data['gen']}")
             return 200, {"ok": True}
         if method == "POST" and rest == ["files"]:

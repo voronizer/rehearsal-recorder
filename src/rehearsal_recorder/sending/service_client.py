@@ -112,6 +112,16 @@ class ServiceClient:
     def delete_take(self, uid):
         return self._call("DELETE", f"/api/reha/takes/{uid}")
 
+    def takes(self):
+        """Every take the service has: its uid, whether it is in the trash
+        ("trashed"), and the generation whose MP3s ("mp3_gen") and whose
+        FLAC files ("flac_gen") are up. An answer that is not such a list is
+        refused, so a stray page is never read as "the service has none"."""
+        answer = self._call("GET", "/api/reha/takes")
+        if not isinstance(answer, list) or not all(isinstance(t, dict) and "uid" in t for t in answer):
+            raise Refused("The band service's list of takes made no sense")
+        return answer
+
     def _call(self, method, path, body=None, raw=None):
         # A name of its own: Cloudflare's Browser Integrity Check, on by
         # default, turns away urllib's "Python-urllib/3.x" with a 403.
@@ -157,4 +167,4 @@ def _json(data):
     if not data:
         return {}
     answer = json.loads(data)
-    return answer if isinstance(answer, dict) else {}
+    return answer if isinstance(answer, (dict, list)) else {}
