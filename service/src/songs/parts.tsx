@@ -247,7 +247,8 @@ export function AddFile({ song }: { song: Song }) {
 export function SongMenu({ song, onGone }: { song: Song; onGone: () => void }) {
   const remove = useDeleteSong()
   const [asking, setAsking] = useState(false)
-  const trashed = song.takes > 0 || song.trashed_takes > 0
+  // Any take at all, in the Trash or still on its way from РЭХА, sends the song to the Trash.
+  const trashed = song.takes > 0 || song.trashed_takes > 0 || song.coming_takes > 0
   const said =
     song.takes > 0
       ? `It goes to the Trash with its ${count(song.takes, "take")}, notes and files, where anyone in the band can put it back for 30 days. In РЭХА the takes stay as they are.`

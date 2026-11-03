@@ -11,7 +11,7 @@ type Gone = { uid: string; name: string; trashed_at: string; by: string | null }
 type TrashedSong = { id: number; title: string; takes: number; trashed_at: string; by: string | null }
 type Trash = { songs: TrashedSong[]; takes: Gone[] }
 type Songs = { songs: { id: number; title: string; takes: number }[] }
-type SongPage = { song: { id: number; takes: number; trashed_takes: number }; takes: { uid: string }[] }
+type SongPage = { song: { id: number; takes: number; trashed_takes: number; coming_takes: number }; takes: { uid: string }[] }
 
 const trash = (cookie: string) => read<Trash>("/api/trash", cookie)
 const songs = (cookie: string) => read<Songs>("/api/songs", cookie)
@@ -88,6 +88,8 @@ test("a song goes to the trash with its takes and comes back whole", async () =>
   expect(gone.takes.map((t) => t.uid)).toEqual([alone])
   expect(await songCalled(alex, "Pałyn")).toBeUndefined()
   expect((await call(`/api/songs/${id}`, {}, alex)).status).toBe(404)
+  // A take's page in the trash does not lead to its song, which is there too.
+  expect(await read(`/api/takes/${withIt}`, alex)).toMatchObject({ song: null, trashed_at: expect.any(String) })
   // A panel left open elsewhere cannot write into it.
   expect((await patch(`/api/songs/${id}`, { notes: "Slower" }, alex)).status).toBe(404)
   const file = call(
@@ -146,6 +148,17 @@ test("a new take of a song in the trash brings the song back", async () => {
   const gone = await trash(alex)
   expect(gone.songs).toEqual([])
   expect(gone.takes.map((t) => t.uid)).toEqual([old])
+})
+
+test("a song whose only take is still on its way says so, and goes to the trash", async () => {
+  const alex = await signInOwner()
+  const r = await reha()
+  const uid = crypto.randomUUID()
+  expect((await r.put(`/api/reha/takes/${uid}`, takeMeta({ song: "Zorka", number: 1, name: "Zorka 1" }))).status).toBe(200)
+  const { id } = (await songCalled(alex, "Zorka"))!
+  expect((await read<SongPage>(`/api/songs/${id}`, alex)).song).toMatchObject({ takes: 0, trashed_takes: 0, coming_takes: 1 })
+  expect((await del(`/api/songs/${id}`, alex)).status).toBe(200)
+  expect((await trash(alex)).songs).toMatchObject([{ id, title: "Zorka" }])
 })
 
 test("a song that never had a take is deleted at once", async () => {

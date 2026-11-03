@@ -155,8 +155,9 @@ export const songRoutes = newApp()
       responses: {
         200: json(
           z.object({
-            /** `trashed_takes`: its takes in the trash, which Delete song's question counts on. */
-            song: SongItem.extend({ notes: z.string(), trashed_takes: z.number() }),
+            /** Its takes in the trash, and its takes whose MP3s are still on their way:
+             *  Delete song's question counts on them. */
+            song: SongItem.extend({ notes: z.string(), trashed_takes: z.number(), coming_takes: z.number() }),
             takes: z.array(TakeRow),
             files: z.array(FileView),
           })
@@ -169,7 +170,7 @@ export const songRoutes = newApp()
       const { id } = c.req.valid("param")
       const s = await liveSong(db, id)
       if (!s) return fail(c, 404, NO_SONG)
-      const [rows, first, files, [trashed]] = await Promise.all([
+      const [rows, first, files, [trashed], [coming]] = await Promise.all([
         takeRows(c.env, and(isNull(take.trashedAt), eq(take.songId, id))),
         firstStatus(db),
         fileViews(db, id),
@@ -177,9 +178,17 @@ export const songRoutes = newApp()
           .select({ n: count() })
           .from(take)
           .where(and(eq(take.songId, id), isNotNull(take.shownGen), isNotNull(take.trashedAt))),
+        db
+          .select({ n: count() })
+          .from(take)
+          .where(and(eq(take.songId, id), isNull(take.shownGen), isNull(take.trashedAt))),
       ])
       return c.json(
-        { song: { ...item(s, rows, first), notes: s.notes, trashed_takes: trashed.n }, takes: rows.map(bare), files },
+        {
+          song: { ...item(s, rows, first), notes: s.notes, trashed_takes: trashed.n, coming_takes: coming.n },
+          takes: rows.map(bare),
+          files,
+        },
         200
       )
     }

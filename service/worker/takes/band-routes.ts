@@ -131,7 +131,8 @@ export const takeRoutes = newApp()
           number: t.number,
           date: r.date,
           rehearsal: r,
-          song: songs[0] ? { id: songs[0].id, title: songs[0].title } : null,
+          // A song in the trash has no page to go to.
+          song: songs[0] && !songs[0].trashedAt ? { id: songs[0].id, title: songs[0].title } : null,
           duration_sec: t.durationSec,
           shape: filled.shape ?? [],
           gen,
@@ -230,8 +231,10 @@ export const takeRoutes = newApp()
           .leftJoin(user, eq(song.trashedBy, user.id))
           .where(isNotNull(song.trashedAt)),
       ])
-      const of = new Map(takes.map((t) => [t.uid, t]))
-      const inSong = (r: Loaded) => r.song_id !== null && of.get(r.uid)!.withSong && songs.some((s) => s.id === r.song_id)
+      // A take put back between the two reads is in one and not the other.
+      const nobody = { withSong: false, name: null, email: null }
+      const of = (uid: string) => takes.find((t) => t.uid === uid) ?? nobody
+      const inSong = (r: Loaded) => r.song_id !== null && of(r.uid).withSong && songs.some((s) => s.id === r.song_id)
       return c.json(
         {
           songs: songs
@@ -246,7 +249,7 @@ export const takeRoutes = newApp()
           takes: rows
             .filter((r) => !inSong(r))
             .sort((a, b) => b.trashed_at!.localeCompare(a.trashed_at!))
-            .map((r) => ({ ...bare(r), trashed_at: r.trashed_at!, by: who(of.get(r.uid)!) })),
+            .map((r) => ({ ...bare(r), trashed_at: r.trashed_at!, by: who(of(r.uid)) })),
         },
         200
       )

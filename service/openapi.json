@@ -3151,11 +3151,15 @@
                             },
                             "trashed_takes": {
                               "type": "number"
+                            },
+                            "coming_takes": {
+                              "type": "number"
                             }
                           },
                           "required": [
                             "notes",
-                            "trashed_takes"
+                            "trashed_takes",
+                            "coming_takes"
                           ]
                         }
                       ]

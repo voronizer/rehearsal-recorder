@@ -10,9 +10,9 @@ opening.
 - **Delete takes and songs in the band service.** ⋯ › **Delete take** is on
   every take, in its panel and on its page. ⋯ › **Delete song** now works on
   a song with takes too, and they go with it. Both wait in the **Trash** for
-  30 days, and **Restore** puts a song back with all its takes. In РЭХА the
-  takes stay as they are: РЭХА stops sending a take the band deleted, and
-  its cloud button sends it again.
+  30 days, and **Restore** puts a song back with the takes that went with
+  it. In РЭХА the takes stay as they are: РЭХА stops sending a take the band
+  deleted, and its cloud button sends it again.
 - **A take put back in the band service is sent again.** When someone
   presses **Restore** on a take you took out with **Remove from the band
   service**, РЭХА sends its changes again within an hour. Before, it went on

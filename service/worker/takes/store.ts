@@ -14,7 +14,7 @@ const markKey = (at: number) => Math.round(at * 100)
 
 /**
  * The song with this title, whatever its case, made with the first status
- * if there is none, and brought out of the trash if it is there. The song's
+ * if there is none (putTake brings it out of the trash). The song's
  * tempo is the one its newest take carries (the latest rehearsal, then the
  * highest number): an older take sent again, from a computer whose РЭХА has
  * an old tempo, leaves it.
@@ -28,8 +28,7 @@ async function songId(env: Bindings, uid: string, meta: TakeMeta): Promise<numbe
     .values({ title, statusId: await firstStatus(db), createdAt: iso() })
     .onConflictDoNothing()
   const named = sql`${song.title} = ${title} COLLATE NOCASE`
-  const [row] = await db.select({ id: song.id, trashedAt: song.trashedAt }).from(song).where(named).limit(1)
-  if (row.trashedAt !== null) await db.batch(songBack(db, row.id))
+  const [row] = await db.select({ id: song.id }).from(song).where(named).limit(1)
   if (tempo === undefined) return row.id
   const { date } = meta.rehearsal
   const [newer] = await db
@@ -121,6 +120,9 @@ export async function putTake(env: Bindings, uid: string, meta: TakeMeta): Promi
       .insert(take)
       .values({ uid, ...fields })
       .onConflictDoUpdate({ target: take.uid, set: fields }),
+    // Its song comes out of the trash with it, in the same batch, so a Delete
+    // song in between cannot leave the take alone in a song in the trash.
+    ...(!stays && fields.songId !== null ? songBack(db, fields.songId) : []),
     ...[...free.values()].filter((id) => !talkedUnder.has(id)).map((id) => db.delete(comment).where(eq(comment.id, id))),
     ...marks.map((m, i) => {
       const id = matched.get(i)
