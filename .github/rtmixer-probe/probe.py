@@ -126,6 +126,7 @@ class Engine:
         # the gap came after the engine (rtmixer, the driver or the loopback).
         self.sent = np.zeros(((secs + 15) * RATE, 2), dtype=np.float32)
         self.base = 0
+        self.track = []  # (this computer's time, frame of the take the card has read to)
         self.rtmixer = rtmixer
         self.block = block
         self.player = player
@@ -231,6 +232,17 @@ class Engine:
     quick = False
     card_call = None
 
+    def stalls(self):
+        """Where the card read less of the ring than time passed: (second of
+        the take, ms behind). Read with the clock of this computer, so the
+        card's own clock drifts the figures a little."""
+        out = []
+        for (t0, f0), (t1, f1) in zip(self.track, self.track[1:]):
+            behind = (t1 - t0) - (f1 - f0) / RATE
+            if behind > 0.04:
+                out.append((round(f0 / RATE, 2), round(behind * 1000)))
+        return out
+
     def run(self):
         self.action = self.mixer.play_ringbuffer(self.ring)
         if self.quick:
@@ -251,6 +263,7 @@ class Engine:
                 continue
             have = self.ring.read_available
             self.lowest = min(self.lowest, have)
+            self.track.append((time.perf_counter(), self.base + self.written - have))
             with self.lock:
                 asked, self.asked = self.asked, None
             if asked is not None:
@@ -333,6 +346,7 @@ def case(engine, load, tracks, out_index, loop, secs, reserve, wav):
                     heard_after_ms_median_p90_max=[heard[len(heard) // 2], heard[int(len(heard) * 0.9)], heard[-1]] if heard else None,
                     card_underflows=int(mixer.stats.output_underflows),
                     card_call_frames=eng.card_call,
+                    card_read_stalls_s_ms=eng.stalls()[:8],
                     sent=analyse.judge(sent))
     player.close()
     stop.set()

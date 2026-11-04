@@ -71,13 +71,13 @@ jobs:
         shell: bash
         working-directory: .github/rtmixer-probe
         run: |
-          for buf in 1024 256; do
+          for buf in 1024; do
             printf 'backend = "Windows WASAPI"\nbufferSizeSamples = %s\n\n[input]\ndevice = ""\n' "$buf" > "$USERPROFILE/FlexASIO.toml"
-            # Run 5 had every case once. Run 6 repeats the rtmixer ones with
-            # a copy of what the engine sent; this run tries a re-mix closer
-            # to the card (rtq), for a change heard sooner.
+            # Runs 5 and 7 each had one gap of 50-70 ms under the light load
+            # that the engine's own copy has not: this run repeats that case
+            # and follows how far the card read the ring, to place it.
             python probe.py --out-device FlexASIO --out-api ASIO --loop-device "CABLE Output" --loop-api "Windows DirectSound" \
-              --cases rtq:heavy,rtq:applike,rtq:heavy,rtq:applike \
+              --cases rt:applike,rt:applike,rt:applike,rt:applike,rt:applike,rt:applike \
               --label "asio$buf" --results results.jsonl || echo "probe asio$buf failed"
           done
 
