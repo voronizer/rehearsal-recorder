@@ -21,6 +21,8 @@ concurrency:
 
 jobs:
   windows:
+    # Runs 5 to 8 have it.
+    if: false
     runs-on: windows-latest
     timeout-minutes: 40
     steps:
@@ -120,9 +122,9 @@ jobs:
           if-no-files-found: warn
 
   macos:
-    # Run 6 has it.
-    if: false
-    runs-on: macos-15
+    # macos-latest and macos-15 each sat 15 minutes unpicked and were
+    # cancelled (runs 4 and 6); the app's own CI ran on macos-latest at 16:11.
+    runs-on: macos-latest
     timeout-minutes: 40
     steps:
       - uses: actions/checkout@v7
