@@ -37,11 +37,6 @@ const scrollTo = (heading: string) => async (page: Page) => {
   })
 }
 
-/** Scrolls the page to its end. */
-const toEnd = async (page: Page) => {
-  await page.locator("main").evaluate((m) => m.scrollTo(0, m.scrollHeight))
-}
-
 const SHOTS: Record<string, Shot> = {
   "new-takes": { who: "ira", path: () => "/" },
   // Ivan turns his guitar up, past where РЭХА's mix had it: his levels, which only he hears.
@@ -63,8 +58,16 @@ const SHOTS: Record<string, Shot> = {
   song: { who: "ivan", path: () => `/songs/${pictured().songs["Viasna"]}` },
   "three-weeks-ago": { who: "ivan", path: () => `/takes/${pictured().takes["Viasna 3"]}?at=104` },
   // On the computer at home, for the recording program: РЭХА's player with a
-  // lane per track, and every track to download under it.
-  downloads: { who: "ivan", path: () => `/takes/${pictured().takes["Kupalle 2"]}`, on: COMPUTER, then: toEnd },
+  // lane per track, and the Download window over it.
+  downloads: {
+    who: "ivan",
+    path: () => `/takes/${pictured().takes["Kupalle 2"]}`,
+    on: COMPUTER,
+    then: async (page) => {
+      await page.getByRole("button", { name: "Download", exact: true }).click()
+      await page.getByRole("dialog").waitFor()
+    },
+  },
   "sign-in": {
     who: null,
     path: () => "/signin",
