@@ -20,6 +20,15 @@ opening.
   in a tab) or ↓ (downloads) after their name, a tempo not set yet is a
   dash, **Download** on a computer and a key's **Remove** are icons, and
   **РЭХА's levels** sits under Master, faded until you move a fader.
+- **Sound in a process of its own.** РЭХА now plays and records through a
+  second program it starts by itself, which does nothing else and keeps a
+  second of sound ready for the card. Before, the rest of РЭХА (the screen,
+  making MP3s, sending to the band service) could hold the sound up for a
+  moment, and playback skipped. If that program stops during a take, the take
+  is kept up to that moment and РЭХА starts the program again. If it stops
+  twice within a minute, РЭХА asks you to restart it. After a listening
+  that skipped, the log says how often the card ran out of sound and the
+  least it had ready.
 - **Download in the band service.** A take's page has one **Download**
   button by its name. **The mix** is the take as one MP3, mixed in the page
   as you hear it there, with your levels, mute and solo. Mute your own part,

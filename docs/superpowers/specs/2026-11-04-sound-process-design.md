@@ -225,10 +225,12 @@ there the age is the same as today's to the frame, and each mark sits
   gets an answer, and the stand-in returns it, so a stream that will not
   open says why, as today.
 - What the screen asks five times a second (the playhead, the meters, the
-  click's flash, a problem) the sound process writes about 100 times a
-  second into shared memory, behind a counter that tells a reader when it
-  read during a write. Checked: no torn read got through, the playhead never
-  went back, and the level always came from the playhead's place.
+  click's flash, a problem) goes through the same pipe. The sound process
+  answers it on four threads of its own, beside each stream's commands, so
+  a slow command never holds up the screen. The first plan wrote it into
+  shared memory about 100 times a second; that was dropped while building
+  it, as it cost the sound process a write every 10 ms for five reads a
+  second, and a question through the pipe takes 0.1–0.2 ms.
 - Larger answers, such as a stopped take's record, go through the pipe.
 
 ## Part 8. The log
@@ -307,7 +309,8 @@ sit on the click, and a take with MIDI notes, to see them on the drums.
 8. A record ring of at least 2.5 s, read every 2 ms.
 9. The notes' clock: one mark a second from that second's reads, the age
    from the stream's input latency.
-10. Shared memory for what the screen polls, a pipe for the rest.
+10. A pipe for everything, what the screen polls answered on threads of its
+    own (shared memory was dropped while building it: Part 7).
 11. A dead sound process is started again once; a second death in a minute
     leaves it down. The new message's wording in Part 9.
 12. The click or backing track switched during a take is heard after 0.2 s.
