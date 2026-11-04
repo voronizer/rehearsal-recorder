@@ -47,8 +47,10 @@ NO_KEY = "No band service key"
 # True when the page took the question; false when it has no way to ask
 # (not loaded yet, or broken), and the window closes.
 CLOSING_JS = "window.__rehaClosing ? (window.__rehaClosing(), true) : false"
-# A take's line while a take records: its sending waits.
+# A take's line while a take records, and while a take, a backing track or
+# the click plays: its sending waits (Api._sound_busy).
 RECORDING_STEP = "A take is recording: carries on after it"
+PLAYING_STEP = "Sound is playing: carries on when it stops"
 # What a band service is and how to run one, for Settings › Folders.
 SERVICE_HELP_URL = "https://reha.stream/band-service"
 
@@ -68,8 +70,10 @@ class _Changed(Exception):
 
 
 class _Paused(Exception):
-    """A take started recording: the pass stops at its next file or part,
-    and carries on from there once the take is kept."""
+    """A take started recording, or something started playing: the pass
+    stops at its next file, part or block of a file being made, and carries
+    on from there once the sound has stopped. Its argument is why, as
+    Api._sound_busy says it."""
 
 
 def _sources(take):
@@ -80,10 +84,10 @@ def _sources(take):
 class BandService:
     """
     The band service as a module of `sending`. One worker thread, one take
-    at a time, never while a take records. The tables are the library's
-    (ServiceCopy, ServiceFile, ServiceDelete); what is only for this run is
-    here: the lines in the list of background work, and when a take that met
-    no internet is tried again.
+    at a time, never while a take records or plays. The tables are the
+    library's (ServiceCopy, ServiceFile, ServiceDelete); what is only for
+    this run is here: the lines in the list of background work, and when a
+    take that met no internet is tried again.
     """
 
     id = "service"
@@ -342,13 +346,21 @@ class BandService:
 
     def states(self, folder):
         """What this rehearsal's takes are doing, by take number."""
-        out = {}
+        return self.on_the_way(folder)[0]
+
+    def on_the_way(self, folder):
+        """states(folder), and the take numbers among them whose MP3s are
+        up already (the take's "service" "up"), in one reading of the
+        rows."""
+        out, up = {}, []
         if not self._keyed():
-            return out
+            return out, up
         for row in self._lib.service_rows():
             if row["due"] and Path(row["folder"]) == Path(folder):
                 out[row["take_number"]] = "working" if row["take_id"] == self._active else "queued"
-        return out
+                if not row["removed"] and row["mp3_gen"] == row["gen"]:
+                    up.append(row["take_number"])
+        return out, up
 
     def left(self):
         """The takes still to send or to put in the trash, and the bytes of
@@ -578,9 +590,9 @@ class BandService:
 
     def run_next(self):
         """One take, or one deletion. False when there was nothing to do,
-        or not now: while a take records, or before a take that met no
-        internet is due to be tried again."""
-        if self.api._recorder is not None or self.api._library is None or not self._keyed():
+        or not now: while a take records or anything plays, or before a take
+        that met no internet is due to be tried again."""
+        if self.api._sound_busy() or self.api._library is None or not self._keyed():
             return False
         self._tidy()
         now = time.monotonic()
@@ -698,8 +710,8 @@ class BandService:
             self._send(row, entry, edits)
         except _Changed:
             pass  # looked at again on the next turn, as it is now
-        except _Paused:
-            entry.start(RECORDING_STEP)
+        except _Paused as e:
+            entry.start(PLAYING_STEP if e.args and e.args[0] == "playing" else RECORDING_STEP)
         except Offline as e:
             entry.start(e.step)
             self._later[take_id] = time.monotonic() + self.RETRY_SEC
@@ -721,12 +733,13 @@ class BandService:
         return True
 
     def _check(self, take_id, gen):
-        """The key is there, no take is recording, and the take is still
-        there, at the generation being sent and not taken out."""
+        """The key is there, no take is recording and nothing plays, and the
+        take is still there, at the generation being sent and not taken out."""
         if not self._keyed():
             raise _Changed()
-        if self.api._recorder is not None:
-            raise _Paused()
+        busy = self.api._sound_busy()
+        if busy:
+            raise _Paused(busy)
         row = self._lib.service_row_of(take_id)
         if row is None or row["gen"] != gen or row["removed"]:
             raise _Changed()
@@ -822,7 +835,11 @@ class BandService:
                 self._check(take_id, gen)
                 path = staging_root() / uid / str(gen) / item["name"]
                 try:
-                    service_files.make(item, path)
+                    service_files.make(item, path, stop=self.api._sound_busy)
+                except service_files.Stopped:
+                    # Play pressed while an MP3 or FLAC was being made: it
+                    # is made again from its start next time.
+                    raise _Paused(self.api._sound_busy() or "playing") from None
                 except (service_files.CannotMake, OSError):
                     self._moved(take_id, take)
                     raise

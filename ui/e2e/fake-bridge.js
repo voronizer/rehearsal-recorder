@@ -61,6 +61,10 @@ function toService(take) {
     folder: session ? session.folder : null, take_number:take.take_number, state:'waiting',
     fraction:0, step:null, error:null, detail:null, retry:null, seen:false}];
 }
+// The takes on their way whose MP3s are up (Api.sending_queue).
+const serviceUp = () => session
+  ? session.takes.filter(t => serviceQueue[t.take_number] && t.service && t.service.up).map(t => t.take_number)
+  : [];
 window.__serviceUp = (n, flac = true) => {
   const take = session && session.takes.find(t => t.take_number === n);
   if (take) take.service = {up:true, flac, error:null};
@@ -2006,6 +2010,11 @@ window.__MAKE_API__ = () => ({
     nextName = null;
     return {ok:true, folder:session.folder};
   }),
+  // What session_state would say of the takes on their way, without
+  // draining the cloud queue: only session_state does that.
+  sending_queue: track('sending_queue', async () => JSON.parse(JSON.stringify(session
+    ? {cloud_queue:cloudQueue, service_queue:serviceQueue, service_up:serviceUp()}
+    : {cloud_queue:{}, service_queue:{}, service_up:[]}))),
   session_state: async () => {
     if (!session) return {active:false};
     const song = nextTake().song;
@@ -2026,7 +2035,7 @@ window.__MAKE_API__ = () => ({
        next_take_name:suggestName(), next_take_go:nextTake().go,
        next_take_default:suggestName(undefined, false),
        last_attempt:lastAttempt(session.takes, song, before), set,
-       recording:false, cloud_queue:cq, service_queue:serviceQueue,
+       recording:false, cloud_queue:cq, service_queue:serviceQueue, service_up:serviceUp(),
        disk_bytes:48000000 * session.takes.length}));
   },
   finish_rehearsal: track('finish_rehearsal', async () => {

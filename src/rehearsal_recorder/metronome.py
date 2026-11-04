@@ -651,6 +651,12 @@ class Metronome:
             self._stop_free()
         return {"ok": True}
 
+    def sounding(self):
+        """Whether the click between takes plays now, ▶ or a bar for a
+        setting: the band service's sending and the cloud folder's copies
+        wait for it (Api._sound_busy)."""
+        return self._free is not None
+
     def let_go_for_rescan(self):
         """
         For a rescan, called inside its locks (the Api's _player_lock and
