@@ -47,6 +47,12 @@ from rehearsal_recorder.audio.wavfile import _open_track
 
 BLOCK_FRAMES = 1024
 
+# A block counts as late (skips) when it comes more than this share of a block
+# after its turn. A driver whose own buffer is not a block long calls a little
+# early and a little late by turns, which is not lateness; half a block more is.
+LATE_SHARE = 0.5
+
+
 def channel_label(channels):
     """How the person reads a choice of outputs: "3–4", or "5" for one."""
     return "–".join(str(c) for c in channels)
@@ -100,6 +106,16 @@ class TakePlayer:
 
         self._lock = threading.Lock()
         self.last_status = None
+        # What one listening cost, for skips(): the frames played, the blocks
+        # the card said it ran short of (PortAudio's output underflow), and
+        # the blocks that came late with the latest of them, in seconds. A
+        # late block is timed from the call before it, so the call before is
+        # kept too. Written on the audio thread under the lock.
+        self._heard = 0
+        self._underflows = 0
+        self._late = 0
+        self._latest = 0.0
+        self._last_call = None
         self._pos = 0
         self._playing = False
         self._loop = None  # (start_frame, end_frame)
@@ -219,6 +235,8 @@ class TakePlayer:
         self._stream_channels = max((*channels, *extra))
         self._free = np.zeros((BLOCK_FRAMES, self._stream_channels), dtype=np.float32)
         self._out_frames = 0
+        # A new stream's first block is not late for the old one's last.
+        self._last_call = None
         self._latency = output_latency(sd, index)
         self._stream = open_stream(
             sd.OutputStream,
@@ -443,10 +461,12 @@ class TakePlayer:
         finally:
             self._heartbeat.leave()
 
-    def _fill(self, outdata, frames, status, time_info=None):
+    def _fill(self, outdata, frames, status, time_info=None, now=None):
         if status:
             self.last_status = str(status)
+        now = time.perf_counter() if now is None else now
         with self._lock:
+            self._note(status, frames, now)
             mix = self._render(frames)
             if self._stream_channels == 2 and self._route == (0, 1):
                 outdata[:] = mix
@@ -465,6 +485,24 @@ class TakePlayer:
             if free is not None:
                 self._add_free(free, outdata, frames, time_info)
         self._out_frames += frames
+
+    def _note(self, status, frames, now):
+        """One call of the card's, counted for skips() while the take plays.
+        Every call is timed, paused or not, so the first block after a pause
+        is timed from the one just before it and not from the pause."""
+        last, self._last_call = self._last_call, now
+        if not self._playing:
+            return
+        self._heard += frames
+        if getattr(status, "output_underflow", False):
+            self._underflows += 1
+        if last is not None:
+            block = frames / self.samplerate
+            over = (now - last) - block
+            if over > LATE_SHARE * block:
+                self._late += 1
+                if over > self._latest:
+                    self._latest = over
 
     def _add_free(self, source, outdata, frames, time_info):
         """
@@ -488,6 +526,26 @@ class TakePlayer:
                 np.copyto(outdata[:, c], column, casting="unsafe")
 
     # ---------- transport ----------
+
+    @property
+    def playing(self):
+        """Whether the take plays now: what the sending waits for
+        (Api._sound_busy). Read without the lock, as one value."""
+        return self._playing
+
+    def skips(self):
+        """
+        What the listening since the last ask cost, and the count starts
+        again: (seconds played, times the card ran short, blocks that came
+        late, the latest of them in seconds). The card's own count is the
+        sure one; a late block is a block the app was slow to make, which
+        is heard as a skip when the driver had nothing left to play.
+        """
+        with self._lock:
+            out = (self._heard / self.samplerate, self._underflows, self._late, self._latest)
+            self._heard = self._underflows = self._late = 0
+            self._latest = 0.0
+        return out
 
     def play(self):
         with self._lock:

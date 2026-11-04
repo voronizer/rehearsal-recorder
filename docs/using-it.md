@@ -724,9 +724,9 @@ There are three ways to send takes:
   Folders**. Every take is then copied after you save it, apart from false
   starts: a take shorter than 30 seconds with no ★ and no marks stays on this
   computer unless you tick its box on the screen after the take (see [Keep
-  the take or not](#keep-the-take-or-not)). Nothing is copied while a take is
-  recording. This setting needs a cloud folder, and it turns off if you
-  remove the folder.
+  the take or not](#keep-the-take-or-not)). No copy starts while a take is
+  recording or anything plays: a take, a backing track or the click. This
+  setting needs a cloud folder, and it turns off if you remove the folder.
 
 You can send one of three things. By hand you choose each time; for
 **Send starred** and for automatic sending you choose once in **Settings ›
@@ -860,8 +860,9 @@ Takes are sent the same three ways as to the cloud folder:
 - The starred ones: **Send starred** sends every ★ take of the rehearsal that
   is not in the band service yet.
 - Automatically: **Send saved takes automatically**, in the band service's
-  panel, sends every take you save, between takes. False starts stay on
-  this computer unless you tick their box on the screen after the take.
+  panel, sends every take you save, while nothing records or plays. False
+  starts stay on this computer unless you tick their box on the screen after
+  the take.
 
 On a take that is in the band service, the cloud button opens a dialog,
 *“Viasna 12” in the band service*. It lists each track with what of it is up,
@@ -897,7 +898,10 @@ and **Retry** sends it again. With no internet nothing fails: the line says
 “No internet: carries on when it is back”, and the sending goes on by itself
 once you are online. While a take is recording, the sending waits, so the
 recording has the computer to itself: the line says “A take is recording:
-carries on after it”.
+carries on after it”. It waits the same way while a take, a backing track or
+the click plays, so what you hear has the computer to itself: the line says
+“Sound is playing: carries on when it stops”, and the sending goes on once
+you pause.
 
 Each file goes up in parts, and РЭХА keeps track of which parts arrived. If
 РЭХА closes or the laptop sleeps, it sends only what is missing the next

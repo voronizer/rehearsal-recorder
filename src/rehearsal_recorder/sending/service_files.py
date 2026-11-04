@@ -34,6 +34,11 @@ class CannotMake(Exception):
     """A file of the take could not be made; the words say why."""
 
 
+class Stopped(Exception):
+    """`stop` said so while an MP3 or FLAC was being made: nothing of it is
+    left, and it is made again from its start next time."""
+
+
 def rehearsal_uid(ref):
     """
     What the service knows a rehearsal by, from when it was made and its
@@ -176,11 +181,15 @@ def drift(answer):
         return None
 
 
-def make(item, dst):
+def make(item, dst, stop=None):
     """
     One file of the plan, written at `dst`. The WAV it is made from stays
     as it is: the encoder removes what it encodes, so it is handed a copy.
     Raises CannotMake when the file cannot be made as the service needs it.
+
+    `stop()`, when given, is asked between blocks of an MP3 or FLAC: true,
+    and the file is given up and Stopped raised. A waveform or a .mid is
+    made at once and not asked.
     """
     source = Path(item["source"])
     if not source.exists():
@@ -200,7 +209,10 @@ def make(item, dst):
         return
     copy = dst.with_name(dst.name + ".wav")
     shutil.copyfile(source, copy)
-    done = encode(copy, kind, dst)
+    done = encode(copy, kind, dst, stop=stop)
+    if done.get("stopped"):
+        copy.unlink(missing_ok=True)
+        raise Stopped()
     if done.get("format") != kind:
         copy.unlink(missing_ok=True)
         raise CannotMake(done.get("note") or f"Could not make the {kind.upper()}")

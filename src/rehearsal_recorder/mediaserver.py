@@ -57,6 +57,9 @@ POLLABLE = (
     # hits while Tap listens, which reading hands over once.
     "metronome_state",
     "metronome_taps",
+    # The rehearsal screen's takes on their way, every 1.5 s while there
+    # are any: asked instead of the whole session, which costs the sound.
+    "sending_queue",
 )
 
 

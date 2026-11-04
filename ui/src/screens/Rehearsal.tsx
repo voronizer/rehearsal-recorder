@@ -25,8 +25,10 @@ import { useErrorNotice } from "@/hooks/useErrorNotice"
 import { useEscape, useKey, usePlayerKeys, useSpacebar } from "@/hooks/useSpacebar"
 import {
   api,
+  poll,
   type ControlState,
   type Marker,
+  type SendingQueue,
   type SessionState,
   type Take,
 } from "@/lib/api"
@@ -296,15 +298,30 @@ export function Rehearsal({
   }, !busy)
 
   // While takes are being copied the only thing that changes is on the Python
-  // side, so ask — but only until the queue drains.
+  // side, so ask — but only until the queue drains, and only for the takes on
+  // their way. The whole session is about 16 ms of Python, and asked for every
+  // 1.5 s while a take played, it made the take skip; it is read again only
+  // once the takes on their way change.
   const inFlight =
     Object.keys(session.cloud_queue ?? {}).length > 0 ||
     Object.keys(session.service_queue ?? {}).length > 0
   useEffect(() => {
     if (!inFlight) return
-    const id = setInterval(() => onChanged(), 1500)
-    return () => clearInterval(id)
-  }, [inFlight, onChanged])
+    const was = onTheWay(session)
+    let gone = false
+    const id = setInterval(() => {
+      poll("sending_queue").then(
+        (now) => {
+          if (!gone && onTheWay(now) !== was) void onChanged()
+        },
+        () => {}, // asked again in 1.5 s
+      )
+    }, 1500)
+    return () => {
+      gone = true
+      clearInterval(id)
+    }
+  }, [inFlight, onChanged, session])
 
   // Asks nothing: the notice's Undo brings the take back into its place.
   const deleteTake = async (take: Take) => {
@@ -715,4 +732,11 @@ export function Rehearsal({
       />
     </Shell>
   )
+}
+
+/** The takes on their way, as one string to compare: a take number's key
+ *  reads the same however Python ordered it, as the parsed answer orders
+ *  number keys rising. */
+function onTheWay(q: SendingQueue): string {
+  return JSON.stringify([q.cloud_queue ?? {}, q.service_queue ?? {}, [...(q.service_up ?? [])].sort((a, b) => a - b)])
 }

@@ -77,8 +77,8 @@ export function BandServicePanel({
           <Label htmlFor="service-auto-publish">Send saved takes automatically</Label>
         </div>
         <p className="pl-7 text-xs text-muted-foreground">
-          Every take you keep goes to the band service on its own, between takes rather than while
-          one is recording. False starts stay here.
+          Every take you keep goes to the band service on its own, while nothing records or plays.
+          False starts stay here.
         </p>
       </div>
     </>

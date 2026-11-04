@@ -358,6 +358,40 @@ def main():
     bigger = p._render(4096)
     ok("a bigger block grows it once", bigger.shape[0] == 4096)
     ok("and then keeps that one", p._render(4096).base is bigger.base)
+
+    print("\n[4b2] Skips are counted while the take plays")
+    # The card's calls, timed by hand: a block on time, one the card ran
+    # short of, one that came a whole block late, and one while paused.
+    period = 512 / SR
+    card = np.zeros((512, 2), dtype=np.int16)
+
+    class _Short:
+        output_underflow = True
+
+        def __bool__(self):
+            return True
+
+    p.skips()
+    p.seek(0)
+    p.play()
+    ok("the player says it plays", p.playing is True)
+    p._fill(card, 512, None, now=10.0)
+    p._fill(card, 512, None, now=10.0 + period)
+    p._fill(card, 512, _Short(), now=10.0 + 2 * period)
+    p._fill(card, 512, None, now=10.0 + 4 * period)
+    seconds, short, late, latest = p.skips()
+    ok("the card running short is counted", short == 1)
+    ok("a block a whole block late is counted, by how late",
+       late == 1 and abs(latest - period) < 1e-9)
+    ok("and the time played", abs(seconds - 4 * period) < 1e-9)
+    ok("the count starts again once asked", p.skips()[1:3] == (0, 0))
+    p.pause()
+    ok("paused, it says it does not play", p.playing is False)
+    p._fill(card, 512, _Short(), now=20.0)
+    p.play()
+    p._fill(card, 512, None, now=20.0 + period)
+    ok("nothing counts while paused, and the first block after is timed from the pause",
+       p.skips()[1:3] == (0, 0))
     p.close()
 
     print("\n[4c] Opening and closing the output")
@@ -647,6 +681,9 @@ def main():
 
     status, body = get("api/session_state")
     ok("session state is served", status == 200 and body == {"active": False})
+    status, body = get("api/sending_queue")
+    ok("and the takes on their way, alone",
+       status == 200 and body == {"cloud_queue": {}, "service_queue": {}, "service_up": []})
     status, body = get("api/player_state")
     ok("player state is served", status == 200 and body.get("open") is False)
     status, body = get("api/get_levels")
@@ -1478,6 +1515,8 @@ def main():
     keep_one(2, True)
     ok("with sending off, a take kept with 'send this one' is queued",
        c.session_state()["cloud_queue"] == {2: "queued"})
+    ok("and the screen's lighter question says the same",
+       c.sending_queue() == {"cloud_queue": {2: "queued"}, "service_queue": {}, "service_up": []})
     while c._sending.get("cloud").queue.run_next():
         pass
     sent = c.get_rehearsal(str(choice_folder))["takes"][1]
@@ -1571,6 +1610,56 @@ def main():
     take4 = a.get_rehearsal(str(folder))["takes"][3]
     ok("and the take was not copied", not take4["cloud"])
     a._recorder = None
+    # Playing holds it the same way: a take, a song's backing track, the
+    # click between takes (Api._sound_busy).
+    kept4 = a.get_rehearsal(str(folder))["takes"][3]["tracks"][0]["file"]
+    listened = TakePlayer([{"name": "A", "file": kept4}])
+    a._player = listened
+    listened.play()
+    ok("nothing starts while a take plays", a._sending.get("cloud").queue.run_next() is False
+       and a._sound_busy() == "playing")
+    listened.pause()
+    a._player = None
+    listened.close()
+    a._backing._free = object()
+    ok("nor while a backing track plays", a._sound_busy() == "playing")
+    a._backing._free = None
+    a._metronome._free = object()
+    ok("nor while the click plays", a._sound_busy() == "playing")
+    a._metronome._free = None
+    ok("with nothing playing or recording, nothing is waited for", a._sound_busy() is None)
+
+    # A listening that skipped is one line in the log, once it stops; one
+    # that played clean is none. (This function imports logging further
+    # down, which makes the name its own: hence another name here.)
+    import logging as _logs
+
+    class _Skipped:
+        def __init__(self, answer):
+            self.answer = answer
+
+        def skips(self):
+            return self.answer
+
+    caught = []
+
+    class _Keep(_logs.Handler):
+        def emit(self, record):
+            caught.append(record)
+
+    keep_log = _Keep(_logs.DEBUG)
+    api_logger = _logs.getLogger("rehearsal_recorder.api")
+    api_logger.addHandler(keep_log)
+    try:
+        a._say_skips(_Skipped((252.4, 3, 5, 0.0414)))
+        a._say_skips(_Skipped((60.0, 0, 0, 0.0)))
+    finally:
+        api_logger.removeHandler(keep_log)
+    said = [r.getMessage() for r in caught if r.levelno == _logs.WARNING]
+    ok("a listening that skipped is one line in the log",
+       len(said) == 1 and said[0].startswith(
+           "Playback skipped: in 4:12 of a take the card ran short 3 times and 5 blocks "
+           "came late, the latest by 41 ms"))
     ok("but once recording stops it publishes", a._sending.get("cloud").queue.run_next() is True)
     take4 = a.get_rehearsal(str(folder))["takes"][3]
     ok("and now it is in the cloud folder", Path(take4["cloud"]["mix"]).exists())

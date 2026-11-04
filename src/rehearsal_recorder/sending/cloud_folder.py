@@ -139,10 +139,11 @@ class PublishQueue:
     Takes waiting to be copied into the cloud folder.
 
     One worker and one job at a time, so two takes are never mixed at once,
-    and no job is started while `paused()` is true — the audio callback is not
-    something to start competing with, for a copy that can just as well happen
-    in the gap before the next take. The check is per job, not during one: a
-    copy already under way runs to the end.
+    and no job is started while `paused()` is true — a take recording or
+    anything playing (Api._sound_busy): the audio callback is not something
+    to start competing with, for a copy that can just as well happen in the
+    gap before the next take. The check is per job, not during one: a copy
+    already under way runs to the end.
 
     The loop body is `run_next`, which the tests call directly. The thread is
     only started by the real app, so a test never races it.
@@ -277,7 +278,7 @@ class CloudFolder:
     def __init__(self, api):
         self.api = api
         self.queue = PublishQueue(
-            step=self._publish_step, paused=lambda: api._recorder is not None
+            step=self._publish_step, paused=lambda: api._sound_busy() is not None
         )
         # The journal entry of each take waiting to be copied, by (folder,
         # take number): one however many times it is asked for.
