@@ -5,7 +5,7 @@ versioning](https://semver.org/): until 1.0 the shape of things can still
 move, though recordings on disk are never left behind — old rehearsals keep
 opening.
 
-## Unreleased
+## 0.22.0
 
 - **Sending to the band service waits while you listen.** While a take, a
   backing track or the click plays, РЭХА stops making MP3 and FLAC files
