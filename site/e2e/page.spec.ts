@@ -722,7 +722,8 @@ test("a frame scrolled past holds still", async ({ page }) => {
 })
 
 // Cloudflare's counter loads only on reha.stream (src/page/analytics.ts):
-// here, as on a preview, neither the page nor the app in it adds it.
+// here, on a build on this computer, neither the page nor the app in it
+// adds it.
 test("the page counts no visit away from reha.stream, nor does the app in it", async ({ page }) => {
   const beacon = 'script[src*="cloudflareinsights"]'
   await page.goto("/")

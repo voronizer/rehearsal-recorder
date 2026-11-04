@@ -1,0 +1,17 @@
+# The band's pages, as Cloudflare serves them. The Worker's own answers
+# (/api/ and /files/) carry theirs from worker/index.ts.
+#
+# Content-Security-Policy: a page runs only the build's own scripts, and
+# talks to, plays and shows only what comes from the band's own address,
+# so a comment or a song's name that sneaked in code could not run it or
+# send anything elsewhere. 'wasm-unsafe-eval' lets the page run the MP3
+# encoder for The mix, which is WebAssembly from the band's own address;
+# it lets no script be made from text. Styles may be inline: the pages'
+# components set some on the element itself. frame-ancestors 'none': no
+# other site may put the pages in a frame and trick a member into pressing
+# their buttons.
+/*
+  Content-Security-Policy: default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob:; connect-src 'self'; font-src 'self' data:; worker-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: same-origin
+

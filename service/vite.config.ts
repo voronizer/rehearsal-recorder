@@ -1,9 +1,25 @@
+import { readFileSync } from "node:fs"
 import { fileURLToPath } from "node:url"
 import { cloudflare } from "@cloudflare/vite-plugin"
 import tailwindcss from "@tailwindcss/vite"
-import { defineConfig } from "vite"
+import { defineConfig, type Plugin } from "vite"
 
 const ui = (path: string) => fileURLToPath(new URL(`../ui/${path}`, import.meta.url))
+
+/**
+ * The pages' headers (cloudflare/_headers), at the top of the pages' build,
+ * where Cloudflare reads them. Not in publicDir, which is the app's too.
+ */
+function headers(): Plugin {
+  const file = fileURLToPath(new URL("./cloudflare/_headers", import.meta.url))
+  return {
+    name: "service-headers",
+    applyToEnvironment: (environment) => environment.name === "client",
+    generateBundle() {
+      this.emitFile({ type: "asset", fileName: "_headers", source: readFileSync(file, "utf-8") })
+    },
+  }
+}
 
 // The pages and the Worker, built together: `vite build` writes the pages to
 // dist/client and the Worker beside them, and `vite` runs both locally.
@@ -14,7 +30,7 @@ const ui = (path: string) => fileURLToPath(new URL(`../ui/${path}`, import.meta.
 // icons. Vite turns the JSX into React calls by itself, as tsconfig.json's
 // `jsx` says.
 export default defineConfig({
-  plugins: [tailwindcss(), cloudflare()],
+  plugins: [tailwindcss(), cloudflare(), headers()],
   // РЭХА's icon for the browser's tab and a phone's home screen, as the site has it.
   publicDir: ui("public"),
   resolve: {

@@ -28,8 +28,7 @@ updates:
         update-types: ["minor", "patch"]
 
   # The band service and the website keep lockfiles of their own. Their
-  # pull requests run only their own checks, and the website's gets no
-  # preview on Cloudflare (site.yml).
+  # pull requests run only their own checks.
   - package-ecosystem: "npm"
     directory: "/service"
     schedule:

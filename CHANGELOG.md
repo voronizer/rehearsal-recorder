@@ -14,6 +14,17 @@ opening.
   and **Tracks in FLAC** list the tracks with a tick each, and each ticked
   one comes as a file of its own, the notes as .mid too. This replaces
   **Download tracks** at the foot of the page.
+- **A band's own service is set up on GitHub alone.** Whoever runs one for
+  their band now puts all its settings in their fork's settings on GitHub:
+  the owner's address, the address letters come from, both Cloudflare
+  tokens and the Telegram bot. The service makes its sign-in secret by
+  itself, and nothing is typed into Cloudflare's settings for the Worker any
+  more. When putting the service up fails, the run says which setting or
+  which tick on the token is missing. The steps are in the band service's
+  README.
+- **The band service sends at most 5 codes an hour to one address.**
+  Someone who knows a member's address can no longer fill their inbox with
+  codes, or try codes until one fits.
 
 ## 0.22.0
 

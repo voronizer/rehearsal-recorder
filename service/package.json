@@ -16,7 +16,7 @@
     "test:e2e": "playwright test",
     "pictures": "playwright test -c playwright.pictures.config.ts",
     "test:deploy": "node --test scripts/deploy.test.mjs",
-    "deploy": "node scripts/deploy.mjs"
+    "deploy": "vite build && node scripts/deploy.mjs"
   },
   "dependencies": {
     "@better-auth/api-key": "1.7.14",

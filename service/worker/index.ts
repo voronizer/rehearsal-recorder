@@ -6,6 +6,8 @@ import { DOC, newApp } from "./shared/openapi"
 import { memberRoutes } from "./members/routes"
 import { NO_TOKEN, NoAddressToken, cloudflareAddresses } from "./signin/addresses"
 import { makeAuth } from "./signin/auth"
+import { forgetCodeAsks } from "./signin/code-asks"
+import { database } from "./shared/db"
 import { cloudflareLetters } from "./signin/letters"
 import { meRoutes } from "./signin/routes"
 import { standInRoutes, standIns } from "./signin/stand-ins"
@@ -41,7 +43,7 @@ const AUTH_PATHS = [
 
 const app = newApp()
 
-/** The settings the service cannot work without (service/README.md, step 7). */
+/** The settings the service cannot work without (service/README.md, step 6). */
 const NEEDED = ["OWNER_EMAIL", "LETTERS_FROM", "BETTER_AUTH_SECRET"] as const
 
 const requestParts = createMiddleware<AppEnv>(async (c, next) => {
@@ -60,6 +62,13 @@ const requestParts = createMiddleware<AppEnv>(async (c, next) => {
   c.set("parts", parts)
   c.set("auth", makeAuth(c.env, new URL(c.req.url).origin, parts))
   await next()
+})
+// Every answer from the Worker tells the browser to take a file for the
+// type it is sent as and never guess, so a song's file can never open as
+// a page. The pages' own headers are in cloudflare/_headers.
+app.use("*", async (c, next) => {
+  await next()
+  c.res.headers.set("X-Content-Type-Options", "nosniff")
 })
 app.use("/api/*", requestParts)
 app.use("/files/*", requestParts)
@@ -117,6 +126,11 @@ export default {
       await purgeTrash(env)
     } catch (e) {
       await reportFailure(env, "emptying the trash", e)
+    }
+    try {
+      await forgetCodeAsks(database(env))
+    } catch (e) {
+      await reportFailure(env, "forgetting the counts of codes", e)
     }
   },
   async queue(batch, env) {

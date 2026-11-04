@@ -35,7 +35,8 @@ export function SignIn() {
     if (!error) {
       setStage("code")
       setCode("")
-    } else if (error.status === 429) setSaid(TOO_MANY)
+    } else if (error.code === "TOO_MANY_CODES") setSaid(error.message ?? TOO_MANY)
+    else if (error.status === 429) setSaid(TOO_MANY)
     else if (error.code === "CONFIRM_FIRST") {
       setStage("confirm")
       setSaid(error.message ?? null)

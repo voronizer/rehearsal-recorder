@@ -1,6 +1,6 @@
 // Visits are counted by Cloudflare Web Analytics, which also measures how
 // fast the page loads for them. Only reha.stream's own visitors count: a
-// pull request's preview and a build on this computer load the same page.
+// build on a computer loads the same page.
 //
 // The page adds Cloudflare's script itself rather than letting Cloudflare
 // put it into every page it serves: then each frame of the app on the page
