@@ -124,7 +124,7 @@ class Engine:
     reserve full. If the ring runs dry, rtmixer drops it; the worker starts
     a new one from where the mixing got to, and counts it."""
 
-    def __init__(self, player, mixer, reserve, block=BLOCK, secs=40):
+    def __init__(self, player, mixer, reserve, block=BLOCK, secs=40, add_block=None):
         import rtmixer
         # A copy of what went into the ring, by frame of the take as the
         # card plays it: if the recording has a gap and this copy has none,
@@ -134,13 +134,16 @@ class Engine:
         self.track = []  # (this computer's time, frame of the take the card has read to)
         self.rtmixer = rtmixer
         self.block = block
+        # "rth": top the reserve up in bigger blocks (fewer trips through
+        # Python per second of sound), re-mix after a change in small ones.
+        self.add_block = add_block or block
         self.player = player
         self.mixer = mixer
         size = block
-        while size < int(reserve * RATE * 1.5):
+        while size < max(int(reserve * RATE * 1.5), 4 * self.add_block):
             size *= 2
         self.size = size
-        self.floats = np.zeros((block, 2), dtype=np.float32)
+        self.floats = {n: np.zeros((n, 2), dtype=np.float32) for n in {block, self.add_block}}
         self.target = int(reserve * RATE)
         self.low = int(reserve * 0.6 * RATE)
         self.restart_fill = None  # frames to put in a new ring after a dry run
@@ -184,20 +187,22 @@ class Engine:
         for t, g in zip(p.tracks, gains):
             t.current_gain = g
 
-    def _mix_from(self, state):
+    def _mix_from(self, state, frames=None):
+        frames = frames or self.block
         with self.player._lock:
             if state is not None:
                 self._restore(state)
-            mix = self.player._render(self.block)
-            np.multiply(mix, 1.0 / 32768.0, out=self.floats, casting="unsafe")
-            return self.floats, self._state()
+            mix = self.player._render(frames)
+            out = self.floats[frames]
+            np.multiply(mix, 1.0 / 32768.0, out=out, casting="unsafe")
+            return out, self._state()
 
     def _add(self):
         self.states[self.written] = self.end_state or self._state()
-        block, self.end_state = self._mix_from(self.end_state)
+        block, self.end_state = self._mix_from(self.end_state, self.add_block)
         self.ring.write(block)
         self._copy(self.written, block)
-        self.written += self.block
+        self.written += self.add_block
 
     def _copy(self, at, block):
         a = self.base + at
@@ -232,7 +237,7 @@ class Engine:
             self.asked = self.card_at()
 
     def fill_first(self):
-        while self.ring.read_available + self.block <= self.target:
+        while self.ring.read_available + self.add_block <= self.target:
             self._add()
 
     quick = False
@@ -274,14 +279,17 @@ class Engine:
                 asked, self.asked = self.asked, None
             if asked is not None:
                 at = -(-(self.card_at() + self.guard) // self.block) * self.block
+                if at not in self.states:  # topped up in bigger blocks: the next block start
+                    later = [a for a in self.states if a >= at]
+                    at = min(later) if later else self.written
                 if at < self.written and at in self.states:
                     self.cursor = (at, self.states[at])
                     self.card0, self.first = asked, None
-            if have < self.low and self.ring.write_available >= self.block:
+            if have < self.low and self.ring.write_available >= self.add_block:
                 self._add()
             elif self.cursor is not None:
                 self._remix_one()
-            elif have + self.block <= self.target and self.ring.write_available >= self.block:
+            elif have + self.add_block <= self.target and self.ring.write_available >= self.add_block:
                 self._add()
             else:
                 card = self.card_at()
@@ -332,8 +340,9 @@ def case(engine, load, tracks, out_index, loop, secs, reserve, wav):
                             latency=output_latency(sd, out_index))
         try:
             player.play()
-            eng = Engine(player, mixer, reserve, block=4096 if engine == "rt4k" else BLOCK, secs=secs)
-            eng.quick = engine == "rtq"
+            eng = Engine(player, mixer, reserve, block=4096 if engine == "rt4k" else BLOCK, secs=secs,
+                         add_block=4096 if engine == "rth" else None)
+            eng.quick = engine in ("rtq", "rth")
             if RESTART_FILL is not None:
                 eng.restart_fill = max(eng.block, int(RESTART_FILL * RATE))
             eng.fill_first()
