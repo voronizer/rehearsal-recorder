@@ -13,6 +13,8 @@ The mockups Alex picked from are the service's own pages on answers recorded
 from a local Worker over the pictures' band (sources in
 /mnt/project-files/band-service/download/):
 
+Alex approved this spec on 4 November at 10:35 («интересно. ладно. делай»).
+
 - where the button goes: https://claude.ai/artifact/QA9soomaCzZcLM3fPLgFfk
 - where the mix comes from: https://claude.ai/artifact/BHVM4AJJJDkWgNxFJUo1cg
 - how the tracks come: https://claude.ai/artifact/3msnD7Xm6A11K8Gh25mcZc
