@@ -9,14 +9,13 @@ nothing is written to disk: only levels are measured.
 
 import threading
 
-import sounddevice as sd
-
 from rehearsal_recorder.audio import heartbeat
 from rehearsal_recorder.audio.devices import (
     STREAM_LOCK,
     close_stream,
     input_latency,
     open_stream,
+    sd,
 )
 from rehearsal_recorder.audio.ring import RingInput
 
@@ -24,6 +23,10 @@ BLOCK_FRAMES = 1024
 
 
 class LevelMonitor:
+
+    # What the sound process calls this kind (audio/sound/host.py).
+    kind = "LevelMonitor"
+
     def __init__(self, device_index, samplerate, tracks):
         if not tracks:
             raise ValueError("No tracks configured")

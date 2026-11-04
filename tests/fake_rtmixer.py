@@ -488,3 +488,94 @@ def install(sd=None):
         twins = through
     return module
 
+
+
+# ---------- a sound process with the fake card (test_sound) ----------
+
+
+def fake_sounddevice():
+    """A sounddevice stand-in with one card of two inputs and two outputs,
+    for a sound process that has no real one."""
+    import types
+
+    module = types.ModuleType("sounddevice")
+    devices = [{"name": "Fake card", "index": 0, "hostapi": 0, "max_input_channels": 2,
+                "max_output_channels": 2, "default_samplerate": 48000.0,
+                "default_low_input_latency": 0.005, "default_low_output_latency": 0.005,
+                "default_high_input_latency": 0.02, "default_high_output_latency": 0.02}]
+
+    def query_devices(device=None, kind=None):
+        if device is None and kind is None:
+            return [dict(d) for d in devices]
+        return dict(devices[0 if device is None else device])
+
+    class _Stream:
+        def __init__(self, **kw):
+            self.kw = kw
+
+        def start(self):
+            pass
+
+        def stop(self):
+            pass
+
+        def close(self):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc):
+            pass
+
+    module.query_devices = query_devices
+    module.query_hostapis = lambda index=None: (
+        [{"name": "Core Audio", "devices": [0], "default_input_device": 0, "default_output_device": 0}]
+        if index is None else {"name": "Core Audio", "devices": [0]})
+    module.default = types.SimpleNamespace(device=[0, 0])
+    module.check_input_settings = module.check_output_settings = lambda **kw: None
+    module.get_portaudio_version = lambda: (1, "fake PortAudio")
+    module.PortAudioError = type("PortAudioError", (Exception,), {})
+    module._initialized = 1
+    module._terminate = module._initialize = lambda: None
+    module.InputStream = module.OutputStream = module.Stream = _Stream
+    return module
+
+
+def run_card(frames=1024, rate=48000):
+    """The card on a thread of its own, a call of `frames` each time that
+    many frames go by, its inputs hearing a quiet 440 Hz tone."""
+    import threading
+
+    def run():
+        period = frames / rate
+        due = time.perf_counter()
+        done = 0
+        while True:
+            due += period
+            if card.streams:
+                t = (np.arange(frames) + done) / rate
+                tone = (0.25 * np.sin(2 * np.pi * 440 * t)).astype(np.float32)
+                card.feed(np.column_stack([tone, tone]))
+                done += frames
+                try:
+                    card.pump(frames)
+                except Exception:  # noqa: BLE001 - a stream closing as the card calls it
+                    pass
+            else:
+                card.time += period
+            wait = due - time.perf_counter()
+            if wait > 0:
+                time.sleep(wait)
+            else:
+                due = time.perf_counter()
+
+    threading.Thread(target=run, name="fake-card", daemon=True).start()
+
+
+def install_host():
+    """What a sound process runs first in test_sound: the fake card in
+    place of sounddevice and rtmixer, running by itself."""
+    sys.modules["sounddevice"] = fake_sounddevice()
+    install()
+    run_card()

@@ -424,6 +424,9 @@ class InterfaceCheck:
     file loads, so the suites can shorten them.
     """
 
+    # What the sound process calls this kind (audio/sound/host.py).
+    kind = "InterfaceCheck"
+
     def __init__(self):
         self._lock = threading.Lock()
         self._stop = threading.Event()

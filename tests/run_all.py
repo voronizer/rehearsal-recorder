@@ -135,6 +135,19 @@ things to be true:
                        deletion and its Undo, the close dialog, disconnect.
                        Needs openapi-core 0.23.1.
 
+    test_ring.py       rtmixer's rings on a fake card (tests/fake_rtmixer.py):
+                       a second kept ahead, a setting heard from two card
+                       calls on, an exact move, a dry ring started again,
+                       a record ring that filled, the notes' clock, a take
+                       written bit for bit, the click on the take's grid.
+
+    test_sound.py      the sound process, spawned as the app spawns it, with
+                       the fake card running in it: calls and answers, a
+                       recorder's levels, clock and log reaching the main
+                       process, the sound process killed mid-take (its files
+                       kept, started again once, then left down) and the
+                       main process killed (the sound process ends too).
+
 The interface's tests are in ui/, beside the code they test: `npm test` and
 `npm run test:e2e` there. See tests/README.md.
 
@@ -161,7 +174,7 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 SUITES = ("test_control_api.py", "test_controller_browse.py", "test_controller_diagnostics.py", "test_controller_extensions.py", "test_controller_recovery.py", "test_controller.py", "test_transport.py", "test_engine.py", "test_platform.py", "test_store.py", "test_ports.py",
           "test_midi.py", "test_click.py", "test_tempo.py", "test_drift.py", "test_backing.py",
-          "test_sending.py", "test_ring.py")
+          "test_sending.py", "test_ring.py", "test_sound.py")
 
 # Four times the longest any suite has taken (test_engine, 145 s on CI's Mac).
 LIMIT = 600

@@ -53,8 +53,6 @@ import time
 from pathlib import Path
 
 import numpy as np
-import sounddevice as sd
-
 from rehearsal_recorder.activity import Stages
 from rehearsal_recorder.audio import heartbeat
 from rehearsal_recorder.audio.backing_file import write_take_track
@@ -65,6 +63,7 @@ from rehearsal_recorder.audio.devices import (
     input_latency,
     open_stream,
     output_latency,
+    sd,
 )
 from rehearsal_recorder.audio.format import (
     bytes_per_sample,
@@ -179,6 +178,10 @@ def _duplex_latency(stream, asked):
 
 
 class AudioRecorder:
+
+    # What the sound process calls this kind (audio/sound/host.py).
+    kind = "AudioRecorder"
+
     def __init__(self, device_index, samplerate, tracks, out_dir, bit_depth=16,
                  clock=None, notes=(), click=None, meter=None):
         """

@@ -23,19 +23,67 @@ audio system beside its index, and found again by those.
 The rescan: PortAudio lists the devices once, when it starts, so a card
 plugged in afterwards is not there until PortAudio is stopped and started
 again — see rescan().
+
+Where PortAudio is: `sd` here is sounddevice in the sound process
+(audio/sound), and in this process when there is none apart (the tests, the
+self-test). In the main process beside a sound process it is that process's
+device list (audio/sound/view.py), and the functions that open a stream or
+ask a card a question (in_sound) run over there.
 """
 
 import atexit
 import queue
 import sys
 import threading
-from functools import partial
-
-import sounddevice as sd
+from functools import partial, wraps
 
 from rehearsal_recorder.audio.format import SUPPORTED_DEPTHS, capture_dtype
 from rehearsal_recorder.midi.rules import notes_problem, records_audio
 from rehearsal_recorder.platform_support import enter_com_apartment
+
+
+
+def _backend():
+    from rehearsal_recorder.audio import sound
+
+    if sound.apart() is not None:
+        from rehearsal_recorder.audio.sound import view
+
+        return view
+    import sounddevice
+
+    return sounddevice
+
+
+class _PortAudio:
+    """sounddevice, or the sound process's device list: see the module's
+    "Where PortAudio is". Looked up at each use, so a suite's stand-in put
+    in sys.modules is the one asked."""
+
+    def __getattr__(self, name):
+        return getattr(_backend(), name)
+
+    def __setattr__(self, name, value):
+        setattr(_backend(), name, value)
+
+
+sd = _PortAudio()
+
+
+def in_sound(fn):
+    """`fn` run in the sound process when there is one apart: it opens a
+    stream or asks a card, which only that process may do."""
+
+    @wraps(fn)
+    def where_the_sound_is(*args, **kw):
+        from rehearsal_recorder.audio import sound
+
+        if sound.apart() is None:
+            return fn(*args, **kw)
+        return sound.function(f"devices.{fn.__name__}", *args, **kw)
+
+    return where_the_sound_is
+
 
 STREAM_LOCK = threading.RLock()
 
@@ -300,8 +348,11 @@ def release_at_exit():
     sounddevice stops it at exit too, from the main thread, closing whatever
     stream is still open — an ASIO driver loaded on the audio thread, let go
     from another. Registered after sounddevice's own handler, so it runs
-    first and leaves that one nothing to do.
+    first and leaves that one nothing to do. Nothing to do in a process
+    that never loaded it (the main process beside a sound process).
     """
+    if "sounddevice" not in sys.modules:
+        return
     terminate = getattr(sd, "_terminate", None)
     if terminate is None or not isinstance(getattr(sd, "_initialized", None), int):
         return
@@ -334,6 +385,7 @@ atexit.register(release_at_exit)
 OFFERED_RATES = (44100, 48000, 96000)
 
 
+@in_sound
 def recording_formats(device_index, channels):
     """
     Which sample rate and bit depth combinations this input actually accepts.
@@ -440,7 +492,16 @@ def rescan():
 
     The calls used are sounddevice's own and private — they are what its exit
     handler uses — so they are looked for before anything is touched.
+
+    In the main process beside a sound process: done there, and its new
+    list read here (sound/view.py).
     """
+    from rehearsal_recorder.audio import sound
+
+    if sound.apart() is not None:
+        from rehearsal_recorder.audio.sound import view
+
+        return view.rescan()
     terminate = getattr(sd, "_terminate", None)
     initialize = getattr(sd, "_initialize", None)
     count = getattr(sd, "_initialized", None)
@@ -606,6 +667,7 @@ def _is_asio(device_index):
         return False
 
 
+@in_sound
 def usable_output(device_index, samplerate, channels=2):
     """
     Returns (index_to_use, complaint). index_to_use is None for the system

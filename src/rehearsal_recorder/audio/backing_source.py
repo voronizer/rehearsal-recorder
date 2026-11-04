@@ -54,6 +54,9 @@ class BackingSource:
     file before its frame `floor` is not heard: the take has not begun there.
     """
 
+    # What the sound process calls this kind (audio/sound/host.py).
+    kind = "BackingSource"
+
     def __init__(self, opened, route, volume, place=None, follow=False, start=0, floor=0,
                  samplerate=None):
         self._data, self._frames, self.file_rate, _, self.channels = opened
@@ -308,6 +311,9 @@ class BackingSource:
 class Sources:
     """Several sources in one stream (the click and the backing track on one
     device), rendered in turn: the contract of each, the route of all."""
+
+    # What the sound process calls this kind (audio/sound/host.py).
+    kind = "Sources"
 
     def __init__(self, *sources):
         self.sources = tuple(sources)

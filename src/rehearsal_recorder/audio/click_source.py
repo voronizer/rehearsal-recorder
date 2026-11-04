@@ -53,6 +53,9 @@ class ClickSource:
     None while the take has not chosen its first click.
     """
 
+    # What the sound process calls this kind (audio/sound/host.py).
+    kind = "ClickSource"
+
     def __init__(self, tempo, signature, voices, route, place=None, bars=None, start_k=0, heard=None):
         self.voices = voices
         self.route = tuple(route)
@@ -311,3 +314,28 @@ class ClickSource:
             else:
                 origin, from_k = first_frame, self._next
         self._grid = (origin, from_k, tempo, bar_from, signature)
+
+
+def following(tempo, signature, voices, route, backing, bar_one, same):
+    """
+    A click that keeps to a backing track's bars, played between takes: its
+    click k on bar `bar_one` (seconds into the file) and k beats after, on
+    the backing track's own frames when `same` (both on one stream), else
+    through both streams' clocks. None for a click whose place is not known
+    yet (the backing track not playing). Made where the sound is, as the
+    place is asked on the stream's own thread.
+    """
+    rate = backing.samplerate
+
+    def place(k):
+        origin = backing.origin
+        if origin is None:
+            return None
+        frame = origin + round(bar_one * rate) + click_frame(k, tempo, rate)
+        if same:
+            return frame
+        at = backing.clock.ns_at(frame)
+        return None if at is None else source.clock.frame_at(at)
+
+    source = ClickSource(tempo, signature, voices, route, place=place)
+    return source

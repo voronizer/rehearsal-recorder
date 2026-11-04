@@ -122,6 +122,9 @@ class TakeBacking:
     not heard, so the take keeps no Backing track (spec Part 3).
     """
 
+    # What the sound process calls this kind (audio/sound/host.py).
+    kind = "TakeBacking"
+
     def __init__(self, file, first_bar, route=None, output=None, volume=0.8, on=True, played=None):
         self.file = Path(file)
         self.first_bar = float(first_bar)
@@ -158,6 +161,9 @@ class TakeClick:
     are the song's, None for none, for its notes; `voices` may be None and
     `route` empty.
     """
+
+    # What the sound process calls this kind (audio/sound/host.py).
+    kind = "TakeClick"
 
     def __init__(self, tempo, signature, count_in_bars, voices, route, on=True, wav_tempo=True,
                  lead_sec=0.1, output=None, samplerate=None, clicks=True, backing=None):

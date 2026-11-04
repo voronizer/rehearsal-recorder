@@ -34,8 +34,6 @@ for both.
 import threading
 
 import numpy as np
-import sounddevice as sd
-
 from rehearsal_recorder.audio import heartbeat
 from rehearsal_recorder.audio.click import accent, click_frame, mix_clicks
 from rehearsal_recorder.audio.devices import (
@@ -45,6 +43,7 @@ from rehearsal_recorder.audio.devices import (
     output_complaint,
     output_latency,
     usable_output,
+    sd,
 )
 from rehearsal_recorder.audio.format import unpack24
 from rehearsal_recorder.audio.ring import BLOCK, RingOutput
@@ -95,6 +94,10 @@ class Track:
 
 
 class TakePlayer:
+
+    # What the sound process calls this kind (audio/sound/host.py).
+    kind = "TakePlayer"
+
     def __init__(self, tracks):
         """tracks: [{"name":.., "file":..}] — the tracks of one take.
 

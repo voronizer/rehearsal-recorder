@@ -22,10 +22,8 @@ import threading
 import time
 
 import numpy as np
-import sounddevice as sd
-
 from rehearsal_recorder.audio import heartbeat
-from rehearsal_recorder.audio.devices import STREAM_LOCK, close_stream, open_stream, output_latency
+from rehearsal_recorder.audio.devices import STREAM_LOCK, close_stream, open_stream, output_latency, sd
 from rehearsal_recorder.audio.ring import BLOCK, RingOutput
 
 BLOCK_FRAMES = BLOCK
@@ -52,6 +50,9 @@ class ClickOutput:
     counted from 1 as the card labels them, at `samplerate` or the device's
     own. `route` is the same outputs counted from 0, for the source.
     """
+
+    # What the sound process calls this kind (audio/sound/host.py).
+    kind = "ClickOutput"
 
     def __init__(self, device_index, channels, samplerate=None):
         self.device_index = device_index
@@ -195,6 +196,9 @@ class SilentOutput:
     the rate the source was made at, the missing output's own, so its clicks
     are counted at their pace; its blocks are as wide as the source's route.
     """
+
+    # What the sound process calls this kind (audio/sound/host.py).
+    kind = "SilentOutput"
 
     LEAD_SEC = 0.05
 
