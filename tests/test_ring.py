@@ -259,6 +259,36 @@ def dry_ring_restarts():
     ring.stop()
 
 
+def coarse_reads_still_mark():
+    print("\n[8c] Reads as far apart as a coarse sleep makes them still mark the clock")
+    from rehearsal_recorder.audio.ring import RingMarks
+    from rehearsal_recorder.midi.clock import AudioClock
+    latency = 0.08533
+    t0 = 5_000_000_000
+    ns_per_frame = 1e9 / RATE
+    arrive = [t0 + round(j * 1024 * ns_per_frame + latency * 1e9) for j in range(470)]
+    # A Windows wait lasts a timer tick, 15.625 ms; GitHub's Mac sleeps about
+    # 10 ms when asked for 2.
+    for name, step_ms in (("a Windows tick", 15.625), ("a Mac's 10 ms", 10.1)):
+        clock = AudioClock(RATE)
+        marks = RingMarks(clock, RATE, latency)
+        reads = [t0 + round(k * step_ms * 1e6) for k in range(1, int(10_000 / step_ms))]
+        j, last = 0, reads[0]
+        for now in reads[1:]:
+            first = j
+            while j < len(arrive) and arrive[j] <= now:
+                j += 1
+            if j > first:
+                marks.read(first * 1024, (j - first) * 1024, (last + now) // 2, window_ns=now - last)
+            last = now
+        kept = list(clock._kept)
+        off = [abs(ns - (t0 + frame * ns_per_frame)) / 1e6 for ns, frame in kept] or [float("inf")]
+        placed = [abs(clock.to_seconds(t0 + round(s * 1e9)) - s) * 1e3 for s in (1.0, 5.0, 9.0)]
+        ok(f"reads {name} apart: a mark a second ({len(kept)} for 10 s), each within 1.5 ms "
+           f"(worst {max(off):.2f} ms)", 9 <= len(kept) <= 11 and max(off) < 1.5)
+        ok(f"  and a note placed within 0.5 ms (worst {max(placed):.2f} ms)", max(placed) < 0.5)
+
+
 def marks_missing_said():
     print("\n[8b] Reads too far apart for a mark: the log says so, once")
     from rehearsal_recorder.audio.ring import RingMarks
@@ -272,15 +302,15 @@ def marks_missing_said():
         clock = AudioClock(RATE)
         marks = RingMarks(clock, RATE, 0.01)
         t0 = 5_000_000_000
-        # A read every 16 ms, as a wait on a Windows timer tick makes them.
-        for k in range(1, 250):
-            marks.read((k - 1) * 768, 768, t0 + k * 16_000_000, window_ns=16_000_000)
+        # A read every 60 ms: the ring's thread held up all along.
+        for k in range(1, 70):
+            marks.read((k - 1) * 2880, 2880, t0 + k * 60_000_000, window_ns=60_000_000)
     finally:
         logger.removeHandler(handler)
     lines = [s for s in said if "notes' clock" in s]
-    ok("no mark from reads 16 ms apart", not clock.marked())
+    ok("no mark from reads 60 ms apart", not clock.marked())
     ok("the log says the clock has had no mark, once", len(lines) == 1)
-    ok("  with how far apart the reads were", bool(lines) and "16.0 ms" in lines[0])
+    ok("  with how far apart the reads were", bool(lines) and "60.0 ms" in lines[0])
 
 
 def move_made_before_it_returns():
@@ -581,6 +611,7 @@ def main():
     heard_falls_back()
     input_pads_overflow()
     marks_mean_of_second()
+    coarse_reads_still_mark()
     marks_missing_said()
     move_made_before_it_returns()
     import tempfile

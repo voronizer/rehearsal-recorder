@@ -664,16 +664,20 @@ class RingMarks:
     reads costs no precision. The first comes after FIRST_MARK_SEC, so a
     take's click on another device has a clock to start by.
 
-    A read that waited longer than WINDOW_SEC on the one before says too
-    little of when its frames came, and is left out. Each read kept is the
-    clock's latest mark besides (AudioClock.mark_latest), not kept for the
-    fit: take.clock writes the kept marks up to the latest. When QUIET_SEC
-    of frames pass with no mark, the log says so once, with how far apart
-    the reads were: the notes of that take are placed by the take's start.
+    A read that waited longer than WINDOW_SEC on the one before, the thread
+    held up and not a coarse sleep, says too little of when its frames came,
+    and is left out. A coarse sleep is kept: GitHub's Mac sleeps 10 ms when
+    asked for 2, and a wait on Windows lasts a timer tick, 15.6 ms.
+
+    The mean of the reads since the last mark is the clock's latest mark
+    besides (AudioClock.mark_latest), not kept for the fit: take.clock
+    writes the kept marks up to the latest. When QUIET_SEC of frames pass
+    with no mark, the log says so once, with how far apart the reads were:
+    the notes of that take are placed by the take's start.
     """
 
     FIRST_MARK_SEC = 0.25
-    WINDOW_SEC = 0.01
+    WINDOW_SEC = 0.05
     QUIET_SEC = 2.0
 
     def __init__(self, clock, samplerate, latency_sec, block=BLOCK):
@@ -682,6 +686,7 @@ class RingMarks:
         self.latency_ns = int(round(latency_sec * _NS))
         self.block = block
         self._reads = []
+        self._sum_ns = self._sum_frames = 0
         self._span = self.FIRST_MARK_SEC * samplerate
         self._marked_frame = 0  # the frame of the last mark, or the take's start
         self._said = False
@@ -702,18 +707,22 @@ class RingMarks:
         frame = first_frame + max(0, frames - self.block)
         seen = (arrival_ns - self.latency_ns, frame)
         reads.append(seen)
+        self._sum_ns += seen[0]
+        self._sum_frames += frame
+        n = len(reads)
+        ns, mean = round(self._sum_ns / n), round(self._sum_frames / n)
         if frame - reads[0][1] >= self._span:
-            n = len(reads)
-            ns = round(sum(r[0] for r in reads) / n)
-            mean = round(sum(r[1] for r in reads) / n)
             # Cleared first: a clock that raises is asked again in a second,
             # not at every read after.
             reads.clear()
+            self._sum_ns = self._sum_frames = 0
             self._span = self.rate
             self._marked_frame = mean
             self.clock.mark_at(ns, mean)
-        # The newest frame seen, between the marks, as a callback's every
-        # block said it.
+        # The newest point between the marks: the mean of this second's
+        # reads so far, as sure as the reads allow. One read alone is off by
+        # up to half the time since the one before, which a fit leans on at
+        # the end of a take.
         latest = getattr(self.clock, "mark_latest", None)
         if latest is not None:
-            latest(*seen)
+            latest(ns, mean)

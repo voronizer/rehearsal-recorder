@@ -7353,7 +7353,9 @@ def main():
     after = time.perf_counter_ns()
     one = clock._kept
     ok("a quarter of a second in, the clock has its first mark", len(one) == 1)
-    ok("and the newest frame read as its latest", clock.marks()[-1][1] == 19 * 1024)
+    # The latest is the mean of the reads since that mark (RingMarks).
+    ok("and the reads since, as its latest: newer than the mark, none past the newest frame",
+       bool(one) and one[0][1] < clock.marks()[-1][1] <= 19 * 1024)
     ok("on a frame the take has written", one and 0 <= one[0][1] < 20 * 1024)
     ok("at a time those frames were captured: after the take began, less the latency, and before now",
        one and before - 10_000_000 <= one[0][0] <= after - 10_000_000)
