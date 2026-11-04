@@ -69,6 +69,16 @@ jobs:
               --label "asio$buf" --results results.jsonl || echo "probe asio$buf failed"
           done
 
+      - name: Record under load, ASIO buffer 1024 then 256
+        shell: bash
+        working-directory: .github/rtmixer-probe
+        run: |
+          for buf in 1024 256; do
+            printf 'backend = "Windows WASAPI"\nbufferSizeSamples = %s\n\n[output]\ndevice = ""\n\n[input]\ndeviceRegex = "CABLE Output"\n' "$buf" > "$USERPROFILE/FlexASIO.toml"
+            python rec_probe.py --in-device FlexASIO --in-api ASIO --tone-device "CABLE Input" --tone-api MME \
+              --label "asio$buf" --results results.jsonl || echo "rec probe asio$buf failed"
+          done
+
       - name: Frozen
         shell: bash
         working-directory: .github/rtmixer-probe
@@ -90,6 +100,7 @@ jobs:
           path: |
             .github/rtmixer-probe/results.jsonl
             .github/rtmixer-probe/*.wav
+            .github/rtmixer-probe/rec_*/*.wav
           if-no-files-found: warn
 
   macos:
@@ -125,6 +136,12 @@ jobs:
           python probe.py --out-device BlackHole --out-api "Core Audio" --loop-device BlackHole --loop-api "Core Audio" \
             --label coreaudio --results results.jsonl || echo "probe failed"
 
+      - name: Record under load
+        working-directory: .github/rtmixer-probe
+        run: |
+          python rec_probe.py --in-device BlackHole --in-api "Core Audio" --tone-device BlackHole --tone-api "Core Audio" \
+            --label coreaudio --results results.jsonl || echo "rec probe failed"
+
       - name: Frozen
         working-directory: .github/rtmixer-probe
         run: |
@@ -143,4 +160,5 @@ jobs:
           path: |
             .github/rtmixer-probe/results.jsonl
             .github/rtmixer-probe/*.wav
+            .github/rtmixer-probe/rec_*/*.wav
           if-no-files-found: warn
