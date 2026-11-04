@@ -150,19 +150,26 @@ jobs:
       - name: Devices
         run: python -c "import rehearsal_recorder, sounddevice as sd; print(sd.query_hostapis()); print(sd.query_devices())"
 
-      - name: Play and record
+      # Run 10: is a 2 s reserve enough where 1 s ran dry in run 9, and does
+      # it change how soon M is heard? The rtq engine, as chosen.
+      - name: Reserve 1 s and 2 s
         working-directory: .github/rtmixer-probe
         run: |
-          python probe.py --out-device BlackHole --out-api "Core Audio" --loop-device BlackHole --loop-api "Core Audio" \
-            --label coreaudio --results results.jsonl || echo "probe failed"
+          for res in 1 2; do
+            python probe.py --out-device BlackHole --out-api "Core Audio" --loop-device BlackHole --loop-api "Core Audio" \
+              --label coreaudio --reserve $res --results results.jsonl \
+              --cases rtq:heavy,rtq:heavy,rtq:heavy,rtq:applike || echo "probe failed"
+          done
 
       - name: Record under load
+        if: false  # done in run 9
         working-directory: .github/rtmixer-probe
         run: |
           python rec_probe.py --in-device BlackHole --in-api "Core Audio" --tone-device BlackHole --tone-api "Core Audio" \
             --label coreaudio --results results.jsonl || echo "rec probe failed"
 
       - name: Frozen
+        if: false  # done in run 9
         working-directory: .github/rtmixer-probe
         run: |
           pyinstaller --noconfirm --onedir --log-level WARN --collect-data _sounddevice_data --collect-data sounddevice freeze_check.py

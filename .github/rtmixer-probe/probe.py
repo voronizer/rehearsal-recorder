@@ -82,11 +82,16 @@ def calibrate_sort(target_ms):
         n = int(n * max(1.2, target_ms / max(took, 0.1)))
 
 
+RESTART_FILL = None  # seconds (--restart-fill); None: 0.6 of the reserve
+HOLD_MS = 400  # "harsh": like heavy, with a longer hold (--hold-ms)
+
+
 def start_load(kind, stop):
     """heavy: Python always busy and held ~150 ms once a second;
     applike: held ~60 ms once a second and five short polls a second."""
     holds = []
-    n = calibrate_sort(150 if kind == "heavy" else 60)
+    hold = HOLD_MS if kind == "harsh" else 150 if kind == "heavy" else 60
+    n = calibrate_sort(hold)
     data = [random.random() for _ in range(n)]
 
     def busy():
@@ -105,7 +110,7 @@ def start_load(kind, stop):
             time.sleep(0.2)
             sum(i * i for i in range(20000))
 
-    for f in ((busy, holder) if kind == "heavy" else (holder, poller)):
+    for f in ((busy, holder) if kind in ("heavy", "harsh") else (holder, poller)):
         threading.Thread(target=f, daemon=True).start()
     return holds
 
@@ -138,6 +143,7 @@ class Engine:
         self.floats = np.zeros((block, 2), dtype=np.float32)
         self.target = int(reserve * RATE)
         self.low = int(reserve * 0.6 * RATE)
+        self.restart_fill = None  # frames to put in a new ring after a dry run
         # Where the card may be reading inside its current call is not
         # known, only that it is less than the stream's latency ahead.
         self.unsafe = int(mixer.latency * RATE) + 256
@@ -257,7 +263,7 @@ class Engine:
             if self.action is not None and self.action not in self.mixer.actions:
                 self.ran_dry += 1
                 self._new_ring(self.end_state)
-                while self.ring.read_available < self.low:
+                while self.ring.read_available < (self.restart_fill or self.low):
                     self._add()
                 self.action = self.mixer.play_ringbuffer(self.ring)
                 continue
@@ -328,6 +334,8 @@ def case(engine, load, tracks, out_index, loop, secs, reserve, wav):
             player.play()
             eng = Engine(player, mixer, reserve, block=4096 if engine == "rt4k" else BLOCK, secs=secs)
             eng.quick = engine == "rtq"
+            if RESTART_FILL is not None:
+                eng.restart_fill = max(eng.block, int(RESTART_FILL * RATE))
             eng.fill_first()
             worker = threading.Thread(target=eng.run, daemon=True)
             worker.start()
@@ -368,7 +376,11 @@ def main():
     ap.add_argument("--reserve", type=float, default=1.0)
     ap.add_argument("--cases", default="now:heavy,rt:heavy,rt4k:heavy,now:applike,rt:applike")
     ap.add_argument("--results", required=True)
+    ap.add_argument("--hold-ms", type=int, default=400)
+    ap.add_argument("--restart-fill", type=float, default=None)
     a = ap.parse_args()
+    global HOLD_MS, RESTART_FILL
+    HOLD_MS, RESTART_FILL = a.hold_ms, a.restart_fill
     sys.setswitchinterval(0.001)  # as the app does
     tracks = make_tracks(HERE / "tracks", a.secs + 30)
     out_index, out_name = find(a.out_device, a.out_api, "output")
@@ -379,7 +391,8 @@ def main():
         t = time.perf_counter()
         info = case(engine, load, tracks, out_index, (a.loop_device, a.loop_api), a.secs, a.reserve, wav)
         row = {"label": a.label, "platform": sys.platform, "output": out_name,
-               "engine": engine, "load": load, "took_s": round(time.perf_counter() - t), **info}
+               "engine": engine, "load": load, "reserve_s": a.reserve,
+               "restart_fill_s": a.restart_fill, "hold_target_ms": a.hold_ms if load == "harsh" else None, "took_s": round(time.perf_counter() - t), **info}
         print(json.dumps(row), flush=True)
         with open(a.results, "a", encoding="utf-8") as f:
             f.write(json.dumps(row) + "\n")
