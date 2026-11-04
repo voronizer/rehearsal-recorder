@@ -29,6 +29,7 @@ def judge(path):
     usual = np.median(level)
     low = level < 0.6 * usual
     gaps = []
+    where = []  # (second of the take, ms, lowest level against the usual)
     i = 0
     while i < len(low):
         if low[i]:
@@ -36,6 +37,7 @@ def judge(path):
             while j < len(low) and low[j]:
                 j += 1
             gaps.append(j - i)
+            where.append((round((i + 20) / 1000, 2), j - i, round(float(level[i:j].min() / usual), 2)))
             i = j
         else:
             i += 1
@@ -52,5 +54,6 @@ def judge(path):
             slips.append(round(p1 - p0, 2))
     return {"heard_s": round(len(level) / 1000, 1), "gaps": len(gaps),
             "gap_ms_total": int(sum(gaps)), "gap_ms_longest": int(max(gaps, default=0)),
+            "gaps_at_s_ms_depth": sorted(where, key=lambda g: -g[1])[:6],
             "slips": len(slips), "slip_frames_first": slips[:8],
             "phase_spread_frames": round(float(np.ptp([p for _, p in means])) if means else 0.0, 2)}

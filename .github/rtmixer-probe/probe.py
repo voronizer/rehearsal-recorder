@@ -119,8 +119,13 @@ class Engine:
     reserve full. If the ring runs dry, rtmixer drops it; the worker starts
     a new one from where the mixing got to, and counts it."""
 
-    def __init__(self, player, mixer, reserve, block=BLOCK):
+    def __init__(self, player, mixer, reserve, block=BLOCK, secs=40):
         import rtmixer
+        # A copy of what went into the ring, by frame of the take as the
+        # card plays it: if the recording has a gap and this copy has none,
+        # the gap came after the engine (rtmixer, the driver or the loopback).
+        self.sent = np.zeros(((secs + 15) * RATE, 2), dtype=np.float32)
+        self.base = 0
         self.rtmixer = rtmixer
         self.block = block
         self.player = player
@@ -146,6 +151,7 @@ class Engine:
         self._new_ring(None)
 
     def _new_ring(self, state):
+        self.base += getattr(self, "written", 0)
         rt = self.rtmixer
         self.ring = rt.RingBuffer(elementsize=8, size=self.size)
         ptr = self.ring._ptr
@@ -183,7 +189,16 @@ class Engine:
         self.states[self.written] = self.end_state or self._state()
         block, self.end_state = self._mix_from(self.end_state)
         self.ring.write(block)
+        self._copy(self.written, block)
         self.written += self.block
+
+    def _copy(self, at, block):
+        a = self.base + at
+        if a + len(block) <= len(self.sent):
+            self.sent[a:a + len(block)] = block
+
+    def played(self):
+        return self.sent[:self.base + self.card_at()]
 
     def _remix_one(self):
         at, state = self.cursor
@@ -196,6 +211,7 @@ class Engine:
         if at >= self.card_at() + self.unsafe:
             slot = at % self.size
             self.data[slot:slot + self.block] = block
+            self._copy(at, block)
             if self.first is None:
                 self.first = at
                 self.leads.append(at - self.card0)
@@ -286,13 +302,15 @@ def case(engine, load, tracks, out_index, loop, secs, reserve, wav):
                             latency=output_latency(sd, out_index))
         try:
             player.play()
-            eng = Engine(player, mixer, reserve, block=4096 if engine == "rt4k" else BLOCK)
+            eng = Engine(player, mixer, reserve, block=4096 if engine == "rt4k" else BLOCK, secs=secs)
             eng.fill_first()
             worker = threading.Thread(target=eng.run, daemon=True)
             worker.start()
             info["changes"] = toggles(lambda m: eng.change(lambda: player.set_muted("T1", m)), secs)
             eng.stop.set()
             worker.join()
+            sent = wav.with_name(wav.stem + "_sent.wav")
+            sf.write(str(sent), eng.played(), RATE, subtype="FLOAT")
             time.sleep(0.2)
         finally:
             close_stream(mixer)
@@ -301,7 +319,8 @@ def case(engine, load, tracks, out_index, loop, secs, reserve, wav):
                     lowest_reserve_ms=round(eng.lowest / RATE * 1000),
                     remix_blocks_too_late=eng.skipped_blocks,
                     heard_after_ms_median_p90_max=[heard[len(heard) // 2], heard[int(len(heard) * 0.9)], heard[-1]] if heard else None,
-                    card_underflows=int(mixer.stats.output_underflows))
+                    card_underflows=int(mixer.stats.output_underflows),
+                    sent=analyse.judge(sent))
     player.close()
     stop.set()
     tail, _ = rec.communicate(timeout=60)

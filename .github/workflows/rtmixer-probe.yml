@@ -73,11 +73,15 @@ jobs:
         run: |
           for buf in 1024 256; do
             printf 'backend = "Windows WASAPI"\nbufferSizeSamples = %s\n\n[input]\ndevice = ""\n' "$buf" > "$USERPROFILE/FlexASIO.toml"
+            # Run 5 had every case once; this run repeats the rtmixer ones
+            # with a copy of what the engine sent, to place each gap.
             python probe.py --out-device FlexASIO --out-api ASIO --loop-device "CABLE Output" --loop-api "Windows DirectSound" \
+              --cases rt:heavy,rt4k:heavy,rt:applike,rt:heavy,rt4k:heavy,rt:applike \
               --label "asio$buf" --results results.jsonl || echo "probe asio$buf failed"
           done
 
       - name: Record under load, ASIO buffer 1024 then 256
+        if: false  # done in run 5
         shell: bash
         working-directory: .github/rtmixer-probe
         run: |
@@ -88,6 +92,7 @@ jobs:
           done
 
       - name: Frozen
+        if: false  # done in run 5
         shell: bash
         working-directory: .github/rtmixer-probe
         run: |
@@ -114,9 +119,8 @@ jobs:
           if-no-files-found: warn
 
   macos:
-    # Off for this push: run 4 has it.
-    if: false
-    runs-on: macos-latest
+    # macos-latest sat queued for 15 minutes and was cancelled in run 4.
+    runs-on: macos-15
     timeout-minutes: 40
     steps:
       - uses: actions/checkout@v7
