@@ -3,7 +3,7 @@ import { api, type TrackFile, type TrackMedia } from "@/lib/api"
 import { pythonSound, type PlayerSound } from "@/lib/playerSound"
 import {
   heard,
-  keepListeningVolume,
+  listeningVolume,
   playerOpened,
   turnListeningVolume,
   useListeningVolume,
@@ -360,6 +360,15 @@ export function useMultitrackPlayer(
     }
   }, [tracks, view, duration, peaksWindow, sound])
 
+  /** M on the Backing track is kept with its song, whichever button turned it. */
+  const keepHeard = (name: string, heard: boolean) => {
+    const id = songRef.current?.id
+    if (id != null && tracks?.some((t) => t.name === name && t.kind === "backing")) {
+      heardBySong.set(id, heard)
+      void api().set_song_backing_heard(id, heard)
+    }
+  }
+
   const call = useCallback(
     async (fn: () => Promise<Record<string, unknown>>) => {
       if (!openedRef.current) return
@@ -469,6 +478,8 @@ export function useMultitrackPlayer(
 
   return {
     media,
+    /** Reads a take's notes from its .mid files, through the same sound. */
+    readNotes: sound.notes,
     loading,
     loadError,
     settled,
@@ -526,15 +537,15 @@ export function useMultitrackPlayer(
     toggleMute: (name: string) => {
       const heardNext = muted.includes(name)
       void call(() => sound.setMuted(name, !heardNext))
-      // M on the Backing track is kept with its song.
-      const id = songRef.current?.id
-      if (id != null && tracks?.some((t) => t.name === name && t.kind === "backing")) {
-        heardBySong.set(id, heardNext)
-        void api().set_song_backing_heard(id, heardNext)
-      }
+      keepHeard(name, heardNext)
     },
-    toggleSolo: (name: string) =>
-      void call(() => sound.setSolo(soloed === name ? null : name)),
+    // M and S on one track take each other off: S on a muted track turns its
+    // M off, as M on the soloed track turns its S off (the sound does it).
+    toggleSolo: (name: string) => {
+      const on = soloed !== name
+      void call(() => sound.setSolo(on ? name : null))
+      if (on && muted.includes(name)) keepHeard(name, true)
+    },
     getVolume: (name: string) => volumes[name] ?? 1,
     /** Each channel, 0..1, as it last came out of the mix; 0 while nothing
      *  plays. A stereo track's two sides are kept apart, as on the waveform:
@@ -552,6 +563,8 @@ export function useMultitrackPlayer(
     /** 0..1, the whole mix as it last went out; 0 while nothing plays. */
     masterLevel,
     setMaster: turnListeningVolume,
-    persistMaster: keepListeningVolume,
+    persistMaster: () => {
+      void sound.keepMaster(listeningVolume())
+    },
   }
 }

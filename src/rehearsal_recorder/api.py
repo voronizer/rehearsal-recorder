@@ -2413,6 +2413,23 @@ class Api:
                     e["step"] = "After the take"
         return {"entries": entries, "recording": recording}
 
+    def _sound_busy(self):
+        """
+        What the app is doing with sound that the band service's sending and
+        the cloud folder's copies wait for: "recording" while a take records,
+        "playing" while a take, a song's backing track or the metronome's
+        click plays, None otherwise. Each is mixed in Python on the sound
+        card's thread, a block every 21 to 23 ms; making MP3s and FLACs beside
+        a take just recorded made it skip as the band listened to it.
+        """
+        if self._recorder is not None:
+            return "recording"
+        player = self._player
+        if ((player is not None and player.playing)
+                or self._backing.sounding() or self._metronome.sounding()):
+            return "playing"
+        return None
+
     def _journaled(self, kind, title, folder, take_number, work):
         """
         work(progress) as a journal entry, for the operations that run where
@@ -2467,12 +2484,32 @@ class Api:
             # The set it is played by, its titles as they are now, or None.
             "set": here["set"] if here else None,
             "recording": self._recorder is not None,
-            "cloud_queue": self._sending.get("cloud").states(s["folder"]),
-            "service_queue": self._sending.get("service").states(s["folder"]),
+            # The takes on their way: "cloud_queue", "service_queue" and
+            # "service_up", as sending_queue has them.
+            **self.sending_queue(),
             # The header's "On disk", measured as History measures a
             # rehearsal. Read when the screen asks, which is after each take.
             "disk_bytes": _folder_bytes(s["folder"]),
         }
+
+    def sending_queue(self):
+        """
+        This rehearsal's takes on their way, and nothing else of the session:
+        "cloud_queue" and "service_queue", each by take number, "queued" or
+        "working"; and "service_up", the takes on their way to the band
+        service whose MP3s are up already, the one change a take's row shows
+        before it leaves the queue. The rehearsal screen asks for this every
+        1.5 s while a take is on its way, and reads the whole session only
+        once it changes. The whole session is about 16 ms of Python; with
+        the sending paused while a take plays, the takes wait all through
+        the listening, and asking for it that often made the take skip.
+        """
+        if self._session is None:
+            return {"cloud_queue": {}, "service_queue": {}, "service_up": []}
+        folder = self._session["folder"]
+        service_queue, service_up = self._sending.get("service").on_the_way(folder)
+        return {"cloud_queue": self._sending.get("cloud").states(folder),
+                "service_queue": service_queue, "service_up": service_up}
 
     def _go_before_tonight(self, title):
         """The go at the song titled `title` that its first go tonight is
@@ -4852,6 +4889,9 @@ class Api:
             self._transport.playback_take_name = None
             if player is not None:
                 player.close()
+        if player is not None:
+            # Outside the lock: the line asks the sending what is waiting.
+            self._say_skips(player)
 
     def _resink(self):
         """A click between takes follows the player opening and closing
@@ -4898,9 +4938,36 @@ class Api:
                 log.exception("The take's click could not be made again in the player")
 
     def player_state(self):
-        if self._player is None:
+        player = self._player
+        if player is None:
             return {"open": False}
-        return {"open": True, "tracks": self._open_tracks, **self._player.state()}
+        state = player.state()
+        if not state["playing"]:
+            # A take that played to its end: the screen asks this a few
+            # times a second, so its listening is said here.
+            self._say_skips(player)
+        return {"open": True, "tracks": self._open_tracks, **state}
+
+    def _say_skips(self, player):
+        """
+        One line in the log for a listening that skipped, once it stops: how
+        often the card ran short, how many blocks came late and the latest,
+        and how many takes waited to be sent meanwhile. Nothing for one that
+        played clean. It is for finding out after a rehearsal whether takes
+        still skip, and with what going on beside them.
+        """
+        seconds, short, late, latest = player.skips()
+        if not short and not late:
+            return
+        try:
+            waiting = self.sending_left()["takes"]
+        except Exception:  # noqa: BLE001 - the line matters more than this part of it
+            waiting = None
+        minutes, rest = divmod(int(round(seconds)), 60)
+        log.warning(
+            "Playback skipped: in %d:%02d of a take the card ran short %d times and %d blocks "
+            "came late, the latest by %d ms%s", minutes, rest, short, late, round(latest * 1000),
+            "" if not waiting else f"; takes waiting to be sent: {waiting}")
 
     @serialised
     def player_toggle(self):
@@ -4908,6 +4975,7 @@ class Api:
             return {"ok": False, "error": "No take open"}
         if self._player.state()["playing"]:
             self._player.toggle()
+            self._say_skips(self._player)
             return {"ok": True, **self._player.state()}
         return self.player_play()
 
@@ -4918,6 +4986,8 @@ class Api:
         revived = self._revive_output()
         if revived.get("ok") is False:
             return revived
+        # What the last listening left unsaid starts no new one's count.
+        self._say_skips(self._player)
         self._player.play()
         return {"ok": True, **self._player.state(), **revived}
 
@@ -4945,6 +5015,7 @@ class Api:
         if self._player is None:
             return {"ok": True}
         self._player.pause()
+        self._say_skips(self._player)
         return {"ok": True, **self._player.state()}
 
     @serialised

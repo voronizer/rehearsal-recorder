@@ -583,6 +583,20 @@ test.describe("the mix", () => {
     expect(await callCount(page, "player_toggle")).toBe(toggles + 2)
   })
 
+  test("M and S on one track take each other off", async ({ page }) => {
+    await savedTake(page)
+    const mute = page.getByRole("button", { name: "Mute Guitar" })
+    const solo = page.getByRole("button", { name: "Solo Guitar" })
+    await mute.click()
+    await expect(mute).toHaveAttribute("aria-pressed", "true")
+    await solo.click()
+    await expect(solo).toHaveAttribute("aria-pressed", "true")
+    await expect(mute).toHaveAttribute("aria-pressed", "false")
+    await mute.click()
+    await expect(mute).toHaveAttribute("aria-pressed", "true")
+    await expect(solo).toHaveAttribute("aria-pressed", "false")
+  })
+
   test("one master turns the whole take down, for listening only", async ({ page }) => {
     await savedTake(page)
     const master = page.getByRole("slider", { name: "Master volume", exact: true })

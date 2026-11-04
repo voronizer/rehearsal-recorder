@@ -410,8 +410,10 @@ rehearsal into the next.
 - Balance the band with the fader under each track name. **M**, after the
   fader, mutes a track, and **S**, after **M**, plays it on its own. A
   pressed **M** is blue and a pressed **S** yellow, so you see at a glance
-  which tracks you muted or soloed. Volumes are remembered by track name, so
-  the next take starts with the same balance.
+  which tracks you muted or soloed. On one track only one of them is on:
+  **S** on a muted track turns its **M** off, and **M** on the soloed track
+  turns its **S** off. Volumes are remembered by track name, so the next
+  take starts with the same balance.
 - Turn the whole take up or down with **Master** under the tracks. It only
   changes how loud you hear it. The balance and the copy sent to the cloud
   stay as they are. The app remembers it for the next take. Its meter shows
@@ -722,9 +724,9 @@ There are three ways to send takes:
   Folders**. Every take is then copied after you save it, apart from false
   starts: a take shorter than 30 seconds with no ★ and no marks stays on this
   computer unless you tick its box on the screen after the take (see [Keep
-  the take or not](#keep-the-take-or-not)). Nothing is copied while a take is
-  recording. This setting needs a cloud folder, and it turns off if you
-  remove the folder.
+  the take or not](#keep-the-take-or-not)). No copy starts while a take is
+  recording or anything plays: a take, a backing track or the click. This
+  setting needs a cloud folder, and it turns off if you remove the folder.
 
 You can send one of three things. By hand you choose each time; for
 **Send starred** and for automatic sending you choose once in **Settings ›
@@ -799,7 +801,20 @@ service does, and how to get one for your band, is on
 
 A take plays there at the levels its tracks have in РЭХА's player. In the
 service each of you can turn a track up or down for yourself: only you hear
-it that way, and nothing comes back to РЭХА.
+it that way, and nothing comes back to РЭХА. **Master** under the tracks
+turns the whole take up or down on that phone or computer only. On a
+computer, a track that recorded MIDI shows its notes as in РЭХА's player, and
+they are not played; on a phone its row has the MIDI sign.
+
+On a computer, Master's row also shows where the band drifted, as in РЭХА
+(see [Where the band drifted](#where-the-band-drifted)), with the click's
+bars behind the line. РЭХА works the tempo out once all of a take's files are
+up, the FLAC files too, so the line can come a while after the band can play
+the take. For takes
+already in the service before you updated РЭХА, it does the same in the
+background, one take at a time; a take whose files are no longer on this
+computer gets no line. The service marks drift past 2%: **Drift shown past**
+is a setting in РЭХА only.
 
 ### The key
 
@@ -845,8 +860,9 @@ Takes are sent the same three ways as to the cloud folder:
 - The starred ones: **Send starred** sends every ★ take of the rehearsal that
   is not in the band service yet.
 - Automatically: **Send saved takes automatically**, in the band service's
-  panel, sends every take you save, between takes. False starts stay on
-  this computer unless you tick their box on the screen after the take.
+  panel, sends every take you save, while nothing records or plays. False
+  starts stay on this computer unless you tick their box on the screen after
+  the take.
 
 On a take that is in the band service, the cloud button opens a dialog,
 *“Viasna 12” in the band service*. It lists each track with what of it is up,
@@ -882,7 +898,10 @@ and **Retry** sends it again. With no internet nothing fails: the line says
 “No internet: carries on when it is back”, and the sending goes on by itself
 once you are online. While a take is recording, the sending waits, so the
 recording has the computer to itself: the line says “A take is recording:
-carries on after it”.
+carries on after it”. It waits the same way while a take, a backing track or
+the click plays, so what you hear has the computer to itself: the line says
+“Sound is playing: carries on when it stops”, and the sending goes on once
+you pause.
 
 Each file goes up in parts, and РЭХА keeps track of which parts arrived. If
 РЭХА closes or the laptop sleeps, it sends only what is missing the next
@@ -1018,7 +1037,9 @@ In the player, a track's notes are a lane of their own. On **Both** they are
 the next lane under the track's audio, and share its dark background, under a
 thin line; on **MIDI** they are in the track's own place among the lanes, on a
 background of their own. On the left the lane says “Saved as .mid, not played
-here”, and it has no **M**, **S** or fader, as there is nothing to hear. A kit
+here”, and it has no **M**, **S** or fader, as there is nothing to hear. The
+notes go paler with their track's waveform when the track is muted or another
+is soloed; notes of a track on **MIDI** go paler while any track is soloed. A kit
 is drawn in six rows, Crash, Ride, Hi-hat, Toms, Snare and Kick; anything
 else, by pitch. A track with the drums icon is drawn as a kit, and so is one
 whose notes are all on MIDI channel 10. A track with no notes in a take says

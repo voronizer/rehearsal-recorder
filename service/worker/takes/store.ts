@@ -5,7 +5,7 @@ import type { Bindings } from "../shared/env"
 import { firstStatus, labelsFor } from "../labels/match"
 import { comment, rehearsal, song, take } from "../shared/schema"
 import { iso } from "../shared/time"
-import type { TakeMeta } from "./meta"
+import type { Drift, TakeMeta } from "./meta"
 import { deleteFiles } from "./purge"
 import { makeShape } from "./shape"
 
@@ -63,7 +63,11 @@ async function songId(env: Bindings, uid: string, meta: TakeMeta): Promise<numbe
  * moved on by `cut_start` here, and all of them move back together when the
  * new generation's MP3s are ready.
  */
-export async function putTake(env: Bindings, uid: string, meta: TakeMeta): Promise<{ inTrash: boolean }> {
+export async function putTake(
+  env: Bindings,
+  uid: string,
+  meta: TakeMeta
+): Promise<{ inTrash: boolean; driftGen: number | null }> {
   const db = database(env)
   const [before] = await db.select().from(take).where(eq(take.uid, uid)).limit(1)
   const stays = before?.trashedAt != null && (before.trashedBy !== null || before.withSong) && !meta.by_hand
@@ -80,6 +84,7 @@ export async function putTake(env: Bindings, uid: string, meta: TakeMeta): Promi
     tracks: meta.tracks,
     notes: meta.notes,
     gen: meta.gen,
+    ...(meta.meter !== undefined && { meter: meta.meter }),
     pendingCut: cut,
     ...(!stays && { trashedAt: null, trashedBy: null, withSong: false }),
     updatedAt: iso(),
@@ -132,7 +137,20 @@ export async function putTake(env: Bindings, uid: string, meta: TakeMeta): Promi
         : db.insert(comment).values({ ...row, takeUid: uid, at: m.at, fromReha: true, createdAt: iso() })
     }),
   ])
-  return { inTrash: stays }
+  return { inTrash: stays, driftGen: before?.driftGen ?? null }
+}
+
+/**
+ * The band's tempo through a take, which РЭХА counts after its files are up.
+ * It is kept for the generation it was counted for; one counted for a
+ * generation РЭХА has since moved on from is not kept.
+ */
+export async function putDrift(env: Bindings, uid: string, gen: number, drift: Drift): Promise<"done" | "no take"> {
+  const db = database(env)
+  const [row] = await db.select({ gen: take.gen }).from(take).where(eq(take.uid, uid)).limit(1)
+  if (!row) return "no take"
+  if (row.gen === gen) await db.update(take).set({ drift, driftGen: gen }).where(and(eq(take.uid, uid), eq(take.gen, gen)))
+  return "done"
 }
 
 /**

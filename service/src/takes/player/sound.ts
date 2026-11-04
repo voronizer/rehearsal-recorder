@@ -1,8 +1,11 @@
 import { useEffect, useMemo } from "react"
-import type { PlayerState, TrackFile, TrackMedia } from "@/lib/api"
+import type { PlayerState, TakeNotes, TrackFile, TrackMedia } from "@/lib/api"
 import type { PlayerSound } from "@/lib/playerSound"
 import { keepLevels, levelsQuery, peaksQuery, queryClient, type TakePage } from "../../api"
 import { levelOf } from "./levels"
+import { withMute, withSolo } from "./desk"
+import { keepMaster } from "./master"
+import { readNotes } from "./notes"
 import { useOne, type One, type Setup } from "./one"
 
 /** As many points as РЭХА's take_media gives a zoomed wave (audio/waveform.py). */
@@ -46,7 +49,10 @@ export function serviceSound(take: TakePage, one: One): ServiceSound {
 
   const state = async (): Promise<PlayerState> => {
     const p = mine()
-    const base = { ok: true, open: true, tracks, duration: take.duration_sec, master: 1 }
+    // Master is the device's, on every take: its meter is what the one player puts out,
+    // whichever take that is. Its level comes with open() alone, so a poll never moves the
+    // fader from under a hand that turned it before the take was open.
+    const base = { ok: true, open: true, tracks, duration: take.duration_sec, master_level: one.mixLoudness() }
     if (p) {
       position = p.time()
       loop = p.repeat
@@ -64,7 +70,6 @@ export function serviceSound(take: TakePage, one: One): ServiceSound {
         soloed: solo === null ? null : names[solo],
         volumes: Object.fromEntries(names.map((n, i) => [n, p.gain(i)])),
         levels: Object.fromEntries(names.map((n, i) => [n, [loud[i]]])),
-        master_level: Math.max(0, ...loud),
       }
     }
     const coming = one.comingOf(uid)
@@ -77,7 +82,6 @@ export function serviceSound(take: TakePage, one: One): ServiceSound {
       soloed: solo === null ? null : names[solo],
       volumes: Object.fromEntries(names.map((n) => [n, levelHere(n)])),
       levels: {},
-      master_level: 0,
     }
   }
 
@@ -99,8 +103,26 @@ export function serviceSound(take: TakePage, one: One): ServiceSound {
 
   return {
     tracks,
-    open: () => state(),
+    open: async () => ({ ...(await state()), master: one.master() }),
     state,
+
+    // Each .mid read here in the page, as РЭХА's take_notes reads it, with
+    // its words for a file that is not there or cannot be read.
+    notes: (files) =>
+      Promise.all(
+        files.map(async (f): Promise<TakeNotes> => {
+          const named = { name: f.name, ...(f.icon ? { icon: f.icon } : {}) }
+          if (!f.file) return { ...named, error: "Notes file not found" }
+          try {
+            const res = await fetch(f.file)
+            if (res.status === 404) return { ...named, error: "Notes file not found" }
+            if (!res.ok) throw new Error(`HTTP ${res.status}`)
+            return { ...named, ...readNotes(new Uint8Array(await res.arrayBuffer()), f.icon === "drums") }
+          } catch {
+            return { ...named, error: "Notes file not readable" }
+          }
+        })
+      ),
 
     async media(_tracks, buckets = BUCKETS, from, to) {
       zoom?.abort()
@@ -158,7 +180,7 @@ export function serviceSound(take: TakePage, one: One): ServiceSound {
       const i = names.indexOf(name)
       if (i >= 0) {
         if (mine()) one.setMute(uid, i, on)
-        else muted = on ? [...new Set([...muted, i])] : muted.filter((x) => x !== i)
+        else ({ muted, solo } = withMute({ muted, solo }, i, on))
       }
       return state()
     },
@@ -166,7 +188,7 @@ export function serviceSound(take: TakePage, one: One): ServiceSound {
       const i = name === null ? null : names.indexOf(name)
       if (i !== -1) {
         if (mine()) one.setSolo(uid, i)
-        else solo = i
+        else ({ muted, solo } = withSolo({ muted, solo }, i))
       }
       return state()
     },
@@ -177,8 +199,17 @@ export function serviceSound(take: TakePage, one: One): ServiceSound {
       mine()?.setGain(i, volume)
       return { ok: true }
     },
-    // The service has no master level: the phone's or computer's own volume is it.
-    setMaster: async () => ({ ok: true }),
+    // How loud every take plays on this device, whichever is in the player.
+    async setMaster(volume) {
+      one.setMaster(volume)
+      return { ok: true }
+    },
+    // Also on the one player: a level turned before the take was open never reached it.
+    async keepMaster(volume) {
+      one.setMaster(volume)
+      keepMaster(volume)
+      return { ok: true }
+    },
 
     async keepLevels(volumes) {
       // Only what was turned: a track left alone plays at each take's own balance.

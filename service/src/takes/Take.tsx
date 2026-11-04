@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { Link, useNavigate, useParams, useSearch } from "@tanstack/react-router"
 import { RotateCcw } from "lucide-react"
 import { TakePlayer as RehaPlayer } from "@/components/TakePlayer"
@@ -6,7 +6,7 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { useMultitrackPlayer } from "@/hooks/useMultitrackPlayer"
 import { usePlayerKeys, useSpacebar } from "@/hooks/useSpacebar"
-import type { Label as RehaLabel, Marker } from "@/lib/api"
+import type { Label as RehaLabel, Marker, NotesFile } from "@/lib/api"
 import { labelsChanged } from "@/lib/labels"
 import { useLabels, useLevels, useLevelsTrouble, useRestore, useTake, type TakePage } from "../api"
 import { TakeMarks } from "../marks/MarkItem"
@@ -16,7 +16,8 @@ import { useSize } from "../shell/size"
 import { clock, count, longDay } from "../shell/words"
 import { chipsOf } from "./chips"
 import { Desk } from "./Desk"
-import { Downloads } from "./Downloads"
+import { Download } from "./Download"
+import { notesAlone, notesOf } from "./player/lanes"
 import { CANNOT_PLAY, usePlayer } from "./player/one"
 import { useServiceSound, type ServiceSound } from "./player/sound"
 import { StarButton, TakeName } from "./parts"
@@ -25,11 +26,13 @@ import { TakePlayer } from "./TakePanel"
 
 /**
  * A take's page, for close work. On a computer, РЭХА's own player: a lane
- * per track with its level, M and S, a piece on repeat, the marks as chips
- * whose talk opens in the panel; the tracks to download under it. On a
- * phone, the take's wave, a row per track as РЭХА's desk has them, its
- * marks and the downloads. A link from the band's chat carries ?at= (the
- * playhead goes there) and the mark or comment it is about.
+ * per track with its level, M and S, the notes of a track that sent its
+ * .mid, Master with its level and meter, a piece on repeat, the marks as
+ * chips whose talk opens in the panel. On a phone, the take's wave, a row
+ * per track as РЭХА's desk has them, the MIDI sign on a track that sent
+ * notes, Master and its marks. **Download**, by the take's name, gives the
+ * mix and the tracks (Download.tsx). A link from the band's chat carries
+ * ?at= (the playhead goes there) and the mark or comment it is about.
  */
 export function Take() {
   const { uid } = useParams({ from: "/band/takes/$uid" })
@@ -118,9 +121,17 @@ function Levels({ take, sound }: { take: TakePage; sound: ServiceSound }) {
   )
 }
 
+/** The take's lanes of notes, made again only when its files are. */
+function useNotes(take: TakePage) {
+  // The page is read again after every change; its files keep their identity unless they changed.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  return useMemo(() => notesOf(take), [take.uid, take.gen, take.tracks, take.notes])
+}
+
 /** РЭХА's player on the page itself, with no frame round it, as in РЭХА. */
-function Full({ take }: { take: TakePage }) {
-  const sound = useServiceSound(take)
+function Full({ take, notes, sound }: { take: TakePage; notes: NotesFile[]; sound: ServiceSound }) {
+  // РЭХА counts it after the take's files are up: until then, the click alone.
+  const drift = useMemo(() => ({ answer: take.drift, counting: false }), [take.drift])
   const player = useMultitrackPlayer(sound.tracks, take.duration_sec, null, sound)
   const { open } = usePanel()
   useRehaLabels()
@@ -136,7 +147,12 @@ function Full({ take }: { take: TakePage }) {
       <div data-take-player className="flex flex-col">
         <RehaPlayer
           player={player}
-          master={false}
+          // No click button: the service plays none (Alex's pick, 2026-11-03). Master's lane is as in
+          // РЭХА, the click's stripes and the band's tempo РЭХА counted (his picks, 2026-11-03 22:24 and 22:26).
+          click={false}
+          take={take.meter}
+          drift={drift}
+          notes={notes}
           markers={markers}
           onAddMarker={(at) => open({ kind: "mark", uid: take.uid, at })}
           onEditMarker={talk}
@@ -150,24 +166,19 @@ function Full({ take }: { take: TakePage }) {
   )
 }
 
-/**
- * On a phone: the take's wave with ▶, a row per track as on РЭХА's desk,
- * the marks, then the downloads, which are for the computer at home.
- */
-function Phone({ take }: { take: TakePage }) {
-  const sound = useServiceSound(take)
+/** On a phone: the take's wave with ▶, a row per track as on РЭХА's desk, then the marks. */
+function Phone({ take, notes, tracks, sound }: { take: TakePage; notes: NotesFile[]; tracks: number; sound: ServiceSound }) {
   const player = useMultitrackPlayer(sound.tracks, take.duration_sec, null, sound)
   return (
     <Groups>
       <Group>
         <TakePlayer take={take} height={72} />
       </Group>
-      <Group title="Tracks" hint={String(take.tracks.length)}>
-        <Desk take={take} player={player} />
+      <Group title="Tracks" hint={String(tracks)}>
+        <Desk take={take} player={player} notes={notes} />
         <Levels take={take} sound={sound} />
       </Group>
       <TakeMarks take={take} />
-      <Downloads take={take} />
     </Groups>
   )
 }
@@ -179,6 +190,11 @@ function TakeView({ take }: { take: TakePage }) {
   const song = take.song
   const phone = size === "phone"
   const cannot = p.supported === false
+  const notes = useNotes(take)
+  // One for the page: the player, the desk and Download read the same levels, M and S.
+  const sound = useServiceSound(take)
+  // A track of notes alone is one of the band's tracks too, as in a lineup.
+  const tracks = take.tracks.length + notesAlone(take, notes).length
   return (
     <Page
       head={song ? <Back to="/songs/$id" params={{ id: String(song.id) }} label={song.title} /> : <Back to="/songs" label="Songs" />}
@@ -191,6 +207,9 @@ function TakeView({ take }: { take: TakePage }) {
             </Badge>
           )}
           <span className="flex-1" />
+          <span className="text-sm font-normal">
+            <Download take={take} sound={sound} phone={phone} />
+          </span>
           <span className="text-sm font-normal">
             <StarButton take={take} who disabled={!!take.trashed_at} />
           </span>
@@ -208,27 +227,26 @@ function TakeView({ take }: { take: TakePage }) {
           <Link to="/rehearsals/$uid" params={{ uid: take.rehearsal.uid }} className={OPENS}>
             {longDay(take.date)}
           </Link>
-          {` · ${clock(take.duration_sec)} · ${count(take.tracks.length, "track")}`}
+          {` · ${clock(take.duration_sec)} · ${count(tracks, "track")}`}
         </>
       }
     >
       {take.trashed_at && <InTrash uid={take.uid} />}
       {phone && !cannot ? (
-        <Phone take={take} />
+        <Phone take={take} notes={notes} tracks={tracks} sound={sound} />
       ) : (
         <>
           {/* On a computer РЭХА's player sits on the page itself, as in РЭХА, with no card round it. */}
-          {!cannot && <Full take={take} />}
-          <Groups>
-            {cannot && (
+          {!cannot && <Full take={take} notes={notes} sound={sound} />}
+          {/* The marks are the player's chips; with no player, a list. */}
+          {cannot && (
+            <Groups>
               <Group>
                 <p className="text-muted-foreground">{CANNOT_PLAY}</p>
               </Group>
-            )}
-            {/* The marks are the player's chips here; on a phone, or with no player, a list. */}
-            {(phone || cannot) && <TakeMarks take={take} />}
-            <Downloads take={take} />
-          </Groups>
+              <TakeMarks take={take} />
+            </Groups>
+          )}
         </>
       )}
     </Page>

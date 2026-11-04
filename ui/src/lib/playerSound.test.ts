@@ -16,7 +16,9 @@ const bridge = vi.hoisted(() => ({
   player_set_volume: vi.fn(async () => ({ ok: true })),
   player_set_master: vi.fn(async () => ({ ok: true })),
   take_media: vi.fn(async () => []),
+  take_notes: vi.fn(async () => []),
   save_mix: vi.fn(async () => ({ ok: true })),
+  save_master_volume: vi.fn(async () => ({ ok: true })),
 }))
 vi.mock("@/lib/api", () => ({
   api: () => bridge,
@@ -33,6 +35,12 @@ describe("pythonSound", () => {
     await pythonSound.close()
     expect(bridge.player_open).toHaveBeenCalledWith(tracks, true)
     expect(bridge.player_close).toHaveBeenCalled()
+  })
+
+  it("asks Python to read a take's notes from its .mid files", async () => {
+    const files = [{ name: "Drums", file: "/rec/t1/drums.mid", icon: "drums" }, { name: "Keys", file: null }]
+    await pythonSound.notes(files)
+    expect(bridge.take_notes).toHaveBeenCalledWith(files)
   })
 
   it("asks Python for the waves of a stretch when zoomed in", async () => {
@@ -69,5 +77,10 @@ describe("pythonSound", () => {
   it("keeps the levels in the app's settings", async () => {
     await pythonSound.keepLevels({ Bass: 0.5 })
     expect(bridge.save_mix).toHaveBeenCalledWith({ Bass: 0.5 })
+  })
+
+  it("keeps Master's level in the app's settings", async () => {
+    await pythonSound.keepMaster(0.6)
+    expect(bridge.save_master_volume).toHaveBeenCalledWith(0.6)
   })
 })

@@ -11,6 +11,7 @@ its notes, numbered on from there.
 """
 
 import json
+import math
 import os
 import shutil
 import uuid
@@ -23,9 +24,19 @@ from rehearsal_recorder.audio.waveform import wav_peaks
 # ten, which the pages stretch to their width.
 PEAKS = 1200
 
+# The signatures the service takes, as the metronome has them.
+# The most bars the service keeps for a take: an hour at 240 a minute is 3600 of 4/4.
+MAX_BARS = 20000
+SIGNATURES = ("4/4", "3/4", "2/4", "6/8")
+
 
 class CannotMake(Exception):
     """A file of the take could not be made; the words say why."""
+
+
+class Stopped(Exception):
+    """`stop` said so while an MP3 or FLAC was being made: nothing of it is
+    left, and it is made again from its start next time."""
 
 
 def rehearsal_uid(ref):
@@ -107,18 +118,78 @@ def meta(take, rehearsal, labels, volumes, gen, cut_start, tempo=None):
         "tracks": [{"position": i, "name": t["name"], "icon": t.get("icon"),
                     "files": [f"{i}.mp3", f"{i}.flac", f"{i}.peaks"]}
                    for i, t in enumerate(audio, 1)],
-        "notes": [{"position": len(audio) + i, "name": n["name"], "file": f"{len(audio) + i}.mid"}
+        "notes": [{"position": len(audio) + i, "name": n["name"], "file": f"{len(audio) + i}.mid",
+                   "icon": n.get("icon")}
                   for i, n in enumerate(_notes(take), 1)],
         "marks": marks,
         "tempo": None if tempo is None else float(tempo),
+        "meter": meter(take),
     }
 
 
-def make(item, dst):
+def meter(take):
+    """The take's click as the service keeps it, for the stripes along
+    Master's lane: its tempo and signature, or neither, and whether it was
+    recorded to the click."""
+    tempo, signature = take.get("tempo"), take.get("signature")
+    if (isinstance(tempo, bool) or not isinstance(tempo, (int, float)) or not 0 < tempo <= 999
+            or signature not in SIGNATURES):
+        tempo = signature = None
+    return {"tempo": None if tempo is None else float(tempo), "signature": signature,
+            "click": bool(take.get("click")) and tempo is not None}
+
+
+def drift(answer):
+    """
+    The band's tempo through a take as Api.take_drift answered it, the way
+    the service keeps it: the times to a millisecond and the tempos to a
+    hundredth, so an hour's bars stay small. None for an answer that is not
+    the take's to keep: a count Record stopped, one that could not read the
+    take's files (they may be back later), or one the service would not take.
+    """
+    if not isinstance(answer, dict):
+        return None
+    if not answer.get("ok"):
+        why = answer.get("why")
+        return {"ok": False, "why": why} if why in ("short", "no-beat") else None
+
+    def tempo(t):
+        return round(float(t), 2) if t is not None and math.isfinite(t) and t > 0 else None
+
+    def time(t):
+        t = float(t)
+        if not math.isfinite(t) or t < 0:
+            raise ValueError(t)
+        return round(t, 3)
+
+    try:
+        aim = answer["aim"]
+        middle, aimed = float(answer["middle"]), float(aim["tempo"])
+        bars = answer["bars"]
+        if not (math.isfinite(middle) and middle > 0 and math.isfinite(aimed) and aimed > 0) or len(bars) > MAX_BARS:
+            return None
+        return {
+            "ok": True,
+            "source": answer["source"],
+            "per_bar": answer["per_bar"],
+            "middle": round(middle, 2),
+            "aim": {"tempo": aimed, "signature": aim["signature"], "from": aim["from"], "song": aim.get("song")},
+            "bars": [{"n": int(b["n"]), "start": time(b["start"]), "end": time(b["end"]), "tempo": tempo(b["tempo"])}
+                     for b in bars],
+        }
+    except (KeyError, TypeError, ValueError, OverflowError):
+        return None
+
+
+def make(item, dst, stop=None):
     """
     One file of the plan, written at `dst`. The WAV it is made from stays
     as it is: the encoder removes what it encodes, so it is handed a copy.
     Raises CannotMake when the file cannot be made as the service needs it.
+
+    `stop()`, when given, is asked between blocks of an MP3 or FLAC: true,
+    and the file is given up and Stopped raised. A waveform or a .mid is
+    made at once and not asked.
     """
     source = Path(item["source"])
     if not source.exists():
@@ -138,7 +209,10 @@ def make(item, dst):
         return
     copy = dst.with_name(dst.name + ".wav")
     shutil.copyfile(source, copy)
-    done = encode(copy, kind, dst)
+    done = encode(copy, kind, dst, stop=stop)
+    if done.get("stopped"):
+        copy.unlink(missing_ok=True)
+        raise Stopped()
     if done.get("format") != kind:
         copy.unlink(missing_ok=True)
         raise CannotMake(done.get("note") or f"Could not make the {kind.upper()}")

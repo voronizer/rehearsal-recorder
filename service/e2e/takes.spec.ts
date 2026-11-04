@@ -4,16 +4,33 @@ import { as, band, HEADERS } from "./band"
 test.describe("as Alex", () => {
   test.use({ storageState: as("alex") })
 
-  test("a take page has REHA's player: a lane per track with M and S, no Master", async ({ page }) => {
+  test("a take page has REHA's player: a lane per track with M and S, the drums' notes, and Master", async ({ page }) => {
     await page.goto(`/takes/${band().takes["Viasna 12"]}`)
     await expect(page.getByText(/^Thursday, 30 October( 2025)? · 0:10 · 6 tracks$/)).toBeVisible()
     const player = page.locator("[data-take-player]")
     const lanes = player.locator("[data-lane-row]")
-    await expect(lanes).toHaveCount(6)
-    for (const [i, name] of ["Drums", "Bass", "Guitar", "Keys", "Vocals", "Shaker"].entries())
+    await expect(lanes).toHaveCount(7)
+    for (const [i, name] of ["Drums", "Drums", "Bass", "Guitar", "Keys", "Vocals", "Shaker"].entries())
       await expect(lanes.nth(i)).toHaveAttribute("data-lane-row", name)
-    // The service has no click and no master level.
-    await expect(player.locator("[data-master-group]")).toHaveCount(0)
+    // The drums' notes under their sound, read from the .mid on the page, a row each for the kit.
+    await expect(lanes.nth(1)).toHaveAttribute("data-paired", "true")
+    await expect(lanes.nth(1).locator("[data-notes-plate]")).toContainText("Saved as .mid, not played here")
+    const kit = player.locator('[data-notes-lane="Drums"]')
+    for (const row of ["Hi-hat", "Snare", "Kick"]) await expect(kit.getByText(row, { exact: true })).toBeVisible()
+    await expect(kit).not.toContainText("Notes file")
+    // Master: how loud the take plays here, and no click button, as the
+    // service plays no click; its lane has the click's bars and the band's
+    // tempo through them, as РЭХА counted it.
+    const master = player.locator("[data-master-group]")
+    await expect(master.getByRole("slider", { name: "Master volume" })).toBeVisible()
+    await expect(master.getByRole("meter", { name: "Master level" })).toBeVisible()
+    await expect(page.getByRole("button", { name: "Click with the take" })).toHaveCount(0)
+    const lane = master.locator("[data-master-lane]")
+    await expect(lane.locator("[data-click-tag]")).toHaveText("Click 120 bpm · 4/4")
+    expect(await lane.locator("[data-click-line]").count()).toBeGreaterThan(0)
+    await expect(lane.locator("[data-drift-line]")).toBeVisible()
+    await expect(lane.locator("[data-drift-chip]")).toHaveText(["+6"])
+    await expect(lane).toHaveAttribute("aria-label", "Click 120 bpm · 4/4. Tempo: ahead 6 bpm, bars 3 to 5.")
     // РЭХА's balance came with the take.
     await expect(player.getByRole("slider", { name: "Vocals volume" })).toHaveAttribute("aria-valuetext", "70%")
     await expect(player.getByRole("slider", { name: "Bass volume" })).toHaveAttribute("aria-valuetext", "100%")
@@ -24,9 +41,21 @@ test.describe("as Alex", () => {
     const solo = player.getByRole("button", { name: "Solo Bass" })
     await solo.click()
     await expect(solo).toHaveAttribute("aria-pressed", "true")
+    // The drums' notes go pale with their sound while the bass plays alone.
+    await expect(kit).toHaveAttribute("data-dimmed", "true")
     await solo.click()
     await expect(solo).toHaveAttribute("aria-pressed", "false")
+    await expect(kit).not.toHaveAttribute("data-dimmed")
     await expect(mute).toHaveAttribute("aria-pressed", "true")
+
+    // On one track, S takes M off and M takes S off.
+    const soloVocals = player.getByRole("button", { name: "Solo Vocals" })
+    await soloVocals.click()
+    await expect(soloVocals).toHaveAttribute("aria-pressed", "true")
+    await expect(mute).toHaveAttribute("aria-pressed", "false")
+    await mute.click()
+    await expect(mute).toHaveAttribute("aria-pressed", "true")
+    await expect(soloVocals).toHaveAttribute("aria-pressed", "false")
   })
 
   test("a take plays, its time moves, and a press on the lanes moves the playhead", async ({ page }) => {
@@ -35,6 +64,9 @@ test.describe("as Alex", () => {
     const time = transport.getByText(/^\d:\d\d \/ 0:10$/)
     await expect(time).toHaveText("0:00 / 0:10")
     await transport.getByRole("button", { name: "Play", exact: true }).click()
+    // Master's meter shows the whole take coming out.
+    const meter = page.getByRole("meter", { name: "Master level" })
+    await expect.poll(async () => Number(await meter.getAttribute("aria-valuenow")), { timeout: 10_000 }).toBeGreaterThan(0)
     await expect(time).toHaveText(/^0:0[2-9] \/ 0:10$/, { timeout: 10_000 })
     // The bar at the bottom holds the same take, so it steps aside here.
     await expect(page.getByLabel("Player", { exact: true })).toHaveCount(0)
@@ -45,30 +77,150 @@ test.describe("as Alex", () => {
     await expect(time).toHaveText("0:08 / 0:10")
   })
 
-  test("download tracks says which originals are still coming", async ({ page }) => {
-    await page.goto(`/takes/${band().takes["Pałyn 9"]}`)
-    const files = page.getByRole("region", { name: "Download tracks" })
-    await expect(files).toContainText("The originals are still coming from РЭХА. For now, each track is an MP3.")
-    await expect(files.getByRole("link", { name: "Bass MP3" })).toHaveAttribute("href", /\/2\.mp3\?download=1$/)
-    await expect(files.getByRole("link", { name: "Keys MIDI" })).toHaveAttribute("href", /\/3\.mid\?download=1$/)
-    await expect(files.getByRole("link", { name: /FLAC/ })).toHaveCount(0)
+  test("stuck at the foot of the window, Master covers the lanes that go on under it", async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 600 })
+    await page.goto(`/takes/${band().takes["Viasna 12"]}`)
+    await expect(page.locator('[data-notes-lane="Drums"]').getByText("Kick", { exact: true })).toBeVisible()
+    const master = page.locator("[data-master-band]")
+    // Its foot is the window's, so no strip of a lane shows under it.
+    const foot = await master.evaluate((b) => {
+      const main = b.closest("main")!.getBoundingClientRect()
+      const hit = document.elementFromPoint(main.left + main.width / 2, main.bottom - 3)
+      return { gap: main.bottom - b.getBoundingClientRect().bottom, master: !!hit && b.contains(hit) }
+    })
+    expect(Math.abs(foot.gap)).toBeLessThan(1)
+    expect(foot.master).toBe(true)
+  })
 
+  test("a track of notes alone has a lane of its own, after the tracks of sound", async ({ page }) => {
+    await page.goto(`/takes/${band().takes["Pałyn 9"]}`)
+    // The keys are one of its tracks.
+    await expect(page.getByText(/^Thursday, 30 October( 2025)? · 0:10 · 3 tracks$/)).toBeVisible()
+    const lanes = page.locator("[data-take-player] [data-lane-row]")
+    await expect(lanes).toHaveCount(3)
+    await expect(lanes.nth(2)).toHaveAttribute("data-lane-row", "Keys")
+    await expect(lanes.nth(2)).not.toHaveAttribute("data-paired")
+    await expect(lanes.nth(2).locator("[data-notes-plate]")).toContainText("Keys")
+    await expect(lanes.nth(2).locator("[data-notes-plate] [data-icon]")).toHaveAttribute("data-icon", "keys")
+    // A chord in the octave of middle C.
+    const keys = page.locator('[data-notes-lane="Keys"]')
+    await expect(keys.getByText("C4", { exact: true })).toBeVisible()
+    await expect(keys).not.toContainText("Notes file")
+    // Another track's S leaves the keys' notes out of what is heard: pale.
+    await expect(keys).not.toHaveAttribute("data-dimmed")
+    await page.getByRole("button", { name: "Solo Drums" }).click()
+    await expect(keys).toHaveAttribute("data-dimmed", "true")
+  })
+
+  test("a take sent by REHA 0.21 has Master with no lane: its click was not sent", async ({ page }) => {
+    await page.goto(`/takes/${band().takes["Pałyn 9"]}`)
+    const master = page.locator("[data-take-player] [data-master-group]")
+    await expect(master.getByRole("slider", { name: "Master volume" })).toBeVisible()
+    await expect(master.locator("[data-master-lane]")).toHaveCount(0)
+  })
+
+  test("Master's level is kept on this device for the next take", async ({ page }) => {
+    await page.goto(`/takes/${band().takes["Viasna 12"]}`)
+    const master = page.getByRole("slider", { name: "Master volume" })
+    await expect(master).toHaveAttribute("aria-valuetext", "100%")
+    await master.focus()
+    for (let k = 0; k < 10; k++) await page.keyboard.press("ArrowLeft")
+    await expect(master).toHaveAttribute("aria-valuetext", "90%")
+    await page.goto(`/takes/${band().takes["Pałyn 9"]}`)
+    await expect(page.getByRole("slider", { name: "Master volume" })).toHaveAttribute("aria-valuetext", "90%")
+  })
+
+  test("Download gives the tracks ticked in a list, each a file of its own; FLAC waits for the originals", async ({ page }) => {
+    await page.goto(`/takes/${band().takes["Pałyn 9"]}`)
+    await page.getByRole("button", { name: "Download", exact: true }).click()
+    const window = page.getByRole("dialog", { name: "Download “Pałyn 9”" })
+    await expect(window.getByRole("button", { name: "The mix" })).toBeEnabled()
+    await expect(window.getByRole("button", { name: "Tracks in FLAC" })).toBeDisabled()
+    await expect(window).toContainText("The originals are still coming from РЭХА.")
+
+    await window.getByRole("button", { name: "Tracks in MP3" }).click()
+    const list = page.getByRole("dialog", { name: "Tracks of “Pałyn 9” in MP3" })
+    // The keys recorded notes alone: their .mid is a line of its own, after the tracks of sound.
+    await expect(list.locator("[data-file]")).toHaveText(["Drums", "Bass", "Keys, notes (MIDI)"])
+    await expect(list.getByRole("button", { name: "Download 3 files" })).toBeEnabled()
+    await list.getByRole("checkbox").nth(1).click()
+    // The files as the Worker serves them; their names are checked on Kupalle 2, since a
+    // browser on Linux with no UTF-8 locale names “Pałyn” files “download”.
+    const files: string[] = []
+    page.on("download", (d) => void files.push(new URL(d.url()).pathname.split("/").pop()!))
+    await list.getByRole("button", { name: "Download 2 files" }).click()
+    await expect(list).toBeHidden()
+    await expect.poll(() => files).toEqual(["1.mp3", "3.mid"])
+
+    // Opened again, it starts from the three choices.
+    await page.getByRole("button", { name: "Download", exact: true }).click()
+    await expect(window.getByRole("button", { name: "The mix" })).toBeVisible()
+  })
+
+  test("the FLAC list has a track's notes under its sound, once the originals are up", async ({ page }) => {
     await page.goto(`/takes/${band().takes["Kupalle 2"]}`)
-    await expect(page.getByRole("region", { name: "Download tracks" })).not.toContainText("still coming")
-    await expect(page.getByRole("link", { name: "Drums FLAC" })).toHaveAttribute("href", /\/1\.flac\?download=1$/)
+    await page.getByRole("button", { name: "Download", exact: true }).click()
+    await page.getByRole("button", { name: "Tracks in FLAC" }).click()
+    await expect(page.getByRole("dialog").locator("[data-file]")).toHaveText(["Drums", "Bass"])
+    await page.getByRole("button", { name: "Back" }).click()
+    await page.getByRole("button", { name: "Tracks in FLAC" }).click()
+    const files: string[] = []
+    page.on("download", (d) => void files.push(d.suggestedFilename()))
+    await page.getByRole("button", { name: "Download 2 files" }).click()
+    await expect.poll(() => files).toEqual(["Kupalle 2 - Drums.flac", "Kupalle 2 - Bass.flac"])
+
+    await page.goto(`/takes/${band().takes["Viasna 12"]}`)
+    await page.getByRole("button", { name: "Download", exact: true }).click()
+    await expect(page.getByRole("button", { name: "Tracks in FLAC" })).toBeDisabled()
+    await page.getByRole("button", { name: "Tracks in MP3" }).click()
+    await expect(page.getByRole("dialog").locator("[data-file]")).toHaveText([
+      "Drums",
+      "Drums, notes (MIDI)",
+      "Bass",
+      "Guitar",
+      "Keys",
+      "Vocals",
+      "Shaker",
+    ])
+    for (const box of await page.getByRole("dialog").getByRole("checkbox").all()) await box.click()
+    await expect(page.getByRole("button", { name: "Download 0 files" })).toBeDisabled()
+  })
+
+  test("the mix is made in the page as it plays, and called after what was muted", async ({ page }) => {
+    await page.goto(`/takes/${band().takes["Viasna 12"]}`)
+    await page.getByRole("button", { name: "Mute Bass" }).click()
+    await page.getByRole("button", { name: "Download", exact: true }).click()
+    const coming = page.waitForEvent("download")
+    await page.getByRole("button", { name: "The mix" }).click()
+    const mix = await coming
+    expect(mix.suggestedFilename()).toBe("Viasna 12 - without Bass.mp3")
+    await expect(page.getByRole("dialog")).toBeHidden()
+    // An MP3: its first frame's sync bits, after an ID3 tag if LAME wrote one.
+    const bytes = new Uint8Array(await (await mix.createReadStream()).toArray().then((c) => Buffer.concat(c)))
+    const at = bytes[0] === 0x49 ? 10 + ((bytes[6] << 21) | (bytes[7] << 14) | (bytes[8] << 7) | bytes[9]) : 0
+    expect([bytes[at], bytes[at + 1] & 0xe0]).toEqual([0xff, 0xe0])
+
+    // With every track muted there is nothing to mix.
+    for (const name of ["Drums", "Guitar", "Keys", "Vocals", "Shaker"]) await page.getByRole("button", { name: `Mute ${name}` }).click()
+    await page.getByRole("button", { name: "Download", exact: true }).click()
+    await page.getByRole("button", { name: "The mix" }).click()
+    await expect(page.getByRole("dialog")).toContainText("Every track is muted, so the mix would be silent.")
   })
 })
 
 test.describe("as Alex on a phone", () => {
   test.use({ storageState: as("alex"), viewport: { width: 390, height: 844 } })
 
-  test("a take page puts the marks before the downloads, each mark with its colour", async ({ page }) => {
+  test("a take page lists the marks, each with its colour, and Download is an icon by the name", async ({ page }) => {
     await page.goto(`/takes/${band().takes["Kupalle 2"]}`)
     const main = page.getByRole("main")
     const marks = main.getByRole("region", { name: "Marks" })
-    const files = main.getByRole("region", { name: "Download tracks" })
-    const top = async (l: typeof marks) => (await l.boundingBox())!.y
-    expect(await top(marks)).toBeLessThan(await top(files))
+    await expect(main.getByRole("region", { name: "Download tracks" })).toHaveCount(0)
+    const download = main.getByRole("button", { name: "Download", exact: true })
+    await expect(download).toHaveText("")
+    await download.click()
+    await expect(page.getByRole("dialog", { name: "Download “Kupalle 2”" })).toBeVisible()
+    await page.getByRole("button", { name: "Close" }).click()
     // The dot beside the label's name: it has a size.
     const dot = marks.locator("[data-mark]").first().locator("[data-label] > *").first()
     const box = (await dot.boundingBox())!
@@ -82,12 +234,30 @@ test.describe("as Alex on a phone", () => {
     const rows = tracks.locator("[data-desk-row]")
     await expect(rows).toHaveCount(6)
     await expect(rows.nth(4)).toHaveAttribute("data-desk-row", "Vocals")
+    // The MIDI sign on the drums, which sent their notes too; Master after the tracks.
+    await expect(rows.nth(0).getByRole("img", { name: "MIDI notes too" })).toBeVisible()
+    await expect(rows.nth(1).getByRole("img", { name: "MIDI notes too" })).toHaveCount(0)
+    await expect(tracks.locator("[data-master-plate]")).toBeVisible()
+    await expect(tracks.getByRole("slider", { name: "Master volume" })).toBeVisible()
     await expect(page.locator("[data-lane-row]")).toHaveCount(0)
     await expect(page.getByRole("toolbar", { name: "Transport" })).toHaveCount(0)
     const mute = tracks.getByRole("button", { name: "Mute Drums" })
     await mute.click()
     await expect(mute).toHaveAttribute("aria-pressed", "true")
     await expect(tracks.getByRole("slider", { name: "Vocals volume" })).toHaveAttribute("aria-valuetext", "70%")
+  })
+  test("on a phone, a track of notes alone has a row that says so, after the tracks of sound", async ({ page }) => {
+    await page.goto(`/takes/${band().takes["Pałyn 9"]}`)
+    const tracks = page.getByRole("main").getByRole("region", { name: "Tracks", exact: true })
+    await expect(tracks).toContainText(/^Tracks\s*3/)
+    const rows = tracks.locator("[data-desk-row]")
+    await expect(rows).toHaveCount(3)
+    await expect(rows.nth(2)).toHaveAttribute("data-desk-row", "Keys")
+    await expect(rows.nth(2)).toContainText("Saved as .mid, not played here")
+    await expect(rows.nth(2).getByRole("slider")).toHaveCount(0)
+    await expect(rows.nth(2)).not.toHaveAttribute("data-dimmed")
+    await tracks.getByRole("button", { name: "Solo Drums" }).click()
+    await expect(rows.nth(2)).toHaveAttribute("data-dimmed", "true")
   })
 })
 
@@ -171,6 +341,12 @@ test.describe("as Ira", () => {
     await expect(panel.getByRole("button", { name: /^Pause “Pałyn 3”/ })).toBeVisible()
     await expect(solo).toHaveAttribute("aria-pressed", "true")
     await expect(panel.getByRole("group", { name: "Drums" })).toHaveAttribute("data-heard", "false")
+    // M on the soloed track takes its S off.
+    const mute = panel.getByRole("button", { name: "Mute Bass" })
+    await mute.click()
+    await expect(mute).toHaveAttribute("aria-pressed", "true")
+    await expect(solo).toHaveAttribute("aria-pressed", "false")
+    await expect(panel.getByRole("group", { name: "Drums" })).toHaveAttribute("data-heard", "true")
   })
 
   test("a star shows at once and stays after a reload", async ({ page }) => {

@@ -7,6 +7,13 @@ opening.
 
 ## Unreleased
 
+- **Download in the band service.** A take's page has one **Download**
+  button by its name. **The mix** is the take as one MP3, mixed in the page
+  as you hear it there, with your levels, mute and solo. Mute your own part,
+  and you have the band to practise along with at home. **Tracks in MP3**
+  and **Tracks in FLAC** list the tracks with a tick each, and each ticked
+  one comes as a file of its own, the notes as .mid too. This replaces
+  **Download tracks** at the foot of the page.
 - **A band's own service is set up on GitHub alone.** Whoever runs one for
   their band now puts all its settings in their fork's settings on GitHub:
   the owner's address, the address letters come from, both Cloudflare
@@ -18,6 +25,39 @@ opening.
 - **The band service sends at most 5 codes an hour to one address.**
   Someone who knows a member's address can no longer fill their inbox with
   codes, or try codes until one fits.
+
+## 0.22.0
+
+- **Sending to the band service waits while you listen.** While a take, a
+  backing track or the click plays, РЭХА stops making MP3 and FLAC files
+  and sending them, and goes on once you pause, as it already did while a
+  take records. Copies to a cloud folder wait the same way. Before, the
+  sending started right after **Stop**, and a take you listened to then
+  could skip. The rehearsal screen made it skip too: while takes waited to
+  be sent, it read the whole rehearsal every 1.5 seconds. Now it asks only
+  which takes are on their way.
+- **The band service shows a track's MIDI notes.** A track that recorded
+  MIDI has its notes in the take's player, as in РЭХА: under its sound, or
+  in a lane of its own for a track that recorded notes only. They are not
+  played. On a phone, the track's row has the MIDI sign. **Download tracks**
+  now has a track's sound and its notes on one row.
+- **Master in the band service.** Under the tracks, **Master** turns the
+  whole take up or down and shows how loud it all comes out. The level is
+  kept on that phone or computer for the next take, and nobody else hears
+  it. The service plays no click, so Master has no click button.
+- **Where the band drifted, in the band service.** On a computer, Master's
+  row shows the click's bars and the band's tempo bar by bar, as in РЭХА's
+  player. РЭХА works the tempo out once all of a take's files are up, the
+  FLAC files too, and sends it. Takes already in the service get it too:
+  after the update, РЭХА sends it for them in the background, for each take
+  whose files are still on this computer.
+- **M and S on one track take each other off.** **S** on a muted track turns
+  its **M** off, and **M** on the soloed track turns its **S** off, in РЭХА
+  and in the band service. Before, both could be on at once.
+- **A track's notes go paler with its sound.** In the player, a track's MIDI
+  notes go paler when the track is muted or another track is soloed, as its
+  waveform does. Notes of a track on **MIDI** go paler while any track is
+  soloed. The same in the band service, on a phone too.
 
 ## 0.21.0
 

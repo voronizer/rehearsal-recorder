@@ -1,7 +1,7 @@
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs"
 import { request, type APIRequestContext } from "@playwright/test"
 import { BASE, confirm, HEADERS, signIn } from "../e2e/band"
-import { member, reha } from "../e2e/seed"
+import { member, reha, smf } from "../e2e/seed"
 
 /*
   The band the pictures on reha.stream/band-service show: four people, named
@@ -12,7 +12,8 @@ import { member, reha } from "../e2e/seed"
   length and waveforms shaped like a band's.
 
   Who plays what, and whose pictures:
-    Vik      drums.
+    Vik      drums, on a kit that sends its notes too: each take has
+             a .mid of them.
     Alex     bass; the owner.
     Ivan     guitar. The pictures of a take, a song and the marks are
              his; he marked Viasna 12.
@@ -48,6 +49,8 @@ type Seeded = {
   length: string
   starred?: boolean
   marks?: { at: number; label: string; colour: string; note: string }[]
+  /** Where the band got ahead of the click, as shares of the take, and by how much at most. */
+  rush?: { from: number; to: number; bpm: number }
 }
 
 // The order РЭХА would send them in: rehearsal by rehearsal, take by take.
@@ -74,12 +77,86 @@ const TAKES: Seeded[] = [
     length: "4:05",
     marks: [{ at: 178, label: "Keep this", colour: "green", note: "This solo" }],
   },
-  { song: "Kupalle", number: 2, back: 0, length: "5:05", starred: true },
+  // Ahead of the click in the last chorus.
+  { song: "Kupalle", number: 2, back: 0, length: "5:05", starred: true, rush: { from: 0.8, to: 0.94, bpm: 4 } },
 ]
 
 const seconds = (length: string) => {
   const [m, s] = length.split(":").map(Number)
   return m * 60 + s
+}
+
+/** Every take was recorded to the click at 120 a minute in 4/4: a bar is 2 s. */
+const CLICK = { tempo: 120, signature: "4/4", click: true } as const
+
+/** The band's bars over a take, from the 2 s the waveform's drums come in
+ *  at: where each starts and its tempo. About 120, a little either side as
+ *  a band holds it, and ahead where the take says it rushed. */
+function bars(t: Seeded, length: number, seed: number): { start: number; tempo: number }[] {
+  const out: { start: number; tempo: number }[] = []
+  let state = seed * 7919 + 17
+  const noise = () => ((state = (state * 1103515245 + 12345) % 2147483648) / 2147483648) - 0.5
+  let wander = 0
+  for (let at = 2; at < length - 1; ) {
+    const share = at / length
+    // Each bar near the one before: a band drifts, it does not jump.
+    wander = 0.7 * wander + 0.9 * noise()
+    let tempo = 120 + wander
+    if (t.rush && share >= t.rush.from && share < t.rush.to)
+      tempo += t.rush.bpm * Math.sin((Math.PI * (share - t.rush.from)) / (t.rush.to - t.rush.from))
+    tempo = Math.round(tempo * 100) / 100
+    out.push({ start: at, tempo })
+    at += (60 / tempo) * 4
+  }
+  return out
+}
+
+/** The band's tempo through a take as РЭХА counts it from the kit's notes,
+ *  to send once the take's files are up. The first bar, before the drums,
+ *  has none. */
+function drift(t: Seeded, played: { start: number; tempo: number }[]) {
+  const tempi = played.map((b) => b.tempo).sort((a, b) => a - b)
+  return {
+    ok: true,
+    source: "drums-mid",
+    per_bar: 4,
+    middle: tempi[tempi.length >> 1],
+    aim: { tempo: CLICK.tempo, signature: CLICK.signature, from: "click", song: t.song },
+    bars: [
+      { n: 1, start: 0, end: played[0].start, tempo: null },
+      ...played.map((b, i) => ({
+        n: i + 2,
+        start: Math.round(b.start * 1000) / 1000,
+        end: Math.round((b.start + (60 / b.tempo) * 4) * 1000) / 1000,
+        tempo: b.tempo,
+      })),
+    ],
+  }
+}
+
+/** Vik's kit over a take, as its .mid, on the band's bars: kick on 1, 3
+ *  and the "and" of 3, snare on 2 and 4, the hi-hat in eighths, a crash at
+ *  the start of every eight bars and a fill of toms at their end. */
+function kit(length: number, played: { start: number; tempo: number }[]): Uint8Array {
+  const notes: [number, number, number, number][] = []
+  const hit = (at: number, note: number) => {
+    if (at < length - 1) notes.push([at, 0.1, note, 9])
+  }
+  for (const [bar, { start: t, tempo }] of played.entries()) {
+    const beat = 60 / tempo
+    const fill = bar % 8 === 7
+    for (let e = 0; e < 8; e++) {
+      if (e === 0 && bar % 8 === 0) hit(t, 49)
+      else if (fill && e >= 4) hit(t + (e * beat) / 2, [48, 47, 45, 43][e - 4])
+      else hit(t + (e * beat) / 2, 42)
+    }
+    hit(t, 36)
+    hit(t + 2 * beat, 36)
+    hit(t + 2.5 * beat, 36)
+    hit(t + beat, 38)
+    if (!fill) hit(t + 3 * beat, 38)
+  }
+  return smf(notes)
 }
 
 /** A made-up waveform for a part over a take: 1200 numbers from 0 to 1, a
@@ -137,6 +214,7 @@ export default async function seed() {
     const name = `${t.song} ${t.number}`
     takes[name] = uid
     const length = seconds(t.length)
+    const played = bars(t, length, n)
     const tracks = TRACKS.map((k, i) => ({
       position: i + 1,
       name: k.name,
@@ -155,15 +233,18 @@ export default async function seed() {
       // As the band's mix in РЭХА had it: the guitar and the vocals down a little.
       balance: { Guitar: 0.8, Vocals: 0.8 },
       tracks,
-      notes: [],
+      notes: [{ position: TRACKS.length + 1, name: "Drums", icon: "drums", file: `${TRACKS.length + 1}.mid` }],
       marks: t.marks ?? [],
+      meter: CLICK,
     })
     // The pictures play nothing, so the page tests' short tracks stand in for the sound.
     for (const k of tracks) {
       await send.file(uid, `${k.position}.mp3`, mp3(k.position))
       await send.file(uid, `${k.position}.peaks`, peaks(TRACKS[k.position - 1].name, length, n))
     }
+    await send.file(uid, `${TRACKS.length + 1}.mid`, kit(length, played))
     await send.post(`/api/reha/takes/${uid}/ready`, { gen: 1, what: "mp3" })
+    await send.put(`/api/reha/takes/${uid}/drift`, { gen: 1, drift: drift(t, played) })
     for (const k of tracks) await send.file(uid, `${k.position}.flac`, "fLaC made up")
     await send.post(`/api/reha/takes/${uid}/ready`, { gen: 1, what: "flac" })
   }

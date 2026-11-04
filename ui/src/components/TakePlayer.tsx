@@ -31,9 +31,10 @@ import { formatMMSS } from "@/lib/format"
 import { labelLook, labelOf, markText, useLabels } from "@/lib/labels"
 import { rise } from "@/lib/motion"
 import { playLabel, SPINNER_AFTER_MS } from "@/lib/playLook"
-import { api, type Marker, type MissingNotes, type NotesFile, type TakeNotes } from "@/lib/api"
+import type { Marker, MissingNotes, NotesFile, TakeNotes } from "@/lib/api"
 import type { MultitrackPlayer } from "@/hooks/useMultitrackPlayer"
-import type { DriftTake } from "@/lib/drift"
+import type { PlayerSound } from "@/lib/playerSound"
+import type { DriftTake, DriftView } from "@/lib/drift"
 
 const SKIP_SECONDS = 10
 /** A region shorter than this is a slip of the mouse, not an intention. */
@@ -42,7 +43,8 @@ const MIN_CROP_SEC = 1
 const WHOLE_TAKE_SLACK_SEC = 0.05
 
 /**
- * What take_notes read back from a take's .mid files, by track name: asked
+ * What the sound read back from a take's .mid files, by track name (Python's
+ * take_notes in РЭХА, the page itself in the band service): asked
  * once for each take opened, and not again to zoom or play, since the notes
  * of a whole take come at once. A track whose port never appeared has no
  * file, and is asked about in the same call for its icon alone.
@@ -53,8 +55,8 @@ const WHOLE_TAKE_SLACK_SEC = 0.05
  * one before's notes while its own are on their way. A read that fails is an
  * answer too: an error for each lane, which the lane says.
  */
-function useTakeNotes(notes?: NotesFile[], missing?: MissingNotes[]) {
-  const [read, setRead] = useState<{
+function useTakeNotes(read: PlayerSound["notes"], notes?: NotesFile[], missing?: MissingNotes[]) {
+  const [got, setGot] = useState<{
     notes?: NotesFile[]
     missing?: MissingNotes[]
     byName: Map<string, TakeNotes>
@@ -66,16 +68,15 @@ function useTakeNotes(notes?: NotesFile[], missing?: MissingNotes[]) {
     ]
     if (files.length === 0) return
     let alive = true
-    api()
-      .take_notes(files)
+    read(files)
       .then((answers) => {
-        if (alive) setRead({ notes, missing, byName: new Map(answers.map((a) => [a.name, a])) })
+        if (alive) setGot({ notes, missing, byName: new Map(answers.map((a) => [a.name, a])) })
       })
       .catch(() => {
         // The bar has said what went wrong. Each lane says it too, in place
         // of the spinner it waited with, and the take still plays.
         if (alive)
-          setRead({
+          setGot({
             notes,
             missing,
             byName: new Map<string, TakeNotes>(
@@ -86,8 +87,8 @@ function useTakeNotes(notes?: NotesFile[], missing?: MissingNotes[]) {
     return () => {
       alive = false
     }
-  }, [notes, missing])
-  return read && read.notes === notes && read.missing === missing ? read.byName : null
+  }, [read, notes, missing])
+  return got && got.notes === notes && got.missing === missing ? got.byName : null
 }
 
 /**
@@ -112,11 +113,16 @@ export function TakePlayer({
   goKeys = false,
   status,
   rising = false,
-  master = true,
+  click = true,
+  drift: given,
 }: {
   player: MultitrackPlayer
-  /** Master's row under the tracks; the band's service leaves it out. */
-  master?: boolean
+  /** Master's click button; the band's service has none. */
+  click?: boolean
+  /** The band's tempo through the take, where it is known already: the
+   *  band's service has it from РЭХА. None asks Python for it
+   *  (useTakeDrift). */
+  drift?: DriftView
   /** The take's click: its tempo, its signature, and whether it was
    *  recorded to the click, for Master's button and stripes; and its files
    *  and song, for the band's tempo along Master's lane. */
@@ -156,8 +162,9 @@ export function TakePlayer({
    *  take is opened in a screen already up, it is simply there. */
   rising?: boolean
 }) {
-  const notesRead = useTakeNotes(notes, notesMissing)
-  const drift = useTakeDrift(take)
+  const notesRead = useTakeNotes(player.readNotes, notes, notesMissing)
+  const asked = useTakeDrift(given ? null : take)
+  const drift = given ?? asked
   // The same rule the timeline draws by: one end set reaches to the take's
   // own start or end.
   const { region, duration } = player
@@ -192,7 +199,7 @@ export function TakePlayer({
       >
         <Timeline
           player={player}
-          master={master}
+          click={click}
           take={take}
           drift={drift}
           markers={markers}

@@ -29,7 +29,7 @@ The phone loads a take as you listen, half a minute ahead of where you are, so a
 
 ## Hear your own part
 
-Each of you has a track of your own in every take. Play yours alone to hear what you really did, or mute it and practise along with the band as it played that night.
+Each of you has a track of your own in every take. Play yours alone to hear what you really did, or mute it and practise along with the band as it played that night. With yours muted, press **Download**, then **The mix**: you get an MP3 of the band without you, to practise along anywhere.
 
 The levels are yours as well. Turn a track up or down once, and it plays that way for you in every take with a track of that name, on the phone and on the computer. Only you hear it that way; for the others nothing changes. **РЭХА's levels** brings back the mix the take came with.
 
@@ -61,9 +61,11 @@ Every take the band sends is there, by song, including the Viasna from three wee
 
 ## Take your track home
 
-At home, download the tracks as they were recorded and open them in your recording program, the DAW, on the computer. Then record new takes of your part over the band as it played that night.
+At home, press **Download** on the take's page, then **Tracks in FLAC**: the tracks as they were recorded. Tick the ones you need and open them in your recording program, the DAW, on the computer. Then record new takes of your part over the band as it played that night.
 
-![A take's page on a computer: РЭХА's own player, and under it Download tracks, each track in FLAC, the full-quality file РЭХА recorded](downloads)
+If a track recorded MIDI too, the notes an electronic kit or keyboard sends, the player draws those notes without playing them, and **Tracks in FLAC** has them as a .mid file. In the DAW each note moves on its own, so a hit that ran ahead goes back into place without dragging the rest of the kit along.
+
+![A take's page on a computer with the Download window open over РЭХА's own player: the mix, the tracks in MP3, and the tracks in FLAC, the full-quality files РЭХА recorded, with the kit's notes as MIDI](downloads)
 
 ## How to start
 

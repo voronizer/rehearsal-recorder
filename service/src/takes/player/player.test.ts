@@ -107,3 +107,62 @@ test("a stretch no longer wanted gives up waiting for its file", async () => {
   wanted.abort()
   expect(await wave).toBeNull()
 })
+
+/** A node of the fake sound: what it is joined to, and its gain as last set. */
+class FakeNode {
+  readonly to: unknown[] = []
+  fftSize = 0
+  gain = { value: 1, setTargetAtTime: (v: number) => void (this.gain.value = v) }
+  connect(node: unknown) {
+    this.to.push(node)
+    return node
+  }
+  disconnect() {}
+  getFloatTimeDomainData(wave: Float32Array) {
+    wave.fill(0)
+  }
+}
+
+/** Web Audio as far as Master needs it: every gain made, and where each goes. */
+class FakeSound {
+  static made: FakeNode[] = []
+  static meters: FakeNode[] = []
+  readonly destination = { speakers: true }
+  currentTime = 0
+  async resume() {}
+  createGain() {
+    const g = new FakeNode()
+    FakeSound.made.push(g)
+    return g
+  }
+  createAnalyser() {
+    const m = new FakeNode()
+    FakeSound.meters.push(m)
+    return m
+  }
+}
+
+test("Master's level is on the whole take as it goes out: set before it plays, and turned while it does", () => {
+  withDecoder()
+  vi.stubGlobal("AudioContext", FakeSound)
+  vi.stubGlobal("fetch", () => new Promise(() => {}))
+  const p = new Player([{ url: "t1.mp3", gain: 1 }, { url: "t2.mp3", gain: 0.8 }])
+  expect(p.masterVolume).toBe(1)
+  p.setMaster(0.5)
+  expect(p.masterVolume).toBe(0.5)
+  p.play(0)
+  // The gain that goes to the speakers: the tracks' own gains go to it.
+  const out = FakeSound.made.findLast((n) => n.to.some((t) => (t as { speakers?: boolean }).speakers))!
+  expect(out.gain.value).toBe(0.5)
+  expect(FakeSound.made.filter((n) => n.to.includes(out))).toHaveLength(2)
+  p.setMaster(0.25)
+  expect(out.gain.value).toBe(0.25)
+  p.setMaster(3)
+  expect(out.gain.value).toBe(1)
+  p.setMaster(-1)
+  expect(p.masterVolume).toBe(0)
+  // The whole mix's meter is after Master; with no sound come yet, it reads 0, as a meter at rest does.
+  expect(out.to.some((n) => FakeSound.meters.includes(n as FakeNode))).toBe(true)
+  expect(p.mixLoudness()).toBe(0)
+  p.close()
+})

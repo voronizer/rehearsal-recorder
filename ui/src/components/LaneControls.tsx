@@ -1,6 +1,7 @@
 import type { ReactNode } from "react"
 import { Volume1, Volume2, VolumeX } from "lucide-react"
 import { InstrumentIcon } from "@/components/InstrumentIcon"
+import { MidiGlyph } from "@/components/midi/MidiGlyph"
 import { LanePlate } from "@/components/ui/lane-plate"
 import { Toggle } from "@/components/ui/toggle"
 import { Whole } from "@/components/ui/whole"
@@ -138,12 +139,16 @@ function MeteredFader({
  * The take's Backing track is the song's file, not one of the band's tracks
  * (backing-track spec Part 7): its plate has a dashed frame, and after its
  * name it says what the file is, "Stereo file" or "Mono file" (`file`).
+ *
+ * On the band service's desk for a phone, which has no lanes, the MIDI sign
+ * after the name says the track recorded its notes too (`midi`).
  */
 export function LaneControls({
   name,
   icon,
   file,
   paired = false,
+  midi = false,
   channels,
   muted,
   soloed,
@@ -162,6 +167,8 @@ export function LaneControls({
   file?: string
   /** The track records its notes too: its notes' row is under this one. */
   paired?: boolean
+  /** The track recorded its notes too, and no row under it says so. */
+  midi?: boolean
   /** In the file: 1, 2, or 0 when it could not be read. */
   channels: number
   muted: boolean
@@ -195,6 +202,11 @@ export function LaneControls({
         {file && (
           <span data-plate-file className="shrink-0 text-xs leading-4 text-muted-foreground">
             {file}
+          </span>
+        )}
+        {midi && (
+          <span data-plate-midi role="img" aria-label="MIDI notes too" className="flex shrink-0">
+            <MidiGlyph className="size-4 text-muted-foreground" />
           </span>
         )}
       </div>

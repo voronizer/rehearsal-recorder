@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "c4ee5e08-937a-45b9-a0df-b28c261bbafd",
+  "id": "11dd0856-72c5-44c6-9db3-e8846d483043",
   "prevId": "1a9edc14-4bf4-4cac-89d2-bacdfb3a122c",
   "tables": {
     "account": {
@@ -393,37 +393,6 @@
         "started_at": {
           "name": "started_at",
           "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {},
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "checkConstraints": {}
-    },
-    "code_ask": {
-      "name": "code_ask",
-      "columns": {
-        "email": {
-          "name": "email",
-          "type": "text",
-          "primaryKey": true,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "since": {
-          "name": "since",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "count": {
-          "name": "count",
-          "type": "integer",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
@@ -1354,6 +1323,27 @@
         "shape": {
           "name": "shape",
           "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "meter": {
+          "name": "meter",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "drift": {
+          "name": "drift",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "drift_gen": {
+          "name": "drift_gen",
+          "type": "integer",
           "primaryKey": false,
           "notNull": false,
           "autoincrement": false

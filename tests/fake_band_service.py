@@ -13,7 +13,8 @@ service would not take.
 It can be told to drop the connection unanswered, to keep a part and then
 drop it, to forget its uploads, to refuse with words, or to say РЭХА is too
 old. A test can delete a take as someone in the band does, and press
-Restore on it.
+Restore on it. It can be a service from before the tempo along Master,
+which neither keeps a take's tempo nor says which it has.
 """
 
 import json
@@ -55,13 +56,17 @@ class FakeBandService:
         self.takes = {}
         # uid: {"mp3": gen, "flac": gen}, the generations whose files are up.
         self.gens = {}
+        # uid: {"gen", "drift"}, the band's tempo through the take as sent.
+        self.drifts = {}
+        # False: a service from before the tempo along Master.
+        self.keeps_tempo = True
         # upload_id: {"uid", "gen", "name", "size", "parts": {number: bytes}}
         self.uploads = {}
         # "uid/gen/name": the file's bytes, once its upload is done.
         self.files = {}
         # What came, in order: "put <uid>", "start <uid> <name>", "part <uid>
         # <name> <number>", "file <uid> <name>", "ready <uid> <what>",
-        # "delete <uid>", "list".
+        # "drift <uid> <gen>", "delete <uid>", "list".
         self.order = []
         self.mismatches = []
         # Every User-Agent a request came with.
@@ -76,6 +81,8 @@ class FakeBandService:
         self.forget_after_parts = None
         # (status, words) every call is refused with, until set back to None.
         self.refuse = None
+        # (status, words) a take's tempo is refused with, until set back to None.
+        self.refuse_drift = None
         # Every call answered 426, until set back to False.
         self.too_old = False
         # Called with the call's words ("part <uid> <name> <n>") just before
@@ -194,7 +201,8 @@ class FakeBandService:
         if method == "GET" and parts == ["takes"]:
             with self._lock:
                 listed = [{"uid": uid, "trashed": t["trashed"], "mp3_gen": self.gens.get(uid, {}).get("mp3"),
-                           "flac_gen": self.gens.get(uid, {}).get("flac")} for uid, t in self.takes.items()]
+                           "flac_gen": self.gens.get(uid, {}).get("flac"), **self._drift_gen(uid)}
+                          for uid, t in self.takes.items()]
             self._said("list")
             return 200, listed
         if parts[:1] != ["takes"] or len(parts) < 2:
@@ -208,8 +216,22 @@ class FakeBandService:
                 # One the band deleted comes out of the trash only when sent by hand.
                 stays = was.get("trashed") and was.get("trashed_by") and not meta.get("by_hand")
                 self.takes[uid] = {**meta, "trashed": bool(stays), "trashed_by": was.get("trashed_by") if stays else None}
+                gen = self._drift_gen(uid)
             self._said(f"put {uid}")
-            return 200, {"ok": True, "in_trash": bool(stays)}
+            return 200, {"ok": True, "in_trash": bool(stays), **gen}
+        if method == "PUT" and rest == ["drift"] and self.keeps_tempo:
+            data = json.loads(body)
+            if self.refuse_drift is not None:
+                self._said(f"refused drift {uid}")
+                status, words = self.refuse_drift
+                return status, {"error": words}
+            with self._lock:
+                if uid not in self.takes:
+                    return 404, {"error": "No such take"}
+                if data["gen"] == self.takes[uid]["gen"]:
+                    self.drifts[uid] = data
+            self._said(f"drift {uid} {data['gen']}")
+            return 200, {"ok": True}
         if method == "DELETE" and not rest:
             with self._lock:
                 if uid in self.takes:
@@ -266,6 +288,13 @@ class FakeBandService:
             self._said(f"file {uid} {upload['name']}")
             return 200, {"ok": True}
         return 404, {"error": "No such call"}
+
+    def _drift_gen(self, uid):
+        """The generation whose tempo the service has, as it says it; a
+        service from before the tempo says nothing."""
+        if not self.keeps_tempo:
+            return {}
+        return {"drift_gen": (self.drifts.get(uid) or {}).get("gen")}
 
     @staticmethod
     def _send(h, status, answer):

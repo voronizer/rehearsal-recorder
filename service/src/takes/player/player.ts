@@ -1,3 +1,4 @@
+import { withMute, withSolo, type Desk } from "./desk"
 import { FRAME, loopTime, passFrames, passShift } from "./loop"
 import { parseFrames } from "./mp3"
 import { Fold } from "./peaks"
@@ -157,7 +158,10 @@ export class Player {
   private gains: GainNode[] = []
   private meters: AnalyserNode[] = []
   private master: GainNode | null = null
+  /** The whole mix after Master, as it goes out. */
+  private mixMeter: AnalyserNode | null = null
   private levels: number[]
+  private volume = 1
   private muted = new Set<number>()
   private solo: number | null = null
   private loop: { a: number; b: number } | null = null
@@ -237,15 +241,23 @@ export class Player {
 
   /** How loud each track comes out now, 0 to 1: after its level, M and S; 0 while paused. */
   loudness(): number[] {
-    return this.tracks.map((_, i) => {
-      const meter = this.meters[i]
-      if (!meter || this.t0 === null) return 0
-      const wave = new Float32Array(meter.fftSize)
-      meter.getFloatTimeDomainData(wave)
-      let top = 0
-      for (const v of wave) top = Math.max(top, Math.abs(v))
-      return Math.min(1, top)
-    })
+    return this.tracks.map((_, i) => this.peak(this.meters[i]))
+  }
+
+  /** How loud the whole take comes out now, 0 to 1: every track together, after Master; 0 while paused. */
+  mixLoudness(): number {
+    return this.peak(this.mixMeter)
+  }
+
+  /** Master's level, 0 to 1: how loud the whole take plays, for listening. */
+  get masterVolume(): number {
+    return this.volume
+  }
+
+  /** Master's level, heard at once and kept for when the take plays. */
+  setMaster(v: number): void {
+    this.volume = Math.min(1, Math.max(0, v))
+    if (this.master && this.context) this.master.gain.setTargetAtTime(this.volume, this.context.currentTime, GLIDE_SEC)
   }
 
   /** Plays from `at`. Called from a click, so the browser lets sound start. */
@@ -281,15 +293,23 @@ export class Player {
     }
   }
 
+  /** M and S on one track take each other off (desk.ts). */
   setMute(i: number, on: boolean): void {
-    if (on) this.muted.add(i)
-    else this.muted.delete(i)
-    this.mix()
+    this.desk(withMute(this.deskNow(), i, on))
   }
 
   /** Only this track is heard, or, with `on` false, every track again. */
   setSolo(i: number, on: boolean): void {
-    this.solo = on ? i : this.solo === i ? null : this.solo
+    this.desk(on ? withSolo(this.deskNow(), i) : this.solo === i ? withSolo(this.deskNow(), null) : this.deskNow())
+  }
+
+  private deskNow(): Desk {
+    return { muted: [...this.muted], solo: this.solo }
+  }
+
+  private desk(d: Desk): void {
+    this.muted = new Set(d.muted)
+    this.solo = d.solo
     this.mix()
   }
 
@@ -386,6 +406,7 @@ export class Player {
     this.halt()
     this.fetching?.abort()
     this.master?.disconnect()
+    this.mixMeter?.disconnect()
     for (const meter of this.meters) meter.disconnect()
     this.context = null
     // A wave still waiting for its stretch gets none; a file waiting to go on stops.
@@ -398,8 +419,12 @@ export class Player {
     const context = wakeSound()
     this.context = context
     const master = context.createGain()
+    master.gain.value = this.volume
     master.connect(context.destination)
     this.master = master
+    this.mixMeter = context.createAnalyser()
+    this.mixMeter.fftSize = 1024
+    master.connect(this.mixMeter)
     this.gains = this.tracks.map(() => {
       const g = context.createGain()
       g.connect(master)
@@ -412,6 +437,16 @@ export class Player {
       return meter
     })
     this.mix(true)
+  }
+
+  /** The loudest sample a meter has just seen, 0 to 1; 0 while no sound comes. */
+  private peak(meter: AnalyserNode | null | undefined): number {
+    if (!meter || this.t0 === null) return 0
+    const wave = new Float32Array(meter.fftSize)
+    meter.getFloatTimeDomainData(wave)
+    let top = 0
+    for (const v of wave) top = Math.max(top, Math.abs(v))
+    return Math.min(1, top)
   }
 
   private mix(now = false) {

@@ -444,8 +444,8 @@ take. Converting runs afterwards, on a copy, in an ordinary call.
   cloud folder is chosen: only empty ones, named the way the app names a
   rehearsal's folder, straight inside the cloud folder. The rest of it is the
   band's.
-- Automatic copies wait while a take records, so mixing never competes with
-  the sound card.
+- Automatic copies wait while a take records or anything plays, so making
+  them never competes with the mixing on the sound card's thread.
 - The recording itself stays WAV. It is the one thing here that cannot be
   made again, and disk is cheap.
 
