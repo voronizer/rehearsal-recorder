@@ -119,22 +119,23 @@ class Engine:
     reserve full. If the ring runs dry, rtmixer drops it; the worker starts
     a new one from where the mixing got to, and counts it."""
 
-    def __init__(self, player, mixer, reserve):
+    def __init__(self, player, mixer, reserve, block=BLOCK):
         import rtmixer
         self.rtmixer = rtmixer
+        self.block = block
         self.player = player
         self.mixer = mixer
-        size = BLOCK
+        size = block
         while size < int(reserve * RATE * 1.5):
             size *= 2
         self.size = size
-        self.floats = np.zeros((BLOCK, 2), dtype=np.float32)
+        self.floats = np.zeros((block, 2), dtype=np.float32)
         self.target = int(reserve * RATE)
         self.low = int(reserve * 0.6 * RATE)
         # Where the card may be reading inside its current call is not
         # known, only that it is less than the stream's latency ahead.
-        self.unsafe = int(mixer.latency * RATE) + BLOCK // 4
-        self.guard = self.unsafe + BLOCK
+        self.unsafe = int(mixer.latency * RATE) + 256
+        self.guard = self.unsafe + block
         self.asked = None
         self.lock = threading.Lock()
         self.leads = []
@@ -174,7 +175,7 @@ class Engine:
         with self.player._lock:
             if state is not None:
                 self._restore(state)
-            mix = self.player._render(BLOCK)
+            mix = self.player._render(self.block)
             np.multiply(mix, 1.0 / 32768.0, out=self.floats, casting="unsafe")
             return self.floats, self._state()
 
@@ -182,7 +183,7 @@ class Engine:
         self.states[self.written] = self.end_state or self._state()
         block, self.end_state = self._mix_from(self.end_state)
         self.ring.write(block)
-        self.written += BLOCK
+        self.written += self.block
 
     def _remix_one(self):
         at, state = self.cursor
@@ -194,13 +195,13 @@ class Engine:
         block, state = self._mix_from(state)
         if at >= self.card_at() + self.unsafe:
             slot = at % self.size
-            self.data[slot:slot + BLOCK] = block
+            self.data[slot:slot + self.block] = block
             if self.first is None:
                 self.first = at
                 self.leads.append(at - self.card0)
         else:
             self.skipped_blocks += 1
-        self.cursor = (at + BLOCK, state)
+        self.cursor = (at + self.block, state)
 
     def change(self, apply):
         with self.lock:
@@ -208,7 +209,7 @@ class Engine:
             self.asked = self.card_at()
 
     def fill_first(self):
-        while self.ring.read_available + BLOCK <= self.target:
+        while self.ring.read_available + self.block <= self.target:
             self._add()
 
     def run(self):
@@ -226,19 +227,19 @@ class Engine:
             with self.lock:
                 asked, self.asked = self.asked, None
             if asked is not None:
-                at = -(-(self.card_at() + self.guard) // BLOCK) * BLOCK
+                at = -(-(self.card_at() + self.guard) // self.block) * self.block
                 if at < self.written and at in self.states:
                     self.cursor = (at, self.states[at])
                     self.card0, self.first = asked, None
-            if have < self.low and self.ring.write_available >= BLOCK:
+            if have < self.low and self.ring.write_available >= self.block:
                 self._add()
             elif self.cursor is not None:
                 self._remix_one()
-            elif have + BLOCK <= self.target and self.ring.write_available >= BLOCK:
+            elif have + self.block <= self.target and self.ring.write_available >= self.block:
                 self._add()
             else:
                 card = self.card_at()
-                for at in [a for a in self.states if a < card - BLOCK]:
+                for at in [a for a in self.states if a < card - self.block]:
                     del self.states[at]
                 time.sleep(0.005)
         self.mixer.cancel(self.action)
@@ -285,7 +286,7 @@ def case(engine, load, tracks, out_index, loop, secs, reserve, wav):
                             latency=output_latency(sd, out_index))
         try:
             player.play()
-            eng = Engine(player, mixer, reserve)
+            eng = Engine(player, mixer, reserve, block=4096 if engine == "rt4k" else BLOCK)
             eng.fill_first()
             worker = threading.Thread(target=eng.run, daemon=True)
             worker.start()
@@ -319,7 +320,7 @@ def main():
     ap.add_argument("--label", required=True)
     ap.add_argument("--secs", type=int, default=30)
     ap.add_argument("--reserve", type=float, default=1.0)
-    ap.add_argument("--cases", default="now:heavy,rt:heavy,now:applike,rt:applike")
+    ap.add_argument("--cases", default="now:heavy,rt:heavy,rt4k:heavy,now:applike,rt:applike")
     ap.add_argument("--results", required=True)
     a = ap.parse_args()
     sys.setswitchinterval(0.001)  # as the app does

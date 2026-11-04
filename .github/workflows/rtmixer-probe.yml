@@ -21,8 +21,6 @@ concurrency:
 
 jobs:
   windows:
-    # Off for this push: run 3 has it.
-    if: false
     runs-on: windows-latest
     timeout-minutes: 40
     steps:
@@ -49,6 +47,13 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          # Recording is refused (E_ACCESSDENIED) until desktop apps may use
+          # the microphone.
+          $mic = "SOFTWARE\Microsoft\Windows\CurrentVersion\CapabilityAccessManager\ConsentStore\microphone"
+          reg add "HKLM\$mic" /v Value /t REG_SZ /d Allow /f
+          reg add "HKCU\$mic" /v Value /t REG_SZ /d Allow /f
+          reg add "HKCU\$mic\NonPackaged" /v Value /t REG_SZ /d Allow /f
+          reg add "HKLM\SOFTWARE\Policies\Microsoft\Windows\AppPrivacy" /v LetAppsAccessMicrophone /t REG_DWORD /d 1 /f
           Set-Service Audiosrv -StartupType Automatic -ErrorAction SilentlyContinue
           Start-Service Audiosrv -ErrorAction SilentlyContinue
           gh release download --repo dechamps/FlexASIO --pattern "FlexASIO-*.exe" --dir $env:RUNNER_TEMP
@@ -109,6 +114,8 @@ jobs:
           if-no-files-found: warn
 
   macos:
+    # Off for this push: run 4 has it.
+    if: false
     runs-on: macos-latest
     timeout-minutes: 40
     steps:
