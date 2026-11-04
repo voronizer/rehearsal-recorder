@@ -644,9 +644,13 @@ class RingInput:
             self.fault = repr(e)
 
     def _run(self):
+        # time.sleep and not a wait on _stop: on Windows a wait lasts at
+        # least a timer tick, 15.6 ms, and reads that far apart are too
+        # coarse to mark the notes' clock by (RingMarks). time.sleep has a
+        # high-resolution timer there since Python 3.11.
         while not self._stop.is_set():
             self.look()
-            self._stop.wait(INPUT_TICK_SEC)
+            time.sleep(INPUT_TICK_SEC)
 
 
 class RingMarks:
@@ -663,11 +667,14 @@ class RingMarks:
     A read that waited longer than WINDOW_SEC on the one before says too
     little of when its frames came, and is left out. Each read kept is the
     clock's latest mark besides (AudioClock.mark_latest), not kept for the
-    fit: take.clock writes the kept marks up to the latest.
+    fit: take.clock writes the kept marks up to the latest. When QUIET_SEC
+    of frames pass with no mark, the log says so once, with how far apart
+    the reads were: the notes of that take are placed by the take's start.
     """
 
     FIRST_MARK_SEC = 0.25
     WINDOW_SEC = 0.01
+    QUIET_SEC = 2.0
 
     def __init__(self, clock, samplerate, latency_sec, block=BLOCK):
         self.clock = clock
@@ -676,11 +683,18 @@ class RingMarks:
         self.block = block
         self._reads = []
         self._span = self.FIRST_MARK_SEC * samplerate
+        self._marked_frame = 0  # the frame of the last mark, or the take's start
+        self._said = False
 
     def read(self, first_frame, frames, arrival_ns, window_ns=None):
         if arrival_ns is None or frames <= 0:
             return
         if window_ns is not None and window_ns > self.WINDOW_SEC * _NS:
+            if not self._said and first_frame + frames - self._marked_frame > self.QUIET_SEC * self.rate:
+                self._said = True
+                log.warning("The notes' clock has had no mark for %.0f s of the take: the ring was "
+                            "read %.1f ms apart, more than %.0f", self.QUIET_SEC,
+                            window_ns / 1e6, self.WINDOW_SEC * 1000)
             return
         reads = self._reads
         # Several calls in one read came together: the last is the one that
@@ -696,6 +710,7 @@ class RingMarks:
             # not at every read after.
             reads.clear()
             self._span = self.rate
+            self._marked_frame = mean
             self.clock.mark_at(ns, mean)
         # The newest frame seen, between the marks, as a callback's every
         # block said it.

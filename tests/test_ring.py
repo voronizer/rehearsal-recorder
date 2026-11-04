@@ -9,7 +9,9 @@ The first group checks the fake itself against what rtmixer's C callback
 does (src/rtmixer.c in rtmixer 0.1.7), since every later check leans on it.
 """
 
+import logging
 import sys
+import time
 import types
 from pathlib import Path
 
@@ -255,6 +257,30 @@ def dry_ring_restarts():
     ok("from where the mixing got to", heard[0, 0] == 47 * 1024)
     ok("the stream's frames go on", ring.heard() == 48 * 1024)
     ring.stop()
+
+
+def marks_missing_said():
+    print("\n[8b] Reads too far apart for a mark: the log says so, once")
+    from rehearsal_recorder.audio.ring import RingMarks
+    from rehearsal_recorder.midi.clock import AudioClock
+    said = []
+    handler = logging.Handler()
+    handler.emit = lambda record: said.append(record.getMessage())
+    logger = logging.getLogger("rehearsal_recorder.audio.ring")
+    logger.addHandler(handler)
+    try:
+        clock = AudioClock(RATE)
+        marks = RingMarks(clock, RATE, 0.01)
+        t0 = 5_000_000_000
+        # A read every 16 ms, as a wait on a Windows timer tick makes them.
+        for k in range(1, 250):
+            marks.read((k - 1) * 768, 768, t0 + k * 16_000_000, window_ns=16_000_000)
+    finally:
+        logger.removeHandler(handler)
+    lines = [s for s in said if "notes' clock" in s]
+    ok("no mark from reads 16 ms apart", not clock.marked())
+    ok("the log says the clock has had no mark, once", len(lines) == 1)
+    ok("  with how far apart the reads were", bool(lines) and "16.0 ms" in lines[0])
 
 
 def move_made_before_it_returns():
@@ -526,6 +552,26 @@ def marks_reach_clock(tmp):
     rec.stop()
 
 
+def reads_often_enough():
+    print("\n[13b] The record ring's own thread reads often enough to mark the notes' clock")
+    from rehearsal_recorder.audio.ring import RingInput, RingMarks
+    card = fake_rtmixer.card
+    card.reset()
+    recorder = rtmixer.Recorder(channels=1, samplerate=RATE, blocksize=1024)
+    recorder.start()
+    ring = RingInput(recorder, 1, RATE, lambda block, first, arrival: None)
+    stamps = []
+    ring.service = lambda now_ns=None: stamps.append(time.perf_counter_ns())
+    ring.start()
+    time.sleep(0.5)
+    ring.stop(drain=False)
+    gaps = sorted(b - a for a, b in zip(stamps, stamps[1:]))
+    median = gaps[len(gaps) // 2] / 1e6 if gaps else float("inf")
+    limit = RingMarks.WINDOW_SEC * 1000
+    ok(f"half its reads come under {limit:.0f} ms apart, on this computer (median {median:.1f} ms)",
+       median <= limit)
+
+
 def main():
     fake_card_behaves()
     output_keeps_a_second()
@@ -535,6 +581,7 @@ def main():
     heard_falls_back()
     input_pads_overflow()
     marks_mean_of_second()
+    marks_missing_said()
     move_made_before_it_returns()
     import tempfile
     with tempfile.TemporaryDirectory() as folder:
@@ -545,6 +592,7 @@ def main():
         click_on_card_lands_on_grid(tmp)
         stop_on_quarter(tmp)
         marks_reach_clock(tmp)
+    reads_often_enough()
     if problems:
         print(f"\n{len(problems)} problem(s):")
         for p in problems:
