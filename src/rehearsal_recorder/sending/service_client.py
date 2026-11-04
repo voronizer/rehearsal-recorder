@@ -109,13 +109,18 @@ class ServiceClient:
     def ready(self, uid, gen, what):
         return self._call("POST", f"/api/reha/takes/{uid}/ready", {"gen": gen, "what": what})
 
+    def put_drift(self, uid, gen, drift):
+        """The band's tempo through a generation of the take (service_files.drift)."""
+        return self._call("PUT", f"/api/reha/takes/{uid}/drift", {"gen": gen, "drift": drift})
+
     def delete_take(self, uid):
         return self._call("DELETE", f"/api/reha/takes/{uid}")
 
     def takes(self):
         """Every take the service has: its uid, whether it is in the trash
-        ("trashed"), and the generation whose MP3s ("mp3_gen") and whose
-        FLAC files ("flac_gen") are up. An answer that is not such a list is
+        ("trashed"), the generation whose MP3s ("mp3_gen") and whose FLAC
+        files ("flac_gen") are up, and, from a service that keeps it, the
+        generation whose tempo it has ("drift_gen"). An answer that is not such a list is
         refused, so a stray page is never read as "the service has none"."""
         answer = self._call("GET", "/api/reha/takes")
         if not isinstance(answer, list) or not all(isinstance(t, dict) and "uid" in t for t in answer):

@@ -5,6 +5,7 @@ import { LanePlate } from "@/components/ui/lane-plate"
 import { Whole } from "@/components/ui/whole"
 import type { MultitrackPlayer } from "@/hooks/useMultitrackPlayer"
 import type { NotesFile } from "@/lib/api"
+import { cn } from "@/lib/utils"
 import type { TakePage } from "../api"
 import { notesAlone } from "./player/lanes"
 
@@ -14,7 +15,8 @@ const ROW = "h-14 rounded-lg bg-card"
  * On a phone: a row per track as РЭХА's desk draws it, its name, its level,
  * M and S; no wave. A track that recorded its notes too has the MIDI sign
  * after its name; one that recorded notes alone has a row that says so,
- * after the tracks of sound. Master is the last row, as on a desk.
+ * after the tracks of sound, its name greyed as a track's is while another
+ * track is soloed. Master is the last row, as on a desk.
  */
 export function Desk({ take, player, notes }: { take: TakePage; player: MultitrackPlayer; notes: NotesFile[] }) {
   const withNotes = new Set(notes.map((n) => n.name))
@@ -44,12 +46,22 @@ export function Desk({ take, player, notes }: { take: TakePage; player: Multitra
         )
       })}
       {notesAlone(take, notes).map((n) => (
-        <div key={n.file} data-desk-row={n.name} data-desk-notes className={ROW}>
+        <div
+          key={n.file}
+          data-desk-row={n.name}
+          data-desk-notes
+          data-dimmed={player.hasSolo || undefined}
+          className={ROW}
+        >
           {/* As a track's plate: the name on its line, and under it what the notes are. */}
           <LanePlate grouped className="gap-1">
             <div className="flex h-4 items-center gap-2">
               <InstrumentIcon icon={n.icon} className="size-4 shrink-0 text-muted-foreground" />
-              <Whole text={n.name} reach className="min-w-0 flex-1 truncate text-sm leading-4" />
+              <Whole
+                text={n.name}
+                reach
+                className={cn("min-w-0 flex-1 truncate text-sm leading-4", player.hasSolo && "text-muted-foreground")}
+              />
               <MidiGlyph className="size-4 shrink-0 text-muted-foreground" />
             </div>
             <span className="flex h-5 items-center text-xs text-muted-foreground">Saved as .mid, not played here</span>

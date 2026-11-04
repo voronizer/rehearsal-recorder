@@ -2332,12 +2332,20 @@ window.__MAKE_API__ = () => ({
   }),
   player_set_volume: track('player_set_volume', async (n, v) => { if (P) P.volumes[n] = v; return {ok:true}; }),
   player_set_master: track('player_set_master', async (v) => { if (P) P.master = v; return {ok:true}; }),
+  // M and S on one track take each other off, as Python's player does.
   player_set_muted: track('player_set_muted', async (n, m) => {
     if (!P) return {ok:false};
     P.muted = m ? [...new Set([...P.muted, n])] : P.muted.filter(x => x !== n);
+    if (m && P.soloed === n) P.soloed = null;
     return {ok:true, ...playerState()};
   }),
-  player_set_solo: track('player_set_solo', async (n) => { if (P) P.soloed = n; return {ok:true, ...playerState()}; }),
+  player_set_solo: track('player_set_solo', async (n) => {
+    if (P) {
+      P.soloed = n;
+      P.muted = P.muted.filter(x => x !== n);
+    }
+    return {ok:true, ...playerState()};
+  }),
 
   add_take_marker: track('add_take_marker', async (folder, n, sec, note, labelId) => {
     const take = (session ? session.takes : []).find(t => t.take_number === n);

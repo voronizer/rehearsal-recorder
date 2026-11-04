@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from "react"
 import { playLook, type PlayLook } from "@/lib/playLook"
 import { useLevels, useTake, type TakePage } from "../../api"
+import { withMute, withSolo, type Desk } from "./desk"
 import { levelOf } from "./levels"
 import { keptMaster } from "./master"
 import { Player, wakeSound } from "./player"
@@ -65,7 +66,6 @@ type PlayerApi = {
 }
 
 /** A take's M and S: the tracks muted, the one soloed. */
-export type Desk = { muted: number[]; solo: number | null }
 const NO_DESK: Desk = { muted: [], solo: null }
 
 const PlayerCtx = createContext<PlayerApi | null>(null)
@@ -241,13 +241,13 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   const mute = (u: string, i: number) => {
     const on = !deskOf(u).muted.includes(i)
     heldOf(u)?.setMute(i, on)
-    setDesk(u, (d) => ({ ...d, muted: on ? [...new Set([...d.muted, i])] : d.muted.filter((x) => x !== i) }))
+    setDesk(u, (d) => withMute(d, i, on))
   }
 
   const soloOne = (u: string, i: number) => {
     const on = deskOf(u).solo !== i
     heldOf(u)?.setSolo(i, on)
-    setDesk(u, (d) => ({ ...d, solo: on ? i : null }))
+    setDesk(u, (d) => withSolo(d, on ? i : null))
   }
 
   const sounds = (u: string, i: number) => {
@@ -277,7 +277,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
         const now = mine(u)
         if (!now) return
         now.setMute(i, on)
-        setDesk(u, (d) => ({ ...d, muted: on ? [...new Set([...d.muted, i])] : d.muted.filter((x) => x !== i) }))
+        setDesk(u, (d) => withMute(d, i, on))
       },
       setSolo: (u, i) => {
         const now = mine(u)
@@ -285,7 +285,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
         const was = now.soloed
         if (i !== null) now.setSolo(i, true)
         else if (was !== null) now.setSolo(was, false)
-        setDesk(u, (d) => ({ ...d, solo: i }))
+        setDesk(u, (d) => withSolo(d, i))
       },
       master: () => master.current,
       mixLoudness: () => player.current?.mixLoudness() ?? 0,

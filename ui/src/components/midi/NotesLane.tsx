@@ -35,7 +35,9 @@ const MIN_NOTE_PX = 2
  * and a spinner turns in it from the second on (B5).
  *
  * Nothing here is heard. The lane only draws what take_notes read back from
- * the .mid, all of it at once, so zooming asks Python for nothing.
+ * the .mid, all of it at once, so zooming asks Python for nothing. It is
+ * `dimmed` as its track's waveform is, while M or another track's S keeps
+ * that track from being heard.
  */
 export function NotesLane({
   name,
@@ -44,6 +46,7 @@ export function NotesLane({
   view,
   playhead,
   missing = false,
+  dimmed = false,
   className,
 }: {
   /** The track's name, for finding the lane: data-notes-lane. */
@@ -57,6 +60,9 @@ export function NotesLane({
   playhead: number
   /** The track's port was not there the whole take: no .mid to draw. */
   missing?: boolean
+  /** Its track is not heard: the notes not played yet go paler, as a
+   *  waveform's do. */
+  dimmed?: boolean
   /** The lane's height comes from here, as a waveform's does. Nothing
    *  inside it has a height of its own, so it is as tall as the room it is
    *  given: in the player, its plate's height less the well round it, 3 px
@@ -145,7 +151,7 @@ export function NotesLane({
       }
     }
     ctx.globalAlpha = 1
-  }, [size, notes, rows, rowPx, from, to, playhead])
+  }, [size, notes, rows, rowPx, from, to, playhead, dimmed])
 
   const message = missing
     ? "No notes in this take"
@@ -164,10 +170,13 @@ export function NotesLane({
     <div
       ref={boxRef}
       data-notes-lane={name}
+      data-dimmed={dimmed || undefined}
       style={
         {
           "--nl-played": "var(--color-primary)",
-          "--nl-rest": "color-mix(in oklab, var(--color-muted-foreground) 70%, transparent)",
+          "--nl-rest": dimmed
+            ? "color-mix(in oklab, var(--color-muted-foreground) 35%, transparent)"
+            : "color-mix(in oklab, var(--color-muted-foreground) 70%, transparent)",
           "--nl-grid": "color-mix(in oklab, var(--color-border) 80%, transparent)",
         } as React.CSSProperties
       }

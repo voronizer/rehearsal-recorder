@@ -364,6 +364,16 @@ test("the Backing lane is last, above Master, dashed and muted the first time; M
   // Another song's is its own: Pałyn's opens muted.
   await openOld(page, "Pałyn", "Take 3 Pałyn 3")
   await expect(mute(page)).toHaveAttribute("aria-pressed", "true")
+
+  // S on it turns its M off, and that is kept for Pałyn too.
+  await page.getByRole("button", { name: "Solo Backing" }).click()
+  await expect(mute(page)).toHaveAttribute("aria-pressed", "false")
+  await expect
+    .poll(() => args(page, "set_song_backing_heard"))
+    .toEqual([
+      [id, true],
+      [await idOf(page, "Pałyn"), true],
+    ])
 })
 
 // Drift leaves the Backing track out of "the mix" by its kind (spec Part 9):

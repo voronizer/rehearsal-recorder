@@ -1,3 +1,4 @@
+import { withMute, withSolo, type Desk } from "./desk"
 import { FRAME, loopTime, passFrames, passShift } from "./loop"
 import { parseFrames } from "./mp3"
 import { Fold } from "./peaks"
@@ -292,15 +293,23 @@ export class Player {
     }
   }
 
+  /** M and S on one track take each other off (desk.ts). */
   setMute(i: number, on: boolean): void {
-    if (on) this.muted.add(i)
-    else this.muted.delete(i)
-    this.mix()
+    this.desk(withMute(this.deskNow(), i, on))
   }
 
   /** Only this track is heard, or, with `on` false, every track again. */
   setSolo(i: number, on: boolean): void {
-    this.solo = on ? i : this.solo === i ? null : this.solo
+    this.desk(on ? withSolo(this.deskNow(), i) : this.solo === i ? withSolo(this.deskNow(), null) : this.deskNow())
+  }
+
+  private deskNow(): Desk {
+    return { muted: [...this.muted], solo: this.solo }
+  }
+
+  private desk(d: Desk): void {
+    this.muted = new Set(d.muted)
+    this.solo = d.solo
     this.mix()
   }
 

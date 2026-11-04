@@ -16,6 +16,10 @@ const take = {
     { position: 3, name: "Drums", mp3: false, flac: false, mid: true },
     { position: 4, name: "Pads", mp3: false, flac: false, mid: true },
   ],
+  notes: [
+    { position: 3, name: "Drums", icon: "drums" },
+    { position: 4, name: "Pads", icon: null },
+  ],
 } as unknown as TakePage
 
 test("each .mid of the take is a lane of notes: under its own sound, or after the band's tracks", () => {
@@ -26,9 +30,14 @@ test("each .mid of the take is a lane of notes: under its own sound, or after th
 })
 
 test("a take with no notes has no lanes of them, and one of notes alone has them at the top", () => {
-  expect(notesOf({ ...take, files: take.files.slice(0, 2) })).toEqual([])
-  const midiOnly = { ...take, tracks: [], files: [{ position: 1, name: "Pads", mp3: false, flac: false, mid: true }] }
+  expect(notesOf({ ...take, notes: [] })).toEqual([])
+  const midiOnly = { ...take, tracks: [], notes: [{ position: 1, name: "Pads", icon: null }] }
   expect(notesOf(midiOnly)).toEqual([{ name: "Pads", file: "/files/t1/2/1.mid", port: "", after: null, place: 1 }])
+})
+
+test("a track of notes alone has its own icon, so a kit on any channel is drawn as one", () => {
+  const kit = { ...take, notes: [{ position: 4, name: "Pads", icon: "drums" }] }
+  expect(notesOf(kit)).toEqual([{ name: "Pads", file: "/files/t1/2/4.mid", icon: "drums", port: "", after: "Keys", place: 4 }])
 })
 
 test("the lanes of notes alone are the ones with no track of sound of their name", () => {

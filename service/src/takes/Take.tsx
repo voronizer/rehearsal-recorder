@@ -125,12 +125,14 @@ function Levels({ take, sound }: { take: TakePage; sound: ServiceSound }) {
 function useNotes(take: TakePage) {
   // The page is read again after every change; its files keep their identity unless they changed.
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  return useMemo(() => notesOf(take), [take.uid, take.gen, take.tracks, take.files])
+  return useMemo(() => notesOf(take), [take.uid, take.gen, take.tracks, take.notes])
 }
 
 /** РЭХА's player on the page itself, with no frame round it, as in РЭХА. */
 function Full({ take, notes }: { take: TakePage; notes: NotesFile[] }) {
   const sound = useServiceSound(take)
+  // РЭХА counts it after the take's files are up: until then, the click alone.
+  const drift = useMemo(() => ({ answer: take.drift, counting: false }), [take.drift])
   const player = useMultitrackPlayer(sound.tracks, take.duration_sec, null, sound)
   const { open } = usePanel()
   useRehaLabels()
@@ -146,8 +148,11 @@ function Full({ take, notes }: { take: TakePage; notes: NotesFile[] }) {
       <div data-take-player className="flex flex-col">
         <RehaPlayer
           player={player}
-          // Master's level and meter, with no click: the service plays none (Alex's pick, 2026-11-03).
+          // No click button: the service plays none (Alex's pick, 2026-11-03). Master's lane is as in
+          // РЭХА, the click's stripes and the band's tempo РЭХА counted (his picks, 2026-11-03 22:24 and 22:26).
           click={false}
+          take={take.meter}
+          drift={drift}
           notes={notes}
           markers={markers}
           onAddMarker={(at) => open({ kind: "mark", uid: take.uid, at })}

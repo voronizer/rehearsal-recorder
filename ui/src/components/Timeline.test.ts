@@ -3,6 +3,7 @@ import { renderToStaticMarkup } from "react-dom/server"
 import { describe, expect, it, vi } from "vitest"
 import { Timeline } from "@/components/Timeline"
 import type { MultitrackPlayer } from "@/hooks/useMultitrackPlayer"
+import type { TakeClick } from "@/lib/metronome"
 
 // The app's stores (labels, the system's keys) give no snapshot of their own
 // for a page drawn on a server; here the one they have does.
@@ -59,8 +60,8 @@ const player = {
   persistMaster: noop,
 } as unknown as MultitrackPlayer
 
-const timeline = (click?: boolean) =>
-  renderToStaticMarkup(createElement(Timeline, { player, click }))
+const timeline = (click?: boolean, take?: TakeClick | null) =>
+  renderToStaticMarkup(createElement(Timeline, { player, click, take }))
 
 describe("the timeline's Master row", () => {
   it("is under the tracks, with the click's button and lane, by default", () => {
@@ -71,7 +72,14 @@ describe("the timeline's Master row", () => {
     expect(out).toContain("Bass")
   })
 
-  it("with no click, as in the band's service, is Master's level and meter alone", () => {
+  it("with no click button but a take's click known, as in the band's service, has the lane and no button", () => {
+    const out = timeline(false, { tempo: 120, signature: "4/4", click: true })
+    expect(out).toContain("data-master-group")
+    expect(out).not.toContain("data-master-click")
+    expect(out).toContain("data-master-lane")
+  })
+
+  it("with no click button and nothing known of the take's click, is Master's level and meter alone", () => {
     const out = timeline(false)
     expect(out).toContain("data-master-group")
     expect(out).toContain('aria-label="Master volume"')

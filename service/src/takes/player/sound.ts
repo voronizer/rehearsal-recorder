@@ -3,6 +3,7 @@ import type { PlayerState, TakeNotes, TrackFile, TrackMedia } from "@/lib/api"
 import type { PlayerSound } from "@/lib/playerSound"
 import { keepLevels, levelsQuery, peaksQuery, queryClient, type TakePage } from "../../api"
 import { levelOf } from "./levels"
+import { withMute, withSolo } from "./desk"
 import { keepMaster } from "./master"
 import { readNotes } from "./notes"
 import { useOne, type One, type Setup } from "./one"
@@ -179,7 +180,7 @@ export function serviceSound(take: TakePage, one: One): ServiceSound {
       const i = names.indexOf(name)
       if (i >= 0) {
         if (mine()) one.setMute(uid, i, on)
-        else muted = on ? [...new Set([...muted, i])] : muted.filter((x) => x !== i)
+        else ({ muted, solo } = withMute({ muted, solo }, i, on))
       }
       return state()
     },
@@ -187,7 +188,7 @@ export function serviceSound(take: TakePage, one: One): ServiceSound {
       const i = name === null ? null : names.indexOf(name)
       if (i !== -1) {
         if (mine()) one.setSolo(uid, i)
-        else solo = i
+        else ({ muted, solo } = withSolo({ muted, solo }, i))
       }
       return state()
     },

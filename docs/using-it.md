@@ -410,8 +410,10 @@ rehearsal into the next.
 - Balance the band with the fader under each track name. **M**, after the
   fader, mutes a track, and **S**, after **M**, plays it on its own. A
   pressed **M** is blue and a pressed **S** yellow, so you see at a glance
-  which tracks you muted or soloed. Volumes are remembered by track name, so
-  the next take starts with the same balance.
+  which tracks you muted or soloed. On one track only one of them is on:
+  **S** on a muted track turns its **M** off, and **M** on the soloed track
+  turns its **S** off. Volumes are remembered by track name, so the next
+  take starts with the same balance.
 - Turn the whole take up or down with **Master** under the tracks. It only
   changes how loud you hear it. The balance and the copy sent to the cloud
   stay as they are. The app remembers it for the next take. Its meter shows
@@ -804,6 +806,16 @@ turns the whole take up or down on that phone or computer only. On a
 computer, a track that recorded MIDI shows its notes as in РЭХА's player, and
 they are not played; on a phone its row has the MIDI sign.
 
+On a computer, Master's row also shows where the band drifted, as in РЭХА
+(see [Where the band drifted](#where-the-band-drifted)), with the click's
+bars behind the line. РЭХА works the tempo out once all of a take's files are
+up, the FLAC files too, so the line can come a while after the band can play
+the take. For takes
+already in the service before you updated РЭХА, it does the same in the
+background, one take at a time; a take whose files are no longer on this
+computer gets no line. The service marks drift past 2%: **Drift shown past**
+is a setting in РЭХА only.
+
 ### The key
 
 A key is one line of text: the service's address and a secret, such as
@@ -1025,7 +1037,9 @@ In the player, a track's notes are a lane of their own. On **Both** they are
 the next lane under the track's audio, and share its dark background, under a
 thin line; on **MIDI** they are in the track's own place among the lanes, on a
 background of their own. On the left the lane says “Saved as .mid, not played
-here”, and it has no **M**, **S** or fader, as there is nothing to hear. A kit
+here”, and it has no **M**, **S** or fader, as there is nothing to hear. The
+notes go paler with their track's waveform when the track is muted or another
+is soloed; notes of a track on **MIDI** go paler while any track is soloed. A kit
 is drawn in six rows, Crash, Ride, Hi-hat, Toms, Snare and Kick; anything
 else, by pitch. A track with the drums icon is drawn as a kit, and so is one
 whose notes are all on MIDI channel 10. A track with no notes in a take says

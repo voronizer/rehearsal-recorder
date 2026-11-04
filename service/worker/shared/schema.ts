@@ -164,7 +164,27 @@ export const accountRelations = relations(account, ({ one }) => ({
 // The service's own.
 
 export type Track = { position: number; name: string; icon: string | null; files: string[] }
-export type Notes = { position: number; name: string; file: string }
+/** `icon` is the track's, which РЭХА 0.21 and older did not send. */
+export type Notes = { position: number; name: string; file: string; icon?: string | null }
+/** A take's click as РЭХА keeps it: its tempo and signature, and whether it
+ *  was recorded to the click. A take recorded with the click off has a tempo
+ *  and `click` false. */
+export type Meter = { tempo: number | null; signature: "4/4" | "3/4" | "2/4" | "6/8" | null; click: boolean }
+/** One bar of the band's tempo through a take, as РЭХА counts it; `tempo`
+ *  null where no beat was heard. */
+export type DriftBar = { n: number; start: number; end: number; tempo: number | null }
+/** The band's tempo through a take, as РЭХА's take_drift answers it (its
+ *  audio/drift.py), for the line along Master's lane. */
+export type Drift =
+  | {
+      ok: true
+      source: "drums-mid" | "drums" | "mix"
+      per_bar: number
+      middle: number
+      aim: { tempo: number; signature: "4/4" | "3/4" | "2/4" | "6/8"; from: "click" | "take" | "song" | "middle"; song: string | null }
+      bars: DriftBar[]
+    }
+  | { ok: false; why: "short" | "no-beat" }
 
 export const rehearsal = sqliteTable("rehearsal", {
   uid: text("uid").primaryKey(),
@@ -283,6 +303,12 @@ export const take = sqliteTable(
     updatedAt: text("updated_at").notNull(),
     /** The wave a list draws (takes/shape.ts); null until it is made. */
     shape: text("shape", { mode: "json" }).$type<number[]>(),
+    /** Its click; null for a take РЭХА 0.21 or older sent. */
+    meter: text("meter", { mode: "json" }).$type<Meter>(),
+    /** The band's tempo through it, counted by РЭХА, and the generation it
+     *  was counted for; both null until РЭХА sends it. */
+    drift: text("drift", { mode: "json" }).$type<Drift>(),
+    driftGen: integer("drift_gen"),
   },
   (table) => [index("take_rehearsal_idx").on(table.rehearsalUid), index("take_song_idx").on(table.songId)]
 )

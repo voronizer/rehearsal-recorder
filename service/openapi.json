@@ -237,6 +237,12 @@
                 },
                 "file": {
                   "type": "string"
+                },
+                "icon": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
                 }
               },
               "required": [
@@ -281,6 +287,9 @@
             "exclusiveMinimum": 0,
             "maximum": 999
           },
+          "meter": {
+            "$ref": "#/components/schemas/Meter"
+          },
           "by_hand": {
             "type": "boolean"
           }
@@ -298,6 +307,174 @@
           "tracks",
           "notes",
           "marks"
+        ]
+      },
+      "Meter": {
+        "type": "object",
+        "properties": {
+          "tempo": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "exclusiveMinimum": 0,
+            "maximum": 999
+          },
+          "signature": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "4/4",
+              "3/4",
+              "2/4",
+              "6/8",
+              null
+            ]
+          },
+          "click": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "tempo",
+          "signature",
+          "click"
+        ]
+      },
+      "Drift": {
+        "oneOf": [
+          {
+            "type": "object",
+            "properties": {
+              "ok": {
+                "type": "boolean",
+                "enum": [
+                  true
+                ]
+              },
+              "source": {
+                "type": "string",
+                "enum": [
+                  "drums-mid",
+                  "drums",
+                  "mix"
+                ]
+              },
+              "per_bar": {
+                "type": "number",
+                "exclusiveMinimum": 0
+              },
+              "middle": {
+                "type": "number",
+                "exclusiveMinimum": 0
+              },
+              "aim": {
+                "type": "object",
+                "properties": {
+                  "tempo": {
+                    "type": "number",
+                    "exclusiveMinimum": 0
+                  },
+                  "signature": {
+                    "type": "string",
+                    "enum": [
+                      "4/4",
+                      "3/4",
+                      "2/4",
+                      "6/8"
+                    ]
+                  },
+                  "from": {
+                    "type": "string",
+                    "enum": [
+                      "click",
+                      "take",
+                      "song",
+                      "middle"
+                    ]
+                  },
+                  "song": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  }
+                },
+                "required": [
+                  "tempo",
+                  "signature",
+                  "from",
+                  "song"
+                ]
+              },
+              "bars": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "n": {
+                      "type": "integer",
+                      "minimum": 1
+                    },
+                    "start": {
+                      "type": "number",
+                      "minimum": 0
+                    },
+                    "end": {
+                      "type": "number",
+                      "minimum": 0
+                    },
+                    "tempo": {
+                      "type": [
+                        "number",
+                        "null"
+                      ],
+                      "exclusiveMinimum": 0
+                    }
+                  },
+                  "required": [
+                    "n",
+                    "start",
+                    "end",
+                    "tempo"
+                  ]
+                },
+                "maxItems": 20000
+              }
+            },
+            "required": [
+              "ok",
+              "source",
+              "per_bar",
+              "middle",
+              "aim",
+              "bars"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "ok": {
+                "type": "boolean",
+                "enum": [
+                  false
+                ]
+              },
+              "why": {
+                "type": "string",
+                "enum": [
+                  "short",
+                  "no-beat"
+                ]
+              }
+            },
+            "required": [
+              "ok",
+              "why"
+            ]
+          }
         ]
       },
       "Gone": {
@@ -1176,6 +1353,47 @@
               "$ref": "#/components/schemas/Mark"
             }
           },
+          "notes": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "position": {
+                  "type": "number"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "icon": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                }
+              },
+              "required": [
+                "position",
+                "name",
+                "icon"
+              ]
+            }
+          },
+          "meter": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/Meter"
+              },
+              {
+                "type": [
+                  "object",
+                  "null"
+                ]
+              }
+            ]
+          },
+          "drift": {
+            "$ref": "#/components/schemas/Drift"
+          },
           "files": {
             "type": "array",
             "items": {
@@ -1235,6 +1453,9 @@
           "starred_by_me",
           "starred_at_rehearsal",
           "marks",
+          "notes",
+          "meter",
+          "drift",
           "files",
           "flac_coming",
           "trashed_at"
@@ -1890,7 +2111,7 @@
     },
     "/api/reha/takes/{uid}": {
       "put": {
-        "description": "A take's details: made, or brought up to date. A take РЭХА removed comes out of the trash; one the band deleted, or one that went with its song, only when sent `by_hand`. `in_trash` says it is still there.",
+        "description": "A take's details: made, or brought up to date. A take РЭХА removed comes out of the trash; one the band deleted, or one that went with its song, only when sent `by_hand`. `in_trash` says it is still there; `drift_gen` is the generation whose tempo the service has.",
         "security": [
           {
             "rehaKey": []
@@ -1942,11 +2163,18 @@
                     },
                     "in_trash": {
                       "type": "boolean"
+                    },
+                    "drift_gen": {
+                      "type": [
+                        "number",
+                        "null"
+                      ]
                     }
                   },
                   "required": [
                     "ok",
-                    "in_trash"
+                    "in_trash",
+                    "drift_gen"
                   ]
                 }
               }
@@ -2055,9 +2283,114 @@
         }
       }
     },
+    "/api/reha/takes/{uid}/drift": {
+      "put": {
+        "description": "The band's tempo through a generation of the take, for the line along Master's lane, or why it has none. РЭХА counts it once the take's files are up. One for a generation РЭХА has moved on from is not kept.",
+        "security": [
+          {
+            "rehaKey": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "required": true,
+            "name": "uid",
+            "in": "path"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "example": "0.17.0"
+            },
+            "required": true,
+            "name": "x-reha-version",
+            "in": "header"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "gen": {
+                    "type": "integer",
+                    "minimum": 1
+                  },
+                  "drift": {
+                    "$ref": "#/components/schemas/Drift"
+                  }
+                },
+                "required": [
+                  "gen",
+                  "drift"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Done",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Ok"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Not as the service expects",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in, or the key does not work",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not there",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "426": {
+            "description": "РЭХА is too old for the service",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/reha/takes": {
       "get": {
-        "description": "Every take the service has: whether it is in the trash, and which generation's MP3s and FLAC files are up. РЭХА asks when it starts and every hour, to learn what the band deleted or put back.",
+        "description": "Every take the service has: whether it is in the trash, which generation's MP3s and FLAC files are up, and which generation's tempo it has. РЭХА asks when it starts and every hour, to learn what the band deleted or put back, and which takes still need their tempo.",
         "security": [
           {
             "rehaKey": []
@@ -2101,13 +2434,20 @@
                           "number",
                           "null"
                         ]
+                      },
+                      "drift_gen": {
+                        "type": [
+                          "number",
+                          "null"
+                        ]
                       }
                     },
                     "required": [
                       "uid",
                       "trashed",
                       "mp3_gen",
-                      "flac_gen"
+                      "flac_gen",
+                      "drift_gen"
                     ]
                   }
                 }

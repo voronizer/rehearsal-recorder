@@ -237,6 +237,23 @@ def main():
     p.set_solo("B")
     ok("solo leaves one", abs(int(settle(p)[:, 0].mean()) - 2000) < 30)
     p.set_solo(None)
+    # M and S on one track take each other off: both are never lit. From
+    # the start again: each settling spends a part of the two-second take.
+    p.seek(0)
+    p.set_muted("B", True)
+    p.set_solo("B")
+    ok("S on a muted track takes its M off, and it plays alone",
+       p.state()["muted"] == [] and p.state()["soloed"] == "B"
+       and abs(int(settle(p)[:, 0].mean()) - 2000) < 30)
+    p.set_muted("B", True)
+    ok("M on the soloed track takes its S off",
+       p.state()["muted"] == ["B"] and p.state()["soloed"] is None
+       and abs(int(settle(p)[:, 0].mean()) - 1000) < 30)
+    p.set_solo("A")
+    ok("S on another track leaves a muted one muted", p.state()["muted"] == ["B"] and p.state()["soloed"] == "A")
+    p.set_solo(None)
+    p.set_muted("B", False)
+    p.seek(0)
     p.set_volume("A", 0.5)
     p.set_volume("B", 0.0)
     ok("volume applies", abs(int(settle(p)[:, 0].mean()) - 500) < 30)
