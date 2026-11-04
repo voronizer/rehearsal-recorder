@@ -757,6 +757,11 @@ class Backing:
             self._stop_free()
         return {"ok": True}
 
+    def sounding(self):
+        """Whether ▶ or Settings' two seconds play now: the band service's
+        sending and the cloud folder's copies wait for it (Api._sound_busy)."""
+        return self._free is not None
+
     def _stop_free(self):
         with STREAM_LOCK:
             with self._lock:

@@ -7,6 +7,14 @@ opening.
 
 ## Unreleased
 
+- **Sending to the band service waits while you listen.** While a take, a
+  backing track or the click plays, РЭХА stops making MP3 and FLAC files
+  and sending them, and goes on once you pause, as it already did while a
+  take records. Copies to a cloud folder wait the same way. Before, the
+  sending started right after **Stop**, and a take you listened to then
+  could skip. The rehearsal screen made it skip too: while takes waited to
+  be sent, it read the whole rehearsal every 1.5 seconds. Now it asks only
+  which takes are on their way.
 - **The band service shows a track's MIDI notes.** A track that recorded
   MIDI has its notes in the take's player, as in РЭХА: under its sound, or
   in a lane of its own for a track that recorded notes only. They are not

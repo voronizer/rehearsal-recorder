@@ -110,7 +110,11 @@ def _flac_subtype(source_subtype):
     return "PCM_16" if source_subtype == "PCM_16" else "PCM_24"
 
 
-def encode(src, fmt, dst=None, progress=None):
+class _Stopped(Exception):
+    """`stop` said so between two blocks."""
+
+
+def encode(src, fmt, dst=None, progress=None, stop=None):
     """
     Converts src into fmt, next to it unless dst says otherwise, and removes
     the wav it came from — this is the cloud copy, the recording itself is
@@ -123,6 +127,10 @@ def encode(src, fmt, dst=None, progress=None):
 
     `progress(fraction)`, when given, hears how far along it is, by frames
     read, and 1.0 however it ends — it never fails the caller either.
+
+    `stop()`, when given, is asked between blocks: true, and what was written
+    goes, the source stays, and the answer says {"stopped": True}. The band
+    service's files stop so when something starts playing (sending/).
     """
     def finished(answer):
         if progress is not None:
@@ -162,10 +170,16 @@ def encode(src, fmt, dst=None, progress=None):
                 for block in fin.blocks(
                     blocksize=BLOCK_FRAMES, dtype="int32", always_2d=True
                 ):
+                    if stop is not None and stop():
+                        raise _Stopped()
                     fout.write(block)
                     read += len(block)
                     if progress is not None:
                         progress(min(1.0, read / total))
+    except _Stopped:
+        Path(dst).unlink(missing_ok=True)
+        return finished({"ok": False, "stopped": True, "file": str(src), "format": "wav",
+                         "note": "Stopped before it was done"})
     except Exception as e:
         Path(dst).unlink(missing_ok=True)
         return finished({"ok": True, "file": str(src), "format": "wav",

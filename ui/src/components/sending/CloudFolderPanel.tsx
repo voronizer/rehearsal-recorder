@@ -174,7 +174,7 @@ export function CloudFolderPanel({
             </div>
             <p className="pl-7 text-xs text-muted-foreground">
               Every take you keep is copied to the cloud folder on its own,
-              between takes rather than while one is recording.
+              while nothing records or plays.
             </p>
           </div>
 

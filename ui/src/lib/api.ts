@@ -327,6 +327,14 @@ export type Draft = {
   created_at: string
 }
 
+/** A rehearsal's takes on their way, as its session has them: what the
+ *  rehearsal screen asks for while there are any (`sending_queue`). */
+export type SendingQueue = {
+  cloud_queue?: Record<number, "queued" | "working">
+  service_queue?: Record<number, "queued" | "working">
+  service_up?: number[]
+}
+
 export type SessionState =
   | { active: false }
   | {
@@ -353,6 +361,8 @@ export type SessionState =
       cloud_queue?: Record<number, "queued" | "working">
       /** And the takes waiting for the band service, or going there. */
       service_queue?: Record<number, "queued" | "working">
+      /** The takes on their way to the band service whose MP3s are up. */
+      service_up?: number[]
       /** How much of the disk the rehearsal's folder uses, for the header. */
       disk_bytes?: number
     }
@@ -1197,6 +1207,8 @@ type PyApi = {
     Ok<{ formats?: Record<string, number[]>; trouble?: string }>
   >
   session_state(): Promise<SessionState>
+  /** The session's takes on their way, and nothing else of it. */
+  sending_queue(): Promise<SendingQueue>
   finish_rehearsal(): Promise<
     Ok<{ folder?: string; take_count?: number; folder_removed?: boolean }>
   >
@@ -1735,6 +1747,7 @@ const ANSWERS_WITH_A_VALUE = new Set<keyof PyApi>([
   "load_default_tracks",
   "take_media",
   "session_state",
+  "sending_queue",
   "get_levels",
   "monitor_levels",
   "monitor_health",
@@ -1850,6 +1863,7 @@ type Pollable = {
   activity: Activity
   recording_health: RecordingHealth
   session_state: SessionState
+  sending_queue: SendingQueue
   update_status: UpdateStatus
   /** The click's phase and what is heard next, for the beat's light. */
   metronome_state: MetronomeState

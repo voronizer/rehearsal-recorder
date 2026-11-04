@@ -286,7 +286,7 @@ def run(tmp, fake):
     n_fault = keep("Kupalle", band=["Drums"])
     real_make = service_files.make
 
-    def broken(item, dst):
+    def broken(item, dst, stop=None):
         raise RuntimeError("disk on fire")
 
     service_files.make = broken
@@ -330,9 +330,9 @@ def run(tmp, fake):
     uid_make = uid_of(n_make)
     moved, waits = [], []
 
-    def make_then_rename(item, dst):
+    def make_then_rename(item, dst, stop=None):
         waits.append(api._names_must_wait())
-        real_make(item, dst)
+        real_make(item, dst, stop=stop)
         if not moved:
             moved.append(api.rename_take(folder(), n_make, "Kupalle")["ok"])
 
@@ -362,6 +362,111 @@ def run(tmp, fake):
     api._recorder = None
     drain()
     ok("and it carries on after the take", take(n_rec)["service"]["up"])
+
+    # Playing is waited for as recording is: a take, a song's backing track,
+    # the click between takes (Api._sound_busy). The take here; the others
+    # are the same question, asked in test_engine.py.
+    from rehearsal_recorder.audio.player import TakePlayer
+
+    def line_of(n):
+        return next((e for e in entries() if e["state"] == "running" and e["take_number"] == n), None)
+
+    n_play = keep("Palyn", band=["Drums"], seconds=6.0)
+    uid_play = uid_of(n_play)
+    listened = TakePlayer([{"name": "Drums", "file": take(n_play)["tracks"][0]["file"]}])
+    api._player = listened
+    listened.play()
+    ok("nothing goes while a take plays",
+       service().run_next() is False and fake.count(f"part {uid_play} ") == 0)
+    listened.pause()
+
+    def play_on_part(words):
+        if words.startswith(f"part {uid_play} 1.mp3 1") and not listened.playing:
+            listened.play()
+
+    fake.on_call = play_on_part
+    service().run_next()
+    fake.on_call = None
+    line = line_of(n_play)
+    ok("Play stops the sending at the next part, and its line says why",
+       fake.count(f"part {uid_play} ") == 1 and not take(n_play)["service"]["up"]
+       and line is not None and line["step"] == band_service.PLAYING_STEP
+       and service().run_next() is False)
+    listened.pause()
+    drain()
+    ok("and it carries on once the take is paused", take(n_play)["service"]["up"])
+
+    # Play pressed while an MP3 is being made: it stops between two blocks,
+    # leaves nothing behind, and is made again from its start.
+    n_block = keep("Palyn", band=["Drums"], seconds=6.0)
+    uid_block = uid_of(n_block)
+    real_make = service_files.make
+    pressed = []
+
+    def play_while_making(item, dst, stop=None):
+        if item["kind"] == "mp3" and not pressed:
+            pressed.append(dst)
+            listened.play()
+        return real_make(item, dst, stop=stop)
+
+    service_files.make = play_while_making
+    try:
+        service().run_next()
+    finally:
+        service_files.make = real_make
+    line = line_of(n_block)
+    made = pressed[0] if pressed else None
+    ok("Play stops an MP3 being made, and nothing of it is left",
+       made is not None and not made.exists() and not made.with_name(made.name + ".wav").exists()
+       and fake.count(f"part {uid_block} ") == 0
+       and line is not None and line["step"] == band_service.PLAYING_STEP)
+    listened.pause()
+    drain()
+    up = fake.names_of(uid_block, 1)
+    ok("and after the pause it is made whole and goes",
+       take(n_block)["service"]["up"] and "1.mp3" in up and len(up["1.mp3"]) > 0)
+    api._player = None
+    listened.close()
+
+    # The rehearsal screen asks only this while takes are on their way
+    # (Api.sending_queue), and reads the whole session once it changes. A
+    # take's MP3s getting there is the one change its row shows before it
+    # leaves the queue, so the answer says it.
+    n_up = keep("Palyn", band=["Drums"], seconds=6.0)
+    uid_up = uid_of(n_up)
+    asked = []
+
+    def ask_at_flac(words):
+        if words.startswith(f"part {uid_up} 1.flac") and not asked:
+            asked.append(api.sending_queue())
+
+    fake.on_call = ask_at_flac
+    drain()
+    fake.on_call = None
+    during = asked[0] if asked else {}
+    after = api.sending_queue()
+    ok("the screen's light question names a take whose MP3s are up while its FLAC goes",
+       during.get("service_queue", {}).get(n_up) == "working" and n_up in during.get("service_up", []))
+    ok("and leaves it out once all of it is up",
+       n_up not in after["service_queue"] and n_up not in after["service_up"]
+       and {k: api.session_state()[k] for k in after} == after)
+
+    stops = []
+
+    def stop_at_second_block():
+        stops.append(True)
+        return len(stops) >= 2
+
+    long_item = service_files.plan(take(n_block), {"flac"})[0]
+    cut_short = tmp / "cut-short" / "1.flac"
+    try:
+        service_files.make(long_item, cut_short, stop=stop_at_second_block)
+        stopped = False
+    except service_files.Stopped:
+        stopped = True
+    ok("a file being made asks between blocks, and stops when told",
+       stopped and len(stops) == 2 and not cut_short.exists()
+       and not cut_short.with_name("1.flac.wav").exists())
 
     lanes = {"take_number": 1, "tracks": [{"name": "Drums", "file": "a.wav"}, {"name": "Click", "file": None},
                                           {"name": "Bass", "file": "b.wav"}],

@@ -192,6 +192,31 @@ test("the take says it is waiting for the band service", async ({ page }) => {
   await expect(overview.getByLabel("In the band service", { exact: true })).toBeVisible()
 })
 
+// The whole session is about 16 ms of Python, and asked for every 1.5 s it
+// made a take skip as it played: while a take waits, the screen asks only
+// which takes are on their way, and reads the session once that changes.
+test("while a take waits, the screen asks only which takes are on their way", async ({ page }) => {
+  type Bridge = { pywebview: { api: Record<string, (...a: unknown[]) => unknown> }; __READS__: number }
+  const overview = await openTonight(page, WITH_KEY)
+  await page.evaluate(() => {
+    const w = window as unknown as Bridge
+    const real = w.pywebview.api.session_state
+    w.__READS__ = 0
+    w.pywebview.api.session_state = (...a: unknown[]) => {
+      w.__READS__ += 1
+      return real(...a)
+    }
+  })
+  await overview.getByRole("button", { name: "Send Viasna 1 to the band service" }).click()
+  await expect(overview.getByText("Waiting for the band service")).toBeVisible()
+  const reads = await page.evaluate(() => (window as unknown as Bridge).__READS__)
+  await expect.poll(() => callCount(page, "sending_queue")).toBeGreaterThanOrEqual(2)
+  expect(await page.evaluate(() => (window as unknown as Bridge).__READS__)).toBe(reads)
+  await page.evaluate(() => (window as unknown as { __serviceUp: (n: number) => void }).__serviceUp(2))
+  await expect(overview.getByLabel("In the band service", { exact: true })).toBeVisible()
+  expect(await page.evaluate(() => (window as unknown as Bridge).__READS__)).toBe(reads + 1)
+})
+
 test("the background list shows MP3s and FLAC counts", async ({ page }) => {
   await openApp(page, {
     before: `window.__ACTIVITY__ = ${JSON.stringify([
