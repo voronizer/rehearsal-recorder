@@ -17,8 +17,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: rtmixer-probe
-  cancel-in-progress: true
+  group: rtmixer-probe-${{ github.sha }}
 
 jobs:
   windows:
@@ -54,6 +53,8 @@ jobs:
           $exe = Get-ChildItem $env:RUNNER_TEMP -Filter "FlexASIO-*.exe" | Select-Object -First 1
           Write-Host "Installing $($exe.Name)"
           Start-Process -Wait -FilePath $exe.FullName -ArgumentList "/VERYSILENT","/SUPPRESSMSGBOXES","/NORESTART","/SP-"
+          # An empty FlexASIO.log in the profile turns its log on.
+          New-Item -ItemType File -Path "$env:USERPROFILE\FlexASIO.log" -Force | Out-Null
 
       - name: Devices
         shell: bash
@@ -65,7 +66,7 @@ jobs:
         run: |
           for buf in 1024 256; do
             printf 'backend = "Windows WASAPI"\nbufferSizeSamples = %s\n\n[input]\ndevice = ""\n' "$buf" > "$USERPROFILE/FlexASIO.toml"
-            python probe.py --out-device FlexASIO --out-api ASIO --loop-device "CABLE Output" --loop-api MME \
+            python probe.py --out-device FlexASIO --out-api ASIO --loop-device "CABLE Output" --loop-api "Windows DirectSound" \
               --label "asio$buf" --results results.jsonl || echo "probe asio$buf failed"
           done
 
@@ -74,8 +75,8 @@ jobs:
         working-directory: .github/rtmixer-probe
         run: |
           for buf in 1024 256; do
-            printf 'backend = "Windows WASAPI"\nbufferSizeSamples = %s\n\n[output]\ndevice = ""\n\n[input]\ndeviceRegex = "CABLE Output"\n' "$buf" > "$USERPROFILE/FlexASIO.toml"
-            python rec_probe.py --in-device FlexASIO --in-api ASIO --tone-device "CABLE Input" --tone-api MME \
+            printf 'backend = "Windows WASAPI"\nbufferSizeSamples = %s\n' "$buf" > "$USERPROFILE/FlexASIO.toml"
+            python rec_probe.py --in-device FlexASIO --in-api ASIO --tone-device "VB-Audio Virtual Cable" --tone-api "Windows DirectSound" \
               --label "asio$buf" --results results.jsonl || echo "rec probe asio$buf failed"
           done
 
@@ -91,7 +92,9 @@ jobs:
         if: always()
         shell: bash
         working-directory: .github/rtmixer-probe
-        run: cat results.jsonl >> "$GITHUB_STEP_SUMMARY" || true
+        run: |
+          cat results.jsonl >> "$GITHUB_STEP_SUMMARY" || true
+          grep -iE "error|fail|unable|cannot" "$USERPROFILE/FlexASIO.log" | tail -40 || true
 
       - uses: actions/upload-artifact@v7
         if: always()
@@ -104,6 +107,8 @@ jobs:
           if-no-files-found: warn
 
   macos:
+    # Off while run 2's macos job is still waiting for a Mac.
+    if: false
     runs-on: macos-latest
     timeout-minutes: 40
     steps:
