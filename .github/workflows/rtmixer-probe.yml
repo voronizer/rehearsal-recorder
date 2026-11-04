@@ -110,11 +110,11 @@ jobs:
         working-directory: .github/rtmixer-probe
         run: |
           printf 'backend = "Windows WASAPI"\nbufferSizeSamples = 1024\n' > "$USERPROFILE/FlexASIO.toml"
+          # Run 16: one mark a second from all of a second's reads, the age as
+          # the stream's input latency (what today's ASIO times say).
           for i in 1 2; do
             python clockcheck.py 30 FlexASIO ASIO a ../../src || echo "clock a $i failed"
-            python clockcheck.py 30 FlexASIO ASIO b ../../src || echo "clock b $i failed"
-            python landing.py today FlexASIO ASIO ../../src || echo "landing today $i failed"
-            python landing.py rtmixer FlexASIO ASIO ../../src || echo "landing rtmixer $i failed"
+            python clockcheck.py 30 FlexASIO ASIO b ../../src 0.002 latency || echo "clock b $i failed"
           done
           python same_clock.py || echo "same clock failed"
 
@@ -205,10 +205,11 @@ jobs:
       - name: Notes' clock and the take's click
         working-directory: .github/rtmixer-probe
         run: |
+          # Run 16: one mark a second from all of a second's reads, the age
+          # learned or the stream's input latency.
           for i in 1 2; do
-            python clockcheck.py 30 BlackHole "Core Audio" both ../../src || echo "clock $i failed"
-            python landing.py today BlackHole "Core Audio" ../../src || echo "landing today $i failed"
-            python landing.py rtmixer BlackHole "Core Audio" ../../src || echo "landing rtmixer $i failed"
+            python clockcheck.py 30 BlackHole "Core Audio" both ../../src 0.002 latency || echo "clock latency $i failed"
+            python clockcheck.py 30 BlackHole "Core Audio" both ../../src 0.002 learn || echo "clock learn $i failed"
           done
           python same_clock.py || echo "same clock failed"
 
