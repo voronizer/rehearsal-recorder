@@ -15,8 +15,11 @@
 // They go up with the Worker as its secrets. A setting the repository lacks
 // stays as the Worker has it, so one typed into Cloudflare's dashboard
 // still counts. BETTER_AUTH_SECRET, which signs the band's sign-ins, is
-// made here once, when the Worker has none; after that it is never
-// touched, since a new one would sign the whole band out.
+// made here only for a Worker that is not there yet. A Worker already up
+// keeps the one it has, as a secret or as a plain variable typed into the
+// dashboard (keep_vars keeps those, and `wrangler secret list` does not
+// show them): a new one would sign the whole band out, as the first
+// deploy of this script did on 2026-11-04.
 //
 // In order: the database, the bucket and the queue are found, or made when
 // there are none; the database's id and the address are written into the
@@ -111,20 +114,21 @@ function databaseId() {
 }
 
 /**
- * The names of the Worker's secrets, or none for a Worker not made yet.
- * Anything else stops the job: guessing "none" would make a new
- * BETTER_AUTH_SECRET and sign the band out.
+ * Whether the Worker is up already: `wrangler secret list` answers for one
+ * that is and says "not found" for one that is not. Anything else stops the
+ * job: guessing "not there" would make a new BETTER_AUTH_SECRET and sign
+ * the band out.
  */
-function workerSecrets(name) {
+function workerIsUp(name) {
   const done = spawnSync("wrangler", ["secret", "list", "--name", name, "--config", BUILT], {
     stdio: ["ignore", "pipe", "pipe"],
     encoding: "utf8",
   })
   if (done.error) throw done.error
-  if (done.status === 0) return listIn(done.stdout, "secrets").map((s) => s.name)
+  if (done.status === 0) return true
   const said = `${done.stdout ?? ""}${done.stderr ?? ""}`
   process.stderr.write(said)
-  if (/Worker "[^"]+".* not found\./.test(said)) return []
+  if (/Worker "[^"]+".* not found\./.test(said)) return false
   stop(HINTS.settings)
 }
 
@@ -173,9 +177,9 @@ function main() {
   }
   writeFileSync(BUILT, JSON.stringify(config, null, 2) + "\n")
 
-  if (!workerSecrets(config.name).includes("BETTER_AUTH_SECRET")) {
+  if (!workerIsUp(config.name)) {
     settings.BETTER_AUTH_SECRET = randomBytes(20).toString("hex")
-    console.log("The Worker has no BETTER_AUTH_SECRET yet: one was made for it.")
+    console.log("A new Worker: a BETTER_AUTH_SECRET was made for it.")
   }
   const names = Object.keys(settings)
   console.log(names.length ? `Settings going up with the Worker: ${names.join(", ")}.` : "No settings from the repository.")

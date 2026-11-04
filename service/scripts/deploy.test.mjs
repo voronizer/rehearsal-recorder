@@ -204,14 +204,17 @@ test("settings the repository lacks stay as the Worker has them", () => {
   assert.equal(asked.at(-1), `wrangler deploy --config ${BUILT}`)
 })
 
-test("a new Worker gets a BETTER_AUTH_SECRET; one it has is never replaced", () => {
+test("only a new Worker gets a BETTER_AUTH_SECRET; one already up keeps its own", () => {
   const first = deploy({ ...ALL_THERE, secrets: null })
   assert.match(first.sent.BETTER_AUTH_SECRET, /^[0-9a-f]{40}$/)
   assert.doesNotMatch(first.out, new RegExp(first.sent.BETTER_AUTH_SECRET))
-  const without = deploy({ ...ALL_THERE, secrets: ["OWNER_EMAIL"] })
-  assert.match(without.sent.BETTER_AUTH_SECRET, /^[0-9a-f]{40}$/)
   const kept = deploy(ALL_THERE)
   assert.equal(kept.sent.BETTER_AUTH_SECRET, undefined)
+  // Typed into the dashboard as a plain variable, it is not among the
+  // secrets, and still signs the band's sign-ins.
+  const plain = deploy({ ...ALL_THERE, secrets: ["OWNER_EMAIL"] })
+  assert.equal(plain.sent.BETTER_AUTH_SECRET, undefined)
+  assert.doesNotMatch(plain.out, /BETTER_AUTH_SECRET/)
 })
 
 test("when the Worker's settings cannot be read, nothing goes up and no secret is made", () => {
