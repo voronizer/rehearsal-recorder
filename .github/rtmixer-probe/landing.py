@@ -9,6 +9,7 @@ where today's does.
 usage: landing.py MODE DEVICE-SUBSTRING HOSTAPI [src]   (MODE: today | rtmixer)"""
 import sys, time, json
 sys.path.insert(0, sys.argv[4] if len(sys.argv) > 4 else "src")
+import rehearsal_recorder  # noqa: F401  (ASIO on before sounddevice loads)
 import numpy as np, sounddevice as sd, rtmixer
 from rehearsal_recorder.audio.click_timing import round_trip_frames
 

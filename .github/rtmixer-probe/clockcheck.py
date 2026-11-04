@@ -11,6 +11,7 @@ against A's at A's block starts, which are block starts of B's too.
 a or b alone (ASIO allows one stream a process): their ages and jitter."""
 import sys, threading, time, json
 sys.path.insert(0, sys.argv[5] if len(sys.argv) > 5 else "src")
+import rehearsal_recorder  # noqa: F401  (ASIO on before sounddevice loads)
 import numpy as np, sounddevice as sd, rtmixer
 from rehearsal_recorder.midi.clock import AudioClock
 from rehearsal_recorder.audio.capture import _block_age

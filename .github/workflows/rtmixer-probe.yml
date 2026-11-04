@@ -116,6 +116,7 @@ jobs:
             python landing.py today FlexASIO ASIO ../../src || echo "landing today $i failed"
             python landing.py rtmixer FlexASIO ASIO ../../src || echo "landing rtmixer $i failed"
           done
+          python same_clock.py || echo "same clock failed"
 
       - name: Frozen, also from a second process
         if: false  # run 12 has it
@@ -209,6 +210,7 @@ jobs:
             python landing.py today BlackHole "Core Audio" ../../src || echo "landing today $i failed"
             python landing.py rtmixer BlackHole "Core Audio" ../../src || echo "landing rtmixer $i failed"
           done
+          python same_clock.py || echo "same clock failed"
 
       - name: Frozen, also from a second process
         if: false  # run 12 has it
