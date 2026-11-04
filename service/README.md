@@ -189,9 +189,10 @@ alone and runs `scripts/deploy.mjs` on that build:
    the build's `dist/reha_band/wrangler.json`. `wrangler.jsonc` here keeps
    `local`.
 3. It applies the migrations D1 has not had yet, and puts the Worker up
-   with the settings the repository has. When the Worker has no
-   `BETTER_AUTH_SECRET`, it makes one; one the Worker has is never
-   replaced, since a new one would sign the whole band out.
+   with the settings the repository has. A Worker going up for the first
+   time gets a `BETTER_AUTH_SECRET` made for it. A Worker already up keeps
+   its own, a secret or a plain variable typed into the dashboard, since a
+   new one would sign the whole band out.
 
 When Cloudflare refuses a step, the job's error says which tick the token
 most likely lacks. On a computer, `npm run deploy` builds and then does the
