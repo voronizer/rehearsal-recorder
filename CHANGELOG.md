@@ -5,7 +5,7 @@ versioning](https://semver.org/): until 1.0 the shape of things can still
 move, though recordings on disk are never left behind — old rehearsals keep
 opening.
 
-## Unreleased
+## 0.23.0
 
 - **Icons in place of words.** A lane of notes in the player has its **M**
   pressed for good and faded, where a track's **M** is: the notes are saved
