@@ -274,7 +274,8 @@ function TrackList({ take, kind, onBack, onDone }: { take: TakePage; kind: Kind;
           </Button>
         }
         action={
-          <Button disabled={!n} onClick={download}>
+          // The row pressed to come here is gone: the keyboard starts on the button Enter presses.
+          <Button autoFocus disabled={!n} onClick={download}>
             Download {count(n, "file")}
           </Button>
         }

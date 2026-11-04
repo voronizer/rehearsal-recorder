@@ -94,7 +94,17 @@ const browser: MixWays = {
   },
   // Loaded on the first mix, as a file of its own.
   encoder: async () => (await import("./encoder")).mp3Encoder(),
-  pause: () => new Promise((go) => setTimeout(go, 0)),
+  // A message to itself, not a timer: in a tab out of sight a browser lets a
+  // timer go once a second at most, and the mix would take minutes.
+  pause: () =>
+    new Promise((go) => {
+      const channel = new MessageChannel()
+      channel.port1.onmessage = () => {
+        channel.port1.close()
+        go()
+      }
+      channel.port2.postMessage(null)
+    }),
 }
 
 /** How much of the work the fetching and decoding are; encoding takes the rest. Measured: 4 s of 14 for six 5-minute tracks. */

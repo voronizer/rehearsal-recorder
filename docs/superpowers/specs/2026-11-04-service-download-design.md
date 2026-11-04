@@ -174,8 +174,9 @@ All of it is in the pages; the Worker and РЭХА do not change.
   into one buffer, then turns it down if needed and encodes it.
 - The encoder is LAME, the MP3 encoder РЭХА's libsndfile uses too, built
   for the browser by the `wasm-media-encoders` package (0.7.0, MIT; LAME
-  itself is LGPL). It is about 66 KB and loaded only when **The mix** is
-  pressed, as a file of its own. Browsers cannot make MP3 by themselves.
+  itself is LGPL). It is about 130 KB, 66 KB as it travels compressed,
+  and loaded only when **The mix** is pressed, as a file of its own.
+  Browsers cannot make MP3 by themselves.
 - What the page plays now (levels, M, S) comes from the take's sound
   (`useServiceSound`), the same state the desk and the lanes draw.
 - The take page's answer (`TakePage.files`) already says which files each

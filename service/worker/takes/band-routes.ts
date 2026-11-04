@@ -45,7 +45,7 @@ const TakePage = z
     /** The band's tempo through the generation the band hears; null until
      *  РЭХА has counted it. */
     drift: Drift.nullable(),
-    /** What **Download tracks** offers; `mid` is null for a track with no notes. */
+    /** The files **Download** lists; `mid` is null for a track with no notes. */
     files: z.array(
       z.object({ position: z.number(), name: z.string(), mp3: z.boolean(), flac: z.boolean(), mid: z.boolean().nullable() })
     ),
