@@ -1,0 +1,146 @@
+# A probe for the skips fix, on this branch only: never merged. Plays a take
+# through real sound drivers on Windows (ASIO, through FlexASIO) and macOS
+# (Core Audio) the way the app plays now and through rtmixer, under load,
+# records what came out through a loopback device, and freezes rtmixer with
+# PyInstaller to see it play from a bundle. See .github/rtmixer-probe/.
+
+name: rtmixer probe
+
+on:
+  push:
+    branches: [claude/project-thread-09lvgc]
+    paths:
+      - .github/rtmixer-probe/**
+      - .github/workflows/rtmixer-probe.yml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: rtmixer-probe
+  cancel-in-progress: true
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+
+      - name: Install
+        shell: bash
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e . rtmixer==0.1.7 pyinstaller
+
+      # A virtual cable: what is played into "CABLE Input" comes out of
+      # "CABLE Output", where a second process records it.
+      - uses: LABSN/sound-ci-helpers@v1
+
+      - name: FlexASIO, an ASIO driver over Windows audio
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          Set-Service Audiosrv -StartupType Automatic -ErrorAction SilentlyContinue
+          Start-Service Audiosrv -ErrorAction SilentlyContinue
+          gh release download --repo dechamps/FlexASIO --pattern "FlexASIO-*.exe" --dir $env:RUNNER_TEMP
+          $exe = Get-ChildItem $env:RUNNER_TEMP -Filter "FlexASIO-*.exe" | Select-Object -First 1
+          Write-Host "Installing $($exe.Name)"
+          Start-Process -Wait -FilePath $exe.FullName -ArgumentList "/VERYSILENT","/SUPPRESSMSGBOXES","/NORESTART","/SP-"
+
+      - name: Devices
+        shell: bash
+        run: python -c "import rehearsal_recorder, sounddevice as sd; print(sd.query_hostapis()); print(sd.query_devices())"
+
+      - name: Play and record, ASIO buffer 1024 then 256
+        shell: bash
+        working-directory: .github/rtmixer-probe
+        run: |
+          for buf in 1024 256; do
+            printf 'backend = "Windows WASAPI"\nbufferSizeSamples = %s\n\n[input]\ndevice = ""\n' "$buf" > "$USERPROFILE/FlexASIO.toml"
+            python probe.py --out-device FlexASIO --out-api ASIO --loop-device "CABLE Output" --loop-api MME \
+              --label "asio$buf" --results results.jsonl || echo "probe asio$buf failed"
+          done
+
+      - name: Frozen
+        shell: bash
+        working-directory: .github/rtmixer-probe
+        run: |
+          printf 'backend = "Windows WASAPI"\nbufferSizeSamples = 1024\n\n[input]\ndevice = ""\n' > "$USERPROFILE/FlexASIO.toml"
+          pyinstaller --noconfirm --onedir --log-level WARN --collect-data _sounddevice_data --collect-data sounddevice freeze_check.py
+          dist/freeze_check/freeze_check.exe FlexASIO ASIO
+
+      - name: Results
+        if: always()
+        shell: bash
+        working-directory: .github/rtmixer-probe
+        run: cat results.jsonl >> "$GITHUB_STEP_SUMMARY" || true
+
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: probe-windows
+          path: |
+            .github/rtmixer-probe/results.jsonl
+            .github/rtmixer-probe/*.wav
+          if-no-files-found: warn
+
+  macos:
+    runs-on: macos-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e . rtmixer==0.1.7 pyinstaller
+
+      # A loopback device: what is played into it can be recorded from it.
+      - name: BlackHole
+        run: |
+          brew install --cask blackhole-2ch
+          sudo killall coreaudiod || true
+          sleep 5
+
+      - name: Devices
+        run: python -c "import rehearsal_recorder, sounddevice as sd; print(sd.query_hostapis()); print(sd.query_devices())"
+
+      - name: Play and record
+        working-directory: .github/rtmixer-probe
+        run: |
+          python probe.py --out-device BlackHole --out-api "Core Audio" --loop-device BlackHole --loop-api "Core Audio" \
+            --label coreaudio --results results.jsonl || echo "probe failed"
+
+      - name: Frozen
+        working-directory: .github/rtmixer-probe
+        run: |
+          pyinstaller --noconfirm --onedir --log-level WARN --collect-data _sounddevice_data --collect-data sounddevice freeze_check.py
+          dist/freeze_check/freeze_check BlackHole "Core Audio"
+
+      - name: Results
+        if: always()
+        working-directory: .github/rtmixer-probe
+        run: cat results.jsonl >> "$GITHUB_STEP_SUMMARY" || true
+
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: probe-macos
+          path: |
+            .github/rtmixer-probe/results.jsonl
+            .github/rtmixer-probe/*.wav
+          if-no-files-found: warn
