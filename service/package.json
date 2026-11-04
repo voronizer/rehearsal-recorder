@@ -27,6 +27,7 @@
     "drizzle-orm": "0.45.4",
     "hono": "4.13.14",
     "midi-file": "1.2.4",
+    "wasm-media-encoders": "0.7.0",
     "zod": "4.6.7"
   },
   "devDependencies": {
