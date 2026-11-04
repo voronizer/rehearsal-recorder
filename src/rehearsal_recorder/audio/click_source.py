@@ -117,15 +117,38 @@ class ClickSource:
     def set_on(self, on):
         """Off: the clicks go on being counted and are not heard."""
         self._on = bool(on)
+        self._tell()
 
     def set_voices(self, voices):
         """Another sound or volume, at the same rate, from the next click."""
         self.voices = voices
+        self._tell()
 
     def retime(self, tempo, signature):
         """A new tempo or signature, from the next click (a free click only)."""
         number = 1 if self._asked is None else self._asked[0] + 1
         self._asked = (number, tempo, signature)
+        self._tell()
+
+    # Set by the stream that plays it, when that stream renders ahead of what
+    # is heard (audio/ring.py): told of a change here, it renders the blocks
+    # not yet heard again, from what `keep` saved before each.
+    changed = None
+
+    def _tell(self):
+        changed = self.changed
+        if changed is not None:
+            changed()
+
+    def keep(self):
+        """What rendering has moved on since the block began, for put_back."""
+        return (self._next, self._sounding, self._last, self._grid, self._taken,
+                self.written, self.started)
+
+    def put_back(self, kept):
+        """Back to where `keep` was, to render a block again."""
+        (self._next, self._sounding, self._last, self._grid, self._taken,
+         self.written, self.started) = kept
 
     def upcoming(self, now_ns, within_sec=1.5):
         """

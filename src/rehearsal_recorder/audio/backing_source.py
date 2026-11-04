@@ -25,6 +25,7 @@ read is in single attributes, each replaced whole, taken up at the next block.
 """
 
 import math
+import time
 
 import numpy as np
 
@@ -88,6 +89,8 @@ class BackingSource:
         # Seconds into the file at the start of the last block rendered: None
         # before it plays, and on past the file's end in a take.
         self.position_sec = None
+        # (the stream's first frame of that block, file frames a stream frame)
+        self._rendered_at = None
         # As ClickSource's: a take on another device waits for `started`
         # before it chooses its first frame, and `written` says how far the
         # stream has rendered. repr() of the first error in render, which
@@ -101,13 +104,49 @@ class BackingSource:
     def set_on(self, on):
         """The row's switch: off, it goes on playing and is not heard."""
         self._on = bool(on)
+        self._tell()
 
     def set_volume(self, volume):
         self._volume = float(volume)
+        self._tell()
 
     def fade_out(self):
         """Stop: what is heard fades out over FADE_SEC, then is silent."""
         self._fading = True
+        self._tell()
+
+    # As ClickSource's: set by a stream that renders ahead of what is heard.
+    changed = None
+
+    def _tell(self):
+        changed = self.changed
+        if changed is not None:
+            changed()
+
+    def keep(self):
+        """What rendering has moved on since the block began, for put_back."""
+        return (self._gain, self._ramp_from, self._ramp_to, self._ramp_done, self._origin,
+                self._pos, self._past_end, self.position_sec, self._rendered_at,
+                self.written, self.started)
+
+    def put_back(self, kept):
+        """Back to where `keep` was, to render a block again."""
+        (self._gain, self._ramp_from, self._ramp_to, self._ramp_done, self._origin,
+         self._pos, self._past_end, self.position_sec, self._rendered_at,
+         self.written, self.started) = kept
+
+    def heard_sec(self, now_ns=None):
+        """Seconds into the file of what is heard at `now_ns` (now): the last
+        block rendered, taken back by as far as the stream renders ahead of
+        what is heard, by its clock. None before it plays."""
+        pos, rendered = self.position_sec, self._rendered_at
+        if pos is None or rendered is None:
+            return pos
+        first_frame, step = rendered
+        heard = self.clock.frame_at(time.perf_counter_ns() if now_ns is None else now_ns)
+        if heard is None or heard >= first_frame:
+            return pos
+        return max(0.0, pos - (first_frame - heard) * step / self.file_rate)
 
     @property
     def done(self):
@@ -147,6 +186,7 @@ class BackingSource:
             return
         pos, step = at
         self.position_sec = pos / self.file_rate
+        self._rendered_at = (first_frame, step)
         if self._place is None and pos >= self._frames:
             self._past_end = True
         if not isinstance(gain, np.ndarray) and gain == 0.0:
@@ -275,3 +315,19 @@ class Sources:
     def render(self, out, first_frame, arrival_ns, lead_sec):
         for source in self.sources:
             source.render(out, first_frame, arrival_ns, lead_sec)
+
+    @property
+    def changed(self):
+        return self.sources[0].changed if self.sources else None
+
+    @changed.setter
+    def changed(self, tell):
+        for source in self.sources:
+            source.changed = tell
+
+    def keep(self):
+        return tuple(s.keep() for s in self.sources)
+
+    def put_back(self, kept):
+        for source, one in zip(self.sources, kept):
+            source.put_back(one)

@@ -857,10 +857,10 @@ class Backing:
         if taking:
             if take is not None:
                 playing = True
-                position = take.source.position_sec or 0
+                position = take.source.heard_sec() or 0
         elif free is not None and free.shown and not free.source.done:
             playing = True
-            position = free.source.position_sec or 0
+            position = free.source.heard_sec() or 0
         return {"song": shown, "on": self._setting("backing_on"), "volume": self._setting("backing_volume"),
                 "row": self._setting("backing_row") or self._row_from_library(), "playing": playing,
                 "position_sec": max(0, round(position, 2)),

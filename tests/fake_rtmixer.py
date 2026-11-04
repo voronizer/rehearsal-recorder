@@ -204,10 +204,23 @@ class _Card:
 
 card = _Card()
 
+# A suite with stream stand-ins of its own (a card that refuses to open, one
+# that hangs on stop, ASIO's one stream at a time) hands them the opening:
+# twins(kind, settings) with kind "output", "input" or "duplex" returns an
+# object whose start, stop and close each stream's own call first, or raises
+# as that card would.
+twins = None
+
 
 class _Base:
-    def __init__(self, kind, samplerate=None, channels=None, blocksize=0,
-                 device=None, latency=None, **kwargs):
+    def __init__(self, kind, **kwargs):
+        # What it was opened with, for a check that asks.
+        self.kw = dict(kwargs)
+        self._twin = twins(kind, self.kw) if twins is not None else None
+        self._open(kind, **kwargs)
+
+    def _open(self, kind, samplerate=None, channels=None, blocksize=0, device=None,
+              latency=None, **kwargs):
         self.kind = kind
         self.samplerate = float(samplerate or 48000)
         self.blocksize = blocksize
@@ -249,11 +262,15 @@ class _Base:
     def start(self):
         if self.closed:
             raise RuntimeError("stream is closed")
+        if self._twin is not None:
+            self._twin.start()
         if not self.active:
             self.active = True
             card.streams.append(self)
 
     def stop(self):
+        if self._twin is not None:
+            self._twin.stop()
         if self.active:
             self.active = False
             card.streams.remove(self)
@@ -261,7 +278,11 @@ class _Base:
     abort = stop
 
     def close(self):
-        self.stop()
+        if self.active:
+            self.active = False
+            card.streams.remove(self)
+        if self._twin is not None and not self.closed:
+            self._twin.close()
         self.closed = True
 
     def __enter__(self):
@@ -366,9 +387,21 @@ class MixerAndRecorder(Mixer, Recorder):
         _Base.__init__(self, "duplex", **kwargs)
 
 
-def install():
-    """Puts this module in sys.modules as `rtmixer` and returns it."""
+_KINDS = {"output": "OutputStream", "input": "InputStream", "duplex": "Stream"}
+
+
+def install(sd=None):
+    """Puts this module in sys.modules as `rtmixer` and returns it. With `sd`,
+    a suite's sounddevice stand-in, each stream is opened through that
+    module's own stream class of its kind as well (see `twins`), looked up as
+    it opens, so a check that swaps one in has rtmixer's streams follow."""
+    global twins
     module = sys.modules[__name__]
     sys.modules["rtmixer"] = module
+    if sd is not None:
+        def through(kind, settings):
+            stand_in = getattr(sd, _KINDS[kind], None)
+            return stand_in(**settings) if stand_in is not None else None
+        twins = through
     return module
 

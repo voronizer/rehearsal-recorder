@@ -7,10 +7,16 @@ setSinkId, which this engine does not implement for AudioContext. It also
 meant holding the whole take in memory decoded (float32, ~11.5 MB per minute
 per track) and maintaining a second, streaming mode for long takes.
 
-This is simpler and more honest: sounddevice (the same library used for
-recording), the output device is chosen explicitly, and tracks are read
-through memmap — the OS pages in what is needed, so memory does not grow with
-take length and seeking is just an index change.
+This is simpler and more honest: the output device is chosen explicitly, and
+tracks are read through memmap — the OS pages in what is needed, so memory
+does not grow with take length and seeking is just an index change.
+
+The card is fed by rtmixer from a ring the mixing keeps a second ahead
+(audio/ring.py; docs/superpowers/specs/2026-11-04-sound-process-design.md,
+Part 2), so nothing else Python does can make it wait. A setting (M, S, a
+fader, Master, the click) mixes the second not yet heard again; Play, Pause,
+a seek and the loop move the take a block ahead of the card. The playhead and
+the meters are those of the block the card plays now, not of the last mixed.
 
 Synchronisation comes for free: every track is mixed into one stream from the
 same position, so there is nothing to drift apart.
@@ -33,7 +39,6 @@ import sounddevice as sd
 
 from rehearsal_recorder.audio import heartbeat
 from rehearsal_recorder.audio.click import accent, click_frame, mix_clicks
-from rehearsal_recorder.audio.click_timing import lead_of
 from rehearsal_recorder.audio.devices import (
     STREAM_LOCK,
     close_stream,
@@ -43,14 +48,13 @@ from rehearsal_recorder.audio.devices import (
     usable_output,
 )
 from rehearsal_recorder.audio.format import unpack24
+from rehearsal_recorder.audio.ring import BLOCK, RingOutput
 from rehearsal_recorder.audio.wavfile import _open_track
 
-BLOCK_FRAMES = 1024
+BLOCK_FRAMES = BLOCK
 
-# A block counts as late (skips) when it comes more than this share of a block
-# after its turn. A driver whose own buffer is not a block long calls a little
-# early and a little late by turns, which is not lateness; half a block more is.
-LATE_SHARE = 0.5
+# The mix is made at 16-bit scale; the ring is float, full scale 1.
+_TO_FLOAT = 1.0 / 32768.0
 
 
 def channel_label(channels):
@@ -106,19 +110,16 @@ class TakePlayer:
 
         self._lock = threading.Lock()
         self.last_status = None
-        # What one listening cost, for skips(): the frames played, the blocks
-        # the card said it ran short of (PortAudio's output underflow), and
-        # the blocks that came late with the latest of them, in seconds. A
-        # late block is timed from the call before it, so the call before is
-        # kept too. Written on the audio thread under the lock.
+        # What one listening cost, for skips(): the frames mixed while the
+        # take played (each once, however often a block is mixed again: up to
+        # `_counted`), and the ring's dry runs counted at the last ask.
         self._heard = 0
-        self._underflows = 0
-        self._late = 0
-        self._latest = 0.0
-        self._last_call = None
+        self._counted = 0
+        self._dry_told = 0
         self._pos = 0
         self._playing = False
         self._loop = None  # (start_frame, end_frame)
+        self._loop_asked = None
         self._soloed = None
         self._finished = False
         # How loud the whole mix comes out, after every track's own fader —
@@ -140,6 +141,11 @@ class TakePlayer:
         self._stream_channels = 2
         self._route = (0, 1)
         self._stream = None
+        # The ring the stream plays (audio/ring.RingOutput), and whether the
+        # take plays as the last Play, Pause or end of the take left it: the
+        # card hears that a block or two later, the buttons show it at once.
+        self._ring = None
+        self._meant = None
         # The device the stream is open on (None: the system's), and how
         # late what it writes is heard, for the click between takes.
         self.output_device = None
@@ -179,7 +185,6 @@ class TakePlayer:
         self._free_click = None
         self._free_backing = None
         self._free = None
-        self._out_frames = 0
 
     def open_output(self, device_index=None, channels=(1, 2), extra_channels=()):
         """
@@ -231,30 +236,31 @@ class TakePlayer:
 
     def _start_output(self, index, channels, extra=()):
         """The stream itself, once the device and the outputs are settled."""
+        import rtmixer  # the sound process's alone
+
         self._route = tuple(c - 1 for c in channels)
         self._stream_channels = max((*channels, *extra))
         self._free = np.zeros((BLOCK_FRAMES, self._stream_channels), dtype=np.float32)
-        self._out_frames = 0
-        # A new stream's first block is not late for the old one's last.
-        self._last_call = None
         self._latency = output_latency(sd, index)
         self._stream = open_stream(
-            sd.OutputStream,
+            rtmixer.Mixer,
             device=index,
             channels=self._stream_channels,
             samplerate=self.samplerate,
-            dtype="int16",
             blocksize=BLOCK_FRAMES,
             # Without it, what is played can be heard seconds later — see
             # output_latency.
             latency=self._latency,
-            callback=self._callback,
         )
         self.output_device = index
         said = getattr(self._stream, "latency", None)
         if isinstance(said, (int, float)) and 0 < said < 1:
             self._latency = float(said)
-        self._heartbeat.start()
+        self._ring = RingOutput(self._stream, self._stream_channels, self.samplerate,
+                                self._ring_fill, self._ring_state, self._ring_restore,
+                                heartbeat=self._heartbeat)
+        self._dry_told = 0
+        self._ring.start()
         try:
             self._output_name = (
                 sd.query_devices(index)["name"] if index is not None else None
@@ -266,9 +272,8 @@ class TakePlayer:
     def output_problem(self):
         """problem, with the output asked afresh — for a play that must not
         start into a dead stream just because nobody polled while paused."""
-        with self._lock:
-            self._check_output()
-            return self.problem
+        self._check_output()
+        return self.problem
 
     def _check_output(self):
         """
@@ -277,7 +282,8 @@ class TakePlayer:
         without a word — and playback would otherwise sit there, "playing",
         with the cursor frozen. The dead stream is left for the next play to
         replace: this is asked from the state poll, which opens and closes
-        nothing.
+        nothing. Asked without the lock: the pause is a move of the ring's,
+        whose thread takes the ring's lock before this one's.
         """
         if self.problem is None and self._heartbeat.silent():
             where = (
@@ -289,7 +295,8 @@ class TakePlayer:
                 f"{heartbeat.SILENCE_SEC:.0f} seconds. It was unplugged, "
                 "switched off or stopped answering. Press play to try it again."
             )
-            self._playing = False
+            self._meant = False
+            self._apply(self._pause)
 
     # ---------- audio ----------
 
@@ -451,79 +458,108 @@ class TakePlayer:
         np.copyto(result, out, casting="unsafe")
         return result
 
-    def _callback(self, outdata, frames, time_info, status):
-        # Deliberately no print() here: this runs on the audio thread, where
-        # anything that takes a lock or allocates can cost a dropout. The last
-        # status is kept for whoever asks.
-        self._heartbeat.enter()
-        try:
-            self._fill(outdata, frames, status, time_info)
-        finally:
-            self._heartbeat.leave()
-
-    def _fill(self, outdata, frames, status, time_info=None, now=None):
-        if status:
-            self.last_status = str(status)
-        now = time.perf_counter() if now is None else now
+    def _ring_fill(self, out, frame, now_ns, lead_sec):
+        """
+        One block of the ring (audio/ring.RingOutput): the take's mix on its
+        route, then the click or backing track between takes on theirs.
+        Returns what the screen shows while the card plays it: where in the
+        take it began, whether it played, the meters it made, and whether the
+        take had finished by its end.
+        """
+        frames = len(out)
         with self._lock:
-            self._note(status, frames, now)
-            mix = self._render(frames)
-            if self._stream_channels == 2 and self._route == (0, 1):
-                outdata[:] = mix
+            place, playing = self._pos, self._playing
+            if playing and frame >= self._counted:
+                self._heard += frames
+                self._counted = frame + frames
+            self._render(frames)
+            mix = self._mix[:frames]
+            if len(self._route) == 2:
+                np.multiply(mix[:, 0], _TO_FLOAT, out=out[:, self._route[0]])
+                np.multiply(mix[:, 1], _TO_FLOAT, out=out[:, self._route[1]])
             else:
-                outdata.fill(0)
-                if len(self._route) == 2:
-                    outdata[:, self._route[0]] = mix[:, 0]
-                    outdata[:, self._route[1]] = mix[:, 1]
-                else:
-                    # One output on its own takes the left side, which is the
-                    # whole mix: every track goes to both sides equally, so left
-                    # and right are the same samples. If tracks ever get a pan,
-                    # this has to become the average of the two.
-                    outdata[:, self._route[0]] = mix[:, 0]
+                # One output on its own takes the left side, which is the
+                # whole mix: every track goes to both sides equally, so left
+                # and right are the same samples. If tracks ever get a pan,
+                # this has to become the average of the two.
+                np.multiply(mix[:, 0], _TO_FLOAT, out=out[:, self._route[0]])
+            shown = (place, playing, self.master_level, [t.levels for t in self.tracks],
+                     self._finished)
         for free in (self._free_click, self._free_backing):
             if free is not None:
-                self._add_free(free, outdata, frames, time_info)
-        self._out_frames += frames
+                self._add_free(free, out, frame, now_ns, lead_sec)
+        return shown
 
-    def _note(self, status, frames, now):
-        """One call of the card's, counted for skips() while the take plays.
-        Every call is timed, paused or not, so the first block after a pause
-        is timed from the one just before it and not from the pause."""
-        last, self._last_call = self._last_call, now
-        if not self._playing:
-            return
-        self._heard += frames
-        if getattr(status, "output_underflow", False):
-            self._underflows += 1
-        if last is not None:
-            block = frames / self.samplerate
-            over = (now - last) - block
-            if over > LATE_SHARE * block:
-                self._late += 1
-                if over > self._latest:
-                    self._latest = over
+    def _ring_state(self):
+        """What the mixing has moved on since a block began (RingOutput's
+        `state`): where the take is, the eased gains, the click, whether it
+        plays, the loop, and the free click's and backing track's own."""
+        with self._lock:
+            free = tuple((f, f.keep()) if f is not None and hasattr(f, "keep") else None
+                         for f in (self._free_click, self._free_backing))
+            return (self._pos, tuple(t.current_gain for t in self.tracks), self._master_gain,
+                    self._click_until, self._playing, self._finished, self._loop, free)
 
-    def _add_free(self, source, outdata, frames, time_info):
+    def _ring_restore(self, state):
+        with self._lock:
+            (self._pos, gains, self._master_gain, self._click_until, self._playing,
+             self._finished, self._loop, free) = state
+            for track, gain in zip(self.tracks, gains):
+                track.current_gain = gain
+            # Put back only into the source that is still there: one put in
+            # since starts where it is.
+            for kept, now in zip(free, (self._free_click, self._free_backing)):
+                if kept is not None and kept[0] is now:
+                    now.put_back(kept[1])
+
+    def _add_free(self, source, out, frame, now_ns, lead_sec):
         """
         The click or the backing track between takes, onto what the take put
         out: on its own outputs, at its own volume, outside the master and the
         meters. Outputs this stream does not reach are left out.
         """
+        frames = len(out)
         block = self._free
-        if block is None or block.shape[0] < frames or block.shape[1] != outdata.shape[1]:
-            # A driver that asks for more than a block, once.
-            block = self._free = np.zeros((frames, outdata.shape[1]), dtype=np.float32)
+        if block is None or block.shape[0] < frames or block.shape[1] != out.shape[1]:
+            block = self._free = np.zeros((frames, out.shape[1]), dtype=np.float32)
         block = block[:frames]
         block.fill(0.0)
-        source.render(block, self._out_frames, time.perf_counter_ns(), lead_of(time_info, self._latency))
+        source.render(block, frame, now_ns, lead_sec)
         for c in source.route:
-            if c < outdata.shape[1]:
-                column = block[:, c]
-                column *= 32767.0
-                column += outdata[:, c]
-                np.clip(column, -32768, 32767, out=column)
-                np.copyto(outdata[:, c], column, casting="unsafe")
+            if c < out.shape[1]:
+                column = out[:, c]
+                column += block[:, c]
+                np.clip(column, -1.0, 1.0, out=column)
+
+    def _apply(self, edit):
+        """A move of the take (Play, Pause, a seek, the loop): a block ahead
+        of the card when it plays, at once when nothing does."""
+        ring = self._ring
+        if ring is not None:
+            ring.move(edit)
+        else:
+            edit()
+
+    def _changed(self):
+        """A setting changed: what the card has not played yet is mixed again."""
+        ring = self._ring
+        if ring is not None:
+            ring.change()
+
+    def _heard_block(self):
+        """What the screen shows of the block the card plays now, and the
+        frame: (shown, frame), or (None, None) before the ring plays. Until
+        the card has played up to the last move (a seek, Play), the block
+        that move landed on: the playhead goes where it was sent at once."""
+        ring = self._ring
+        if ring is None:
+            return None, None
+        frame = ring.heard()
+        if not ring.settled():
+            landed = ring.landed
+            if landed is not None and (frame is None or landed > frame):
+                return ring.shown(landed), landed
+        return ring.shown(frame), frame
 
     # ---------- transport ----------
 
@@ -531,62 +567,88 @@ class TakePlayer:
     def playing(self):
         """Whether the take plays now: what the sending waits for
         (Api._sound_busy). Read without the lock, as one value."""
-        return self._playing
+        return self._heard_playing()
+
+    def _heard_playing(self):
+        """Whether the take plays: as the last Play or Pause left it until
+        the card has played that far, then as the card plays it."""
+        ring = self._ring
+        shown, _ = self._heard_block()
+        if ring is None or shown is None:
+            return self._playing
+        meant = self._meant
+        if meant is not None:
+            if not ring.settled():
+                return meant
+            self._meant = None
+        return shown[1]
 
     def skips(self):
         """
         What the listening since the last ask cost, and the count starts
-        again: (seconds played, times the card ran short, blocks that came
-        late, the latest of them in seconds). The card's own count is the
-        sure one; a late block is a block the app was slow to make, which
-        is heard as a skip when the driver had nothing left to play.
+        again: (seconds played, times the ring ran dry since, 0, 0.0). A ring
+        that ran dry is what is heard as a skip; the last two are kept for
+        the log's shape and are always nothing now, as the card is fed by
+        rtmixer and not called late by Python.
         """
+        ring = self._ring
+        dry = ring.counts["ran_dry"] if ring is not None else 0
         with self._lock:
-            out = (self._heard / self.samplerate, self._underflows, self._late, self._latest)
-            self._heard = self._underflows = self._late = 0
-            self._latest = 0.0
+            out = (self._heard / self.samplerate, dry - self._dry_told, 0, 0.0)
+            self._heard = 0
+            self._dry_told = dry
         return out
 
-    def play(self):
+    def _play(self):
         with self._lock:
             if self._pos >= self.total_frames:
                 self._pos = 0
             self._finished = False
             self._playing = True
 
-    def pause(self):
+    def _pause(self):
         with self._lock:
             self._playing = False
 
+    def play(self):
+        self._meant = True
+        self._apply(self._play)
+
+    def pause(self):
+        self._meant = False
+        self._apply(self._pause)
+
     def toggle(self):
-        with self._lock:
-            if self._playing:
-                self._playing = False
-            else:
-                if self._pos >= self.total_frames:
-                    self._pos = 0
-                self._finished = False
-                self._playing = True
+        playing = self._heard_playing()
+        if playing:
+            self.pause()
+        else:
+            self.play()
 
     def seek(self, seconds):
-        with self._lock:
-            frame = int(max(0.0, seconds) * self.samplerate)
-            self._pos = min(frame, self.total_frames)
-            self._finished = False
+        def edit():
+            with self._lock:
+                frame = int(max(0.0, seconds) * self.samplerate)
+                self._pos = min(frame, self.total_frames)
+                self._finished = False
+        self._apply(edit)
 
     def set_loop(self, start_sec, end_sec):
-        with self._lock:
-            if start_sec is None or end_sec is None:
-                self._loop = None
-                return
+        loop = None
+        if start_sec is not None and end_sec is not None:
             a = int(max(0.0, start_sec) * self.samplerate)
             b = int(min(end_sec, self.total_frames / self.samplerate) * self.samplerate)
-            if b - a < int(0.2 * self.samplerate):
-                self._loop = None
-                return
-            self._loop = (a, b)
-            if not (a <= self._pos < b):
-                self._pos = a
+            if b - a >= int(0.2 * self.samplerate):
+                loop = (a, b)
+        # What the screen shows at once; the card hears it from a block on.
+        self._loop_asked = loop
+
+        def edit():
+            with self._lock:
+                self._loop = loop
+                if loop is not None and not (loop[0] <= self._pos < loop[1]):
+                    self._pos = loop[0]
+        self._apply(edit)
 
     # ---------- mix ----------
 
@@ -595,6 +657,7 @@ class TakePlayer:
             for t in self.tracks:
                 if t.name == name:
                     t.volume = float(min(1.0, max(0.0, volume)))
+        self._changed()
 
     # M and S on one track take each other off, so both are never lit and
     # what plays is what the buttons show.
@@ -606,6 +669,7 @@ class TakePlayer:
                     t.muted = bool(muted)
             if muted and self._soloed == name:
                 self._soloed = None
+        self._changed()
 
     def set_solo(self, name):
         with self._lock:
@@ -613,16 +677,19 @@ class TakePlayer:
             for t in self.tracks:
                 if t.name == name:
                     t.muted = False
+        self._changed()
 
     def set_master_muted(self, muted):
         with self._lock:
             self.master_muted = bool(muted)
             if self.master_muted and not self._playing:
                 self._master_gain = 0.0
+        self._changed()
 
     def set_master(self, volume):
         with self._lock:
             self.master = float(min(1.0, max(0.0, volume)))
+        self._changed()
 
     # ---------- the click ----------
 
@@ -639,7 +706,23 @@ class TakePlayer:
     def play_free_click(self, source):
         """The click between takes into this stream, on its route; None
         takes it out."""
-        self._free_click = source
+        old, self._free_click = self._free_click, source
+        self._swapped(old, source)
+
+    def _swapped(self, old, new):
+        """A source between takes put in or taken out. Put in, it is mixed in
+        from a block ahead of the card, and told to say when it changes. One
+        taken out that has played all it will is heard out from the ring (a
+        bar for a setting, its last clicks); one taken out before that (■)
+        is mixed out from a block ahead of the card."""
+        tell = self._changed
+        if old is not None and getattr(old, "changed", None) == tell:
+            old.changed = None
+        if new is not None and hasattr(new, "keep"):
+            new.changed = tell
+        if new is None and old is not None and getattr(old, "done", False):
+            return
+        self._changed()
 
     @property
     def free_click(self):
@@ -650,7 +733,8 @@ class TakePlayer:
     def play_free_backing(self, source):
         """A song's backing track between takes (a BackingSource) into this
         stream, on its route; None takes it out."""
-        self._free_backing = source
+        old, self._free_backing = self._free_backing, source
+        self._swapped(old, source)
 
     @property
     def free_backing(self):
@@ -665,50 +749,62 @@ class TakePlayer:
         with self._lock:
             self._take_click = None if voices is None or not tempo else (tempo, signature, voices)
             self._click_until = None
+        self._changed()
 
     def set_click_on(self, on):
         """Master's metronome button: whether the take's click is heard."""
         with self._lock:
             self._click_on = bool(on)
             self._click_until = None
+        self._changed()
 
     # ---------- state ----------
 
     def state(self):
+        self._check_output()
+        playing = self._heard_playing()
+        shown, frame = self._heard_block()
         with self._lock:
-            self._check_output()
+            if shown is None:
+                # No ring playing (no output open): the mixing's own.
+                pos, levels = self._pos, [t.levels for t in self.tracks]
+                master_level, finished = self.master_level, self._finished
+            else:
+                place, was, master_level, levels, finished = shown
+                pos = min(place + frame % BLOCK, self.total_frames) if was else place
             return {
                 "problem": self.problem,
-                "playing": self._playing,
-                "position": self._pos / self.samplerate,
+                "playing": playing,
+                "position": pos / self.samplerate,
                 "duration": self.total_frames / self.samplerate,
-                "finished": self._finished,
-                # 0..1 per channel of each track, as it came out of the mix a
-                # moment ago. The interface polls this several times a second,
-                # which is what the meters beside the faders are made of. A
-                # list even for a mono track, so one shape serves both.
+                # A Play pressed after the end is not the end any more.
+                "finished": bool(finished) and not playing,
+                # 0..1 per channel of each track, as it came out of the block
+                # the card plays now. The interface polls this several times a
+                # second, which is what the meters beside the faders are made
+                # of. A list even for a mono track, so one shape serves both.
                 #
-                # Nothing while paused, straight away. The last block's levels
-                # stay put until the next one is rendered, and a pause answers
-                # before that — and is the last thing the interface asks
-                # until play, so the meters stood still at the last level.
+                # Nothing while paused, straight away: a pause answers before
+                # the card has played up to it, and is the last thing the
+                # interface asks until play, so the meters would stand still
+                # at the last level.
                 "levels": {
                     t.name: [
-                        round(min(1.0, v / 32768.0), 3) if self._playing else 0.0
-                        for v in t.levels
+                        round(min(1.0, v / 32768.0), 3) if playing else 0.0
+                        for v in kept
                     ]
-                    for t in self.tracks
+                    for t, kept in zip(self.tracks, levels)
                 },
                 "master_level": (
-                    round(min(1.0, self.master_level / 32768.0), 3)
-                    if self._playing else 0.0
+                    round(min(1.0, master_level / 32768.0), 3)
+                    if playing else 0.0
                 ),
                 "loop": (
                     {
-                        "a": self._loop[0] / self.samplerate,
-                        "b": self._loop[1] / self.samplerate,
+                        "a": self._loop_asked[0] / self.samplerate,
+                        "b": self._loop_asked[1] / self.samplerate,
                     }
-                    if self._loop
+                    if self._loop_asked
                     else None
                 ),
                 "soloed": self._soloed,
@@ -730,6 +826,10 @@ class TakePlayer:
         then find the stream gone, which is where
         "'NoneType' object has no attribute 'close'" came from.
         """
+        ring, self._ring = self._ring, None
+        if ring is not None:
+            ring.stop()
+        self._meant = None
         self._heartbeat.stop()
         self._free_click = None
         self._free_backing = None

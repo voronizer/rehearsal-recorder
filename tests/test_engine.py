@@ -98,6 +98,15 @@ _sd.InputStream = _FakeStream
 # A stream with inputs and outputs: a take whose click is on the recording card.
 _sd.Stream = _FakeStream
 sys.modules["sounddevice"] = _sd
+# rtmixer plays and records from rings: its stand-in, whose card a check runs
+# by hand (tests/fake_rtmixer.py).
+sys.path.insert(0, str(PROJECT / "tests"))
+import fake_rtmixer  # noqa: E402
+
+# Its streams are opened through the sounddevice stand-ins above, so a check
+# that swaps those for a card that refuses, hangs or is ASIO's one at a time
+# has rtmixer's streams behave the same.
+fake_rtmixer.install(_sd)
 # No suite opens a real MIDI port. With None in sys.modules, importing the
 # library raises ImportError, which midi/ports.open_system() answers as "MIDI is
 # not available" — whatever is plugged into the machine running them.
@@ -141,6 +150,19 @@ def write_wav(path, value, seconds=2.0, depth=16):
         else:
             frame = struct.pack("<i", value * 256)[:3]  # little-endian, low 3
         w.writeframes(frame * int(SR * seconds))
+
+
+def by_hand(player):
+    """The player's ring looked after by the check, not its thread: each
+    `player._ring.service()` is one look, and the fake card moves only when
+    pumped, so what the card hears is known exactly."""
+    ring = player._ring
+    ring._stop.set()
+    thread, ring._thread = ring._thread, None
+    if thread is not None:
+        thread.join()
+    ring._stop.clear()
+    return ring
 
 
 def settle(player, blocks=40, frames=512):
@@ -359,40 +381,30 @@ def main():
     ok("a bigger block grows it once", bigger.shape[0] == 4096)
     ok("and then keeps that one", p._render(4096).base is bigger.base)
 
-    print("\n[4b2] Skips are counted while the take plays")
-    # The card's calls, timed by hand: a block on time, one the card ran
-    # short of, one that came a whole block late, and one while paused.
-    period = 512 / SR
-    card = np.zeros((512, 2), dtype=np.int16)
-
-    class _Short:
-        output_underflow = True
-
-        def __bool__(self):
-            return True
-
-    p.skips()
-    p.seek(0)
-    p.play()
-    ok("the player says it plays", p.playing is True)
-    p._fill(card, 512, None, now=10.0)
-    p._fill(card, 512, None, now=10.0 + period)
-    p._fill(card, 512, _Short(), now=10.0 + 2 * period)
-    p._fill(card, 512, None, now=10.0 + 4 * period)
-    seconds, short, late, latest = p.skips()
-    ok("the card running short is counted", short == 1)
-    ok("a block a whole block late is counted, by how late",
-       late == 1 and abs(latest - period) < 1e-9)
-    ok("and the time played", abs(seconds - 4 * period) < 1e-9)
-    ok("the count starts again once asked", p.skips()[1:3] == (0, 0))
-    p.pause()
-    ok("paused, it says it does not play", p.playing is False)
-    p._fill(card, 512, _Short(), now=20.0)
-    p.play()
-    p._fill(card, 512, None, now=20.0 + period)
-    ok("nothing counts while paused, and the first block after is timed from the pause",
-       p.skips()[1:3] == (0, 0))
+    print("\n[4b2] Skips: the ring running dry is counted while the take plays")
     p.close()
+    fake_rtmixer.card.reset()
+    dry = TakePlayer(tracks)
+    dry.open_output(0)
+    ring = by_hand(dry)
+    dry.skips()
+    dry.play()
+    ok("the player says it plays as Play is pressed", dry.playing is True)
+    ring.service()
+    for _ in range(4):
+        fake_rtmixer.card.pump(1024)
+    ring.service()
+    seconds, short, late, latest = dry.skips()
+    ok("the time played is counted, a ring that did not run dry is not",
+       seconds > 0 and short == 0 and (late, latest) == (0, 0.0))
+    for _ in range(60):
+        fake_rtmixer.card.pump(1024)
+    ring.service()
+    ok("a ring that ran dry is counted", dry.skips()[1] == 1)
+    ok("the count starts again once asked", dry.skips()[1:3] == (0, 0))
+    dry.pause()
+    ok("paused, it says it does not play", dry.playing is False)
+    dry.close()
 
     print("\n[4c] Opening and closing the output")
     from rehearsal_recorder.audio.devices import usable_output
@@ -419,11 +431,11 @@ def main():
     # raise "'NoneType' object has no attribute 'close'".
     p3 = TakePlayer(tracks)
     p3.open_output(0)
-    before = _sd.OutputStream.closed
+    stream = p3._stream
     p3.close_output()
     p3.close_output()
     ok("closing twice closes the stream once",
-       _sd.OutputStream.closed == before + 1)
+       stream.closed and stream not in fake_rtmixer.card.streams and p3._stream is None)
     ok("and the take is still loaded", len(p3.tracks) == 2)
 
     # Switching device keeps the take: close() would have thrown it away.
@@ -549,10 +561,13 @@ def main():
     complaint = p4.open_output(3, (3, 4))
     ok("the stream is opened wide enough to reach 3–4",
        p4._stream.kw["channels"] == 4 and complaint is None)
+    by_hand(p4)
     p4.play()
+    p4._ring.service()
     settle(p4)
-    block = np.zeros((512, 4), dtype=np.int16)
-    p4._callback(block, 512, None, None)
+    block = np.zeros((1024, 4), dtype=np.float32)
+    p4._ring_fill(block, 0, 0, 0.0)
+    block *= 32768
     ok("the mix comes out of 3 and 4",
        abs(int(block[:, 2].mean()) - 3000) < 30
        and abs(int(block[:, 3].mean()) - 3000) < 30)
@@ -561,8 +576,10 @@ def main():
     complaint = p4.open_output(3, (5,))
     ok("one output on its own opens as far as that output",
        p4._stream.kw["channels"] == 5 and complaint is None)
-    block = np.full((512, 5), 7, dtype=np.int16)
-    p4._callback(block, 512, None, None)
+    by_hand(p4)
+    block = np.zeros((1024, 5), dtype=np.float32)
+    p4._ring_fill(block, 0, 0, 0.0)
+    block *= 32768
     ok("the mix comes out of that one alone, at the same level",
        abs(int(block[:, 4].mean()) - 3000) < 30 and not block[:, :4].any())
 
@@ -13132,8 +13149,8 @@ def main():
         a82.metronome_set(120, "4/4")
         played82 = a82.metronome_play()
         own82 = a82._metronome._free
-        for b in range(30):  # 30720 frames at 120: clicks 0 and 1 played, click 2 next
-            own82.sink._callback(np.zeros((1024, 2), np.float32), 1024, None, None)
+        for b in range(30):  # 30720 frames at 120: clicks 0 and 1 heard, click 2 next
+            fake_rtmixer.card.pump(1024)
         opened82b = a82.player_open([{"name": "Quiet", "file": str(tmp82 / "Quiet.wav")}])
         moved82 = a82._metronome._free
         ok("play first, the take opened after on the click's card: the player opens there, no warning",

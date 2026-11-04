@@ -143,8 +143,211 @@ def fake_card_behaves():
     card.reset()
 
 
+class Counter:
+    """A take stand-in for a RingOutput: each frame of channel 0 is its
+    place in the take, channel 1 the level it was mixed at."""
+
+    def __init__(self):
+        self.pos = 0
+        self.level = 1.0
+        self.leads = []
+
+    def fill(self, out, frame, now_ns, lead_sec):
+        n = len(out)
+        out[:, 0] = self.pos + np.arange(n)
+        out[:, 1] = self.level
+        self.leads.append((frame, lead_sec))
+        shown = self.pos
+        self.pos += n
+        return shown
+
+    def state(self):
+        return self.pos
+
+    def restore(self, s):
+        self.pos = s
+
+
+def _output():
+    from rehearsal_recorder.audio.ring import RingOutput
+    fake_rtmixer.card.reset()
+    mixer = rtmixer.Mixer(channels=2, samplerate=RATE, blocksize=1024)
+    mixer.start()
+    take = Counter()
+    ring = RingOutput(mixer, 2, RATE, take.fill, take.state, take.restore)
+    ring.start(worker=False)
+    return mixer, take, ring
+
+
+def _play(mixer, calls, frames=1024):
+    """`calls` card calls; what came out, one array."""
+    out = [fake_rtmixer.card.pump(frames)[mixer] for _ in range(calls)]
+    return np.concatenate(out) if out else np.zeros((0, 2), np.float32)
+
+
+def output_keeps_a_second():
+    print("\n[2] A play ring keeps a second ahead of the card")
+    mixer, take, ring = _output()
+    ok("after start, 47 blocks are in the ring", ring.ring.read_available == 47 * 1024)
+    heard = _play(mixer, 3)
+    ok("the card plays the take from its first frame", np.array_equal(heard[:, 0], np.arange(3072)))
+    ok("three calls in, the card hears frame 3072", ring.heard() == 3072)
+    ring.service()
+    ok("a look tops it up to a second again", ring.ring.read_available == 47 * 1024)
+    frame, lead = take.leads[-1]
+    ok("each block is told how far ahead of the card it is heard",
+       abs(lead - (frame - 3072) / RATE) < 1e-9)
+    ok("what fill returned is kept for its block", ring.shown(3072 + 5) == 3072)
+    ring.stop()
+
+
+def setting_heard_from_guard():
+    print("\n[3] A setting is mixed again from two card calls ahead")
+    mixer, take, ring = _output()
+    _play(mixer, 3)
+    ring.service()
+    take.level = 2.0
+    ring.change()
+    ring.service()
+    heard = _play(mixer, 40)
+    frames = 3072 + np.arange(len(heard))
+    guard = -(-(3072 + 2 * 1024 + 256) // 1024) * 1024
+    ok(f"the card plays the old setting up to frame {guard}",
+       (heard[frames < guard, 1] == 1.0).all())
+    ok("and the new one from there on", (heard[frames >= guard, 1] == 2.0).all())
+    ok("the take's frames are the same either side", np.array_equal(heard[:, 0], frames))
+    ring.stop()
+
+
+def move_is_exact():
+    print("\n[4] A move is exact to the frame and leaves nothing old after it")
+    mixer, take, ring = _output()
+    _play(mixer, 3)
+    ring.service()
+    seek = 20 * RATE
+    ring.move(lambda: setattr(take, "pos", seek))
+    ring.service()
+    heard = _play(mixer, 47, 1024)
+    frames = 3072 + np.arange(len(heard))
+    jump = np.flatnonzero(heard[:, 0] != frames)
+    at = int(frames[jump[0]]) if len(jump) else None
+    ok("the move lands on a block, ahead of the guard",
+       at is not None and at % 1024 == 0 and at >= 3072 + 2 * 1024 + 256)
+    ok("the take as it was up to there",
+       at is not None and np.array_equal(heard[frames < at, 0], frames[frames < at]))
+    after = heard[frames >= at, 0] if at is not None else np.zeros(0)
+    ok("from 20.000 s on after it, nothing old", np.array_equal(after, seek + np.arange(len(after))))
+    ok("the moved piece and the top-up after it make one run",
+       len(after) >= 24 * 1024)
+    ring.stop()
+
+
+def dry_ring_restarts():
+    print("\n[5] A ring that ran dry plays again with 0.6 s in it")
+    mixer, take, ring = _output()
+    _play(mixer, 48)
+    ok("rtmixer let the dry ring go", ring._action not in mixer.actions)
+    ring.service()
+    ok("counted once", ring.counts["ran_dry"] == 1)
+    ok("a new ring with 0.6 s in it plays",
+       ring.ring.read_available >= 0.6 * RATE and ring._action in mixer.actions)
+    heard = _play(mixer, 1)
+    ok("from where the mixing got to", heard[0, 0] == 47 * 1024)
+    ok("the stream's frames go on", ring.heard() == 48 * 1024)
+    ring.stop()
+
+
+def heard_falls_back():
+    print("\n[6] The frame heard, from the ring when the clock is not believable")
+    fake_rtmixer.card.reset()
+    fake_rtmixer.card.out_latency = 0.01
+    from rehearsal_recorder.audio.ring import RingOutput
+    mixer = rtmixer.Mixer(channels=2, samplerate=RATE, blocksize=1024)
+    mixer.start()
+    take = Counter()
+    ring = RingOutput(mixer, 2, RATE, take.fill, take.state, take.restore)
+    ring.start(worker=False)
+    _play(mixer, 3)
+    ok("by the clock: what the card took, less the output latency", ring.heard() == 3072 - 480)
+    ring._action.actual_time = 0.0
+    ok("no start time: from the ring, the same", ring.heard() == 3072 - 480)
+    ring._action.actual_time = -50.0
+    ok("a start time that puts it past the ring: from the ring", ring.heard() == 3072 - 480)
+    ring.stop()
+    fake_rtmixer.card.out_latency = 0.0
+
+
+def input_pads_overflow():
+    print("\n[7] A record ring that filled: the frames lost come back as silence")
+    from rehearsal_recorder.audio.ring import RingInput
+    card = fake_rtmixer.card
+    card.reset()
+    recorder = rtmixer.Recorder(channels=1, samplerate=RATE, blocksize=1024)
+    recorder.start()
+    got = []
+    ring = RingInput(recorder, 1, RATE, lambda block, first, arrival: got.append(
+        (first, block[:, 0].copy(), arrival)), seconds=8192 / RATE)
+    ring.start(worker=False)
+    card.feed(np.arange(13 * 1024, dtype=np.float32)[:, None] + 1)
+    _play_frames = [card.pump(1024) for _ in range(12)]
+    ring.service()
+    ok("the full ring is handed over", sum(len(b) for _, b, _ in got) == 8192)
+    ok("the overflow is counted", ring.counts["overflowed"] == 1 and ring.counts["fullest_frames"] == 8192)
+    card.pump(1024)
+    ring.service()
+    whole = np.concatenate([b for _, b, _ in got])
+    ok("the take keeps its length: every frame the card captured", len(whole) == 13 * 1024)
+    ok("the 4096 frames lost are silence, said so",
+       ring.counts["lost_frames"] == 4096 and not whole[8192:12288].any()
+       and any(a is None and len(b) == 4096 for _, b, a in got))
+    ok("what came after is in its place", np.array_equal(whole[12288:], np.arange(12288, 13312) + 1))
+    ok("each piece says its first frame", [f for f, _, _ in got] == [0, 8192, 12288])
+    ring.stop()
+
+
+def marks_mean_of_second():
+    print("\n[8] The notes' clock, one mark a second from the reads")
+    from rehearsal_recorder.audio.ring import RingMarks
+    from rehearsal_recorder.midi.clock import AudioClock
+    clock = AudioClock(RATE)
+    latency = 0.08533
+    marks = RingMarks(clock, RATE, latency)
+    rng = np.random.default_rng(7)
+    t0 = 5_000_000_000
+    ns_per_frame = 1e9 / RATE
+    # Block j's first frame is captured at t0 + j*1024 frames and arrives the
+    # stream's latency later; the ring is read about every 10 ms, give or
+    # take 5.
+    arrive = [t0 + round(j * 1024 * ns_per_frame + latency * 1e9) for j in range(470)]
+    reads = sorted(t0 + round(k * 10e6 + rng.uniform(-5e6, 5e6)) for k in range(1, 1000))
+    j, last = 0, reads[0]
+    for now in reads[1:]:
+        first = j
+        while j < len(arrive) and arrive[j] <= now:
+            j += 1
+        if j > first:
+            marks.read(first * 1024, (j - first) * 1024, (last + now) // 2)
+        last = now
+    kept = clock.marks()
+    off = [abs(ns - (t0 + frame * ns_per_frame)) / 1e6 for ns, frame in kept]
+    ok(f"a mark a second ({len(kept)} for 10 s)", 9 <= len(kept) <= 11)
+    ok(f"each mark within 1.5 ms of the true line (worst {max(off):.2f} ms)", max(off) < 1.5)
+    # What a note gets: the line through the marks, read at a moment.
+    placed = [abs(clock.to_seconds(t0 + round(s * 1e9)) - s) * 1e3
+              for s in (1.0, 3.3, 5.0, 7.7, 9.0)]
+    ok(f"a note is placed within 0.5 ms of where it was played (worst {max(placed):.2f} ms)",
+       max(placed) < 0.5)
+
+
 def main():
     fake_card_behaves()
+    output_keeps_a_second()
+    setting_heard_from_guard()
+    move_is_exact()
+    dry_ring_restarts()
+    heard_falls_back()
+    input_pads_overflow()
+    marks_mean_of_second()
     if problems:
         print(f"\n{len(problems)} problem(s):")
         for p in problems:

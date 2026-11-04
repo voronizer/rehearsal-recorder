@@ -153,6 +153,14 @@ class AudioClock(StreamClock):
             back = frames / self.samplerate + self.latency_sec
         self._keep((arrival_ns - int(back * _NS), first))
 
+    def mark_at(self, ns, frame):
+        """
+        The take's frame `frame` was captured at `ns`: a mark made elsewhere
+        than in a callback, by the thread that reads a recording ring
+        (audio/ring.RingMarks). Single assignments and one append, as mark.
+        """
+        self._keep((ns, frame))
+
     def to_seconds(self, ns):
         """
         Seconds into the take on the audio's own clock, for a moment `ns` on

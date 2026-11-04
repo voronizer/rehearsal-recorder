@@ -6,8 +6,10 @@ a device it holds, so on the recording card the click rides the take's stream
 (audio/capture.py) and on the player's device the player's (audio/player.py).
 
 The stream is float32, the clicks' own form, as wide as the highest output
-asked for. Its callback marks the source's clock with when what it writes is
-heard and renders the source into it; nothing else. A stream that ends under it
+asked for. rtmixer plays it from a ring rendered a second ahead
+(audio/ring.py): each block marks the source's clock with when it is heard,
+and a change to the source (swap, a tempo, a volume) renders the part not yet
+heard again. A stream that ends under it
 (a headphone amp unplugged, Bluetooth gone) or goes quiet says so in `problem`,
 and only there: a take whose click has gone records on.
 
@@ -23,10 +25,10 @@ import numpy as np
 import sounddevice as sd
 
 from rehearsal_recorder.audio import heartbeat
-from rehearsal_recorder.audio.click_timing import lead_of
 from rehearsal_recorder.audio.devices import STREAM_LOCK, close_stream, open_stream, output_latency
+from rehearsal_recorder.audio.ring import BLOCK, RingOutput
 
-BLOCK_FRAMES = 1024
+BLOCK_FRAMES = BLOCK
 
 # The rate of an output that says none, and of one that is not there.
 DEFAULT_RATE = 48000
@@ -66,7 +68,7 @@ class ClickOutput:
         self.samplerate = int(round(rate))
         self._source = None
         self._stream = None
-        self._frames = 0
+        self._ring = None
         self._stopping = False
         self._failed = None
         self._heartbeat = heartbeat.Heartbeat()
@@ -74,18 +76,20 @@ class ClickOutput:
     def start(self, source):
         """Opens the stream and plays `source` in it. Raises what the opening
         raised, with `problem` saying so."""
+        import rtmixer  # the sound process's alone
+
+        self._hook(None, source)
         self._source = source
+        width = max(self.channels)
         try:
             with STREAM_LOCK:
                 self._stream = open_stream(
-                    sd.OutputStream,
+                    rtmixer.Mixer,
                     device=self.device_index,
-                    channels=max(self.channels),
+                    channels=width,
                     samplerate=self.samplerate,
-                    dtype="float32",
                     blocksize=BLOCK_FRAMES,
                     latency=self._latency,
-                    callback=self._callback,
                     finished_callback=self._finished,
                 )
         except Exception as e:
@@ -94,16 +98,39 @@ class ClickOutput:
         latency = getattr(self._stream, "latency", None)
         if isinstance(latency, (int, float)) and 0 < latency < 1:
             self._latency = float(latency)
-        self._heartbeat.start()
+        self._ring = RingOutput(self._stream, width, self.samplerate, self._ring_fill,
+                                self._ring_state, self._ring_restore, heartbeat=self._heartbeat)
+        self._ring.start()
 
     def swap(self, source):
-        """Another source from the next block, or None for silence."""
-        self._source = source
+        """Another source from a block ahead of what is heard, or None for
+        silence. One taken out that has played all it will is heard out."""
+        old, self._source = self._source, source
+        self._hook(old, source)
+        if source is None and old is not None and getattr(old, "done", False):
+            return
+        self._changed()
+
+    def _changed(self):
+        ring = self._ring
+        if ring is not None:
+            ring.change()
+
+    def _hook(self, old, new):
+        tell = self._changed
+        if old is not None and getattr(old, "changed", None) == tell:
+            old.changed = None
+        if new is not None and hasattr(new, "keep"):
+            new.changed = tell
 
     def stop(self):
         """Closes the stream. Never raises: the take or the click it served is
         over either way."""
         self._stopping = True
+        ring, self._ring = self._ring, None
+        if ring is not None:
+            ring.stop()
+        self._hook(self._source, None)
         self._source = None
         self._heartbeat.stop()
         with STREAM_LOCK:
@@ -132,19 +159,20 @@ class ClickOutput:
         if not self._stopping and self._failed is None:
             self._failed = STOPPED
 
-    def _callback(self, outdata, frames, time_info, status):
-        # The audio thread: no print, no lock, nothing allocated but what the
-        # source mixes in place.
-        self._heartbeat.enter()
-        try:
-            outdata.fill(0)
-            source = self._source
-            if source is not None and frames:
-                source.render(outdata, self._frames, time.perf_counter_ns(),
-                              lead_of(time_info, self._latency))
-            self._frames += frames
-        finally:
-            self._heartbeat.leave()
+    def _ring_fill(self, out, frame, now_ns, lead_sec):
+        source = self._source
+        if source is not None:
+            source.render(out, frame, now_ns, lead_sec)
+
+    def _ring_state(self):
+        source = self._source
+        keep = getattr(source, "keep", None)
+        return (source, keep() if keep is not None else None)
+
+    def _ring_restore(self, state):
+        source, kept = state
+        if source is not None and source is self._source and kept is not None:
+            source.put_back(kept)
 
 
 class SilentOutput:

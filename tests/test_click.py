@@ -47,6 +47,12 @@ _sd = types.ModuleType("sounddevice")
 _sd.query_devices = lambda index=None, kind=None: {"name": "Stub", "max_output_channels": 2,
                                                    "default_samplerate": 48000}
 sys.modules["sounddevice"] = _sd
+# rtmixer's stand-in, its streams opened through the stub's when it has one,
+# so a check that gives it a card that refuses has rtmixer's refuse too.
+sys.path.insert(0, str(PROJECT / "tests"))
+import fake_rtmixer  # noqa: E402
+
+fake_rtmixer.install(_sd)
 
 import numpy as np  # noqa: E402
 import soundfile  # noqa: E402  (libsndfile, to read the acid chunk the way a DAW's library does)

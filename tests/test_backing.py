@@ -921,10 +921,10 @@ def main():
     player = TakePlayer([{"name": "Gtr", "file": str(tmp / "quiet.wav")}])
     between = BackingSource(backing_file.open_ready(ready6), (0, 1), 1.0)
     player.play_free_backing(between)
-    out = np.zeros((512, 2), np.int16)
-    player._fill(out, 512, None)
+    out = np.zeros((1024, 2), np.float32)
+    player._ring_fill(out, 0, time.perf_counter_ns(), 0.0)
     ok("between takes, mixed into the player's stream on its device",
-       player.free_backing is between and np.abs(out - np.trunc(data6[:512] * 32767)).max() <= 1)
+       player.free_backing is between and np.abs(out - data6[:1024]).max() <= 1e-6)
 
     elsewhere = FakeOutput(RATE)
     asio = TakeClick(120, "4/4", 1, voices, (0, 1), output=elsewhere, samplerate=RATE,
