@@ -14,6 +14,15 @@ opening.
   and **Tracks in FLAC** list the tracks with a tick each, and each ticked
   one comes as a file of its own, the notes as .mid too. This replaces
   **Download tracks** at the foot of the page.
+- **Long take names fit.** A take's row now gives its name a line of its
+  own, with the wave under it, so a long name is no longer cut short to make
+  room for the wave. That is so in the band service and in РЭХА: on the
+  rehearsal screen, in History and on a song's page. In a take's panel in
+  the band service the track names take the room the longest one needs. The
+  name at the top of a take's or a song's panel opens its page and goes on
+  to a second line when it is long; the **Take's page** and **Song's page**
+  buttons are gone. The take's ★ sits by its player, ▶ is level with the
+  wave, and the time is in the wave's corner.
 - **A band's own service is set up on GitHub alone.** Whoever runs one for
   their band now puts all its settings in their fork's settings on GitHub:
   the owner's address, the address letters come from, both Cloudflare

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react"
 import { Link } from "@tanstack/react-router"
-import { ChevronDown, ChevronRight, Ellipsis, X } from "lucide-react"
+import { ChevronDown, Ellipsis, X } from "lucide-react"
 import { ConfirmDialog } from "@/components/ConfirmDialog"
 import { Button } from "@/components/ui/button"
 import {
@@ -298,15 +298,14 @@ export function SongPanel({ id }: { id: number }) {
   const { song, files } = page.data
   return (
     <div className="flex flex-col gap-6" aria-label={song.title}>
-      <div className="flex items-center gap-2">
-        <h2 className="flex-1 truncate text-lg font-semibold">{song.title}</h2>
-        <SongMenu song={song} onGone={close} />
-        <Button asChild variant="outline" size="row">
-          <Link to="/songs/$id" params={{ id: String(id) }}>
-            Song's page
-            <ChevronRight />
+      {/* The title opens the song's page and wraps when long (Alex's pick D, 2026-11-04). */}
+      <div className="flex items-start gap-2">
+        <h2 className="min-w-0 flex-1 py-0.5 text-lg font-semibold [overflow-wrap:anywhere]">
+          <Link to="/songs/$id" params={{ id: String(id) }} className={OPENS}>
+            {song.title}
           </Link>
-        </Button>
+        </h2>
+        <SongMenu song={song} onGone={close} />
         <Button variant="ghost" size="icon-row" aria-label="Close" onClick={close}>
           <X />
         </Button>
