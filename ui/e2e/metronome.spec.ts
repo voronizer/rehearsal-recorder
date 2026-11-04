@@ -464,12 +464,27 @@ test.describe("the row on the rehearsal screen", () => {
     await page.waitForTimeout(300)
     expect(await callCount(page, "metronome_tap_listen")).toBe(0)
 
+    // The three hits are timed in the page from the press itself: the test's
+    // own round trips to the page, timed from here, stretched the gaps under
+    // a busy runner (137 a minute once).
+    await page.evaluate(() => {
+      const w = window as unknown as { __PAD_TAP__: () => void; __HITS__: number }
+      w.__HITS__ = 0
+      document.addEventListener(
+        "click",
+        () => {
+          for (let i = 1; i <= 3; i++)
+            window.setTimeout(() => {
+              w.__PAD_TAP__()
+              w.__HITS__++
+            }, 400 * i)
+        },
+        { once: true, capture: true }
+      )
+    })
     await tap(page).click()
     await expect.poll(() => callCount(page, "metronome_tap_listen")).toBe(1)
-    for (let i = 0; i < 3; i++) {
-      await page.waitForTimeout(400)
-      await pad()
-    }
+    await expect.poll(() => page.evaluate(() => (window as unknown as { __HITS__: number }).__HITS__)).toBe(3)
     // The press and three hits 0.4 s apart: 150 a minute.
     await expect.poll(async () => (await sent(page)).length).toBeGreaterThan(0)
     await expect
