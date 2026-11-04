@@ -95,11 +95,27 @@ jobs:
       # Run 13: a take recorded in the second process, with the load in this
       # one; where the card is and a level come back through shared memory.
       - name: Record in a second process
+        if: false  # run 13 has it
         shell: bash
         working-directory: .github/rtmixer-probe
         run: |
           printf 'backend = "Windows WASAPI"\nbufferSizeSamples = 1024\n' > "$USERPROFILE/FlexASIO.toml"
           for i in 1 2; do python proc_duplex.py "pd_asio_$i.wav" 30 FlexASIO ASIO || echo "duplex $i failed"; done
+
+      # Run 14: the notes' clock and the take's click when the take is
+      # recorded through rtmixer, against today's way. ASIO opens one stream
+      # a process, so today's and the new clock run one after the other.
+      - name: Notes' clock and the take's click
+        shell: bash
+        working-directory: .github/rtmixer-probe
+        run: |
+          printf 'backend = "Windows WASAPI"\nbufferSizeSamples = 1024\n' > "$USERPROFILE/FlexASIO.toml"
+          for i in 1 2; do
+            python clockcheck.py 30 FlexASIO ASIO a ../../src || echo "clock a $i failed"
+            python clockcheck.py 30 FlexASIO ASIO b ../../src || echo "clock b $i failed"
+            python landing.py today FlexASIO ASIO ../../src || echo "landing today $i failed"
+            python landing.py rtmixer FlexASIO ASIO ../../src || echo "landing rtmixer $i failed"
+          done
 
       - name: Frozen, also from a second process
         if: false  # run 12 has it
@@ -178,9 +194,21 @@ jobs:
       # Run 13: a take recorded in the second process, with the load in this
       # one; where the card is and a level come back through shared memory.
       - name: Record in a second process
+        if: false  # run 13 has it
         working-directory: .github/rtmixer-probe
         run: |
           for i in 1 2; do python proc_duplex.py "pd_mac_$i.wav" 30 BlackHole "Core Audio" || echo "duplex $i failed"; done
+
+      # Run 14: the notes' clock and the take's click when the take is
+      # recorded through rtmixer, against today's way, both at once.
+      - name: Notes' clock and the take's click
+        working-directory: .github/rtmixer-probe
+        run: |
+          for i in 1 2; do
+            python clockcheck.py 30 BlackHole "Core Audio" both ../../src || echo "clock $i failed"
+            python landing.py today BlackHole "Core Audio" ../../src || echo "landing today $i failed"
+            python landing.py rtmixer BlackHole "Core Audio" ../../src || echo "landing rtmixer $i failed"
+          done
 
       - name: Frozen, also from a second process
         if: false  # run 12 has it
