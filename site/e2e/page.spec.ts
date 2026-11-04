@@ -497,10 +497,11 @@ test("the MIDI piece shows two lanes of notes, each with its plate, the part hea
   const piece = await showPiece(page, "Notes too, from an e-kit or a keyboard.")
   const drums = piece.locator("[data-notes-plate='Drums']")
   await expect(drums).toContainText("TD-17")
-  await expect(drums).toContainText("Saved as .mid, not played here")
+  // Not played here: M pressed for good, the words in its tip.
+  await expect(drums.getByRole("button", { name: "Drums: Saved as .mid, not played here" })).toHaveAttribute("aria-pressed", "true")
   const keys = piece.locator("[data-notes-plate='Keys']")
   await expect(keys).toContainText("Launchkey Mini MK3")
-  await expect(keys).toContainText("Saved as .mid, not played here")
+  await expect(keys.getByRole("button", { name: "Keys: Saved as .mid, not played here" })).toHaveAttribute("aria-pressed", "true")
   await expect(piece.locator("[data-notes-lane]")).toHaveCount(2)
   // The drums' rows are named, and the keys' octaves.
   await expect(piece.locator("[data-notes-lane='Drums']")).toContainText("Crash")
@@ -696,7 +697,7 @@ test("the disk's piece is as wide as its words, with no room held for a longer s
   await page.goto("/")
   const piece = await showPiece(page, "Disk space in hours.")
   const health = piece.locator("[data-health]")
-  const words = health.getByText("Interface connected · room for")
+  const words = health.getByText(/^Room for/)
   await expect(words).toBeVisible()
   const said = (await words.locator("..").boundingBox())!
   const box = (await health.boundingBox())!

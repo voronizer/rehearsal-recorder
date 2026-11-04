@@ -45,7 +45,8 @@ const SHOTS: Record<string, Shot> = {
     path: () => `/takes/${pictured().takes["Viasna 12"]}?at=102`,
     then: async (page) => {
       await page.getByRole("slider", { name: "Guitar volume" }).press("End")
-      await page.getByText("Your levels. Only you hear them.").waitFor()
+      // His levels: the way back to РЭХА's, under Master, is live.
+      await page.locator("[data-levels] button:not([disabled])").waitFor()
     },
   },
   mark: {

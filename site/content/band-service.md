@@ -33,7 +33,7 @@ Each of you has a track of your own in every take. Play yours alone to hear what
 
 The levels are yours as well. Turn a track up or down once, and it plays that way for you in every take with a track of that name, on the phone and on the computer. Only you hear it that way; for the others nothing changes. **РЭХА's levels** brings back the mix the take came with.
 
-![Viasna 12 on Ivan's phone: a row for each track with its level, M and S, and the guitar turned all the way up. “Your levels. Only you hear them.”](lanes)
+![Viasna 12 on Ivan's phone: a row for each track with its level, M and S, the guitar turned all the way up, and under Master the button for РЭХА's levels](lanes)
 
 ## Point at the second
 

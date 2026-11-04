@@ -1,4 +1,4 @@
-import { useEffect, useState, type CSSProperties } from "react"
+import { useEffect, useState, type CSSProperties, type ReactNode } from "react"
 import {
   CircleAlert,
   Flag,
@@ -106,6 +106,7 @@ export function TakePlayer({
   onAddMarker,
   onEditMarker,
   talkOf,
+  underMaster,
   onRemoveMarker,
   onCrop,
   canCrop = true,
@@ -140,6 +141,8 @@ export function TakePlayer({
    *  says how many comments the talk has. The chip then shows a talk sign
    *  and that number where РЭХА shows its pencil. */
   talkOf?: (marker: Marker) => number
+  /** A row under Master's plate (Timeline's underMaster). */
+  underMaster?: ReactNode
   onRemoveMarker?: (seconds: number) => void
   /** Trim the take down to the region, at once: the take as it was can be
    *  had back with the notice's Undo. Absent where that is not offered. */
@@ -199,6 +202,7 @@ export function TakePlayer({
       >
         <Timeline
           player={player}
+          underMaster={underMaster}
           click={click}
           take={take}
           drift={drift}
@@ -512,17 +516,27 @@ function Transport({
       {/* Repeat is part of how the take plays, so it sits with the playing,
           by the time. Clear and Crop are not here: they are about the
           region, and sit under its times on the timeline. */}
-      <Toggle
-        variant="outline"
-        pressed={looping}
-        onPressedChange={() => player.toggleLoop()}
-        disabled={player.loading}
-        aria-label="Repeat"
-        aria-keyshortcuts={key("R")}
-      >
-        <Repeat />
-        Repeat
-      </Toggle>
+      {/* The Toggle round the tip's trigger, as Stereo's on the start
+          screen: the Toggle's on or off is then the one the button says. */}
+      <Tooltip>
+        <Toggle
+          asChild
+          variant="outline"
+          size="icon-row"
+          pressed={looping}
+          onPressedChange={() => player.toggleLoop()}
+          disabled={player.loading}
+          aria-label="Repeat"
+          aria-keyshortcuts={key("R")}
+        >
+          <TooltipTrigger>
+            <Repeat />
+          </TooltipTrigger>
+        </Toggle>
+        <TooltipContent>
+          <span aria-hidden>Repeat</span>
+        </TooltipContent>
+      </Tooltip>
 
       <div className="ml-auto flex items-center gap-1.5">
         {onAddMarker && (

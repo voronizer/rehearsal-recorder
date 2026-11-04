@@ -109,3 +109,23 @@ export function Violin(props: Props) {
     </Drawn>
   )
 }
+
+/** One ring: a track or a file of one channel. With Stereo, the pair
+ *  Logic's channel strip shows for mono and stereo. */
+export function Mono(props: Props) {
+  return (
+    <Drawn {...props}>
+      <circle cx="12" cy="12" r="8" />
+    </Drawn>
+  )
+}
+
+/** Two rings side by side, overlapping: two channels, left and right. */
+export function Stereo(props: Props) {
+  return (
+    <Drawn {...props}>
+      <circle cx="8" cy="12" r="6.5" />
+      <circle cx="16" cy="12" r="6.5" />
+    </Drawn>
+  )
+}

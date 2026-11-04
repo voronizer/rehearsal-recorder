@@ -14,7 +14,8 @@ test.describe("as Alex", () => {
       await expect(lanes.nth(i)).toHaveAttribute("data-lane-row", name)
     // The drums' notes under their sound, read from the .mid on the page, a row each for the kit.
     await expect(lanes.nth(1)).toHaveAttribute("data-paired", "true")
-    await expect(lanes.nth(1).locator("[data-notes-plate]")).toContainText("Saved as .mid, not played here")
+    // Not played here: M pressed for good, the words in its tip.
+    await expect(lanes.nth(1).locator("[data-notes-plate]").getByRole("button", { name: "Drums: Saved as .mid, not played here" })).toHaveAttribute("aria-pressed", "true")
     const kit = player.locator('[data-notes-lane="Drums"]')
     for (const row of ["Hi-hat", "Snare", "Kick"]) await expect(kit.getByText(row, { exact: true })).toBeVisible()
     await expect(kit).not.toContainText("Notes file")
@@ -253,7 +254,8 @@ test.describe("as Alex on a phone", () => {
     const rows = tracks.locator("[data-desk-row]")
     await expect(rows).toHaveCount(3)
     await expect(rows.nth(2)).toHaveAttribute("data-desk-row", "Keys")
-    await expect(rows.nth(2)).toContainText("Saved as .mid, not played here")
+    await expect(rows.nth(2).getByRole("button", { name: "Keys: Saved as .mid, not played here" })).toHaveAttribute("aria-pressed", "true")
+    await expect(rows.nth(2)).not.toContainText("Saved as")
     await expect(rows.nth(2).getByRole("slider")).toHaveCount(0)
     await expect(rows.nth(2)).not.toHaveAttribute("data-dimmed")
     await tracks.getByRole("button", { name: "Solo Drums" }).click()
@@ -264,12 +266,18 @@ test.describe("as Alex on a phone", () => {
 test.describe("as Ira", () => {
   test.use({ storageState: as("ira") })
 
-  test("a level moved is yours after a reload, and the way back is the balance", async ({ page }) => {
+  test("a level moved is yours after a reload, and the way back is the balance, under Master", async ({ page }) => {
     await page.goto(`/takes/${band().takes["Viasna 12"]}`)
     const player = page.locator("[data-take-player]")
-    const line = page.locator("[data-levels]")
-    await expect(line).toContainText("Levels as РЭХА sent them.")
-    await expect(line.getByRole("button", { name: "РЭХА's levels" })).toBeDisabled()
+    // The way back is under the faders it sets: under Master's plate, there
+    // all the time, faded while the levels are РЭХА's.
+    const back = player.getByRole("button", { name: "РЭХА's levels" })
+    await expect(back).toBeDisabled()
+    const master = (await player.locator("[data-master-plate]").boundingBox())!
+    const at = (await back.boundingBox())!
+    expect(at.y).toBeGreaterThanOrEqual(master.y + master.height)
+    expect(at.x + at.width).toBeLessThanOrEqual(master.x + master.width)
+    await expect(page.getByText("Levels as РЭХА sent them.")).toHaveCount(0)
     const guitar = player.getByRole("slider", { name: "Guitar volume" })
     await expect(guitar).toHaveAttribute("aria-valuetext", "100%")
     // The page is read again only once the last turn has reached the service.
@@ -282,7 +290,9 @@ test.describe("as Ira", () => {
     await guitar.focus()
     for (let i = 0; i < 5; i++) await page.keyboard.press("ArrowLeft")
     await expect(guitar).toHaveAttribute("aria-valuetext", "95%")
-    await expect(line).toContainText("Your levels. Only you hear them.")
+    await expect(back).toBeEnabled()
+    await back.hover()
+    await expect(page.getByRole("tooltip")).toHaveText("Your levels: only you hear them. This puts back the ones РЭХА sent.")
     await kept
 
     await page.reload()
@@ -290,14 +300,14 @@ test.describe("as Ira", () => {
     // A track not moved stays at the take's balance.
     await expect(page.locator("[data-take-player]").getByRole("slider", { name: "Vocals volume" })).toHaveAttribute("aria-valuetext", "70%")
 
-    await page.locator("[data-levels]").getByRole("button", { name: "РЭХА's levels" }).click()
-    await expect(page.locator("[data-levels]")).toContainText("Levels as РЭХА sent them.")
+    await page.locator("[data-take-player]").getByRole("button", { name: "РЭХА's levels" }).click()
+    await expect(page.locator("[data-take-player]").getByRole("button", { name: "РЭХА's levels" })).toBeDisabled()
     await expect(page.locator("[data-take-player]").getByRole("slider", { name: "Guitar volume" })).toHaveAttribute("aria-valuetext", "100%")
     await page.reload()
     await expect(page.locator("[data-take-player]").getByRole("slider", { name: "Guitar volume" })).toHaveAttribute("aria-valuetext", "100%")
   })
 
-  test("a level that could not be kept says so on the line", async ({ page }) => {
+  test("a level that could not be kept says so beside the way back", async ({ page }) => {
     await page.route("**/api/me/levels", (route) =>
       route.request().method() === "PUT"
         ? route.fulfill({ status: 500, json: { error: "The band service is resting" } })

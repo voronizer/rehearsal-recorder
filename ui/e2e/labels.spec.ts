@@ -457,6 +457,8 @@ test("a folder typed in brings its library's labels to the marker dialog", async
   // Saved on leaving the field.
   await page.keyboard.press("Tab")
   await expect.poll(() => callCount(page, "list_labels")).toBeGreaterThan(before)
+  // The first Escape closes Browse's tip, open on the focus Tab gave it.
+  await page.keyboard.press("Escape")
   await page.keyboard.press("Escape")
   await startRehearsal(page)
   await recordTake(page)

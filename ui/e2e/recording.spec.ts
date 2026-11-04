@@ -101,12 +101,14 @@ test("a first take says what is recording, what clipped and what is silent", asy
   // Silent is said once an input has been quiet for a moment.
   await expect(tile(page, "Vocals")).toHaveAttribute("data-silent")
   await expect(tile(page, "Vocals")).toContainText("silent")
-  // An estimate under two days keeps its about.
+  // An estimate under two days keeps its about, after the green dot that
+  // says the interface is sending.
   await expect(
-    page.getByText("Interface connected · room for about 10 h 40 min of recording", {
+    page.getByText("Room for about 10 h 40 min of recording", {
       exact: true,
     })
   ).toHaveCount(1)
+  await expect(page.locator("[data-health]").getByRole("img", { name: "Interface connected" })).toBeVisible()
   // Guitar at the top the whole time is one clip that has not ended, not
   // one for every poll, said on its tile and nowhere else.
   await expect(tile(page, "Guitar")).toHaveAttribute("data-clipped")
@@ -197,13 +199,21 @@ test("the screen is the take and the tiles, with the status beside Stop", async 
   expect(disk.top, "the disk line under Recording").toBeGreaterThanOrEqual(line.bottom)
   expect(Math.abs(disk.left - line.left), "both from the row's left").toBeLessThanOrEqual(0.5)
   // The disk line in the start screen's look, its words where Recording's
-  // start: the icon and its gap are as wide as the dot and its.
+  // start: its green dot's place and gap are as wide as the red dot and its,
+  // and the two dots are one size, one above the other.
   const starts = await status.evaluate((el) =>
     [
       el.querySelector("[data-recording-line] .font-semibold")!,
-      el.querySelector("[data-health] > :last-child > span")!,
+      el.querySelector("[data-health] > :last-child > span:last-child")!,
     ].map((e) => e.getBoundingClientRect().left)
   )
+  const dots = await status.evaluate((el) =>
+    [el.querySelector("[data-recording-line] > span")!, el.querySelector("[data-health] [data-live]")!].map((e) => {
+      const r = e.getBoundingClientRect()
+      return [r.left, r.width]
+    })
+  )
+  expect(dots[1], "the green dot under the red one").toEqual(dots[0])
   expect(Math.abs(starts[0] - starts[1]), "the two lines' words from one x").toBeLessThanOrEqual(0.5)
 
   // The start screen's air: 32 round the screen, 48 between the groups, the
@@ -518,12 +528,12 @@ test("a battery running low is said on the status line, and nothing moves", asyn
   expect((await row.boundingBox())!.height).toBe(before)
   // Charged enough, or plugged in: the usual line.
   await setFake(page, "__BATTERY__", 64)
-  await expect(page.getByText(/^Interface connected · room for/)).toHaveCount(1)
+  await expect(page.getByText(/^Room for/)).toHaveCount(1)
   await expect(page.getByText(/^Battery/)).toHaveCount(0)
   await setFake(page, "__BATTERY__", 14)
   await expect(page.getByText(/^Battery 14%/)).toHaveCount(1)
   await setFake(page, "__BATTERY__", null)
-  await expect(page.getByText(/^Interface connected · room for/)).toHaveCount(1)
+  await expect(page.getByText(/^Room for/)).toHaveCount(1)
 })
 
 /** The take's time as m:ss or h:mm:ss, in seconds. */
@@ -608,10 +618,12 @@ test("nothing moves when low space comes at 150 percent in 960x680", async ({ pa
 test("the recording disk line says the start screen's words", async ({ page }) => {
   await secondGo(page)
   // The start screen says "Room for about 10 h 40 min of recording"; here
-  // the line leads with the interface, and the rest is the same sentence.
-  await expect(health(page).getByText(/^Interface connected · room for /)).toHaveCount(1)
+  // the same sentence follows a green dot: the interface is sending.
+  const live = health(page).getByRole("img", { name: "Interface connected" })
+  await expect(live).toBeVisible()
+  expect(await style(live, "background-color")).toEqual({ "background-color": await colour(page, "--signal") })
   await expect(
-    page.getByText("Interface connected · room for about 10 h 40 min of recording", {
+    page.getByText("Room for about 10 h 40 min of recording", {
       exact: true,
     })
   ).toHaveCount(1)
@@ -624,9 +636,11 @@ test("the recording disk line says the start screen's words", async ({ page }) =
     })
   ).toHaveCount(1)
   await expect(page.getByText(/^Running out of space/)).toHaveCount(0)
-  await expect(page.getByText(/^Interface connected/)).toHaveCount(0)
+  // Low on space, the dot is not there: the warning says enough.
+  await expect(live).toHaveCount(0)
   await setFake(page, "__LOW_SPACE__", false)
-  await expect(page.getByText(/^Interface connected · room for /)).toHaveCount(1)
+  await expect(page.getByText(/^Room for /)).toHaveCount(1)
+  await expect(live).toBeVisible()
 })
 
 for (const theme of ["dark", "light"] as const) {
@@ -657,7 +671,7 @@ for (const theme of ["dark", "light"] as const) {
     })
     // Quiet when all is well.
     await setFake(page, "__BATTERY__", null)
-    const fine = page.getByText(/^Interface connected · room for /)
+    const fine = page.getByText(/^Room for /)
     await expect(fine).toHaveCount(1)
     expect(await style(fine, "color")).toEqual({ color: await colour(page, "--muted-foreground") })
   })

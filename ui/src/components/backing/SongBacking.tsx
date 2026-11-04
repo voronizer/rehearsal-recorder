@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react"
 import { Ellipsis, Play, Square, TriangleAlert } from "lucide-react"
+import { ChannelsIcon } from "@/components/ChannelsIcon"
 import { BarOneField } from "@/components/backing/BarOneField"
 import { FileStart } from "@/components/backing/FileStart"
 import { Button } from "@/components/ui/button"
@@ -245,12 +246,29 @@ export function SongBacking({
             <span data-backing-file className="flex min-w-0 flex-[1_1_10rem] items-baseline gap-1.5 text-sm">
               <span className="truncate">{counting ?? own?.name}</span>
               {counting === null && own && !missing && own.seconds !== null && (
-                <span className="tnum shrink-0 text-xs text-muted-foreground">
-                  {play.position !== null
-                    ? `${formatMMSS(Math.min(play.position, own.seconds))} / ${formatMMSS(own.seconds)}`
-                    : formatMMSS(own.seconds)}{" "}
-                  · {own.channels === 1 ? "mono" : "stereo"}
-                </span>
+                <>
+                  <span className="tnum shrink-0 text-xs text-muted-foreground">
+                    {play.position !== null
+                      ? `${formatMMSS(Math.min(play.position, own.seconds))} / ${formatMMSS(own.seconds)}`
+                      : formatMMSS(own.seconds)}
+                  </span>
+                  {/* One ring or two: mono or stereo, the words in its tip. */}
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <span
+                        data-backing-channels
+                        role="img"
+                        aria-label={own.channels === 1 ? "Mono file" : "Stereo file"}
+                        className="flex shrink-0 self-center"
+                      >
+                        <ChannelsIcon stereo={own.channels !== 1} className="size-3.5 text-muted-foreground" />
+                      </span>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <span aria-hidden>{own.channels === 1 ? "Mono file" : "Stereo file"}</span>
+                    </TooltipContent>
+                  </Tooltip>
+                </>
               )}
             </span>
             {counting === null && own && !missing && (

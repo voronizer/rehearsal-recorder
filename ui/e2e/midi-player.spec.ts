@@ -15,8 +15,8 @@ import type { Locator, Page } from "@playwright/test"
 // The player with a take's notes in it (spec Part 6): a Both track's notes
 // right under its audio, sharing its audio's well under a line; a MIDI
 // track's notes in a lane of their own; and a track whose port never
-// appeared, saying so. The notes are drawn, never played: no M, S or fader on
-// their plates.
+// appeared, saying so. The notes are drawn, never played: their plates have
+// M pressed for good, the words in its tip, and no S or fader.
 
 /** The drummer on Both, the keyboard player on MIDI between the guitar and
  *  the bass, as the band and as the session that records. */
@@ -63,6 +63,10 @@ async function review(page: Page, before = "") {
 
 const plate = (page: Page, name: string) => page.locator(`[data-plate='${name}']`)
 const notesPlate = (page: Page, name: string) => page.locator(`[data-notes-plate='${name}']`)
+/** A notes plate's M, pressed for good, by what its tip says. */
+const lockedM = (plate: Locator, said: string) => plate.getByRole("button", { name: new RegExp(`: ${said}$`) })
+const SAVED = "Saved as .mid, not played here"
+const GONE = "Not connected, no .mid saved"
 const notesLane = (page: Page, name: string) => page.locator(`[data-notes-lane='${name}']`)
 const audioLane = (page: Page, name: string) => page.locator(`[data-lane='${name}']`)
 /** The waveform in that lane, on its well. */
@@ -124,9 +128,23 @@ test.describe("notes in the player", () => {
     const midi = notesPlate(page, "Drums")
     await expect(midi).toContainText("MIDI")
     await expect(midi).toContainText("TD-17")
-    await expect(midi).toContainText("Saved as .mid, not played here")
-    // There is nothing to hear, so nothing to mute, solo or turn up.
-    await expect(midi.getByRole("button")).toHaveCount(0)
+    // There is nothing to hear: M pressed for good, where the track's M is,
+    // and faded as a control that does nothing is; the words in its tip.
+    // Nothing to solo or turn up.
+    const locked = lockedM(midi, SAVED)
+    await expect(locked).toHaveAccessibleName(`Drums: ${SAVED}`)
+    await expect(locked).toHaveAttribute("aria-pressed", "true")
+    await expect(locked).toHaveAttribute("aria-disabled", "true")
+    expect(Number(await locked.evaluate((e) => getComputedStyle(e).opacity))).toBe(0.5)
+    expect(Math.abs((await box(locked)).x - (await box(audio.getByRole("button", { name: "Mute Drums" }))).x)).toBeLessThan(1)
+    await locked.hover()
+    await expect(page.getByRole("tooltip")).toHaveText(SAVED)
+    // Playwright waits for a control that says it is off; a press is sent
+    // all the same, and changes nothing.
+    await locked.click({ force: true })
+    await expect(locked).toHaveAttribute("aria-pressed", "true")
+    await expect(midi).not.toContainText(SAVED)
+    await expect(midi.getByRole("button")).toHaveCount(1)
     await expect(midi.locator("input")).toHaveCount(0)
     await expect(midi.getByRole("meter")).toHaveCount(0)
     // One track: the plates touch, with no line between them.
@@ -165,8 +183,8 @@ test.describe("notes in the player", () => {
     await expect(keys.locator("[data-icon]")).toHaveAttribute("data-icon", "keys")
     await expect(keys).toContainText("Keys")
     await expect(keys).toContainText("Launchkey Mini MK3")
-    await expect(keys).toContainText("Saved as .mid, not played here")
-    await expect(keys.getByRole("button")).toHaveCount(0)
+    await expect(lockedM(keys, SAVED)).toHaveAttribute("aria-pressed", "true")
+    await expect(keys.getByRole("button")).toHaveCount(1)
     await expect(keys.locator("input")).toHaveCount(0)
     // A row of its own, not part of the guitar's: no line on top, and a
     // well of its own, 6 px of the group's fill under the guitar's.
@@ -219,8 +237,8 @@ test.describe("notes in the player", () => {
     })
     await startRehearsal(page)
     await recordTake(page, 1)
-    await expect(notesPlate(page, "Pads")).toContainText("Not connected, no .mid saved")
-    await expect(notesPlate(page, "Synth")).toContainText("Saved as .mid, not played here")
+    await expect(lockedM(notesPlate(page, "Pads"), GONE)).toBeVisible()
+    await expect(lockedM(notesPlate(page, "Synth"), SAVED)).toBeVisible()
     const ys = []
     for (const p of [plate(page, "Gtr"), notesPlate(page, "Pads"), notesPlate(page, "Synth"), plate(page, "Bass")])
       ys.push((await box(p)).y)
@@ -231,8 +249,8 @@ test.describe("notes in the player", () => {
     await review(page, "window.__MIDI_GONE__ = ['Launchkey Mini MK3'];")
     await expect(notesLane(page, "Keys")).toContainText("No notes in this take")
     const keys = notesPlate(page, "Keys")
-    await expect(keys).toContainText("Not connected, no .mid saved")
-    await expect(keys).not.toContainText("Saved as .mid")
+    await expect(lockedM(keys, GONE)).toHaveAttribute("aria-pressed", "true")
+    await expect(lockedM(keys, SAVED)).toHaveCount(0)
     await expect(keys).toContainText("Launchkey Mini MK3")
     // Its icon comes from the same call as the notes: one, for the take.
     await expect(keys.locator("[data-icon]")).toHaveAttribute("data-icon", "keys")
@@ -244,7 +262,7 @@ test.describe("notes in the player", () => {
     ])
     // The drums' notes are there all the same.
     await expect(notesLane(page, "Drums")).not.toContainText("No notes")
-    await expect(notesPlate(page, "Drums")).toContainText("Saved as .mid, not played here")
+    await expect(lockedM(notesPlate(page, "Drums"), SAVED)).toBeVisible()
   })
 
   test("a Both track whose port never appeared keeps its sound, and its notes row says so", async ({
@@ -262,7 +280,7 @@ test.describe("notes in the player", () => {
     const midi = notesPlate(page, "Drums")
     await expect(midi).toContainText("MIDI")
     await expect(midi).toContainText("TD-17")
-    await expect(midi).toContainText("Not connected, no .mid saved")
+    await expect(lockedM(midi, GONE)).toBeVisible()
     await expect(notesLane(page, "Drums")).toContainText("No notes in this take")
     expect(
       await notesLane(page, "Drums").evaluate((e) => {
@@ -316,7 +334,7 @@ test.describe("notes in the player", () => {
     await expect(notesLane(page, "Drums")).toContainText("Notes file not readable")
     await expect(notesLane(page, "Keys")).not.toContainText("Notes file")
     await expect(notesLane(page, "Keys")).not.toContainText("No notes")
-    await expect(notesPlate(page, "Keys")).toContainText("Saved as .mid, not played here")
+    await expect(lockedM(notesPlate(page, "Keys"), SAVED)).toBeVisible()
     await page.getByRole("button", { name: "Play", exact: true }).click()
     await expect.poll(() => callCount(page, "player_toggle")).toBe(1)
   })
@@ -597,10 +615,10 @@ test.describe("notes in the player", () => {
     })
     await openHistory(page)
     await page.getByRole("button", { name: "Take 1 Pałyn" }).click()
-    await expect(notesPlate(page, "Keys")).toContainText("Saved as .mid, not played here")
+    await expect(lockedM(notesPlate(page, "Keys"), SAVED)).toBeVisible()
     await expect(notesPlate(page, "Keys").locator("[data-icon]")).toHaveAttribute("data-icon", "keys")
     await expect(notesLane(page, "Pads")).toContainText("No notes in this take")
-    await expect(notesPlate(page, "Pads")).toContainText("Not connected, no .mid saved")
+    await expect(lockedM(notesPlate(page, "Pads"), GONE)).toBeVisible()
     // Pads goes first, before every audio lane; Keys after the guitar.
     const pads = await box(notesPlate(page, "Pads"))
     const guitar = await box(plate(page, "Guitar"))

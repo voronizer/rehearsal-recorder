@@ -179,15 +179,18 @@ export function AudioSettings() {
               <TooltipTrigger asChild>
                 <Button
                   variant="outline"
+                  size="icon"
+                  aria-label="Look again"
                   onClick={() => void lookAgain()}
                   disabled={rescanning}
                   className="shrink-0"
                 >
                   {slowLook ? <Spinner after={0} /> : <RefreshCw />}
-                  Look again
                 </Button>
               </TooltipTrigger>
-              <TooltipContent>Find an interface plugged in since the app started</TooltipContent>
+              <TooltipContent>
+                <span aria-hidden>Look again: </span>find an interface plugged in since the app started
+              </TooltipContent>
             </Tooltip>
           </div>
 

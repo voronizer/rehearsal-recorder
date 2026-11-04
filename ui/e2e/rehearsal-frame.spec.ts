@@ -167,7 +167,7 @@ test.describe("the header", () => {
     // The date has hyphens a line could break at, and at 960 px the line
     // ends inside it; it is far narrower than the box, so it goes to the
     // next line whole instead.
-    const name = "Tuesday jam at the old brewery with the horn section and the 2026-10-12"
+    const name = "Tuesday jam at the old brewery with the horn section and the choir from 2026-10-12"
     await page.setViewportSize({ width: 960, height: 680 })
     await openApp(page)
     await page.locator("#rehearsal-name").fill(name)
@@ -274,7 +274,7 @@ test.describe("the header", () => {
     }
   })
 
-  test("the folder button says its path in the shared tip, not a native title", async ({
+  test("the folder button says its name and path in the shared tip, not a native title", async ({
     page,
   }) => {
     await openEvening(page)
@@ -284,7 +284,8 @@ test.describe("the header", () => {
     await folder.hover()
     // The fake puts a rehearsal in /rec, under the name it was started with.
     const name = (await calls(page, "start_rehearsal"))[0].args[0]
-    await expect(page.getByRole("tooltip")).toHaveText(`/rec/${name}`)
+    // The button is an icon: its name leads the tip.
+    await expect(page.getByRole("tooltip")).toHaveText(`Open folder: /rec/${name}`)
   })
 })
 

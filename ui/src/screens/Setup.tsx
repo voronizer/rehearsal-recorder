@@ -960,26 +960,25 @@ export function Setup({
             <p className="text-xs text-muted-foreground">
               Plug it in and switch it on, then look again.
             </p>
-            <Button
-              variant="outline"
-              size="row"
-              onClick={() => void lookAgain()}
-              disabled={rescanning}
-              className="shrink-0"
-            >
-              {/* A look that takes a second turns a spinner in its icon's
-                  place (B5). */}
-              {slowLook ? <Spinner after={0} /> : <RefreshCw />}
-              {/* As wide whichever it says, so nothing beside it moves. */}
-              <span className="grid">
-                <span className={cn("col-start-1 row-start-1", rescanning && "invisible")}>
-                  Look again
-                </span>
-                <span className={cn("col-start-1 row-start-1", !rescanning && "invisible")}>
-                  Looking…
-                </span>
-              </span>
-            </Button>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="outline"
+                  size="icon-row"
+                  aria-label={rescanning ? "Looking…" : "Look again"}
+                  onClick={() => void lookAgain()}
+                  disabled={rescanning}
+                  className="shrink-0"
+                >
+                  {/* A look that takes a second turns a spinner in its icon's
+                      place (B5). */}
+                  {slowLook ? <Spinner after={0} /> : <RefreshCw />}
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>
+                <span aria-hidden>Look again</span>
+              </TooltipContent>
+            </Tooltip>
           </div>
           {stillMissing && !rescanning && (
             <Warning>
@@ -1261,10 +1260,16 @@ export function Setup({
               {pastPlaying && <span className="sr-only">, playing</span>}
             </Button>
           )}
-          <Button variant="outline" onClick={onOpenHistory}>
-            <History />
-            History
-          </Button>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button variant="outline" size="icon" aria-label="History" onClick={onOpenHistory}>
+                <History />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>
+              <span aria-hidden>History</span>
+            </TooltipContent>
+          </Tooltip>
           <Tooltip>
             <TooltipTrigger asChild>
               <Button

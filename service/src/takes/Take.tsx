@@ -4,10 +4,12 @@ import { RotateCcw } from "lucide-react"
 import { TakePlayer as RehaPlayer } from "@/components/TakePlayer"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { useMultitrackPlayer } from "@/hooks/useMultitrackPlayer"
 import { usePlayerKeys, useSpacebar } from "@/hooks/useSpacebar"
 import type { Label as RehaLabel, Marker, NotesFile } from "@/lib/api"
 import { labelsChanged } from "@/lib/labels"
+import { cn } from "@/lib/utils"
 import { useLabels, useLevels, useLevelsTrouble, useRestore, useTake, type TakePage } from "../api"
 import { TakeMarks } from "../marks/MarkItem"
 import { usePanel } from "../shell/panel"
@@ -85,38 +87,56 @@ function useRehaLabels() {
   }, [labels])
 }
 
-/** The line under the player: whose levels these are, and the way back to РЭХА's. */
-function Levels({ take, sound }: { take: TakePage; sound: ServiceSound }) {
+/** The way back to РЭХА's levels, under the faders it sets (Alex,
+ *  2026-11-04): under Master's plate on a computer (`under`, the player's
+ *  row there), under the desk's Master on a phone. It is always there, so
+ *  nothing moves, and faded while the levels are the ones РЭХА sent; the
+ *  tip says whose they are. Moving a fader makes them yours and the button
+ *  live. A failure to keep them is said beside it. */
+function Levels({ take, sound, under = false }: { take: TakePage; sound: ServiceSound; under?: boolean }) {
   const yours = useLevels().data?.levels
   const trouble = useLevelsTrouble()
   const mine = take.tracks.some((t) => yours?.[t.name] !== undefined)
   const [busy, setBusy] = useState(false)
-  return (
-    <div data-levels className="flex items-center gap-2 text-sm text-muted-foreground">
-      {/* On the same line, so nothing under it moves. */}
-      {trouble ? (
-        <span role="alert" className="min-w-0 flex-1 text-destructive">
-          Your levels were not kept: {trouble}
+  const button = (
+    <Tooltip>
+      {/* On the span: a button that is off takes no pointer, and its tip
+          would never open. */}
+      <TooltipTrigger asChild>
+        <span className={cn("flex w-fit", under && "px-3")}>
+          <Button
+            variant="outline"
+            size="row"
+            disabled={!mine || busy}
+            onClick={() => {
+              setBusy(true)
+              // A failure is said beside it.
+              sound
+                .backToReha()
+                .catch(() => {})
+                .finally(() => setBusy(false))
+            }}
+          >
+            <RotateCcw />
+            РЭХА's levels
+          </Button>
         </span>
-      ) : (
-        <span className="min-w-0 flex-1">{mine ? "Your levels. Only you hear them." : "Levels as РЭХА sent them."}</span>
-      )}
-      <Button
-        variant="outline"
-        size="row"
-        disabled={!mine || busy}
-        onClick={() => {
-          setBusy(true)
-          // A failure is said on the line.
-          sound
-            .backToReha()
-            .catch(() => {})
-            .finally(() => setBusy(false))
-        }}
-      >
-        <RotateCcw />
-        РЭХА's levels
-      </Button>
+      </TooltipTrigger>
+      <TooltipContent>
+        {mine ? "Your levels: only you hear them. This puts back the ones РЭХА sent." : "The levels as РЭХА sent them"}
+      </TooltipContent>
+    </Tooltip>
+  )
+  const said = trouble && (
+    <span role="alert" className="min-w-0 text-sm text-destructive">
+      Your levels were not kept: {trouble}
+    </span>
+  )
+  // Under Master the two are cells of the player's row, on its columns.
+  return (
+    <div data-levels className={under ? "contents" : "flex items-center gap-3"}>
+      {button}
+      {said}
     </div>
   )
 }
@@ -159,9 +179,9 @@ function Full({ take, notes, sound }: { take: TakePage; notes: NotesFile[]; soun
           // A talk sign and how many comments, where РЭХА has its pencil (Alex's pick B, 2026-11-02).
           talkOf={(m) => markOf(m)?.comments.length ?? 0}
           spaceKey
+          underMaster={<Levels take={take} sound={sound} under />}
         />
       </div>
-      <Levels take={take} sound={sound} />
     </div>
   )
 }

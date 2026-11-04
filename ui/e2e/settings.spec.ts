@@ -621,7 +621,7 @@ test.describe("Audio and Folders", () => {
     expect(await blue()).toEqual([])
   })
 
-  test("Look again keeps its word and box, its icon turning to a spinner after a second", async ({
+  test("Look again keeps its name and box, its icon turning to a spinner after a second", async ({
     page,
   }) => {
     await page.clock.install()
@@ -630,7 +630,7 @@ test.describe("Audio and Folders", () => {
     // What it does is said in the shared tip, not the system's.
     await expect(look).not.toHaveAttribute("title")
     await look.hover()
-    await expect(tooltip(page)).toHaveText("Find an interface plugged in since the app started")
+    await expect(tooltip(page)).toHaveText("Look again: find an interface plugged in since the app started")
     await away(page)
     await expect(tooltip(page)).toHaveCount(0)
     const before = await box(look)
@@ -644,7 +644,7 @@ test.describe("Audio and Folders", () => {
     await page.clock.pauseAt((await page.evaluate(() => Date.now())) + 1000)
     await look.click()
     await expect(look).toBeDisabled()
-    await expect(look).toHaveText("Look again")
+    await expect(look).toHaveAccessibleName("Look again")
     await expect(icon).toBeVisible()
     await expect(spinner).toHaveCount(0)
     await page.clock.runFor(999)
@@ -653,7 +653,7 @@ test.describe("Audio and Folders", () => {
     await page.clock.runFor(1)
     await expect(spinner).toBeVisible()
     await expect(icon).toHaveCount(0)
-    await expect(look).toHaveText("Look again")
+    await expect(look).toHaveAccessibleName("Look again")
     expect(await box(look)).toEqual(before)
 
     await page.clock.resume()

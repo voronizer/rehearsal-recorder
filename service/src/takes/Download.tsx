@@ -5,6 +5,7 @@ import { Checkbox } from "@/components/ui/checkbox"
 import { Dialog, DialogButtons, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Item } from "@/components/ui/item"
 import { Spinner } from "@/components/ui/spinner"
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { useAfter } from "@/hooks/useAfter"
 import { SPINNER_AFTER_MS } from "@/lib/playLook"
 import { cn } from "@/lib/utils"
@@ -74,10 +75,16 @@ export function Download({ take, sound, phone }: { take: TakePage; sound: Servic
           <DownloadIcon />
         </Button>
       ) : (
-        <Button variant="outline" size="row" onClick={show}>
-          <DownloadIcon />
-          Download
-        </Button>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button variant="outline" size="icon-row" aria-label="Download" onClick={show}>
+              <DownloadIcon />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>
+            <span aria-hidden>Download</span>
+          </TooltipContent>
+        </Tooltip>
       )}
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent>

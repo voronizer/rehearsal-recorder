@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useId, useRef, useState } from "react"
+import { Fragment, useEffect, useId, useRef, useState, type ReactNode } from "react"
 import { LaneControls, MasterControls } from "@/components/LaneControls"
 import { MasterClick } from "@/components/metronome/MasterClick"
 import { MasterClickLane } from "@/components/metronome/MasterClickLane"
@@ -87,8 +87,13 @@ export function Timeline({
   take = null,
   drift = null,
   click = true,
+  underMaster,
 }: {
   player: MultitrackPlayer
+  /** A row under Master, on the same columns: the plate's, then the lane's.
+   *  The band's service puts the way back to РЭХА's levels there, under the
+   *  faders it sets. */
+  underMaster?: ReactNode
   /** Master's click button, after its name. The band's service plays no
    *  click, so it has none; its Master lane is there all the same, for a
    *  take whose click it knows. */
@@ -725,6 +730,15 @@ export function Timeline({
               </div>
             )}
           </div>
+          {underMaster && (
+            <div
+              data-under-master
+              className="grid items-center pt-1.5"
+              style={{ gridTemplateColumns: COLUMNS, columnGap: COLUMN_GAP_PX }}
+            >
+              {underMaster}
+            </div>
+          )}
         </div>
       )}
     </>
