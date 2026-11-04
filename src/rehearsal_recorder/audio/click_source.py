@@ -339,3 +339,6 @@ def following(tempo, signature, voices, route, backing, bar_one, same):
 
     source = ClickSource(tempo, signature, voices, route, place=place)
     return source
+
+
+following.kind = "FollowingClick"

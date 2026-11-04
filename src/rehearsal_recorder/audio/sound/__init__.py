@@ -72,15 +72,19 @@ def apart():
     return link if link is not None and not link.local else None
 
 
-def new(kind, *args, **kw):
-    """A `kind` (host.KINDS) made where the sound is: a stand-in for one in
-    the sound process, or the object itself when there is none apart."""
+def new(what, *args, **kw):
+    """`what`, a class of host.kinds() or its kind's name, made where the
+    sound is: a stand-in for one in the sound process, or, with none apart,
+    the object itself (made by the class given, so a suite's stand-in for
+    one is the one made)."""
     link = _link
     if link is None or link.local:
-        from rehearsal_recorder.audio.sound.host import make
+        if isinstance(what, str):
+            from rehearsal_recorder.audio.sound.host import make
 
-        return make(kind, args, kw)
-    return link.new(kind, *args, **kw)
+            return make(what, args, kw)
+        return what(*args, **kw)
+    return link.new(what if isinstance(what, str) else what.kind, *args, **kw)
 
 
 def function(name, *args, **kw):

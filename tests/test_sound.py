@@ -3,7 +3,8 @@ The sound process (audio/sound): a real second process, spawned as the app
 spawns it, with the fake card of tests/fake_rtmixer.py running by itself in
 it. What is checked: a stand-in's calls and answers, the same stand-in for
 the same object, a recorder's levels and its clock's marks reaching the
-main process, its log lines too, and what happens when either process dies.
+main process, its log lines too, a rescan there reaching the device list
+here, and what happens when either process dies.
 
 Run: python tests/test_sound.py
 """
@@ -164,6 +165,21 @@ def levels_marks_and_log(link, folder):
     logging.getLogger("rehearsal_recorder").removeHandler(heard)
 
 
+def rescan_reaches_view(link, folder):
+    print("\n[2b] A card plugged in: Look again there, and its new list here")
+    from rehearsal_recorder.audio import devices
+    from rehearsal_recorder.audio.devices import sd
+
+    before = [d["name"] for d in sd.query_devices()]
+    (folder / "plugged").write_text("yes")
+    trouble = devices.rescan()
+    after = [d["name"] for d in sd.query_devices()]
+    ok("before, the one card there was", before == ["Fake card"])
+    ok("the rescan there went well", trouble is None)
+    ok("  and the list here has the card plugged in since", after == ["Fake card", "Plugged card"])
+    ok("  one device of it asked here is the new one", sd.query_devices(1)["name"] == "Plugged card")
+
+
 def host_dies_take_kept(link, folder):
     print("\n[3] The sound process killed mid-take: the take's files stay, it starts again once")
     told = []
@@ -225,10 +241,14 @@ def parent_dies_host_exits():
 def main():
     with tempfile.TemporaryDirectory() as tmp:
         folder = Path(tmp)
+        # The fake card there lists a second card once this file is there
+        # and PortAudio starts again (fake_rtmixer.fake_sounddevice).
+        os.environ["FAKE_CARD_PLUGGED"] = str(folder / "plugged")
         link = sound.start(prepare=PREPARE)
         try:
             call_and_answer(link, folder)
             levels_marks_and_log(link, folder)
+            rescan_reaches_view(link, folder)
             host_dies_take_kept(link, folder)
         finally:
             sound.stop()

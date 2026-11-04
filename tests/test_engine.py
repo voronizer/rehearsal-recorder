@@ -388,14 +388,15 @@ def main():
     for _ in range(4):
         fake_rtmixer.card.pump(1024)
     ring.service()
-    seconds, short, late, latest = dry.skips()
+    seconds, short, least = dry.skips()
     ok("the time played is counted, a ring that did not run dry is not",
-       seconds > 0 and short == 0 and (late, latest) == (0, 0.0))
+       seconds > 0 and short == 0)
+    ok("  and the least the ring held is said, in seconds", least is not None and 0.5 < least <= 1.1)
     for _ in range(60):
         fake_rtmixer.card.pump(1024)
     ring.service()
     ok("a ring that ran dry is counted", dry.skips()[1] == 1)
-    ok("the count starts again once asked", dry.skips()[1:3] == (0, 0))
+    ok("the count starts again once asked", dry.skips()[1:] == (0, None))
     dry.pause()
     ok("paused, it says it does not play", dry.playing is False)
     dry.close()
@@ -1662,15 +1663,15 @@ def main():
     api_logger = _logs.getLogger("rehearsal_recorder.api")
     api_logger.addHandler(keep_log)
     try:
-        a._say_skips(_Skipped((252.4, 3, 5, 0.0414)))
-        a._say_skips(_Skipped((60.0, 0, 0, 0.0)))
+        a._say_skips(_Skipped((252.4, 3, 0.0414)))
+        a._say_skips(_Skipped((60.0, 0, 0.9)))
     finally:
         api_logger.removeHandler(keep_log)
     said = [r.getMessage() for r in caught if r.levelno == _logs.WARNING]
     ok("a listening that skipped is one line in the log",
        len(said) == 1 and said[0].startswith(
-           "Playback skipped: in 4:12 of a take the card ran short 3 times and 5 blocks "
-           "came late, the latest by 41 ms"))
+           "Playback skipped: in 4:12 of a take the reserve ran dry 3 times; "
+           "the least it held was 0.04 s"))
     ok("but once recording stops it publishes", a._sending.get("cloud").queue.run_next() is True)
     take4 = a.get_rehearsal(str(folder))["takes"][3]
     ok("and now it is in the cloud folder", Path(take4["cloud"]["mix"]).exists())
@@ -14819,6 +14820,54 @@ def main():
                                {"take_number": 1}])
     ok("the interface gets a wave for a kept take, None for one that is not there",
        asked92["ok"] and len(asked92["shapes"][0]) == 120 and asked92["shapes"][1:] == [None, None, None])
+
+    print("\n[93] The sound process stops mid-take")
+    # The take ends as one whose card went quiet does, kept up to there; an
+    # open take pauses with its own problem; a sound process left down
+    # refuses a take, the signal check and the interface check, in one
+    # sentence (audio/sound, the spec's Part 9).
+    from rehearsal_recorder.audio import sound as sound93
+    from rehearsal_recorder.audio.sound.link import DOWN as DOWN93
+    from rehearsal_recorder.audio.sound.link import STOPPED as STOPPED93
+
+    root93 = Path(tempfile.mkdtemp())
+    _, a93 = fresh_api(root93)
+    a93.start_rehearsal("Evening", 0, SR, [{"name": "Gtr", "channel": 1}], 16)
+    write_wav(root93 / "before" / "Gtr.wav", 900)
+    a93.player_open([{"name": "Gtr", "file": str(root93 / "before" / "Gtr.wav")}])
+    ok("a take is open in the player", a93.player_state().get("problem") is None)
+    a93.start_take()
+    fake_rtmixer.recorded(a93._recorder, np.full((2 * SR, 1), 900, dtype=np.int16), 2 * SR, None, None)
+    # What the sound process dying leaves: the raw files closed as they were.
+    a93._recorder.abandon()
+    a93._sound_event("sound_stopped", {})
+    health93 = a93.recording_health()
+    ok("the health check says the sound stopped, so the screen stops the take",
+       health93.get("error") == STOPPED93 and health93.get("active") is False)
+    ok("  and the open take pauses, saying so",
+       a93.player_state().get("problem") == apimod.PLAYBACK_STOPPED
+       and a93.player_state().get("playing") is False)
+    stopped93 = a93.stop_take()
+    ok("Stop keeps the take up to there",
+       stopped93.get("ok") and abs(stopped93["duration_sec"] - 2.0) < 0.05
+       and Path(stopped93["tracks"][0]["file"]).exists())
+    ok("  and the next take is not called stopped", a93._take_lost is False)
+    a93.discard_take(stopped93["temp_dir"])
+
+    class _Down93:
+        local = False
+        alive = False
+
+    real93 = sound93._link
+    sound93._link = _Down93()
+    try:
+        refused93 = [a93.start_take(), a93.start_monitor(0, SR, [{"name": "Gtr", "channel": 1}]),
+                     a93.start_interface_check()]
+    finally:
+        sound93._link = real93
+    ok("a sound process left down refuses a take, the signal check and the interface check",
+       all(r.get("ok") is False and r.get("error") == DOWN93 for r in refused93))
+    ok("  and no take was begun", a93._recorder is None)
 
     print("\n" + "=" * 60)
     if problems:

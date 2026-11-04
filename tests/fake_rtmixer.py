@@ -28,6 +28,7 @@ call. `card.out_latency` and `card.in_latency` (0.0
 unless a check sets them) put the output and input times either side of it.
 """
 
+import os
 import sys
 import time
 
@@ -536,8 +537,17 @@ def fake_sounddevice():
     module.check_input_settings = module.check_output_settings = lambda **kw: None
     module.get_portaudio_version = lambda: (1, "fake PortAudio")
     module.PortAudioError = type("PortAudioError", (Exception,), {})
+    plugged = os.environ.get("FAKE_CARD_PLUGGED")
+
+    def initialize():
+        # A card plugged in since (the file named there exists) is in the
+        # list PortAudio makes as it starts again, as a real one would be.
+        if plugged and os.path.exists(plugged) and len(devices) == 1:
+            devices.append({**devices[0], "name": "Plugged card", "index": 1})
+
     module._initialized = 1
-    module._terminate = module._initialize = lambda: None
+    module._terminate = lambda: None
+    module._initialize = initialize
     module.InputStream = module.OutputStream = module.Stream = _Stream
     return module
 

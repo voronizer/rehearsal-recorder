@@ -151,6 +151,12 @@ def _portaudio_version():
     return sd.get_portaudio_version()[1]
 
 
+def _rtmixer_version():
+    from rehearsal_recorder.audio.ring import _rtmixer
+
+    return _rtmixer().__version__
+
+
 def _function(name):
     from rehearsal_recorder.audio import devices
 
@@ -163,6 +169,7 @@ def _function(name):
         "devices.usable_output": devices.usable_output,
         "microphone": _microphone,
         "portaudio_version": _portaudio_version,
+        "rtmixer_version": _rtmixer_version,
     }
     try:
         return table[name]

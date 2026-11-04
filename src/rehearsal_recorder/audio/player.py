@@ -591,15 +591,18 @@ class TakePlayer:
     def skips(self):
         """
         What the listening since the last ask cost, and the count starts
-        again: (seconds played, times the ring ran dry since, 0, 0.0). A ring
-        that ran dry is what is heard as a skip; the last two are kept for
-        the log's shape and are always nothing now, as the card is fed by
-        rtmixer and not called late by Python.
+        again: (seconds played, times the ring ran dry since, the least the
+        ring held since in seconds or None). A ring that ran dry is what is
+        heard as a skip; the least it held says how near it came.
         """
         ring = self._ring
         dry = ring.counts["ran_dry"] if ring is not None else 0
+        least = None
+        if ring is not None:
+            lowest, ring.counts["lowest_reserve_frames"] = ring.counts["lowest_reserve_frames"], None
+            least = None if lowest is None else lowest / self.samplerate
         with self._lock:
-            out = (self._heard / self.samplerate, dry - self._dry_told, 0, 0.0)
+            out = (self._heard / self.samplerate, dry - self._dry_told, least)
             self._heard = 0
             self._dry_told = dry
         return out
