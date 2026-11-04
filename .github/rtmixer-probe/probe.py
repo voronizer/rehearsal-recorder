@@ -228,8 +228,19 @@ class Engine:
         while self.ring.read_available + self.block <= self.target:
             self._add()
 
+    quick = False
+    card_call = None
+
     def run(self):
         self.action = self.mixer.play_ringbuffer(self.ring)
+        if self.quick:
+            # The card copies one call's worth out of the ring at a time, so
+            # a re-mix two calls ahead of it is safe: closer than the whole
+            # latency, so a change is heard sooner.
+            time.sleep(0.2)
+            self.card_call = int(self.action.stats.max_blocksize)
+            self.unsafe = 2 * self.card_call + 256
+            self.guard = self.unsafe + self.block
         while not self.stop.is_set():
             if self.action is not None and self.action not in self.mixer.actions:
                 self.ran_dry += 1
@@ -303,6 +314,7 @@ def case(engine, load, tracks, out_index, loop, secs, reserve, wav):
         try:
             player.play()
             eng = Engine(player, mixer, reserve, block=4096 if engine == "rt4k" else BLOCK, secs=secs)
+            eng.quick = engine == "rtq"
             eng.fill_first()
             worker = threading.Thread(target=eng.run, daemon=True)
             worker.start()
@@ -320,6 +332,7 @@ def case(engine, load, tracks, out_index, loop, secs, reserve, wav):
                     remix_blocks_too_late=eng.skipped_blocks,
                     heard_after_ms_median_p90_max=[heard[len(heard) // 2], heard[int(len(heard) * 0.9)], heard[-1]] if heard else None,
                     card_underflows=int(mixer.stats.output_underflows),
+                    card_call_frames=eng.card_call,
                     sent=analyse.judge(sent))
     player.close()
     stop.set()
