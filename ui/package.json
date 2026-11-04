@@ -16,7 +16,7 @@
     "build-storybook": "storybook build --quiet --disable-telemetry"
   },
   "dependencies": {
-    "@dnd-kit/react": "0.5.1",
+    "@dnd-kit/react": "0.5.3",
     "@tailwindcss/vite": "^4.3.3",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
