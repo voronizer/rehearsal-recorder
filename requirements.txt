@@ -2,6 +2,14 @@ pywebview
 sounddevice
 numpy
 
+# rtmixer, the sound card's own C code that plays and records from rings
+# Python fills a second ahead, in a process of its own (audio/ring.py,
+# audio/sound/; docs/superpowers/specs/2026-11-04-sound-process-design.md).
+# Pinned: the engine reaches into its ring (write index, memory), which a
+# new version may change. Prebuilt wheels on macOS, Windows and Linux; it
+# brings pa_ringbuffer and cffi with it.
+rtmixer==0.1.7
+
 # libsndfile, for compressing the copies that go to the cloud (FLAC and MP3).
 # A prebuilt wheel on macOS, Windows and Linux — about a megabyte, and it
 # replaces shelling out to afconvert or ffmpeg, which only ever worked on a

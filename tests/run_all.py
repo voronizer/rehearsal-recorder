@@ -161,7 +161,7 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 SUITES = ("test_control_api.py", "test_controller_browse.py", "test_controller_diagnostics.py", "test_controller_extensions.py", "test_controller_recovery.py", "test_controller.py", "test_transport.py", "test_engine.py", "test_platform.py", "test_store.py", "test_ports.py",
           "test_midi.py", "test_click.py", "test_tempo.py", "test_drift.py", "test_backing.py",
-          "test_sending.py")
+          "test_sending.py", "test_ring.py")
 
 # Four times the longest any suite has taken (test_engine, 145 s on CI's Mac).
 LIMIT = 600
