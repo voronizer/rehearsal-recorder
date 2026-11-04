@@ -130,37 +130,97 @@ test.describe("as Alex", () => {
     await expect(page.getByRole("slider", { name: "Master volume" })).toHaveAttribute("aria-valuetext", "90%")
   })
 
-  test("download tracks says which originals are still coming", async ({ page }) => {
+  test("Download gives the tracks ticked in a list, each a file of its own; FLAC waits for the originals", async ({ page }) => {
     await page.goto(`/takes/${band().takes["Pałyn 9"]}`)
-    const files = page.getByRole("region", { name: "Download tracks" })
-    await expect(files).toContainText("The originals are still coming from РЭХА. For now, each track is an MP3.")
-    await expect(files.getByRole("link", { name: "Bass MP3" })).toHaveAttribute("href", /\/2\.mp3\?download=1$/)
-    await expect(files.getByRole("link", { name: "Keys MIDI" })).toHaveAttribute("href", /\/3\.mid\?download=1$/)
-    await expect(files.getByRole("link", { name: /FLAC/ })).toHaveCount(0)
+    await page.getByRole("button", { name: "Download", exact: true }).click()
+    const window = page.getByRole("dialog", { name: "Download “Pałyn 9”" })
+    await expect(window.getByRole("button", { name: "The mix" })).toBeEnabled()
+    await expect(window.getByRole("button", { name: "Tracks in FLAC" })).toBeDisabled()
+    await expect(window).toContainText("The originals are still coming from РЭХА.")
 
+    await window.getByRole("button", { name: "Tracks in MP3" }).click()
+    const list = page.getByRole("dialog", { name: "Tracks of “Pałyn 9” in MP3" })
+    // The keys recorded notes alone: their .mid is a line of its own, after the tracks of sound.
+    await expect(list.locator("[data-file]")).toHaveText(["Drums", "Bass", "Keys, notes (MIDI)"])
+    await expect(list.getByRole("button", { name: "Download 3 files" })).toBeEnabled()
+    await list.getByRole("checkbox").nth(1).click()
+    // The files as the Worker serves them; their names are checked on Kupalle 2, since a
+    // browser on Linux with no UTF-8 locale names “Pałyn” files “download”.
+    const files: string[] = []
+    page.on("download", (d) => void files.push(new URL(d.url()).pathname.split("/").pop()!))
+    await list.getByRole("button", { name: "Download 2 files" }).click()
+    await expect(list).toBeHidden()
+    await expect.poll(() => files).toEqual(["1.mp3", "3.mid"])
+
+    // Opened again, it starts from the three choices.
+    await page.getByRole("button", { name: "Download", exact: true }).click()
+    await expect(window.getByRole("button", { name: "The mix" })).toBeVisible()
+  })
+
+  test("the FLAC list has a track's notes under its sound, once the originals are up", async ({ page }) => {
     await page.goto(`/takes/${band().takes["Kupalle 2"]}`)
-    await expect(page.getByRole("region", { name: "Download tracks" })).not.toContainText("still coming")
-    await expect(page.getByRole("link", { name: "Drums FLAC" })).toHaveAttribute("href", /\/1\.flac\?download=1$/)
+    await page.getByRole("button", { name: "Download", exact: true }).click()
+    await page.getByRole("button", { name: "Tracks in FLAC" }).click()
+    await expect(page.getByRole("dialog").locator("[data-file]")).toHaveText(["Drums", "Bass"])
+    await page.getByRole("button", { name: "Back" }).click()
+    await page.getByRole("button", { name: "Tracks in FLAC" }).click()
+    const files: string[] = []
+    page.on("download", (d) => void files.push(d.suggestedFilename()))
+    await page.getByRole("button", { name: "Download 2 files" }).click()
+    await expect.poll(() => files).toEqual(["Kupalle 2 - Drums.flac", "Kupalle 2 - Bass.flac"])
 
-    // A track of sound and notes is one row, with both.
     await page.goto(`/takes/${band().takes["Viasna 12"]}`)
-    const rows = page.getByRole("region", { name: "Download tracks" }).locator("[data-download]")
-    await expect(rows).toHaveCount(6)
-    await expect(rows.first().getByRole("link", { name: "Drums MP3" })).toHaveAttribute("href", /\/1\.mp3\?download=1$/)
-    await expect(rows.first().getByRole("link", { name: "Drums MIDI" })).toHaveAttribute("href", /\/7\.mid\?download=1$/)
+    await page.getByRole("button", { name: "Download", exact: true }).click()
+    await expect(page.getByRole("button", { name: "Tracks in FLAC" })).toBeDisabled()
+    await page.getByRole("button", { name: "Tracks in MP3" }).click()
+    await expect(page.getByRole("dialog").locator("[data-file]")).toHaveText([
+      "Drums",
+      "Drums, notes (MIDI)",
+      "Bass",
+      "Guitar",
+      "Keys",
+      "Vocals",
+      "Shaker",
+    ])
+    for (const box of await page.getByRole("dialog").getByRole("checkbox").all()) await box.click()
+    await expect(page.getByRole("button", { name: "Download 0 files" })).toBeDisabled()
+  })
+
+  test("the mix is made in the page as it plays, and called after what was muted", async ({ page }) => {
+    await page.goto(`/takes/${band().takes["Viasna 12"]}`)
+    await page.getByRole("button", { name: "Mute Bass" }).click()
+    await page.getByRole("button", { name: "Download", exact: true }).click()
+    const coming = page.waitForEvent("download")
+    await page.getByRole("button", { name: "The mix" }).click()
+    const mix = await coming
+    expect(mix.suggestedFilename()).toBe("Viasna 12 - without Bass.mp3")
+    await expect(page.getByRole("dialog")).toBeHidden()
+    // An MP3: its first frame's sync bits, after an ID3 tag if LAME wrote one.
+    const bytes = new Uint8Array(await (await mix.createReadStream()).toArray().then((c) => Buffer.concat(c)))
+    const at = bytes[0] === 0x49 ? 10 + ((bytes[6] << 21) | (bytes[7] << 14) | (bytes[8] << 7) | bytes[9]) : 0
+    expect([bytes[at], bytes[at + 1] & 0xe0]).toEqual([0xff, 0xe0])
+
+    // With every track muted there is nothing to mix.
+    for (const name of ["Drums", "Guitar", "Keys", "Vocals", "Shaker"]) await page.getByRole("button", { name: `Mute ${name}` }).click()
+    await page.getByRole("button", { name: "Download", exact: true }).click()
+    await page.getByRole("button", { name: "The mix" }).click()
+    await expect(page.getByRole("dialog")).toContainText("Every track is muted, so the mix would be silent.")
   })
 })
 
 test.describe("as Alex on a phone", () => {
   test.use({ storageState: as("alex"), viewport: { width: 390, height: 844 } })
 
-  test("a take page puts the marks before the downloads, each mark with its colour", async ({ page }) => {
+  test("a take page lists the marks, each with its colour, and Download is an icon by the name", async ({ page }) => {
     await page.goto(`/takes/${band().takes["Kupalle 2"]}`)
     const main = page.getByRole("main")
     const marks = main.getByRole("region", { name: "Marks" })
-    const files = main.getByRole("region", { name: "Download tracks" })
-    const top = async (l: typeof marks) => (await l.boundingBox())!.y
-    expect(await top(marks)).toBeLessThan(await top(files))
+    await expect(main.getByRole("region", { name: "Download tracks" })).toHaveCount(0)
+    const download = main.getByRole("button", { name: "Download", exact: true })
+    await expect(download).toHaveText("")
+    await download.click()
+    await expect(page.getByRole("dialog", { name: "Download “Kupalle 2”" })).toBeVisible()
+    await page.getByRole("button", { name: "Close" }).click()
     // The dot beside the label's name: it has a size.
     const dot = marks.locator("[data-mark]").first().locator("[data-label] > *").first()
     const box = (await dot.boundingBox())!

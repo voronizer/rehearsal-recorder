@@ -97,6 +97,9 @@ const browser: MixWays = {
   pause: () => new Promise((go) => setTimeout(go, 0)),
 }
 
+/** How much of the work the fetching and decoding are; encoding takes the rest. Measured: 4 s of 14 for six 5-minute tracks. */
+const DECODING = 0.3
+
 /** How many samples are encoded between pauses: about a second of sound. */
 const PIECE = 48_000
 
@@ -104,8 +107,7 @@ const stopped = () => new DOMException("The mix was stopped", "AbortError")
 
 /**
  * The take mixed as `heard` says, as an MP3 Blob. `progress` hears how far
- * along it is, 0 to 1: fetching and decoding the tracks are the first
- * half, encoding the second. `signal` stops it.
+ * along it is, 0 to 1: fetching and decoding the tracks, then encoding. `signal` stops it.
  */
 export async function makeMix(
   take: Pick<TakePage, "tracks">,
@@ -128,7 +130,7 @@ export async function makeMix(
     sampleRate ||= parseFrames(new Uint8Array(bytes)).sampleRate || 48000
     mix = addInto(mix, await ways.decode(bytes, sampleRate), t.gain)
     if (signal?.aborted) throw stopped()
-    progress?.((0.5 * (n + 1)) / tracks.length)
+    progress?.((DECODING * (n + 1)) / tracks.length)
   }
   turnDown(mix)
 
@@ -140,7 +142,7 @@ export async function makeMix(
   const keep = (bytes: Uint8Array) => bytes.length && parts.push(bytes.slice())
   for (let at = 0; at < left.length; at += PIECE) {
     keep(encoder.encode([left.subarray(at, at + PIECE), right.subarray(at, at + PIECE)]))
-    progress?.(0.5 + (0.5 * Math.min(at + PIECE, left.length)) / left.length)
+    progress?.(DECODING + ((1 - DECODING) * Math.min(at + PIECE, left.length)) / left.length)
     await ways.pause()
     if (signal?.aborted) throw stopped()
   }

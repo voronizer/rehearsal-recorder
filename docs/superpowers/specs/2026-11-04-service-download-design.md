@@ -138,6 +138,12 @@ list of that kind:
   **The mix** uses the levels alone, since there are no M and S to press.
 - A take with no sound, only notes, has only **Tracks in MP3** and
   **Tracks in FLAC**, each with its .mid lines; **The mix** is not there.
+- With every track muted, **The mix** makes nothing, and its line says
+  “Every track is muted, so the mix would be silent.”
+- The mix fetches the tracks' MP3s whole, about 5 MB a track for five
+  minutes, so on a phone it costs that much of the mobile data. Measured in
+  the cloud container, six 5-minute tracks took 4 s to fetch and decode and
+  10 s to encode; a phone has not been measured.
 
 ## On reha.stream
 
