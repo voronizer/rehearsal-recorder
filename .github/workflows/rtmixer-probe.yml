@@ -21,6 +21,8 @@ concurrency:
 
 jobs:
   windows:
+    # Off for this push: run 3 has it.
+    if: false
     runs-on: windows-latest
     timeout-minutes: 40
     steps:
@@ -107,8 +109,6 @@ jobs:
           if-no-files-found: warn
 
   macos:
-    # Off while run 2's macos job is still waiting for a Mac.
-    if: false
     runs-on: macos-latest
     timeout-minutes: 40
     steps:
