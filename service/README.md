@@ -206,3 +206,7 @@ Future License (FSL-1.1-MIT): see `LICENSE`. You can run it for your band,
 read it and change it, but not offer it to others as a commercial service
 that does the same job. Each version becomes MIT two years after it came
 out. РЭХА itself stays under MIT.
+
+**The mix** on a take's page is encoded by LAME, the MP3 encoder, which is
+under the GNU LGPL. It comes built for the browser by the
+`wasm-media-encoders` package (MIT) and is served as a file of its own.

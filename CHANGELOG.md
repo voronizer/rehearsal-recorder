@@ -5,6 +5,16 @@ versioning](https://semver.org/): until 1.0 the shape of things can still
 move, though recordings on disk are never left behind — old rehearsals keep
 opening.
 
+## Unreleased
+
+- **Download in the band service.** A take's page has one **Download**
+  button by its name. **The mix** is the take as one MP3, mixed in the page
+  as you hear it there, with your levels, mute and solo. Mute your own part,
+  and you have the band to practise along with at home. **Tracks in MP3**
+  and **Tracks in FLAC** list the tracks with a tick each, and each ticked
+  one comes as a file of its own, the notes as .mid too. This replaces
+  **Download tracks** at the foot of the page.
+
 ## 0.22.0
 
 - **Sending to the band service waits while you listen.** While a take, a

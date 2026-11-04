@@ -16,7 +16,7 @@ import { useSize } from "../shell/size"
 import { clock, count, longDay } from "../shell/words"
 import { chipsOf } from "./chips"
 import { Desk } from "./Desk"
-import { Downloads } from "./Downloads"
+import { Download } from "./Download"
 import { notesAlone, notesOf } from "./player/lanes"
 import { CANNOT_PLAY, usePlayer } from "./player/one"
 import { useServiceSound, type ServiceSound } from "./player/sound"
@@ -28,11 +28,11 @@ import { TakePlayer } from "./TakePanel"
  * A take's page, for close work. On a computer, РЭХА's own player: a lane
  * per track with its level, M and S, the notes of a track that sent its
  * .mid, Master with its level and meter, a piece on repeat, the marks as
- * chips whose talk opens in the panel; the tracks to download under it. On
- * a phone, the take's wave, a row per track as РЭХА's desk has them, the
- * MIDI sign on a track that sent notes, Master, its marks and the
- * downloads. A link from the band's chat carries ?at= (the playhead goes
- * there) and the mark or comment it is about.
+ * chips whose talk opens in the panel. On a phone, the take's wave, a row
+ * per track as РЭХА's desk has them, the MIDI sign on a track that sent
+ * notes, Master and its marks. **Download**, by the take's name, gives the
+ * mix and the tracks (Download.tsx). A link from the band's chat carries
+ * ?at= (the playhead goes there) and the mark or comment it is about.
  */
 export function Take() {
   const { uid } = useParams({ from: "/band/takes/$uid" })
@@ -129,8 +129,7 @@ function useNotes(take: TakePage) {
 }
 
 /** РЭХА's player on the page itself, with no frame round it, as in РЭХА. */
-function Full({ take, notes }: { take: TakePage; notes: NotesFile[] }) {
-  const sound = useServiceSound(take)
+function Full({ take, notes, sound }: { take: TakePage; notes: NotesFile[]; sound: ServiceSound }) {
   // РЭХА counts it after the take's files are up: until then, the click alone.
   const drift = useMemo(() => ({ answer: take.drift, counting: false }), [take.drift])
   const player = useMultitrackPlayer(sound.tracks, take.duration_sec, null, sound)
@@ -167,12 +166,8 @@ function Full({ take, notes }: { take: TakePage; notes: NotesFile[] }) {
   )
 }
 
-/**
- * On a phone: the take's wave with ▶, a row per track as on РЭХА's desk,
- * the marks, then the downloads, which are for the computer at home.
- */
-function Phone({ take, notes, tracks }: { take: TakePage; notes: NotesFile[]; tracks: number }) {
-  const sound = useServiceSound(take)
+/** On a phone: the take's wave with ▶, a row per track as on РЭХА's desk, then the marks. */
+function Phone({ take, notes, tracks, sound }: { take: TakePage; notes: NotesFile[]; tracks: number; sound: ServiceSound }) {
   const player = useMultitrackPlayer(sound.tracks, take.duration_sec, null, sound)
   return (
     <Groups>
@@ -184,7 +179,6 @@ function Phone({ take, notes, tracks }: { take: TakePage; notes: NotesFile[]; tr
         <Levels take={take} sound={sound} />
       </Group>
       <TakeMarks take={take} />
-      <Downloads take={take} />
     </Groups>
   )
 }
@@ -197,6 +191,8 @@ function TakeView({ take }: { take: TakePage }) {
   const phone = size === "phone"
   const cannot = p.supported === false
   const notes = useNotes(take)
+  // One for the page: the player, the desk and Download read the same levels, M and S.
+  const sound = useServiceSound(take)
   // A track of notes alone is one of the band's tracks too, as in a lineup.
   const tracks = take.tracks.length + notesAlone(take, notes).length
   return (
@@ -211,6 +207,9 @@ function TakeView({ take }: { take: TakePage }) {
             </Badge>
           )}
           <span className="flex-1" />
+          <span className="text-sm font-normal">
+            <Download take={take} sound={sound} phone={phone} />
+          </span>
           <span className="text-sm font-normal">
             <StarButton take={take} who disabled={!!take.trashed_at} />
           </span>
@@ -234,21 +233,20 @@ function TakeView({ take }: { take: TakePage }) {
     >
       {take.trashed_at && <InTrash uid={take.uid} />}
       {phone && !cannot ? (
-        <Phone take={take} notes={notes} tracks={tracks} />
+        <Phone take={take} notes={notes} tracks={tracks} sound={sound} />
       ) : (
         <>
           {/* On a computer РЭХА's player sits on the page itself, as in РЭХА, with no card round it. */}
-          {!cannot && <Full take={take} notes={notes} />}
-          <Groups>
-            {cannot && (
+          {!cannot && <Full take={take} notes={notes} sound={sound} />}
+          {/* The marks are the player's chips; with no player, a list. */}
+          {cannot && (
+            <Groups>
               <Group>
                 <p className="text-muted-foreground">{CANNOT_PLAY}</p>
               </Group>
-            )}
-            {/* The marks are the player's chips here; on a phone, or with no player, a list. */}
-            {(phone || cannot) && <TakeMarks take={take} />}
-            <Downloads take={take} />
-          </Groups>
+              <TakeMarks take={take} />
+            </Groups>
+          )}
         </>
       )}
     </Page>
