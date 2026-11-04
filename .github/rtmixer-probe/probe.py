@@ -299,6 +299,73 @@ class Engine:
         self.mixer.cancel(self.action)
 
 
+# ---------------- the rtp engine: the same, in a process of its own ----------------
+
+def audio_process(conn, tracks, out_index, reserve, secs, sent_path):
+    """Runs in its own process, so the load in the app's process cannot hold
+    its Python up: opens the card, mixes for the ring (as rtq), takes M
+    presses from the pipe, and sends its counts back at the end."""
+    import rtmixer
+    sys.setswitchinterval(0.001)
+    mixer = open_stream(rtmixer.Mixer, device=out_index, channels=2, samplerate=RATE,
+                        latency=output_latency(sd, out_index))
+    player = TakePlayer(tracks)
+    transit = []
+    try:
+        player.play()
+        eng = Engine(player, mixer, reserve, secs=secs)
+        eng.quick = True
+        eng.fill_first()
+        worker = threading.Thread(target=eng.run, daemon=True)
+        worker.start()
+        conn.send("ready")
+        while True:
+            msg = conn.recv()
+            if msg[0] == "stop":
+                break
+            _, muted, sent_at = msg
+            transit.append((time.perf_counter() - sent_at) * 1000)
+            eng.change(lambda m=muted: player.set_muted("T1", m))
+        eng.stop.set()
+        worker.join()
+        sf.write(str(sent_path), eng.played(), RATE, subtype="FLOAT")
+        time.sleep(0.2)
+    finally:
+        close_stream(mixer)
+        player.close()
+    underflows = int(mixer.stats.output_underflows)
+    heard = sorted(round((l / RATE + mixer.latency) * 1000) for l in eng.leads)
+    transit.sort()
+    conn.send(dict(stream_latency_ms=round(mixer.latency * 1000), ran_dry=eng.ran_dry,
+                   lowest_reserve_ms=round(eng.lowest / RATE * 1000),
+                   remix_blocks_too_late=eng.skipped_blocks,
+                   heard_after_ms_median_p90_max=[heard[len(heard) // 2], heard[int(len(heard) * 0.9)], heard[-1]] if heard else None,
+                   pipe_ms_median_max=[round(transit[len(transit) // 2], 2), round(transit[-1], 2)] if transit else None,
+                   card_underflows=underflows, card_call_frames=eng.card_call,
+                   card_read_stalls_s_ms=eng.stalls()[:8]))
+
+
+def case_rtp(tracks, out_index, secs, reserve, wav):
+    import multiprocessing as mp
+    ctx = mp.get_context("spawn")  # as on Windows and macOS by default
+    here, there = ctx.Pipe()
+    sent = wav.with_name(wav.stem + "_sent.wav")
+    proc = ctx.Process(target=audio_process, args=(there, tracks, out_index, reserve, secs, sent), daemon=True)
+    t = time.perf_counter()
+    proc.start()
+    if not here.poll(30) or here.recv() != "ready":
+        raise RuntimeError("the audio process did not start")
+    info = {"process_start_ms": round((time.perf_counter() - t) * 1000)}
+    info["changes"] = toggles(lambda m: here.send(("mute", m, time.perf_counter())), secs)
+    here.send(("stop",))
+    if not here.poll(30):
+        raise RuntimeError("the audio process did not answer")
+    info.update(here.recv())
+    proc.join(10)
+    info["sent"] = analyse.judge(sent)
+    return info
+
+
 # ---------------- one case ----------------
 
 def toggles(apply, secs):
@@ -334,6 +401,8 @@ def case(engine, load, tracks, out_index, loop, secs, reserve, wav):
         heard, short, late, latest = player.skips()
         info.update(log_short=short, log_late=late, log_latest_ms=round(latest * 1000))
         player.close()
+    elif engine == "rtp":
+        info.update(case_rtp(tracks, out_index, secs, reserve, wav))
     else:
         import rtmixer
         mixer = open_stream(rtmixer.Mixer, device=out_index, channels=2, samplerate=RATE,

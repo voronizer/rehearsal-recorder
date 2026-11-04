@@ -21,8 +21,6 @@ concurrency:
 
 jobs:
   windows:
-    # Runs 5 to 8 have it.
-    if: false
     runs-on: windows-latest
     timeout-minutes: 40
     steps:
@@ -75,11 +73,10 @@ jobs:
         run: |
           for buf in 1024; do
             printf 'backend = "Windows WASAPI"\nbufferSizeSamples = %s\n\n[input]\ndevice = ""\n' "$buf" > "$USERPROFILE/FlexASIO.toml"
-            # Runs 5 and 7 each had one gap of 50-70 ms under the light load
-            # that the engine's own copy has not: this run repeats that case
-            # and follows how far the card read the ring, to place it.
+            # Run 12: the sound mixed in a process of its own ("rtp"), the
+            # load stays in this one.
             python probe.py --out-device FlexASIO --out-api ASIO --loop-device "CABLE Output" --loop-api "Windows DirectSound" \
-              --cases rt:applike,rt:applike,rt:applike,rt:applike,rt:applike,rt:applike \
+              --cases rtp:heavy,rtq:heavy,rtp:heavy,rtp:heavy,rtp:applike \
               --label "asio$buf" --results results.jsonl || echo "probe asio$buf failed"
           done
 
@@ -94,8 +91,7 @@ jobs:
               --label "asio$buf" --results results.jsonl || echo "rec probe asio$buf failed"
           done
 
-      - name: Frozen
-        if: false  # done in run 5
+      - name: Frozen, also from a second process
         shell: bash
         working-directory: .github/rtmixer-probe
         run: |
@@ -150,15 +146,15 @@ jobs:
       - name: Devices
         run: python -c "import rehearsal_recorder, sounddevice as sd; print(sd.query_hostapis()); print(sd.query_devices())"
 
-      # Run 10 showed a 2 s reserve runs dry as often as 1 s under heavy
-      # load here: Python mixes too slowly, not too late. Run 11: top the
-      # reserve up in blocks of 4096 ("rth"), re-mix after a change in 1024.
-      - name: Big top-up blocks
+      # Runs 10 and 11: under heavy load here Python mixes too slowly, and
+      # neither a bigger reserve nor bigger blocks fix it. Run 12: the sound
+      # mixed in a process of its own ("rtp"), the load stays in this one.
+      - name: Sound in its own process
         working-directory: .github/rtmixer-probe
         run: |
           python probe.py --out-device BlackHole --out-api "Core Audio" --loop-device BlackHole --loop-api "Core Audio" \
             --label coreaudio --reserve 1 --results results.jsonl \
-            --cases rth:heavy,rtq:heavy,rth:heavy,rtq:heavy,rth:heavy,rth:applike || echo "probe failed"
+            --cases rtp:heavy,rtq:heavy,rtp:heavy,rtp:heavy,rtp:applike || echo "probe failed"
 
       - name: Record under load
         if: false  # done in run 9
@@ -167,8 +163,7 @@ jobs:
           python rec_probe.py --in-device BlackHole --in-api "Core Audio" --tone-device BlackHole --tone-api "Core Audio" \
             --label coreaudio --results results.jsonl || echo "rec probe failed"
 
-      - name: Frozen
-        if: false  # done in run 9
+      - name: Frozen, also from a second process
         working-directory: .github/rtmixer-probe
         run: |
           pyinstaller --noconfirm --onedir --log-level WARN --collect-data _sounddevice_data --collect-data sounddevice freeze_check.py
