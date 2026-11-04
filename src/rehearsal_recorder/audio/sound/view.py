@@ -18,15 +18,19 @@ _initialized = 1
 
 
 def _list():
+    from rehearsal_recorder.audio.sound.link import DOWN
+
     link = sound.apart()
     if link is None:
         raise SoundUnavailable("РЭХА's sound is not running.")
+    if not link.alive:
+        raise SoundUnavailable(DOWN)
     listed = link.devices
     if listed is None:
         link.wait_started()
         listed = link.devices
     if listed is None:
-        raise SoundUnavailable("РЭХА's sound did not start.")
+        raise SoundUnavailable(DOWN if not link.alive else "РЭХА's sound did not start.")
     return listed
 
 
@@ -81,7 +85,9 @@ def rescan():
     here. None, or a sentence when it could not (devices.rescan)."""
     trouble, listed = sound.function("devices.rescan")
     link = sound.apart()
-    if link is not None:
+    # None when PortAudio did not start again there: the list before stays,
+    # and `trouble` says to restart.
+    if link is not None and listed is not None:
         link.devices = listed
     return trouble
 

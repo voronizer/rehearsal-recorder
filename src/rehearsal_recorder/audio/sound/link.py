@@ -37,7 +37,7 @@ import time
 import types
 import weakref
 
-from rehearsal_recorder.audio.sound import IsMethod, SoundUnavailable
+from rehearsal_recorder.audio.sound import IsMethod, SoundUnavailable, mapped
 from rehearsal_recorder.audio.sound.remote import Remote
 from rehearsal_recorder.midi.clock import AudioClock
 
@@ -97,7 +97,7 @@ class _Pickler(pickle.Pickler):
             cid = link._callback(obj)
             self.callbacks.append(cid)
             return ("cb", cid)
-        return None
+        return mapped.reference(obj)
 
 
 class _Unpickler(pickle.Unpickler):
@@ -112,6 +112,8 @@ class _Unpickler(pickle.Unpickler):
             return self.link._remote_for(pid[1], pid[2], self.gen)
         if tag == "clock":
             return self.link._clocks.get(pid[1])
+        if tag == "mapped":
+            return mapped.load(pid)
         raise pickle.UnpicklingError(f"unknown reference {tag!r}")
 
 
@@ -271,7 +273,9 @@ class Link:
             self._remotes = weakref.WeakValueDictionary()
             self._got = {}
             self._forget.clear()
-            self._ready = threading.Event()
+            # Whoever waits for the process that died wakes and asks again:
+            # for the one started now, or hears that it is left down.
+            woken, self._ready = self._ready, threading.Event()
             closing = self._closing
             now = time.monotonic()
             again = not closing and (self._last_death is None or now - self._last_death > AGAIN_WITHIN_SEC)
@@ -279,6 +283,7 @@ class Link:
                 self._last_death = now
                 if not again:
                     self.alive = False
+        woken.set()
         for slot in pending.values():
             slot.done(False, SoundUnavailable(STOPPED))
         if closing:
@@ -294,6 +299,8 @@ class Link:
                 log.exception("РЭХА's sound process could not be started again")
                 with self._lock:
                     self.alive = False
+                    woken, self._ready = self._ready, threading.Event()
+                woken.set()
         log.error("РЭХА's sound process stopped again within %d s: it is left down until РЭХА is restarted",
                   AGAIN_WITHIN_SEC)
         self._emit("sound_down", {})
@@ -304,6 +311,8 @@ class Link:
             return
         with self._lock:
             self._closing = True
+            # Asked anything from now on, it says sound is unavailable.
+            self.alive = False
             conn, process = self._conn, self._process
         try:
             with self._send_lock:
@@ -323,7 +332,17 @@ class Link:
 
     def wait_started(self, timeout=START_PATIENCE_SEC):
         """Whether the sound process is up, waiting `timeout` at most."""
-        return self._ready.wait(timeout)
+        deadline = time.monotonic() + timeout
+        while True:
+            with self._lock:
+                alive, ready, gen = self.alive, self._ready, self.gen
+            if not alive:
+                return False
+            if not ready.wait(max(0.0, deadline - time.monotonic())):
+                return False
+            with self._lock:
+                if self.alive and self.gen == gen:
+                    return True
 
     # ---------- references ----------
 
@@ -369,21 +388,43 @@ class Link:
                 raise SoundUnavailable(DOWN)
             if ready.wait(max(0.0, deadline - time.monotonic())):
                 with self._lock:
+                    if not self.alive:
+                        raise SoundUnavailable(DOWN)
                     if self.gen == gen:
                         return gen
                 continue
             raise SoundUnavailable(NOT_STARTED)
 
-    def _ask(self, build, quick=False):
+    def _ask(self, build, quick=False, of=None):
+        """`build(rid)` sent and its answer waited for. `of`: the generation
+        of the stand-in asked, refused if the process is another one now (a
+        handle there names another object)."""
         if not self.alive:
             raise SoundUnavailable(DOWN)
         gen = self._wait_ready()
+        if of is not None and of != gen:
+            raise SoundUnavailable(STOPPED)
         rid = next(self._ids)
         buf = io.BytesIO()
         pickler = _Pickler(buf, self)
-        pickler.dump(build(rid))
         slot = _Slot()
+        try:
+            pickler.dump(build(rid))
+        except BaseException:
+            if pickler.callbacks:
+                self._events.put(("drop", tuple(pickler.callbacks)))
+            raise
+        # Kept until the answer, and let go of with a call that goes no
+        # further.
         slot.callbacks = tuple(pickler.callbacks)
+        try:
+            return self._sent_and_answered(rid, gen, buf, slot, quick)
+        except BaseException:
+            if slot.callbacks and not slot.event.is_set():
+                self._events.put(("drop", slot.callbacks))
+            raise
+
+    def _sent_and_answered(self, rid, gen, buf, slot, quick):
         with self._lock:
             if gen != self.gen:
                 raise SoundUnavailable(STOPPED)
@@ -426,7 +467,8 @@ class Link:
 
         if remote._gen != self.gen:
             raise SoundUnavailable(STOPPED)
-        return self._ask(lambda rid: ("call", rid, remote._handle, name, args, kw), quick=name in QUICK)
+        return self._ask(lambda rid: ("call", rid, remote._handle, name, args, kw), quick=name in QUICK,
+                         of=remote._gen)
 
     def get(self, remote, name):
         known = self._methods.get(remote.kind)
@@ -434,7 +476,7 @@ class Link:
             return functools.partial(self.call, remote, name)
         if remote._gen != self.gen:
             raise SoundUnavailable(STOPPED)
-        value = self._ask(lambda rid: ("get", rid, remote._handle, name), quick=True)
+        value = self._ask(lambda rid: ("get", rid, remote._handle, name), quick=True, of=remote._gen)
         if isinstance(value, IsMethod):
             self._methods.setdefault(remote.kind, set()).add(name)
             return functools.partial(self.call, remote, name)
@@ -443,4 +485,4 @@ class Link:
     def set(self, remote, name, value):
         if remote._gen != self.gen:
             raise SoundUnavailable(STOPPED)
-        self._ask(lambda rid: ("set", rid, remote._handle, name, value))
+        self._ask(lambda rid: ("set", rid, remote._handle, name, value), of=remote._gen)

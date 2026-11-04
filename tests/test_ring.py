@@ -422,6 +422,32 @@ def card_gone_stops_take(tmp):
     rec.stop()
 
 
+def disk_refuses_stops_take(tmp):
+    print("\n[10b] A take whose disk refuses the write stops, and says why")
+    from rehearsal_recorder.audio.capture import WRITE_FAILED
+    rec = _recorder(tmp / "full")
+    fake_rtmixer.recorded(rec, np.zeros((1024, 3), np.float32))
+    ok("a take that writes is not stopped", rec.problem() is None)
+
+    class _Full:
+        def __init__(self, real):
+            self.real = real
+
+        def write(self, data):
+            raise OSError(28, "No space left on device")
+
+        def __getattr__(self, name):
+            return getattr(self.real, name)
+
+    rec._raw_files["Gtr"] = _Full(rec._raw_files["Gtr"])
+    fake_rtmixer.call(rec._stream, np.zeros((1024, 3), np.float32))
+    rec._input.look()
+    ok("the disk full: the take says it could not be written", rec.problem() == WRITE_FAILED)
+    ok("  and it stays said", rec.problem() == WRITE_FAILED)
+    rec._raw_files["Gtr"] = rec._raw_files["Gtr"].real
+    rec.stop()
+
+
 def _click_take(tmp, name, tempo=120):
     from rehearsal_recorder.audio.click import Voices
     from rehearsal_recorder.audio.take_click import TakeClick
@@ -515,6 +541,7 @@ def main():
         tmp = Path(folder)
         take_writes_every_frame(tmp)
         card_gone_stops_take(tmp)
+        disk_refuses_stops_take(tmp)
         click_on_card_lands_on_grid(tmp)
         stop_on_quarter(tmp)
         marks_reach_clock(tmp)

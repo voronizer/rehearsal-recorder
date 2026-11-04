@@ -129,6 +129,7 @@ class TakeBacking:
         self.file = Path(file)
         self.first_bar = float(first_bar)
         self.opened = open_ready(file)
+        self.channels = self.opened[4]
         self.played = self.opened if played is None else open_ready(played)
         self.output = output
         self.route = tuple(output.route if route is None else route)

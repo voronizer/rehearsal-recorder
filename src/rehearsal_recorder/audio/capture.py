@@ -93,6 +93,13 @@ STALLED = (
     "stopped answering. Everything captured up to that point has been saved."
 )
 
+# A take whose files could not be written: the record ring's thread failed
+# (RingInput.fault), most likely a full disk or a drive pulled out.
+WRITE_FAILED = (
+    "Recording stopped: the take could not be written to the disk, which may "
+    "be full or unplugged. What was written up to then is kept."
+)
+
 # A take that went this long without a sign of life was frozen, and a whole
 # app is frozen by the laptop going to sleep. Blocks come about every 21 ms
 # and the take's own tick every TICK_SEC, so this is no hiccup.
@@ -344,7 +351,10 @@ class AudioRecorder:
         said, either stays said.
         """
         if self.error is None and not self._stopping:
-            if not self._slept() and self._heartbeat.silent():
+            recording = self._input
+            if recording is not None and recording.fault is not None:
+                self.error = WRITE_FAILED
+            elif not self._slept() and self._heartbeat.silent():
                 self.error = STALLED
         return self.error
 

@@ -114,10 +114,14 @@ class TakePlayer:
         self.last_status = None
         # What one listening cost, for skips(): the frames mixed while the
         # take played (each once, however often a block is mixed again: up to
-        # `_counted`), and the ring's dry runs counted at the last ask.
+        # `_counted`), the ring's dry runs counted at the last look, and
+        # since the last ask: the dry runs and the least the ring held, kept
+        # here so a ring let go of (close_output) takes none of them with it.
         self._heard = 0
         self._counted = 0
         self._dry_told = 0
+        self._dry_since = 0
+        self._least_frames = None
         self._pos = 0
         self._playing = False
         self._loop = None  # (start_frame, end_frame)
@@ -595,17 +599,27 @@ class TakePlayer:
         ring held since in seconds or None). A ring that ran dry is what is
         heard as a skip; the least it held says how near it came.
         """
-        ring = self._ring
-        dry = ring.counts["ran_dry"] if ring is not None else 0
-        least = None
-        if ring is not None:
-            lowest, ring.counts["lowest_reserve_frames"] = ring.counts["lowest_reserve_frames"], None
-            least = None if lowest is None else lowest / self.samplerate
+        self._fold(self._ring)
         with self._lock:
-            out = (self._heard / self.samplerate, dry - self._dry_told, least)
+            least = None if self._least_frames is None else self._least_frames / self.samplerate
+            out = (self._heard / self.samplerate, self._dry_since, least)
             self._heard = 0
-            self._dry_told = dry
+            self._dry_since = 0
+            self._least_frames = None
         return out
+
+    def _fold(self, ring):
+        """`ring`'s counts since the last look, added to what skips() says
+        next."""
+        if ring is None:
+            return
+        dry = ring.counts["ran_dry"]
+        lowest, ring.counts["lowest_reserve_frames"] = ring.counts["lowest_reserve_frames"], None
+        with self._lock:
+            self._dry_since += max(0, dry - self._dry_told)
+            self._dry_told = dry
+            if lowest is not None and (self._least_frames is None or lowest < self._least_frames):
+                self._least_frames = lowest
 
     def _play(self):
         with self._lock:
@@ -837,6 +851,7 @@ class TakePlayer:
         ring, self._ring = self._ring, None
         if ring is not None:
             ring.stop()
+            self._fold(ring)
         self._meant = None
         self._heartbeat.stop()
         self._free_click = None

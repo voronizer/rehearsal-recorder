@@ -47,16 +47,17 @@ def start(local=False, prepare=None):
     from rehearsal_recorder.audio.sound.link import Link
 
     with _lock:
-        if _link is None:
+        if _link is None or getattr(_link, "_closing", False):
             _link = Link(local=local, prepare=prepare)
         return _link
 
 
 def stop():
-    """Lets the sound process go (the app is closing)."""
-    global _link
+    """Lets the sound process go (the app is closing). The link stays, let
+    go of: whatever asks after this hears that sound is unavailable, and
+    PortAudio is not loaded in this process for it."""
     with _lock:
-        link, _link = _link, None
+        link = _link
     if link is not None:
         link.close()
 

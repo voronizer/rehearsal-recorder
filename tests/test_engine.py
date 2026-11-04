@@ -397,6 +397,13 @@ def main():
     ring.service()
     ok("a ring that ran dry is counted", dry.skips()[1] == 1)
     ok("the count starts again once asked", dry.skips()[1:] == (0, None))
+    for _ in range(60):
+        fake_rtmixer.card.pump(1024)
+    ring.service()
+    dry.close_output()
+    told = dry.skips()
+    ok("a dry run just before the output closes is still counted, with the least it held",
+       told[1] == 1 and told[2] is not None)
     dry.pause()
     ok("paused, it says it does not play", dry.playing is False)
     dry.close()
@@ -14835,6 +14842,9 @@ def main():
     a93.start_rehearsal("Evening", 0, SR, [{"name": "Gtr", "channel": 1}], 16)
     write_wav(root93 / "before" / "Gtr.wav", 900)
     a93.player_open([{"name": "Gtr", "file": str(root93 / "before" / "Gtr.wav")}])
+    a93.player_set_master(0.3)
+    a93.player_set_muted("Gtr", True)
+    a93.player_set_loop(0.2, 0.8)
     ok("a take is open in the player", a93.player_state().get("problem") is None)
     a93.start_take()
     fake_rtmixer.recorded(a93._recorder, np.full((2 * SR, 1), 900, dtype=np.int16), 2 * SR, None, None)
@@ -14851,8 +14861,42 @@ def main():
     ok("Stop keeps the take up to there",
        stopped93.get("ok") and abs(stopped93["duration_sec"] - 2.0) < 0.05
        and Path(stopped93["tracks"][0]["file"]).exists())
-    ok("  and the next take is not called stopped", a93._take_lost is False)
+    ok("  and the next take is not called stopped", a93._take_lost is None)
     a93.discard_take(stopped93["temp_dir"])
+    played93 = a93.player_play()
+    ok("Play opens the take again, mixed as it was: Master, M and the loop",
+       played93.get("ok") and played93.get("problem") is None and played93.get("master") == 0.3
+       and played93.get("muted") == ["Gtr"] and abs((played93.get("loop") or {}).get("a", 0) - 0.2) < 0.01)
+    a93.player_pause()
+
+    # The sound process gone before its news came: Stop finds it so itself.
+    a93.start_take()
+    fake_rtmixer.recorded(a93._recorder, np.full((SR, 1), 900, dtype=np.int16), SR, None, None)
+    a93._recorder.abandon()
+
+    def _gone93(progress=None):
+        raise sound93.SoundUnavailable(STOPPED93)
+
+    a93._recorder.stop = _gone93
+    early93 = a93.stop_take()
+    ok("a Stop that finds the sound process gone keeps the take all the same",
+       early93.get("ok") and abs(early93.get("duration_sec", 0) - 1.0) < 0.05)
+    a93.discard_take(early93["temp_dir"])
+
+    # Slow to answer is not stopped.
+    from rehearsal_recorder.audio.sound.link import NOT_ANSWERING as SLOW93
+
+    a93.start_take()
+
+    def _slow93():
+        raise sound93.SoundUnavailable(SLOW93)
+
+    a93._recorder.problem = _slow93
+    slow93 = a93.recording_health()
+    ok("a sound process slow to answer does not stop the take",
+       slow93.get("error") is None and slow93.get("active") is True)
+    del a93._recorder.problem
+    a93.discard_take(a93.stop_take()["temp_dir"])
 
     class _Down93:
         local = False

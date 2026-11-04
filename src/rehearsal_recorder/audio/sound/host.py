@@ -37,6 +37,7 @@ import time
 import traceback
 from concurrent.futures import ThreadPoolExecutor
 
+from rehearsal_recorder.audio.sound import mapped
 from rehearsal_recorder.midi.clock import AudioClock
 
 log = logging.getLogger(__name__)
@@ -123,7 +124,13 @@ def _rescan():
     from rehearsal_recorder.audio.devices import rescan
 
     trouble = rescan()
-    return trouble, _device_list()
+    try:
+        listed = _device_list()
+    except Exception:  # noqa: BLE001 - PortAudio did not start again: trouble says so
+        if trouble is None:
+            raise
+        listed = None
+    return trouble, listed
 
 
 def _check(which, kw):
@@ -241,7 +248,7 @@ class _Pickler(pickle.Pickler):
             return ("clock", obj._cid)
         if type(obj) in host.made_types:
             return ("ref", host.ref(obj), obj.kind)
-        return None
+        return mapped.reference(obj)
 
 
 class _Unpickler(pickle.Unpickler):
@@ -265,6 +272,8 @@ class _Unpickler(pickle.Unpickler):
             from rehearsal_recorder.audio.devices import sd
 
             return sd
+        if tag == "mapped":
+            return mapped.load(pid)
         raise pickle.UnpicklingError(f"unknown reference {tag!r}")
 
 
@@ -329,7 +338,12 @@ class _ToMain(logging.Handler):
 class Host:
     def __init__(self, conn):
         self.conn = conn
-        self.send_lock = threading.Lock()
+        # Everything for the main process goes out on one thread of its own,
+        # in the order it was said: a ring's thread marking the take's clock,
+        # or saying a line, never waits for the pipe or for a big answer
+        # ahead of it.
+        self.outbox = queue.SimpleQueue()
+        threading.Thread(target=self._send_out, name="sound-out", daemon=True).start()
         self.objects = {}  # handle -> object
         self.handles = {}  # id(object) -> handle
         self.sent = {}  # handle -> references sent
@@ -342,15 +356,25 @@ class Host:
         self.making = _Serial("sound-new")
         self.functions = _Serial("sound-functions")
         self.ending = threading.Event()
+        self._end_once = threading.Lock()
 
     # what goes to the main process
 
     def send(self, msg):
+        """`msg` pickled now, as it is now, and sent after what was said
+        before it. A message that cannot be pickled raises here."""
         buf = io.BytesIO()
         _Pickler(buf, self).dump(msg)
-        data = buf.getvalue()
-        with self.send_lock:
-            self.conn.send_bytes(data)
+        self.outbox.put(buf.getvalue())
+
+    def _send_out(self):
+        while True:
+            data = self.outbox.get()
+            try:
+                self.conn.send_bytes(data)
+            except (OSError, EOFError, ValueError):
+                # The pipe is gone: the reader sees it and ends the process.
+                return
 
     def event(self, name, payload):
         try:
@@ -469,8 +493,11 @@ class Host:
     def end(self):
         """The pipe or the parent went: recordings let go of their files,
         closed, and the process ends."""
-        if self.ending.is_set():
-            return
+        # Once, and never returning: whoever comes second (the pipe's end
+        # and the parent's both come when the parent dies) waits for the
+        # first to end the process. Returned to main, it would let Python
+        # shut down around the recordings still being let go of.
+        self._end_once.acquire()
         self.ending.set()
         abandon_all(list(self.objects.values()))
         os._exit(0)

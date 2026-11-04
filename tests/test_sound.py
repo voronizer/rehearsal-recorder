@@ -81,7 +81,8 @@ def running(pid):
             state = next(line for line in status.read_text().splitlines() if line.startswith("State:"))
         except (OSError, StopIteration):
             return False
-        return " Z " not in state + " "
+        # "State:\tZ (zombie)": a process that has ended, not yet reaped.
+        return state.split()[1:2] != ["Z"]
     try:
         os.kill(pid, 0)
     except ProcessLookupError:
@@ -180,6 +181,74 @@ def rescan_reaches_view(link, folder):
     ok("  one device of it asked here is the new one", sd.query_devices(1)["name"] == "Plugged card")
 
 
+def mapped_files_by_reference(link, folder):
+    print("\n[2c] A file mapped in memory goes over as where it is, not all it holds")
+    import io
+    import types
+
+    from rehearsal_recorder.audio import backing_file
+    from rehearsal_recorder.audio.backing_source import BackingSource
+    from rehearsal_recorder.audio.sound import host as hostmod
+    from rehearsal_recorder.audio.sound import link as linkmod
+
+    ready = backing_file.make_ready(tone_wav(folder / "Backing copy.wav", 60.0), SR)
+    opened = backing_file.open_ready(ready)
+    sent = io.BytesIO()
+    linkmod._Pickler(sent, link).dump(opened)
+    ok("main to sound: a minute of a ready file goes as a few bytes, not 11 MB", len(sent.getvalue()) < 10_000)
+    back = io.BytesIO()
+    hostmod._Pickler(back, types.SimpleNamespace(made_types=set())).dump(opened)
+    ok("  and sound to main the same", len(back.getvalue()) < 10_000)
+    source = sound.new(BackingSource, opened, (0, 1), 0.8)
+    ok("a backing source made there from it has the file", source.channels == 1 and source.file_rate == SR)
+    data = source._data
+    ok("  and its file read here is the file mapped here again",
+       isinstance(data, np.memmap) and data.filename == opened[0].filename
+       and data.shape == opened[0].shape and float(data[SR // 3, 0]) == float(opened[0][SR // 3, 0]))
+    part = opened[0][:10]
+    alone = io.BytesIO()
+    linkmod._Pickler(alone, link).dump(part)
+    ok("a piece of a mapped file goes by value, as it holds no file of its own",
+       np.array_equal(pickle_load(alone.getvalue(), link), part))
+
+
+def events_never_wait_for_the_pipe():
+    print("\n[2d] What the sound process says never waits for the pipe")
+    from rehearsal_recorder.audio.sound import host as hostmod
+
+    held = threading.Event()
+    went = []
+
+    class _Stuck:
+        def send_bytes(self, data):
+            held.wait(5)
+            went.append(data)
+
+    there = hostmod.Host(_Stuck())
+    started = time.monotonic()
+    for i in range(3):
+        there.event("log", {"line": i})
+    took = time.monotonic() - started
+    held.set()
+    ok("three lines with the main process not reading return at once", took < 0.1)
+    ok("  and go, in order, once it reads again",
+       until(lambda: len(went) == 3, 2) and [pickle_load_plain(d)[2]["line"] for d in went] == [0, 1, 2])
+
+
+def pickle_load_plain(data):
+    import pickle
+
+    return pickle.loads(data)
+
+
+def pickle_load(data, link):
+    import io
+
+    from rehearsal_recorder.audio.sound import link as linkmod
+
+    return linkmod._Unpickler(io.BytesIO(data), link, link.gen).load()
+
+
 def host_dies_take_kept(link, folder):
     print("\n[3] The sound process killed mid-take: the take's files stay, it starts again once")
     told = []
@@ -221,14 +290,43 @@ sys.path[:0] = [{src!r}, {tests!r}]
 from rehearsal_recorder.audio import sound
 link = sound.start(prepare={prepare!r})
 link.wait_started(30)
+rec = sound.new("AudioRecorder", 0, 48000, [{{"name": "Gtr", "channel": 1, "stereo": False}}], {out!r}, 16)
+rec.start()
+time.sleep(1.0)
 print(link.pid(), flush=True)
 time.sleep(60)
 """
 
 
-def parent_dies_host_exits():
-    print("\n[4] The main process killed: the sound process ends too")
-    code = HELPER.format(src=str(PROJECT / "src"), tests=str(PROJECT / "tests"), prepare=PREPARE)
+def never_started_says_so_at_once(folder):
+    print("\n[3b] A sound process that dies before it is ready: left down, said at once")
+    from rehearsal_recorder.audio.devices import sd
+    from rehearsal_recorder.audio.sound.link import DOWN
+
+    told = []
+    link = sound.start(prepare="fake_rtmixer:die_at_once")
+    link.on_event(lambda name, payload: told.append(name))
+    ok("it dies twice and is left down", until(lambda: not link.alive, 15))
+    started = time.monotonic()
+    waited = link.wait_started(30)
+    ok("  waiting for it to start ends at once, saying it did not", waited is False
+       and time.monotonic() - started < 1)
+    started = time.monotonic()
+    try:
+        sd.query_devices()
+        said = None
+    except SoundUnavailable as e:
+        said = str(e)
+    ok("  the device list says sound is unavailable, at once",
+       said == DOWN and time.monotonic() - started < 1)
+    sound.stop()
+
+
+def parent_dies_host_exits(folder):
+    print("\n[4] The main process killed mid-take: the sound process ends too, the take's files kept")
+    out = folder / "take 3"
+    out.mkdir()
+    code = HELPER.format(src=str(PROJECT / "src"), tests=str(PROJECT / "tests"), prepare=PREPARE, out=str(out))
     parent = subprocess.Popen([sys.executable, "-c", code], stdout=subprocess.PIPE, text=True)
     line = parent.stdout.readline().strip()
     pid = int(line) if line.isdigit() else None
@@ -236,6 +334,9 @@ def parent_dies_host_exits():
     parent.kill()
     parent.wait(5)
     ok("it is gone within 2 s of the main process", pid is not None and until(lambda: not running(pid), 2))
+    raws = list(out.glob("*.raw"))
+    ok("  and the take's raw file is on disk with the second recorded",
+       len(raws) == 1 and raws[0].stat().st_size > SR)
 
 
 def main():
@@ -249,10 +350,13 @@ def main():
             call_and_answer(link, folder)
             levels_marks_and_log(link, folder)
             rescan_reaches_view(link, folder)
+            mapped_files_by_reference(link, folder)
+            events_never_wait_for_the_pipe()
             host_dies_take_kept(link, folder)
         finally:
             sound.stop()
-        parent_dies_host_exits()
+        never_started_says_so_at_once(folder)
+        parent_dies_host_exits(folder)
     if problems:
         print(f"\n{len(problems)} problem(s):")
         for p in problems:

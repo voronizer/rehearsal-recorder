@@ -589,7 +589,7 @@ class Backing:
         the disk line counts them as one more track's."""
         with self._lock:
             take = self._take if self._taking else None
-        return 0 if take is None else take.opened[4]
+        return 0 if take is None else take.channels
 
     def end_take(self):
         with self._lock:

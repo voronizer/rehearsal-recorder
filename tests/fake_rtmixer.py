@@ -583,6 +583,12 @@ def run_card(frames=1024, rate=48000):
     threading.Thread(target=run, name="fake-card", daemon=True).start()
 
 
+def die_at_once():
+    """What a sound process runs first in test_sound when it is to die
+    before it is ready, as one whose driver crashes PortAudio would."""
+    os._exit(3)
+
+
 def install_host():
     """What a sound process runs first in test_sound: the fake card in
     place of sounddevice and rtmixer, running by itself."""

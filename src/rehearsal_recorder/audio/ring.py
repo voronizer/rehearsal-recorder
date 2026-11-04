@@ -40,12 +40,20 @@ Frames are counted for the stream, not for one ring: a ring started again
 after running dry goes on from where the mixing got to.
 """
 
+import logging
 import threading
 import time
 
 import numpy as np
 
 from rehearsal_recorder.midi.clock import MAX_AGE_SEC
+
+log = logging.getLogger(__name__)
+
+# rtmixer's calls that queue an action or read which are left share one
+# scratch pointer per stream, and a take's stream is played by one ring's
+# thread and recorded by another's: one at a time, whatever the stream.
+RTMIXER_LOCK = threading.Lock()
 
 BLOCK = 1024
 
@@ -339,7 +347,8 @@ class RingOutput:
         self._landed = self.written
 
     def _play(self, at=0):
-        self._action = self.mixer.play_ringbuffer(self.ring, start=at)
+        with RTMIXER_LOCK:
+            self._action = self.mixer.play_ringbuffer(self.ring, start=at)
 
     # ---------- what the owner calls ----------
 
@@ -393,7 +402,8 @@ class RingOutput:
         action = self._action
         if action is not None:
             try:
-                self.mixer.cancel(action)
+                with RTMIXER_LOCK:
+                    self.mixer.cancel(action)
             except Exception:
                 pass  # the stream is going, and the ring with it
 
@@ -443,10 +453,14 @@ class RingOutput:
         heard = self.heard()
         self._beat()
         action = self._action
-        if action is not None and action not in self.mixer.actions:
+        with RTMIXER_LOCK:
+            gone = action is not None and action not in self.mixer.actions
+        if gone:
             # Ran dry: rtmixer let the ring go. A new one from where the
             # mixing got to.
             self.counts["ran_dry"] += 1
+            # It held nothing at the end: the least it held is none.
+            self.counts["lowest_reserve_frames"] = 0
             self._new_ring()
             while self.ring.read_available < self.low:
                 self._add(None)
@@ -538,7 +552,8 @@ class RingInput:
 
     def start(self, at=0, worker=True):
         """Records from the stream time `at` (0: at once)."""
-        self._action = self.recorder.record_ringbuffer(self.ring, start=at)
+        with RTMIXER_LOCK:
+            self._action = self.recorder.record_ringbuffer(self.ring, start=at)
         self._last_ns = time.perf_counter_ns()
         if self._heartbeat is not None:
             self._heartbeat.start()
@@ -560,7 +575,8 @@ class RingInput:
         action = self._action
         if action is not None:
             try:
-                self.recorder.cancel(action)
+                with RTMIXER_LOCK:
+                    self.recorder.cancel(action)
             except Exception:
                 pass
 
@@ -588,7 +604,8 @@ class RingInput:
                 self._consume(silence, self.frames, None)
                 self.frames += n
                 lost -= n
-        dropped = action not in self.recorder.actions
+        with RTMIXER_LOCK:
+            dropped = action not in self.recorder.actions
         have = self.ring.read_available
         if have > self.counts["fullest_frames"]:
             self.counts["fullest_frames"] = have
@@ -612,14 +629,23 @@ class RingInput:
             # what the card captured meanwhile is handed over as silence.
             self.counts["overflowed"] += 1
             self._gap_from = action.actual_time + action.done_frames / self.rate
-            self._action = self.recorder.record_ringbuffer(self.ring)
+            with RTMIXER_LOCK:
+                self._action = self.recorder.record_ringbuffer(self.ring)
+
+    def look(self):
+        """One look at the ring (service), as its thread makes it: one that
+        fails is kept as the ring's fault, the first said in the log, and
+        the take says it could not be written (AudioRecorder.problem)."""
+        try:
+            self.service()
+        except Exception as e:  # noqa: BLE001  the thread must go on
+            if self.fault is None:
+                log.error("The take could not be written: %r", e)
+            self.fault = repr(e)
 
     def _run(self):
         while not self._stop.is_set():
-            try:
-                self.service()
-            except Exception as e:  # noqa: BLE001  the thread must go on
-                self.fault = repr(e)
+            self.look()
             self._stop.wait(INPUT_TICK_SEC)
 
 
