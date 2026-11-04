@@ -293,6 +293,10 @@ the shared one when it is redone.
   accent blue with a white letter and S amber with a dark one (`tone="mute"`
   and `tone="solo"`, F2). Master's click button after its name is the same
   toggle, grey when on.
+  A notes plate has no fader and no S: where a track's M is, its M is
+  pressed for good and faded, as a control that does nothing is
+  (`NotesMute`, owner's pick A, 2026-11-04), and the words the plate used
+  to say, "Saved as .mid, not played here", are its tip.
   The fader shows keyboard focus on its thumb, in the shared ring, wherever
   a player stands (Review, the rehearsal screen, History): the browser's own
   outline would go round the whole track.
@@ -310,8 +314,11 @@ the shared one when it is redone.
   well (`MasterClickLane`).
   A take's Backing track, the last lane above Master, has a dashed border
   round its plate and its well, in the muted text's colour at half
-  strength, and "Stereo file" or "Mono file" after its name: a file played
-  into the take, not an input the band recorded.
+  strength, and after its name one ring or two (`ChannelsIcon`, the words
+  "Mono file" or "Stereo file" in its tip): a file played into the take,
+  not an input the band recorded. One ring is mono and two are stereo
+  wherever the app says it: a track's Stereo toggle on the start screen,
+  this plate, and a song's backing line.
 - **C7. Group**, `Card`: a panel set apart as F4 says, with 12 px
   corners, 16 px inside, and no border or shadow. A screen gives it more air
   with `className`. It takes the place of about 21 hand-made bordered boxes
@@ -430,7 +437,7 @@ The other shared components, each with its stories:
   none: a click, or a menu or popover shut with a click handing focus back
   to its button. It is gone with Esc or the pointer leaving. It is for a
   name a row had to cut, shown whole (B6), for what an icon button does, and
-  for a word on a button that needs a line to say what it does (Stereo):
+  for a button that needs a line to say what it does (Stereo):
   C8's native `title` tooltips. A tip that only repeats its button's name is
   for the eyes (`aria-hidden` inside it), so a screen reader does not hear
   the name twice. Each `Tooltip` has its own provider, so it needs nothing
@@ -452,6 +459,11 @@ The other shared components, each with its stories:
   player's Repeat, and M and S. Check signal says what pressing it does
   ("Check signal", "Stop checking"), and a toggle's name must not change
   with it, so it is a Button, grey while the check runs.
+  A button whose icon says what it does carries no word (owner's picks,
+  2026-11-04): Repeat, Crop, History on the start screen, Look again, Browse,
+  the folder buttons (Show in Finder, Show in folder, Show) and, in the band
+  service, Download on a computer and a key's Remove. Its name stays its
+  `aria-label`, and the word is its tip, `aria-hidden` there (Tooltip).
 - **ToggleGroup**, `toggle-group.tsx`: pick one or several, with the arrow
   keys moving along the group and Tab leaving it. `default` and `outline` are
   Toggles joined into a bar; `switch` is History's switch, a grey track with
@@ -833,7 +845,7 @@ as the `cn` import.
   a take's progress comes from the journal. While History reads its
   rehearsals, it shows the Spinner, unseen for its first second, and from
   10 s "Reading the folder…" beside it (`useAfter`). Settings' Look again
-  keeps its words and its width while it looks, and after its second a
+  keeps its name and its width while it looks, and after its second a
   Spinner takes its icon's place. While Under the hood asks Python for its
   page, it shows the Spinner, unseen for its first second, and from 10 s
   says beside it what it is doing. The rest as each screen is redone, on

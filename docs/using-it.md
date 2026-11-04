@@ -54,8 +54,9 @@ has and the recording quality. Click it to change them in Settings.
 - **Add track** adds a musician, and the bin icon removes one. A notice says
   which track was taken off, and for 10 seconds **Undo**, or ⌘Z on a Mac
   (Ctrl+Z elsewhere), puts it back in its place.
-- **Stereo** records an input and the next one together as one stereo track,
-  for a keyboard or a pair of overhead microphones. See
+- **Stereo**, the ring after the input, records the input and the next one
+  together as one stereo track, for a keyboard or a pair of overhead
+  microphones. One ring is mono; pressed, it shows two rings. See
   [Stereo instruments](#stereo-instruments).
 - **Audio**, **Both** and **MIDI**, at the top right of each track, say what
   the track records: its input, its input and a MIDI port, or a MIDI port
@@ -232,8 +233,9 @@ how many songs; **In the cloud** (**In the band service** when takes go
 there), how many of them are there; and **On disk**, how much of the disk
 the rehearsal uses. With no cloud folder and no band service set, or no
 takes yet, there is nothing to count and that figure is not shown.
-**Show in Finder** (**Show in Explorer** on Windows) opens its folder. A
-long name wraps, with its pencil after its last word, and is never cut.
+**Show in Finder** (**Show in Explorer** on Windows), the folder button,
+opens its folder. A long name wraps, with its pencil after its last word,
+and is never cut.
 When the name needs the room, the figures go one whole figure at a time:
 the size on disk first, then what is sent, then the takes, and the length
 last. Once one has gone, pointing at them shows them all. The button
@@ -309,9 +311,9 @@ The recording screen is big enough to read from where you play.
   goes dim and says “silent”, which is normal while someone is not
   playing.
 
-At the bottom beside **Stop**, under the red *Recording*, a line says that
-the interface is connected and how much recording time the disk has left:
-“Interface connected · room for about 3 h 20 min of recording”. When the
+At the bottom beside **Stop**, under the red *Recording*, a line says how
+much recording time the disk has left, after a green dot that means the
+interface is connected: “Room for about 3 h 20 min of recording”. When the
 disk is nearly full, the line gets an amber icon and says “Low disk space:
 room for about 12 min. Free some up or finish the rehearsal.” It does the
 same when the laptop runs on its battery with 20% or less left: “Battery
@@ -430,13 +432,14 @@ rehearsal into the next.
   without opening them. Click a mark to jump to it. Near a mark, the button
   says **Open mark** and opens that one.
 - To loop a part, drag across the tracks to select it, then turn on
-  **Repeat**, next to the time, or the loop button beside the selection's
-  times. Drag the edges on the ruler to adjust the selection. The cross
-  beside its times removes the selection. It leaves the take as it was.
-- To trim a take, select the part worth keeping and press **Crop**, under
-  the selection's times. It crops at once: the take as it was goes to the
-  Trash, and the marks inside the part move with it. **Undo** puts the
-  uncut take back.
+  **Repeat** (the two arrows in a loop), next to the time, or the loop
+  button beside the selection's times. Drag the edges on the ruler to adjust
+  the selection. The cross beside its times removes the selection. It leaves
+  the take as it was.
+- To trim a take, select the part worth keeping and press **Crop**, the
+  scissors under the selection's times. It crops at once: the take as it
+  was goes to the Trash, and the marks inside the part move with it.
+  **Undo** puts the uncut take back.
 
 A few things about cropping:
 
@@ -581,8 +584,9 @@ name is another song's by then, the notice says why.
 
 ![Past rehearsals down the left, the chosen one beside them: played by the set Gig on the 25th, 4 of its 6 songs](screenshots/history.png)
 
-**History** has three views, switched at the top of its list: **Rehearsals**,
-one by one, **Songs**, song by song, and **Marks**, label by label.
+**History**, the clock button at the top of the start screen, has three
+views, switched at the top of its list: **Rehearsals**, one by one,
+**Songs**, song by song, and **Marks**, label by label.
 It opens on the one you used last, or on the rehearsal or song you opened
 from the start screen. The switch stays in view while the list scrolls.
 
@@ -802,9 +806,11 @@ service does, and how to get one for your band, is on
 A take plays there at the levels its tracks have in РЭХА's player. In the
 service each of you can turn a track up or down for yourself: only you hear
 it that way, and nothing comes back to РЭХА. **Master** under the tracks
-turns the whole take up or down on that phone or computer only. On a
-computer, a track that recorded MIDI shows its notes as in РЭХА's player, and
-they are not played; on a phone its row has the MIDI sign.
+turns the whole take up or down on that phone or computer only. Under it,
+**РЭХА's levels** puts back the levels the take came with; it is faded until
+you move a fader. On a computer, a track that recorded MIDI shows its notes as
+in РЭХА's player, and they are not played; on a phone its row has the MIDI
+sign.
 
 On a computer, Master's row also shows where the band drifted, as in РЭХА
 (see [Where the band drifted](#where-the-band-drifted)), with the click's
@@ -958,9 +964,9 @@ interface.
 
 The app looks for interfaces when it starts. If you switch on the mixer
 after opening the app, it is not in the list yet. The start screen then says,
-for example, *“X18/XR18” is not connected*, with a **Look again** button.
-Press it once the mixer has started. Settings has the same button next to
-the list of interfaces.
+for example, *“X18/XR18” is not connected*, with **Look again**, the two round
+arrows. Press it once the mixer has started. Settings has the same button
+next to the list of interfaces.
 
 The app never looks again on its own, and never while recording: on Windows
 it restarts every ASIO driver when it looks.
@@ -968,8 +974,9 @@ it restarts every ASIO driver when it looks.
 ### Stereo instruments
 
 A keyboard has two outputs, and so does a pair of overhead microphones. Press
-**Stereo** on a track to record its input and the next one together, as one
-stereo file. The input then shows a pair, for example “Inputs 9–10”.
+**Stereo**, the ring after a track's input, to record its input and the next
+one together, as one stereo file. It then shows two rings, and the input
+shows a pair, for example “Inputs 9–10”.
 
 Both inputs have to be free. If the next input already belongs to another
 track, the stereo track waits for an input and the screen says so.
@@ -1036,8 +1043,9 @@ tile is wide enough.
 In the player, a track's notes are a lane of their own. On **Both** they are
 the next lane under the track's audio, and share its dark background, under a
 thin line; on **MIDI** they are in the track's own place among the lanes, on a
-background of their own. On the left the lane says “Saved as .mid, not played
-here”, and it has no **M**, **S** or fader, as there is nothing to hear. The
+background of their own. On the left the lane has **M** pressed and faded,
+as there is nothing to hear: it cannot be turned off, and pointing at it says
+“Saved as .mid, not played here”. There is no **S** or fader. The
 notes go paler with their track's waveform when the track is muted or another
 is soloed; notes of a track on **MIDI** go paler while any track is soloed. A kit
 is drawn in six rows, Crash, Ride, Hi-hat, Toms, Snare and Kick; anything
@@ -1051,8 +1059,8 @@ read the notes”.
 
 In the take's folder, beside the WAVs, with the same name as the track:
 `Drums.wav` and `Drums.mid`. A track on **MIDI** has only a `.mid`. **Show in
-Finder** (**Show in Explorer** on Windows), at the top of the window, opens
-the rehearsal's folder, and the take's folder is in it. In the cloud folder,
+Finder** (**Show in Explorer** on Windows), the folder button at the top of
+the window, opens the rehearsal's folder, and the take's folder is in it. In the cloud folder,
 **The original tracks** and **Both** (in **What gets sent**) copy each
 `.mid` as it is; **The mix** has no notes in it.
 
@@ -1379,7 +1387,7 @@ included. FLAC and MP3 copies do not.
 
 ## The backing track
 
-![Pałyn's page in History: its tempo row, and under it the backing track Pałyn backing.wav, 3:42 · stereo, with Bar 1 at 0:00.80, ▶ and ⋯, then the start of the file drawn with the song's bars and beats over it](screenshots/backing-song.png)
+![Pałyn's page in History: its tempo row, and under it the backing track Pałyn backing.wav, 3:42, two rings for stereo, with Bar 1 at 0:00.80, ▶ and ⋯, then the start of the file drawn with the song's bars and beats over it](screenshots/backing-song.png)
 
 A backing track is an audio file the band plays along with: pads, keys or a
 choir the band does not have, or a whole arrangement without the part
@@ -1501,13 +1509,13 @@ The tab also has its **Volume**, the same level as the slider in the row.
 
 ### In the player
 
-![A take of Viasna in the player: the four tracks, then Backing with a dashed border, “Stereo file” after its name and M on, right above Master](screenshots/backing-lane.png)
+![A take of Viasna in the player: the four tracks, then Backing with a dashed border, two rings for a stereo file after its name and M on, right above Master](screenshots/backing-lane.png)
 
 A take recorded with the backing track has one more track, **Backing**, the
 last one, right above Master. The app writes it from the file, placed where
 the band heard it, so in a DAW it lands on the band. Its plate and its
-waveform have a dashed border, and “Stereo file” or “Mono file” follows its
-name, so you can tell it from the tracks the band played.
+waveform have a dashed border, so you can tell it from the tracks the band
+played. After its name, two rings mean a stereo file and one ring a mono one.
 
 The first time you open a take of a song, Backing is muted, so you hear the
 band on its own. Turn **M** off, and every take of that song opens with the
@@ -1682,8 +1690,8 @@ To ask for help, press **Copy details for a bug report** on the same page and
 paste what it copies into your message. It says which version you have, what
 the computer is, which interface and settings you record with, which MIDI
 the app is on, what the last check found, and where the app keeps its files.
-The **Show** buttons there open the folder with the settings, the history or
-the crash log, if someone asks you to send one.
+The folder buttons there (**Show**) open the folder with the settings, the
+history or the crash log, if someone asks you to send one.
 
 The same test also runs from a terminal, in the folder where you unpacked
 the app. From there it can test another interface too: add its number, from
@@ -1699,8 +1707,9 @@ If the interface is unplugged or switched off during a take, the take stops
 on its own after three seconds without sound. Everything recorded until then
 is kept, and the take opens as usual, with a note saying why it stopped. Plug
 the interface back in and record the next take. If it is not offered, press
-**Look again** in Settings. A MIDI port that goes away does not stop a take:
-see [A port that is not plugged in](#a-port-that-is-not-plugged-in).
+**Look again** (the two round arrows) in Settings. A MIDI port that goes
+away does not stop a take: see
+[A port that is not plugged in](#a-port-that-is-not-plugged-in).
 
 When a take, the signal check or playback has just started, the interface
 gets five seconds to send its first sound, because some drivers take a

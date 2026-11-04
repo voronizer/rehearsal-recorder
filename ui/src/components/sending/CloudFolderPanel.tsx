@@ -1,5 +1,5 @@
 import { useState } from "react"
-import { CloudUpload, RotateCcw } from "lucide-react"
+import { FolderOpen, RotateCcw } from "lucide-react"
 import { Warning } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { SAID } from "@/components/SettingsGroup"
 import { PickRow } from "@/components/ui/pick-row"
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { dismiss, notify } from "@/lib/notices"
 import { SHARE_OPTIONS } from "@/lib/share"
 import { api, type CloudFormat, type Settings, type ShareWhat } from "@/lib/api"
@@ -104,15 +105,22 @@ export function CloudFolderPanel({
             spellCheck={false}
             className="font-mono text-xs"
           />
-          <Button
-            variant="outline"
-            onClick={browseCloud}
-            aria-label="Choose cloud folder"
-            className="shrink-0"
-          >
-            <CloudUpload />
-            Browse
-          </Button>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="outline"
+                size="icon"
+                onClick={browseCloud}
+                aria-label="Choose cloud folder"
+                className="shrink-0"
+              >
+                <FolderOpen />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>
+              <span aria-hidden>Browse</span>
+            </TooltipContent>
+          </Tooltip>
         </div>
 
         {settings?.cloud_dir && (

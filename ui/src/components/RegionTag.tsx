@@ -136,18 +136,24 @@ export function RegionTag({
       </div>
       {actions && crop && (
         <div className="pointer-events-auto flex items-center gap-1" onPointerDown={theirs}>
-          <Button
-            type="button"
-            variant="outline"
-            size="row"
-            onClick={crop.onClick}
-            disabled={!crop.enabled}
-            aria-label="Crop to the region"
-            className={ACTION}
-          >
-            <Scissors className="size-3" />
-            Crop
-          </Button>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                type="button"
+                variant="outline"
+                size="row"
+                onClick={crop.onClick}
+                disabled={!crop.enabled}
+                aria-label="Crop to the region"
+                className={cn(ACTION, "w-6 px-0")}
+              >
+                <Scissors className="size-3" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>
+              <span aria-hidden>Crop</span>
+            </TooltipContent>
+          </Tooltip>
           {/* A disabled button takes no pointer events, so a tip on it would
               never open; the reason has to be on screen beside it. */}
           {crop.whyOff && (

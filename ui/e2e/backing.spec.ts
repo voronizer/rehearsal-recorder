@@ -339,10 +339,12 @@ test("the Backing lane is last, above Master, dashed and muted the first time; M
   await page.getByRole("radio", { name: "Songs", exact: true }).click()
   await openOld(page, "Viasna", "Take 4 Viasna")
   const id = await idOf(page, "Viasna")
-  // The plate says what the file is, and both it and the lane are dashed.
+  // The plate says what the file is, two rings for stereo with the words in
+  // its tip, and both it and the lane are dashed.
   const plate = page.locator("[data-plate='Backing']")
   await expect(plate).toContainText("Backing")
-  await expect(plate).toContainText("Stereo file")
+  await expect(plate.locator("[data-plate-file]")).toHaveAccessibleName("Stereo file")
+  await expect(plate).not.toContainText("Stereo file")
   expect(await dashed(plate)).toBe("dashed")
   expect(await dashed(page.locator("[data-lane='Backing'] > div"))).toBe("dashed")
   expect(await dashed(page.locator("[data-plate='Drums']"))).not.toBe("dashed")
@@ -396,7 +398,7 @@ test("Review right after a take shows the same lane, muted the first time", asyn
   await page.getByRole("button", { name: /^Stop/ }).click()
   await expect(page.locator("[data-take-summary]")).toBeVisible()
   await expect(lanes(page).last()).toHaveAttribute("data-lane-row", "Backing")
-  await expect(page.locator("[data-plate='Backing']")).toContainText("Stereo file")
+  await expect(page.locator("[data-plate='Backing'] [data-plate-file]")).toHaveAccessibleName("Stereo file")
   await expect(mute(page)).toHaveAttribute("aria-pressed", "true")
   await mute(page).click()
   await expect.poll(() => args(page, "set_song_backing_heard")).toEqual([[await idOf(page, "Pałyn"), true]])

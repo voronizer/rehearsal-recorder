@@ -4,6 +4,7 @@ import { Warning } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { SAID, SettingsGroup } from "@/components/SettingsGroup"
 import { useNoticesGoWithPage } from "@/hooks/useErrorNotice"
 import { dismiss, notify } from "@/lib/notices"
@@ -132,15 +133,22 @@ export function FoldersSettings() {
               spellCheck={false}
               className="font-mono text-xs"
             />
-            <Button
-              variant="outline"
-              onClick={browse}
-              aria-label="Choose recordings folder"
-              className="shrink-0"
-            >
-              <FolderOpen />
-              Browse
-            </Button>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="outline"
+                  size="icon"
+                  onClick={browse}
+                  aria-label="Choose recordings folder"
+                  className="shrink-0"
+                >
+                  <FolderOpen />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>
+                <span aria-hidden>Browse</span>
+              </TooltipContent>
+            </Tooltip>
           </div>
 
           {settings?.path_warning && <Warning>{settings.path_warning}</Warning>}

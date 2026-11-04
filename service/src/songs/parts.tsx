@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react"
 import { Link } from "@tanstack/react-router"
-import { ChevronDown, Ellipsis, X } from "lucide-react"
+import { ChevronDown, Download, Ellipsis, ExternalLink, X } from "lucide-react"
 import { ConfirmDialog } from "@/components/ConfirmDialog"
 import { Button } from "@/components/ui/button"
 import {
@@ -151,11 +151,12 @@ function NotesBox({ song }: { song: Song }) {
   )
 }
 
-const KIND: Record<SongFile["kind"], [string, string]> = {
-  gp: ["GP", "Guitar Pro · downloads to open in Guitar Pro"],
-  pdf: ["PDF", "PDF · opens in a new tab"],
-  picture: ["IMG", "Picture · opens in a new tab"],
-  other: ["FILE", "Downloads"],
+/** The badge, and whether a press opens the file in a tab (↗) or downloads it (↓). */
+const KIND: Record<SongFile["kind"], [string, boolean]> = {
+  gp: ["GP", false],
+  pdf: ["PDF", true],
+  picture: ["IMG", true],
+  other: ["FILE", false],
 }
 
 /** The song's files: a Guitar Pro file downloads, a PDF or a picture opens in a new tab. */
@@ -176,11 +177,15 @@ export function Files({ song, files }: { song: Song; files: SongFile[] }) {
             {...(f.kind === "pdf" || f.kind === "picture" ? { target: "_blank", rel: "noreferrer" } : { download: f.name })}
             className="min-w-0 flex-1"
           >
-            <span className={cn("block truncate", OPENS)}>{f.name}</span>
-            <span className="block truncate text-xs text-muted-foreground">
-              {KIND[f.kind][1]}
-              {f.added_by && ` · added by ${f.added_by}`}
+            <span className="flex min-w-0 items-center gap-1.5">
+              <span className={cn("truncate", OPENS)}>{f.name}</span>
+              {KIND[f.kind][1] ? (
+                <ExternalLink role="img" aria-label="opens in a new tab" className="size-3.5 shrink-0 text-muted-foreground" />
+              ) : (
+                <Download role="img" aria-label="downloads" className="size-3.5 shrink-0 text-muted-foreground" />
+              )}
             </span>
+            {f.added_by && <span className="block truncate text-xs text-muted-foreground">added by {f.added_by}</span>}
           </a>
           <Button variant="ghost" size="icon-row" aria-label={`Remove ${f.name}`} disabled={remove.isPending} onClick={() => setRemoving(f)}>
             <X className="text-muted-foreground" />
@@ -319,11 +324,13 @@ export function SongPanel({ id }: { id: number }) {
               [
                 "Tempo",
                 song.tempo ? (
-                  <span>
-                    {Math.round(song.tempo)} bpm <span className="text-xs text-muted-foreground">from РЭХА</span>
-                  </span>
+                  <span className="tnum">{Math.round(song.tempo)} bpm</span>
                 ) : (
-                  <span className="text-muted-foreground">Not set in РЭХА yet</span>
+                  // A dash until РЭХА sends a take with the song's tempo.
+                  <span className="text-muted-foreground">
+                    <span aria-hidden>—</span>
+                    <span className="sr-only">Not set yet</span>
+                  </span>
                 ),
               ],
               [

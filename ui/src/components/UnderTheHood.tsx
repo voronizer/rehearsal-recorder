@@ -1,5 +1,5 @@
 import { Fragment, useEffect, useRef, useState } from "react"
-import { Activity, Check, CircleCheck, Copy, Info, TriangleAlert, X } from "lucide-react"
+import { Activity, Check, CircleCheck, Copy, FolderOpen, Info, TriangleAlert, X } from "lucide-react"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -248,9 +248,16 @@ function Updates({ hood, update }: { hood: Hood; update: UpdateStatus }) {
             {mine.file}: unpack it, close this copy and open the new one.
           </div>
         </div>
-        <Button variant="outline" size="row" onClick={() => void api().show_update()}>
-          Show in folder
-        </Button>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button variant="outline" size="icon-row" aria-label="Show in folder" onClick={() => void api().show_update()}>
+              <FolderOpen />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>
+            <span aria-hidden>Show in folder</span>
+          </TooltipContent>
+        </Tooltip>
       </>
     )
   } else if (latest && mine?.state === "failed") {
@@ -532,14 +539,21 @@ export function UnderTheHood() {
                     )}
                   </div>
                 </div>
-                <Button
-                  variant="outline"
-                  size="row"
-                  aria-label={`Show ${said.name}`}
-                  onClick={() => void api().show_file(f.key)}
-                >
-                  Show
-                </Button>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="outline"
+                      size="icon-row"
+                      aria-label={`Show ${said.name}`}
+                      onClick={() => void api().show_file(f.key)}
+                    >
+                      <FolderOpen />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <span aria-hidden>Show in folder</span>
+                  </TooltipContent>
+                </Tooltip>
               </div>
             )
           })}

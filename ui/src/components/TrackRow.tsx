@@ -1,4 +1,5 @@
 import { Check, Trash2, TriangleAlert } from "lucide-react"
+import { ChannelsIcon } from "@/components/ChannelsIcon"
 import { Button } from "@/components/ui/button"
 import { Meter } from "@/components/ui/meter"
 import {
@@ -143,14 +144,20 @@ export function TrackRow({
             <Toggle
               asChild
               variant="outline"
-              size="row"
+              size="icon-row"
               pressed={!!track.stereo}
               onPressedChange={onStereo}
               aria-label={`Track ${n} in stereo`}
             >
-              <TooltipTrigger>Stereo</TooltipTrigger>
+              <TooltipTrigger>
+                <ChannelsIcon stereo={!!track.stereo} />
+              </TooltipTrigger>
             </Toggle>
-            <TooltipContent>Two adjacent inputs, written as one stereo file</TooltipContent>
+            <TooltipContent>
+              {track.stereo
+                ? "Stereo: two adjacent inputs, written as one stereo file"
+                : "Mono. Press for stereo: two adjacent inputs, written as one stereo file"}
+            </TooltipContent>
           </Tooltip>
 
           <div data-check-slot="signal" className={cn("ml-auto flex shrink-0", END_COLUMN)}>

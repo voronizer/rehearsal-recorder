@@ -11,10 +11,9 @@ export const LOW_BATTERY = 20
  *  LOW_SPACE_MINUTES), so a low line never says more than 14. */
 const LOW_SPACE_MINUTES = 15
 
-const lower = (s: string) => s.charAt(0).toLowerCase() + s.slice(1)
 /** The free space while the interface sends: the start screen's sentence,
- *  led by the interface. */
-const connected = (minutes: number) => `Interface connected · ${lower(diskLine(minutes, false))}`
+ *  after a green dot that says the interface is sending (DiskLine `live`). */
+const connected = (minutes: number) => diskLine(minutes, false)
 const lowSpace = (minutes: number) =>
   `${diskLine(minutes, true)}. Free some up or finish the rehearsal.`
 
@@ -33,20 +32,25 @@ const TONE = {
 
 /**
  * The disk line's look, one for the start screen and the recording screen:
- * the icon, then the words, in the muted colour. A warning is the icon in
- * warn and the words in the text's colour, as Alert draws it; an error is
- * the whole line in the destructive colour. The icon stands by the first
- * line, should the words take two. `unseen` holds the room of `text`
- * without drawing it.
+ * the icon (or `live`'s dot), then the words, in the muted colour. A warning
+ * is the icon in warn and the words in the text's colour, as Alert draws it;
+ * an error is the whole line in the destructive colour. The icon stands by
+ * the first line, should the words take two. `unseen` holds the room of
+ * `text` without drawing it.
  */
 export function DiskLine({
   icon = "disk",
   text,
   tone = "quiet",
+  live = false,
   unseen,
   className,
 }: {
   icon?: "disk" | "battery"
+  /** The interface is sending: a green dot where the icon is, instead of
+   *  the words "Interface connected". On the recording screen it stands
+   *  under Recording's red dot, as big and as far from its words. */
+  live?: boolean
   text: string
   tone?: keyof typeof TONE
   unseen?: boolean
@@ -58,7 +62,13 @@ export function DiskLine({
       aria-hidden={unseen || undefined}
       className={cn("flex items-start gap-1 text-xs", TONE[tone], unseen && "invisible", className)}
     >
-      <Icon className={cn("mt-px size-3.5 shrink-0", tone === "warn" && "text-warn")} />
+      {live ? (
+        <span className="mt-px flex size-3.5 shrink-0 items-center">
+          <span data-live role="img" aria-label="Interface connected" className="size-2.5 rounded-full bg-signal" />
+        </span>
+      ) : (
+        <Icon className={cn("mt-px size-3.5 shrink-0", tone === "warn" && "text-warn")} />
+      )}
       {unseen ? (
         // Drawn from an attribute, not written in the page: a copy that only
         // holds room is not a second line of text to find, read or select.
@@ -118,6 +128,7 @@ export function HealthLine({
         icon={lowBattery && !health?.error && !health?.low_space ? "battery" : "disk"}
         text={text}
         tone={health?.error ? "error" : warn ? "warn" : "quiet"}
+        live={!!health && !health.error && !warn}
         className="col-start-1 row-start-1"
       />
     </div>

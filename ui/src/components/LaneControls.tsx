@@ -1,9 +1,11 @@
 import type { ReactNode } from "react"
 import { Volume1, Volume2, VolumeX } from "lucide-react"
+import { ChannelsIcon } from "@/components/ChannelsIcon"
 import { InstrumentIcon } from "@/components/InstrumentIcon"
 import { MidiGlyph } from "@/components/midi/MidiGlyph"
 import { LanePlate } from "@/components/ui/lane-plate"
 import { Toggle } from "@/components/ui/toggle"
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { Whole } from "@/components/ui/whole"
 import { CLIP_THRESHOLD } from "@/lib/levels"
 import { cn } from "@/lib/utils"
@@ -138,7 +140,8 @@ function MeteredFader({
  *
  * The take's Backing track is the song's file, not one of the band's tracks
  * (backing-track spec Part 7): its plate has a dashed frame, and after its
- * name it says what the file is, "Stereo file" or "Mono file" (`file`).
+ * name one ring or two say whether the file is mono or stereo, the words
+ * ("Stereo file", `file`) in its tip.
  *
  * On the band service's desk for a phone, which has no lanes, the MIDI sign
  * after the name says the track recorded its notes too (`midi`).
@@ -200,9 +203,16 @@ export function LaneControls({
           className={cn("min-w-0 flex-1 truncate text-sm leading-4", dimmed && "text-muted-foreground")}
         />
         {file && (
-          <span data-plate-file className="shrink-0 text-xs leading-4 text-muted-foreground">
-            {file}
-          </span>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <span data-plate-file role="img" aria-label={file} className="flex shrink-0">
+                <ChannelsIcon stereo={channels > 1} className="size-4 text-muted-foreground" />
+              </span>
+            </TooltipTrigger>
+            <TooltipContent>
+              <span aria-hidden>{file}</span>
+            </TooltipContent>
+          </Tooltip>
         )}
         {midi && (
           <span data-plate-midi role="img" aria-label="MIDI notes too" className="flex shrink-0">

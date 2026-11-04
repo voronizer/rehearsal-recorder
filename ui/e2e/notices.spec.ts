@@ -134,8 +134,13 @@ test("a failure stays until it is closed, and is one notice however often it hap
   await page.clock.fastForward(4500)
   await expect(notices(page, "error")).toHaveCount(1)
 
-  // Focus is on Browse after the Tab, so Escape is not typing: it leaves
-  // Settings in one press, and the notice goes with its screen (C4).
+  // Focus is on Browse after the Tab, so Escape is not typing. Its tip,
+  // open on keyboard focus, goes with the first press; the second leaves
+  // Settings, and the notice goes with its screen (C4).
+  await expect(page.getByRole("tooltip")).toHaveText("Browse")
+  await page.keyboard.press("Escape")
+  await expect(page.getByRole("tooltip")).toHaveCount(0)
+  await expect(page.locator("#recordings-dir")).toHaveCount(1)
   await page.keyboard.press("Escape")
   await expect(startButton(page)).toBeVisible()
   await expect(page.locator("#recordings-dir")).toHaveCount(0)

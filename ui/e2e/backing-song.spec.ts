@@ -34,6 +34,8 @@ const head = (page: Page) => page.locator("[data-song-head]")
 const section = (page: Page) => head(page).getByRole("region", { name: "Backing track" })
 const line = (page: Page) => section(page).locator("[data-backing-line]")
 const file = (page: Page) => section(page).locator("[data-backing-file]")
+/** One ring or two after the time: mono or stereo, named in words. */
+const channels = (page: Page) => file(page).locator("[data-backing-channels]")
 const field = (page: Page) => section(page).getByRole("textbox", { name: "Bar 1 at" })
 const marker = (page: Page) => section(page).getByRole("slider", { name: "Bar 1" })
 const drawing = (page: Page) => section(page).locator("[data-file-start]")
@@ -91,7 +93,8 @@ test("adding a backing track to a song with no tempo counts it and gives the son
     "Counted 104 bpm, now the song's tempo; bar 1 on the first strong beat. Twice too fast or too slow: halve or double." +
       BEAT_LINKS
   )
-  await expect(file(page)).toHaveText(/Dym minus\.mp3\s*3:34 · stereo/)
+  await expect(file(page)).toHaveText(/Dym minus\.mp3\s*3:34$/)
+  await expect(channels(page)).toHaveAccessibleName("Stereo file")
   await expect(field(page)).toHaveValue("0:00.62")
   // The tempo row above has the counted tempo, as the song does.
   await expect(tempo(page)).toHaveValue("104")
@@ -116,7 +119,8 @@ test("adding a backing track to a song with no tempo counts it and gives the son
 test("a backing track counted at the song's tempo moves bar 1 a beat either way", async ({ page }) => {
   await openSong(page, "Pałyn")
   const id = await idOf(page, "Pałyn")
-  await expect(file(page)).toHaveText(/Pałyn backing\.wav\s*3:42 · stereo/)
+  await expect(file(page)).toHaveText(/Pałyn backing\.wav\s*3:42$/)
+  await expect(channels(page)).toHaveAccessibleName("Stereo file")
   await expect(field(page)).toHaveValue("0:00.80")
   await expect(line(page)).toHaveText("Counted 128 bpm, as the song; bar 1 on the first strong beat." + BEAT_LINKS)
   // A beat at 128 is 0.47 s.
@@ -133,7 +137,8 @@ test("a backing track counted at the song's tempo moves bar 1 a beat either way"
 test("a backing track counted at another tempo leaves the song's until it is taken", async ({ page }) => {
   await openSong(page, "Viasna", VIASNA_126)
   const id = await idOf(page, "Viasna")
-  await expect(file(page)).toHaveText(/Viasna backing\.wav\s*4:28 · stereo/)
+  await expect(file(page)).toHaveText(/Viasna backing\.wav\s*4:28$/)
+  await expect(channels(page)).toHaveAccessibleName("Stereo file")
   await expect(line(page)).toHaveText(
     "Counted 126 bpm; the song stays at 128 until you take the backing track's tempo. Bar 1 on its first strong beat."
   )
@@ -146,7 +151,8 @@ test("a backing track counted at another tempo leaves the song's until it is tak
 
 test("pads with no steady beat keep the song's tempo, and draw its bars", async ({ page }) => {
   await openSong(page, "Sonca")
-  await expect(file(page)).toHaveText(/Sonca pads\.wav\s*5:00 · mono/)
+  await expect(file(page)).toHaveText(/Sonca pads\.wav\s*5:00$/)
+  await expect(channels(page)).toHaveAccessibleName("Mono file")
   await expect(line(page)).toHaveText(
     "No steady beat in it (pads): the click keeps the song's 96. Drag bar 1 to where the band comes in, and check it with ▶."
   )
@@ -256,7 +262,8 @@ test("play runs the file and the click, with the playhead, until stopped", async
   await expect(stop(page)).toBeVisible()
   expect(await args(page, "backing_play")).toEqual([[id, true]])
   await expect(playhead(page)).toBeVisible()
-  await expect(file(page)).toHaveText(/Pałyn backing\.wav\s*0:0\d \/ 3:42 · stereo/)
+  await expect(file(page)).toHaveText(/Pałyn backing\.wav\s*0:0\d \/ 3:42$/)
+  await expect(channels(page)).toHaveAccessibleName("Stereo file")
   const left = () => playhead(page).evaluate((el) => parseFloat((el as HTMLElement).style.left))
   const first = await left()
   await expect.poll(left).toBeGreaterThan(first)
@@ -266,7 +273,8 @@ test("play runs the file and the click, with the playhead, until stopped", async
   await expect(play(page)).toBeVisible()
   await expect.poll(() => callCount(page, "backing_stop")).toBe(1)
   await expect(playhead(page)).toHaveCount(0)
-  await expect(file(page)).toHaveText(/Pałyn backing\.wav\s*3:42 · stereo/)
+  await expect(file(page)).toHaveText(/Pałyn backing\.wav\s*3:42$/)
+  await expect(channels(page)).toHaveAccessibleName("Stereo file")
 })
 
 test("one plays at a time: the tempo row's click and the backing track", async ({ page }) => {
@@ -300,7 +308,8 @@ test("replace and remove, from the backing track's menu", async ({ page }) => {
   await setFake(page, "__BACKING_PICK__", { path: "/Users/alex/Music/Pałyn live.wav", name: "Pałyn live.wav" })
   await more(page).click()
   await page.getByRole("menu").getByRole("menuitem", { name: "Replace…" }).click()
-  await expect(file(page)).toHaveText(/Pałyn live\.wav\s*3:34 · stereo/)
+  await expect(file(page)).toHaveText(/Pałyn live\.wav\s*3:34$/)
+  await expect(channels(page)).toHaveAccessibleName("Stereo file")
   expect(await args(page, "add_backing")).toEqual([[id, "/Users/alex/Music/Pałyn live.wav"]])
   await expect(line(page)).toHaveText(
     "Counted 120 bpm; the song stays at 128 until you take the backing track's tempo. Bar 1 on its first strong beat."

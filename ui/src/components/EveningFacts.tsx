@@ -146,12 +146,14 @@ export function EveningFacts({
         {withFolder && (
           <Tooltip>
             <TooltipTrigger asChild>
-              <Button variant="outline" size="row" onClick={() => void showFolder(folder)}>
+              <Button variant="outline" size="icon-row" aria-label={folderButton} onClick={() => void showFolder(folder)}>
                 <FolderOpen className="text-muted-foreground" />
-                {folderButton}
               </Button>
             </TooltipTrigger>
-            <TooltipContent className="break-words">{folder}</TooltipContent>
+            <TooltipContent className="break-words">
+              <span aria-hidden>{folderButton}: </span>
+              <span className="font-mono">{folder}</span>
+            </TooltipContent>
           </Tooltip>
         )}
       </div>

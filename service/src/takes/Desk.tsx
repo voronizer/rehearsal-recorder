@@ -1,6 +1,7 @@
 import { InstrumentIcon } from "@/components/InstrumentIcon"
 import { LaneControls, MasterControls } from "@/components/LaneControls"
 import { MidiGlyph } from "@/components/midi/MidiGlyph"
+import { NotesMute } from "@/components/midi/NotesMute"
 import { LanePlate } from "@/components/ui/lane-plate"
 import { Whole } from "@/components/ui/whole"
 import type { MultitrackPlayer } from "@/hooks/useMultitrackPlayer"
@@ -14,9 +15,10 @@ const ROW = "h-14 rounded-lg bg-card"
 /**
  * On a phone: a row per track as РЭХА's desk draws it, its name, its level,
  * M and S; no wave. A track that recorded its notes too has the MIDI sign
- * after its name; one that recorded notes alone has a row that says so,
- * after the tracks of sound, its name greyed as a track's is while another
- * track is soloed. Master is the last row, as on a desk.
+ * after its name; one that recorded notes alone has a row of its own after
+ * the tracks of sound, with M pressed for good (NotesMute) where theirs is,
+ * its name greyed as a track's is while another track is soloed. Master is
+ * the last row, as on a desk.
  */
 export function Desk({ take, player, notes }: { take: TakePage; player: MultitrackPlayer; notes: NotesFile[] }) {
   const withNotes = new Set(notes.map((n) => n.name))
@@ -64,7 +66,12 @@ export function Desk({ take, player, notes }: { take: TakePage; player: Multitra
               />
               <MidiGlyph className="size-4 shrink-0 text-muted-foreground" />
             </div>
-            <span className="flex h-5 items-center text-xs text-muted-foreground">Saved as .mid, not played here</span>
+            {/* M pressed for good where the other rows have their M. */}
+            <div className="flex h-5 items-center justify-end">
+              <span className="flex w-[2.875rem] shrink-0">
+                <NotesMute name={n.name} />
+              </span>
+            </div>
           </LanePlate>
         </div>
       ))}

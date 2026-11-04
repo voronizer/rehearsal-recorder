@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState, type FormEvent } from "react"
-import { Ellipsis } from "lucide-react"
+import { Ellipsis, X } from "lucide-react"
 import { ConfirmDialog } from "@/components/ConfirmDialog"
 import { Button } from "@/components/ui/button"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { Input } from "@/components/ui/input"
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import {
   useAddMember,
   useBand,
@@ -81,9 +82,7 @@ function TheBand() {
                 <Button variant="ghost" size="row" disabled={picture.isPending} onClick={() => picture.mutate(null)}>
                   Remove the picture
                 </Button>
-              ) : (
-                <span className="text-xs text-muted-foreground">Without a picture the logo is the name's first letter.</span>
-              )}
+              ) : null}
               {done && (
                 <span role="status" className="text-xs text-muted-foreground">
                   Name saved
@@ -212,9 +211,16 @@ function Keys({ keys }: { keys: Key[] }) {
           {keys.map((k) => (
             <div key={k.id} className="flex items-center gap-3">
               <span className="min-w-0 flex-1 truncate">{k.name}</span>
-              <Button variant="ghost" size="row" disabled={remove.isPending} onClick={() => setRemoving(k)}>
-                Remove
-              </Button>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button variant="ghost" size="icon-row" aria-label={`Remove ${k.name}`} disabled={remove.isPending} onClick={() => setRemoving(k)}>
+                    <X className="text-muted-foreground" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <span aria-hidden>Remove</span>
+                </TooltipContent>
+              </Tooltip>
             </div>
           ))}
         </Rows>

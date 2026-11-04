@@ -699,25 +699,32 @@ test.describe("the track rows on the shared pieces", () => {
     await expect(page.getByRole("button", { name: "Check signal" })).toBeEnabled()
   })
 
-  test("Stereo is a toggle with aria-pressed", async ({ page }) => {
+  test("Stereo is a toggle with aria-pressed, one ring off and two on", async ({ page }) => {
     await openApp(page)
     const stereo = page.getByRole("button", { name: "Track 1 in stereo" })
     await expect(stereo).toHaveAttribute("data-slot", "toggle")
     await expect(stereo).toHaveAttribute("aria-pressed", "false")
+    await expect(stereo).toHaveText("")
+    await expect(stereo.locator("circle")).toHaveCount(1)
     // What it does, in the shared tip rather than the browser's own.
     await expect(stereo).not.toHaveAttribute("title")
     await stereo.hover()
-    await expect(tooltip(page)).toHaveText("Two adjacent inputs, written as one stereo file")
+    await expect(tooltip(page)).toHaveText("Mono. Press for stereo: two adjacent inputs, written as one stereo file")
 
     await stereo.click()
     await expect(stereo).toHaveAttribute("aria-pressed", "true")
     await expect(stereo).toHaveAttribute("data-state", "on")
+    await expect(stereo.locator("circle")).toHaveCount(2)
     // On is grey, never the accent (F2), under the pointer as well.
     const background = () => stereo.evaluate((el) => getComputedStyle(el).backgroundColor)
     await expect.poll(background).toBe(await colourOf(page, "selected"))
     expect(await background()).not.toBe(await colourOf(page, "primary"))
     await page.mouse.move(0, 0)
     await expect.poll(background).toBe(await colourOf(page, "selected"))
+    // On, its tip says what it is now, and it keeps its grey while the tip shows.
+    await stereo.hover()
+    await expect(tooltip(page)).toHaveText("Stereo: two adjacent inputs, written as one stereo file")
+    expect(await background()).toBe(await colourOf(page, "selected"))
 
     await stereo.click()
     await expect(stereo).toHaveAttribute("aria-pressed", "false")
@@ -810,7 +817,7 @@ test.describe("the track rows on the shared pieces", () => {
     await at(900)
     expect(await spinner.isVisible(), "a spinner at 0.9 s").toBe(false)
     await expect(spinner, "a spinner by 2 s").toBeVisible({ timeout: 2000 })
-    // The button keeps its box, its words and its spinner changing in it.
+    // The button keeps its box, its icon and its spinner changing in it.
     expect(await looking.boundingBox()).toEqual(box)
 
     await letGo(page, "rescan_devices")

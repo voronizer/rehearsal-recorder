@@ -146,12 +146,13 @@ export function ControllerSettings() {
         action={
           <Tooltip>
             <TooltipTrigger asChild>
-              <Button variant="outline" disabled={refreshing || busy} onClick={() => void lookAgain()} className="shrink-0">
+              <Button variant="outline" size="icon" aria-label="Look again" disabled={refreshing || busy} onClick={() => void lookAgain()} className="shrink-0">
                 {refreshSpinner ? <Spinner after={0} /> : <RefreshCw />}
-                Look again
               </Button>
             </TooltipTrigger>
-            <TooltipContent>Find a controller connected since Settings opened</TooltipContent>
+            <TooltipContent>
+              <span aria-hidden>Look again: </span>find a controller connected since Settings opened
+            </TooltipContent>
           </Tooltip>
         }
       >

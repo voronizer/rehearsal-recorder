@@ -7,6 +7,19 @@ opening.
 
 ## Unreleased
 
+- **Icons in place of words.** A lane of notes in the player has its **M**
+  pressed for good and faded, where a track's **M** is: the notes are saved
+  as .mid and never played, and pointing at **M** says so. Buttons whose
+  icon says what they do lose their word, which is now in their tip:
+  **Repeat**, **Crop**, **History** on the start screen, **Look again**,
+  **Browse**, and the folder buttons (**Show in Finder**, **Show in
+  folder**, **Show**). **Stereo** on a track is one ring for mono and two
+  for stereo, and the same rings stand after the backing track's name in the
+  player and on a song's page. While a take records, a green dot says the
+  interface is connected. In the band service, a song's files have ↗ (opens
+  in a tab) or ↓ (downloads) after their name, a tempo not set yet is a
+  dash, **Download** on a computer and a key's **Remove** are icons, and
+  **РЭХА's levels** sits under Master, faded until you move a fader.
 - **Download in the band service.** A take's page has one **Download**
   button by its name. **The mix** is the take as one MP3, mixed in the page
   as you hear it there, with your levels, mute and solo. Mute your own part,

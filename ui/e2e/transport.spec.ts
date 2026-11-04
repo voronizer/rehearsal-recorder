@@ -157,7 +157,8 @@ test.describe("the transport", () => {
     await openTonight(page, "Take 1 Pałyn 1")
     const repeat = transport(page).getByRole("button", { name: "Repeat", exact: true })
     await expect(repeat).toHaveAttribute("aria-pressed", "false")
-    await expect(repeat).toHaveText("Repeat")
+    // Its icon alone; the word is its name and its tip.
+    await expect(repeat).toHaveText("")
     await expect(repeat).not.toHaveAttribute("title")
     const fill = async () => (await style(repeat, "background-color"))["background-color"]
     // Off it has no fill of its own; the pointer is nowhere near it.

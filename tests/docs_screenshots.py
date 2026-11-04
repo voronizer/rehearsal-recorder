@@ -363,7 +363,7 @@ def main():
         page.add_init_script(PLAYED_BY + MOCK + BAND + COUNTED)
         page.goto(server.base_url, wait_until="networkidle")
         page.wait_for_selector("text=Start rehearsal")
-        page.click("text=History")
+        page.get_by_role("button", name="History", exact=True).click()
         page.wait_for_selector("text=New songs")
         page.wait_for_timeout(400)
         shoot(page, "history")
