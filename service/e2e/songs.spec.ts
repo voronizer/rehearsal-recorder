@@ -31,7 +31,8 @@ test("a song's panel sets its status, key and notes, and takes a file", async ({
   })
   await expect(panel.getByRole("link", { name: /Viasna chart\.pdf/ })).toHaveAttribute("target", "_blank")
 
-  await panel.getByRole("link", { name: "Song's page" }).click()
+  // The title is the way to the song's page.
+  await panel.getByRole("heading", { level: 2 }).getByRole("link", { name: "Viasna" }).click()
   await expect(page).toHaveURL(`/songs/${band().songs["Viasna"]}`)
   await expect(page.getByRole("heading", { level: 1 })).toContainText("Viasna")
   await expect(page.getByRole("main")).toContainText("Ira starts, then the bass")

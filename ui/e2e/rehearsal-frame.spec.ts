@@ -538,9 +538,10 @@ test.describe("the screen", () => {
     }
   })
 
-  // A take's name has a line of its own, and its wave and length go under
-  // it, only where the row has no room for them all: in a window of 880 at
-  // 100 % every take's length stays beside its wave.
+  // A take's name has a line of its own, with its wave and length under it
+  // (owner's pick, 2026-11-04); the length goes under the wave only where
+  // the row has no room for both: in a window of 880 at 100 % every take's
+  // length stays beside its wave.
   test("a take's length stays beside its wave at 100 percent in an 880 by 680 window", async ({ page }) => {
     await page.setViewportSize({ width: 880, height: 680 })
     await openBandApp(page, { stress: "rehearsal" })

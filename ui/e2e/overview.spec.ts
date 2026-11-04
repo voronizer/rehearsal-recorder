@@ -304,8 +304,8 @@ test.describe("the take row", () => {
 })
 
 test.describe("the wave of a take", () => {
-  // Each take's row is its name, then its wave to scale, as the band service
-  // draws them (owner's pick A, 2026-11-02).
+  // Each take's row is its name, with its wave to scale under it, as the
+  // band service draws them (owner's picks, 2026-11-02 and 2026-11-04).
   const wave = (overview: Locator, n: number) => row(overview, n).locator("[data-wave]")
 
   test("each row draws its take's wave once it is in, to scale, with its marks", async ({ page }) => {

@@ -200,7 +200,8 @@ function TakeView({ take }: { take: TakePage }) {
       head={song ? <Back to="/songs/$id" params={{ id: String(song.id) }} label={song.title} /> : <Back to="/songs" label="Songs" />}
       title={
         <span className="flex flex-wrap items-center gap-3">
-          <TakeName take={take} />
+          {/* A long name wraps rather than being cut (2026-11-04). */}
+          <TakeName take={take} wrap className="min-w-0" />
           {take.starred_at_rehearsal && (
             <Badge variant="signal" className="text-xs font-normal">
               ★ at rehearsal

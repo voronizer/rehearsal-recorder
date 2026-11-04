@@ -55,8 +55,8 @@ export type OverviewPlayback = {
  * under 1 px lines, a take nobody named last of them. The evening's figures
  * are not here: the header says them, and it is in view with a take open too.
  *
- * Each take is a row: its name, then its wave drawn to scale — so the take
- * that ran long or stopped short is plain before anything is read, and
+ * Each take is a row: its name, and under it its wave drawn to scale — so
+ * the take that ran long or stopped short is plain before anything is read, and
  * where the band played loud or stopped — with its marks where they fell,
  * and every one of them listed under it: its label's name, then its comment
  * when it has one. The comments are usually why the rehearsal was opened
@@ -305,8 +305,8 @@ function NamePills({
 }
 
 /**
- * One take as a row: ▶, its name, its wave to scale with its marks, its
- * length, and the buttons for it, with every mark's line under it. The rehearsal overview
+ * One take as a row: ▶, its name with its wave to scale under it, its
+ * marks, its length, and the buttons for it, with every mark's line under it. The rehearsal overview
  * draws one per take; a song's page, one per take of the song.
  *
  * On a song's page a row can be of a rehearsal whose folder is not on disk
@@ -412,15 +412,15 @@ export function TakeRow({
           aria-keyshortcuts={here && spaceKeys ? "Space" : undefined}
         />
 
-        {/* The name, then the wave, to scale, and the length right after
-            it (owner's pick A, 2026-11-02, as the band service has them).
-            Where the row has under 17rem for all that, the name has a line
-            of its own and the wave and the rest go under it, rather than
-            out over the edge of the screen: the buttons at the right keep
-            their place, and at a large scale in a narrow window that leaves
-            nothing else. */}
+        {/* The name on a line of its own, then the wave, to scale, and the
+            length right after it (owner's pick, 2026-11-04, as the band
+            service has them): a long name is not cut to give the wave its
+            room. Where the row has under 17rem, the wave and the rest wrap
+            too, rather than going out over the edge of the screen: the
+            buttons at the right keep their place, and at a large scale in a
+            narrow window that leaves nothing else. */}
         <div className="@container min-w-0">
-          <div className="flex items-center gap-x-2.5 gap-y-1 @max-[17rem]:flex-wrap">
+          <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1">
             <Button
               type="button"
               variant="ghost"
@@ -432,7 +432,7 @@ export function TakeRow({
               disabled={missing}
               data-take-name
               data-starred={starred || undefined}
-              className="h-auto w-30 shrink-0 justify-start gap-2 rounded-sm p-0 text-left font-normal whitespace-nowrap hover:bg-transparent disabled:opacity-100 @max-[17rem]:basis-full dark:hover:bg-transparent"
+              className="h-auto max-w-full shrink-0 basis-full justify-start gap-2 rounded-sm p-0 text-left font-normal whitespace-nowrap hover:bg-transparent disabled:opacity-100 dark:hover:bg-transparent"
             >
               <span className="tnum text-xs text-muted-foreground">
                 {String(take.take_number).padStart(2, "0")}
@@ -460,8 +460,8 @@ export function TakeRow({
                 }))}
                 onPress={missing ? undefined : (at) => (onPlayAt ? onPlayAt(take, at) : open(take))}
                 className="shrink"
-                // Of the room after the name less the length's and a ✓'s, so
-                // that every row's is to the one scale.
+                // Of the row less the length's and a ✓'s, so that every
+                // row's is to the one scale.
                 style={{ width: `calc((100% - ${AFTER_WAVE}rem) * ${Math.min(1, take.duration_sec / longest)})` }}
               />
 

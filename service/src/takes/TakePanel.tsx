@@ -1,11 +1,12 @@
+import type { ReactNode } from "react"
 import { Link } from "@tanstack/react-router"
-import { ChevronRight, X } from "lucide-react"
+import { X } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Toggle } from "@/components/ui/toggle"
 import { cn } from "@/lib/utils"
 import { usePeaks, useTake, type TakePage } from "../api"
 import { TakeMarks } from "../marks/MarkItem"
-import { Group, Groups, OPENS, Rows, Trouble, Waiting } from "../shell/parts"
+import { Group, Groups, OPENS, Trouble, Waiting } from "../shell/parts"
 import { usePanel } from "../shell/panel"
 import { clock, longDay } from "../shell/words"
 import { usePlayer, useTime } from "./player/one"
@@ -30,17 +31,19 @@ function TrackWave({ take, peaks, heard }: { take: TakePage; peaks: string; hear
 /**
  * A lane per track with M and S, as РЭХА's player has them. They work
  * whether the take plays or not: pressed before ▶, they sound from it.
+ * The names are a column as wide as the longest, up to 40 % of the row
+ * (Alex's pick B, 2026-11-04), so M and S stand one under another.
  */
 export function Lanes({ take }: { take: TakePage }) {
   const p = usePlayer()
   const desk = p.deskOf(take.uid)
   return (
-    <Rows>
+    <div className="grid grid-cols-[fit-content(40%)_auto_auto_minmax(0,1fr)] gap-x-3 gap-y-2">
       {take.tracks.map((t, i) => {
         const heard = p.sounds(take.uid, i)
         return (
-          <div key={t.position} role="group" aria-label={t.name} data-heard={heard} className="flex items-center gap-3">
-            <span className={cn("w-16 shrink-0 truncate", !heard && "text-muted-foreground line-through")}>{t.name}</span>
+          <div key={t.position} role="group" aria-label={t.name} data-heard={heard} className="col-span-full grid grid-cols-subgrid items-center">
+            <span className={cn("min-w-0 truncate", !heard && "text-muted-foreground line-through")}>{t.name}</span>
             <Toggle size="lane" variant="outline" tone="mute" pressed={desk.muted.includes(i)} onPressedChange={() => p.mute(take.uid, i)} aria-label={`Mute ${t.name}`}>
               M
             </Toggle>
@@ -51,22 +54,29 @@ export function Lanes({ take }: { take: TakePage }) {
           </div>
         )
       })}
-    </Rows>
+    </div>
   )
 }
 
-/** The take's wave with ▶ and the time under it. */
-export function TakePlayer({ take, height = 64 }: { take: TakePage; height?: number }) {
+/**
+ * The take's player on one line: ▶ on the wave's level, the wave with the
+ * time in its corner (Alex, 2026-11-04: «На волне»), and `star` at the end.
+ */
+export function TakePlayer({ take, height = 64, star }: { take: TakePage; height?: number; star?: ReactNode }) {
   const at = useTime(take.uid)
   return (
-    <div className="flex flex-col gap-2">
-      <Wave take={take} height={height} starred={take.stars.length > 0} moves />
-      <div className="flex items-center gap-3">
-        <Play take={take} />
-        <span data-testid="clock" className="tnum text-xs text-muted-foreground">
+    <div className="flex items-center gap-3">
+      <Play take={take} />
+      <div className="relative min-w-0 flex-1">
+        <Wave take={take} height={height} starred={take.stars.length > 0} moves />
+        <span
+          data-testid="clock"
+          className="tnum pointer-events-none absolute right-0 bottom-0 rounded bg-background/85 px-1 text-xs leading-4 text-muted-foreground"
+        >
           {clock(at)} / {clock(take.duration_sec)}
         </span>
       </div>
+      {star}
     </div>
   )
 }
@@ -80,17 +90,13 @@ export function TakePanel({ uid, markAt }: { uid: string; markAt?: number }) {
   const t = take.data
   return (
     <div className="flex flex-col gap-6" aria-label={t.name}>
-      <div className="flex items-center gap-2">
-        <h2 className="flex min-w-0 flex-1 items-center gap-2 text-lg font-semibold">
-          <TakeName take={t} />
-        </h2>
-        <StarButton take={t} who disabled={!!t.trashed_at} />
-        <Button asChild variant="outline" size="row">
-          <Link to="/takes/$uid" params={{ uid }}>
-            Take's page
-            <ChevronRight />
+      {/* The name opens the take's page and wraps when long (Alex's pick D, 2026-11-04); the star is by the player. */}
+      <div className="flex items-start gap-2">
+        <h2 className="min-w-0 flex-1 py-0.5 text-lg font-semibold">
+          <Link to="/takes/$uid" params={{ uid }} className={OPENS}>
+            <TakeName take={t} wrap />
           </Link>
-        </Button>
+        </h2>
         {!t.trashed_at && <TakeMenu take={t} onGone={close} />}
         <Button variant="ghost" size="icon-row" aria-label="Close" onClick={close}>
           <X />
@@ -112,7 +118,7 @@ export function TakePanel({ uid, markAt }: { uid: string; markAt?: number }) {
       </p>
       <Groups>
         <Group>
-          <TakePlayer take={t} />
+          <TakePlayer take={t} star={<StarButton take={t} who disabled={!!t.trashed_at} />} />
         </Group>
         <Group title="Tracks" hint={String(t.tracks.length)} fold="closed">
           <Lanes take={t} />

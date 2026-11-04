@@ -46,8 +46,8 @@ export function Song() {
     <Page
       head={<Back to="/songs" label="Songs" />}
       title={
-        <span className="flex items-center gap-3">
-          {song.title}
+        <span className="flex flex-wrap items-center gap-3">
+          <span className="min-w-0 [overflow-wrap:anywhere]">{song.title}</span>
           <StatusMenu song={song} />
           <KeySelect song={song} />
           <SongMenu song={song} onGone={() => navigate({ to: "/songs" })} />

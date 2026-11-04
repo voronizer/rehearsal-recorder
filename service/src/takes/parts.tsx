@@ -35,12 +35,20 @@ export const colourCss = (l: Label) => `var(${labelLook(l.colour).cssVar})`
 /**
  * “Viasna 12” as РЭХА writes a take: the song's title, then the number a
  * shade lighter. `short`: the number alone. A long title gives way and the
- * number stays, so two takes of one song never read the same.
+ * number stays, so two takes of one song never read the same. `wrap`: a
+ * heading's, the whole name over as many lines as it takes.
  */
-export function TakeName({ take, short, className }: { take: { name: string; number: number }; short?: boolean; className?: string }) {
+export function TakeName({ take, short, wrap, className }: { take: { name: string; number: number }; short?: boolean; wrap?: boolean; className?: string }) {
   const end = ` ${take.number}`
   const title = take.name.endsWith(end) ? take.name.slice(0, -end.length) : take.name
   const split = title !== take.name
+  if (wrap)
+    return (
+      <span className={cn("[overflow-wrap:anywhere]", className)}>
+        {title}
+        {split && <span className="tnum text-muted-foreground"> {take.number}</span>}
+      </span>
+    )
   return (
     <span className={cn("inline-flex min-w-0 max-w-full items-baseline gap-1", className)}>
       {!(short && split) && <span className="min-w-0 truncate">{title}</span>}
@@ -223,14 +231,17 @@ export function Diamond({ colour, className }: { colour: string; className?: str
   return <span aria-hidden="true" className={cn("inline-block size-2.5 shrink-0 rotate-45 rounded-[2px]", className)} style={{ background: colour }} />
 }
 
-/** РЭХА's rehearsal overview gives the longest take this share of the row. */
-const SHARE = 88
+/** The room after the longest take's wave, in rem: its length and the gap. */
+const AFTER_WAVE = 3
 
 /**
- * One take as a row: ▶, its name (opens the take's panel), its wave to
- * scale with its marks (green when it has stars; press it to play from
- * there), its length, your star. `marks` lists its marks under it, each a
- * line that plays from there.
+ * One take as a row: ▶, its name (opens the take's panel) on a line of its
+ * own, and under it the wave to scale with its marks (green when it has
+ * stars; press it to play from there) and its length; your star. The name
+ * has the row's whole width and the wave all of it but its length's room
+ * (Alex's pick B, 2026-11-04): a fixed column cut the name while the wave
+ * had room to spare. `marks` lists its marks under it, each a line that
+ * plays from there.
  */
 export function TakeLine({ take, marks, short, after }: { take: TakeLike; marks?: boolean; short?: boolean; after?: ReactNode }) {
   const p = usePlayer()
@@ -240,15 +251,16 @@ export function TakeLine({ take, marks, short, after }: { take: TakeLike; marks?
     <div className="flex flex-col gap-0.5" data-take={take.name}>
       <div className="grid grid-cols-[2rem_minmax(0,1fr)_auto] items-center gap-x-3">
         <Play take={take} />
-        <div className="flex min-w-0 items-center gap-2.5 overflow-x-clip">
-          <TakeLink take={take} short={short} className="w-24 shrink-0" />
-          <div className="flex min-w-0 flex-1 items-center gap-2.5">
+        <div className="flex min-w-0 flex-col gap-0.5 overflow-x-clip">
+          <TakeLink take={take} short={short} className="self-start" />
+          <div className="flex min-w-0 items-center gap-2.5">
             <Wave
               take={take}
               height={28}
               starred={take.stars.length > 0}
               className="min-w-8"
-              style={{ width: `${(Math.min(take.duration_sec, longest) / longest) * SHARE}%` }}
+              // Of the row less the length's room, so every row's is to one scale.
+              style={{ width: `calc((100% - ${AFTER_WAVE}rem) * ${Math.min(take.duration_sec, longest) / longest})` }}
             />
             <span className="tnum shrink-0 text-sm text-muted-foreground">{clock(take.duration_sec)}</span>
             {after}
