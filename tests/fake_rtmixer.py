@@ -21,12 +21,15 @@ under test depends on each of these:
 
 The card is driven by hand: `card.pump(frames)` is one card call for every
 started stream and returns what each played; `card.feed(array)` queues what
-the card's inputs will hear. `card.time` starts at 1.0 and moves on by the
-call's length after each call. `card.out_latency` and `card.in_latency` (0.0
+the card's inputs will hear. `call(stream, ...)` is one card call for one
+stream alone, and `recorded(recorder, block)` one into a recorder.
+`card.time` starts at 1.0 and moves on by the call's length after each
+call. `card.out_latency` and `card.in_latency` (0.0
 unless a check sets them) put the output and input times either side of it.
 """
 
 import sys
+import time
 
 import numpy as np
 
@@ -245,6 +248,10 @@ class _Base:
 
     @property
     def latency(self):
+        said = getattr(self._twin, "latency", None)
+        if said is not None:
+            # The suite's stand-in says what latency its card has.
+            return said
         if self.kind == "duplex":
             return (card.in_latency, card.out_latency)
         return card.in_latency if self.kind == "input" else card.out_latency
@@ -388,6 +395,82 @@ class MixerAndRecorder(Mixer, Recorder):
 
 
 _KINDS = {"output": "OutputStream", "input": "InputStream", "duplex": "Stream"}
+
+
+def by_hand(ring):
+    """A ring of audio/ring.py looked after by the check, not its thread:
+    each `ring.service()` is one look, so what the card hears is known
+    exactly. Returns the ring."""
+    ring._stop.set()
+    thread, ring._thread = ring._thread, None
+    if thread is not None:
+        thread.join()
+    ring._stop.clear()
+    return ring
+
+
+def call(stream, indata=None, frames=None, advance=True):
+    """One card call for `stream` alone, whatever else is open: its inputs
+    hear `indata` (frames by channels, float32; silence for None), and what
+    its outputs played comes back (None for a stream with none). The card's
+    time moves on by the call, unless `advance` is False (a check that sets
+    `card.time` itself, for streams on two cards)."""
+    if frames is None:
+        frames = 0 if indata is None else len(indata)
+    heard = np.zeros((frames, stream._inputs), dtype=np.float32)
+    if indata is not None and stream._inputs:
+        data = np.asarray(indata, dtype=np.float32)[:frames]
+        if data.ndim == 1:
+            data = data[:, None]
+        width = min(stream._inputs, data.shape[1])
+        heard[:len(data), :width] = data[:, :width]
+    out = stream._call(frames, heard) if stream in card.streams else None
+    if advance:
+        card.time += frames / stream.samplerate
+    return out
+
+
+def recorded(recorder, indata, frames=None, time_info=None, status=None):
+    """A card call into a recorder (audio/capture.AudioRecorder) or a level
+    check (audio/monitor.LevelMonitor), by hand: `indata` as its inputs hear
+    it, in the take's own form (whole numbers at its full scale) or float32,
+    is recorded, and its rings are looked at, so it is on disk when this
+    returns. What its outputs played comes back. `time_info` and `status`
+    are taken for the old callbacks' and not used: the card's own clock and
+    the rings say what they said."""
+    data = np.asarray(indata)
+    if frames is not None:
+        data = data[:frames]
+    if data.dtype.kind in "iu":
+        scale = getattr(recorder, "_full_scale", 32768)
+        data = (data.astype(np.float64) / scale).astype(np.float32)
+    stream = getattr(recorder, "_stream", None)
+    if stream is None:
+        # Never started, or stopped: what the ring's thread would hand over,
+        # handed over by hand (a check of the writing alone), unless it is a
+        # stopped take, which takes nothing.
+        if getattr(recorder, "_stopped", False) or getattr(recorder, "_input", None) is not None:
+            return None
+        consume = getattr(recorder, "_arrived", None) or recorder._measure
+        consume(np.ascontiguousarray(data, dtype=np.float32), getattr(recorder, "_frames_written", 0),
+                time.perf_counter_ns())
+        return None
+    out = call(stream, data, len(data))
+    for name in ("_output", "_input"):
+        ring = getattr(recorder, name, None)
+        if ring is not None:
+            ring.service()
+    return out
+
+
+def recorded_duplex(recorder, indata, outdata, frames=None, time_info=None, status=None):
+    """`recorded` for a take whose click is on the recording card: what its
+    outputs played is copied into `outdata` too, as the old callback wrote it."""
+    out = recorded(recorder, indata, frames)
+    if out is not None and outdata is not None:
+        n, width = min(len(out), len(outdata)), min(out.shape[1], outdata.shape[1])
+        outdata[:n, :width] = out[:n, :width]
+    return out
 
 
 def install(sd=None):

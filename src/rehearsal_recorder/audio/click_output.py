@@ -147,6 +147,17 @@ class ClickOutput:
         """Whether stop() has closed it: it plays nothing again."""
         return self._stopping
 
+    def soonest(self):
+        """The first frame a change asked now is sure to be heard from, None
+        before the card plays the stream (audio/ring.RingOutput.soonest)."""
+        ring = self._ring
+        return None if ring is None else ring.soonest()
+
+    def heard_frame(self):
+        """The frame heard now, None before the card plays the stream."""
+        ring = self._ring
+        return None if ring is None else ring.heard()
+
     def problem(self):
         """Why the click is not being heard, or None. Plain reads, so a take's
         callback may ask."""

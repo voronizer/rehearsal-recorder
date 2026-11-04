@@ -6,6 +6,7 @@ runs on Mac/Windows with the recorder's existing test environment.
 import tempfile
 from pathlib import Path
 from test_engine import fresh_api, np, SR
+import fake_rtmixer  # noqa: E402  (test_engine put tests/ on the path)
 from fake_midi import FakePortSystem
 from rehearsal_recorder.midi.ports import PortInfo
 from rehearsal_recorder.midi.controller import Controller
@@ -52,7 +53,7 @@ def main():
             session=api._session;press(2,71);assert api._session is session
             def record(token):
                 press(token,60);assert api._recorder is not None
-                api._recorder._callback(np.full((512,1),1000,dtype=np.int32),512,None,None)
+                fake_rtmixer.recorded(api._recorder, np.full((512,1),1000,dtype=np.int32),512,None,None)
                 press(token+1,60);assert api._recorder is None
             api._session['set']={'songs':['Song with takes','Empty A','Empty B']}
             api.set_next_take_name('Song with takes')

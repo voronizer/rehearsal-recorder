@@ -482,23 +482,20 @@ def main():
 def one_stream():
     print("\n[5] A take's click, one stream")
     # The click on the recording card: one stream with inputs and outputs, the
-    # click written into its output in the callback that reads its inputs. What
-    # is written comes back in a round trip later, here 9.5 ms (456 frames at
-    # 48000), so the click of input frame s is written at output frame s - 456.
+    # click mixed into its outputs' ring (fill_card). What is played comes
+    # back in a round trip later, here 9.5 ms (456 frames at 48000), as a
+    # recorder would measure it for rings begun that far apart, so the click
+    # of input frame s is written at play frame s - 456.
     SR, MS = 48000, 1_000_000
     T = 3_000_000_000
     voices = Voices("click", SR, 0.7)
 
-    def run(click, blocks, start=0):
-        """Blocks of 1024 into a stream whose output is heard 4.5 ms after its
-        callback runs, and whose input was captured 5 ms before it."""
+    def run(click, blocks, start=0, trip=456):
+        """Blocks of 1024 of the outputs, each mixed 4.5 ms before it is heard."""
         heard = []
         for i in range(start, start + blocks):
             out = np.zeros((1024, 2), np.float32)
-            now = 100.0 + i * 1024 / SR
-            info = types.SimpleNamespace(currentTime=now, inputBufferAdcTime=now - 0.005,
-                                         outputBufferDacTime=now + 0.0045)
-            click.on_duplex_block(out, i * 1024, 1024, info, (0.004, 0.004), now_ns=T + i * 1024 * 1_000_000_000 // SR)
+            click.fill_card(out, i * 1024, T + i * 1024 * 1_000_000_000 // SR, 0.0045, trip)
             heard.append(out)
         return np.concatenate(heard)
 
@@ -507,7 +504,7 @@ def one_stream():
        tc.duplex and tc.first_click_frame is None and tc.end_frame is None)
     heard = run(tc, 150)
     first = tc.first_click_frame
-    ok("the first block chooses it: 0.1 s on, and a round trip of 9.5 ms after that", first == 4800 + 456)
+    ok("the first block chooses it: 0.1 s into the take, and a round trip of 9.5 ms after that", first == 4800 + 456)
     ok("so the first click is at output frame first_click_frame - 456",
        not heard[:first - 456].any() and np.array_equal(heard[first - 456:first - 456 + len(voices.of(2)), 0], voices.of(2)))
     ok("  on both of its outputs", np.array_equal(heard[:, 0], heard[:, 1]))
@@ -552,17 +549,19 @@ def one_stream():
        (k, place) == (3, 76800 - 61440) and not back[:place].any()
        and np.array_equal(back[place:place + len(voices.of(0)), 0], voices.of(accent("4/4", k))))
 
-    # A driver that gives no times: the round trip is the stream's own
-    # latencies, which the recorder knows only once the stream is open (None
-    # until then). The ones it asked for are never taken for them.
-    blank = types.SimpleNamespace(currentTime=0.0, inputBufferAdcTime=0.0, outputBufferDacTime=0.0)
-    unsaid = TakeClick(120, "4/4", 1, voices, (0, 1))
+    # The ring is mixed before the card plays it, the round trip not known
+    # yet: nothing when the two rings begin together, as they are asked to.
+    # Measured later, and not nothing (a ring begun late), the blocks mixed
+    # again place each click by it; the first click stays the take's frame.
+    moved = TakeClick(120, "4/4", 1, voices, (0, 1))
     out = np.zeros((1024, 2), np.float32)
-    unsaid.on_duplex_block(out, 0, 1024, blank, None, now_ns=T)
-    waited = unsaid.first_click_frame is None and not out.any()
-    unsaid.on_duplex_block(out, 1024, 1024, blank, (0.004, 0.006), now_ns=T + 21_333_333)
-    ok("a driver with no times: the first click waits for the stream's own latencies, 10 ms here",
-       waited and unsaid.first_click_frame == 1024 + 4800 + 480)
+    moved.fill_card(out, 0, T, None, 0)
+    chosen = moved.first_click_frame
+    again = run(moved, 4, start=4, trip=480)
+    ok("mixed before the card plays: the first click 0.1 s in, no round trip yet", chosen == 4800)
+    ok("  a round trip measured later moves where it is written, not the first click",
+       moved.first_click_frame == 4800 and not again[:4320 - 4096].any()
+       and np.array_equal(again[4320 - 4096:4320 - 4096 + len(voices.of(2)), 0], voices.of(2)))
 
     print("  Stop records on to the next quarter")
     eight = TakeClick(180, "6/8", 1, voices, (0, 1))

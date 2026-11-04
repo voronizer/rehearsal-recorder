@@ -32,7 +32,6 @@ for both.
 """
 
 import threading
-import time
 
 import numpy as np
 import sounddevice as sd
@@ -555,6 +554,9 @@ class TakePlayer:
         if ring is None:
             return None, None
         frame = ring.heard()
+        if ring.action is not None and (frame is None or frame < ring.base):
+            # Nothing of the ring heard yet: its first block is next.
+            frame = ring.base
         if not ring.settled():
             landed = ring.landed
             if landed is not None and (frame is None or landed > frame):

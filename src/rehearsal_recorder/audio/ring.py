@@ -62,6 +62,10 @@ INPUT_TICK_SEC = 0.002
 # How long stop() waits for a thread to finish its pass.
 JOIN_SEC = 2.0
 
+# How long move() waits for the thread to make the move: a seek is where it
+# was sent as soon as it returns, for whoever asks the position next.
+MOVE_WAIT_SEC = 0.1
+
 _NS = 1e9
 
 
@@ -136,7 +140,9 @@ class RingOutput:
         self._asked = 0
         self._made = 0
         self._landed = None
+        self._made_now = threading.Condition(self._lock)
         self._stop = threading.Event()
+        self._wake = threading.Event()
         self._thread = None
         self._took = 0.0  # seconds the last move took to mix
         self._seen = None  # frames the card had taken at the last look
@@ -151,6 +157,7 @@ class RingOutput:
         self._end = None
         self._cursor = None
         self._started = False
+        self.requested = 0
 
     # ---------- the ring ----------
 
@@ -184,10 +191,14 @@ class RingOutput:
 
     def heard(self):
         """The stream's frame the card plays this moment, by its clock:
-        PortAudio's time less the time the ring started. Counted from the
-        ring instead when that time is not believable (none yet, before the
-        ring's start or past what it was given): what the card took, less
-        the output latency. None before the ring plays."""
+        PortAudio's time less the time the ring started. Just after the
+        card's first call, that is before the ring's first frame (heard an
+        output latency later), and so is the frame. Counted from the ring
+        instead when that time is not believable (none yet, more than a
+        second before the ring's start, or past what it was given): what the
+        card took, less the output latency. None until the card has taken
+        from the ring, as nothing of it is heard before (a ring asked to
+        start later, or one the card has not reached yet)."""
         action, base, written = self._action, self._base, self.written
         if action is None:
             return None
@@ -196,12 +207,31 @@ class RingOutput:
             try:
                 into = int(round((self.mixer.time - started) * self.rate))
             except Exception:
-                into = -1
-            if 0 <= into <= written - base:
+                into = None
+            if into is not None and -self.rate <= into <= written - base:
                 return base + into
-        if self._started:
-            return max(base, self.card_at() - int(_output_latency(self.mixer) * self.rate))
+        taken = self.card_at()
+        if self._started and taken > base:
+            return max(base, taken - int(_output_latency(self.mixer) * self.rate))
         return None
+
+    def soonest(self):
+        """The first frame a change asked now is sure to be heard from: past
+        the guard, and a card call more for the thread's next look. None
+        until the card has taken from the ring."""
+        if self.heard() is None:
+            return None
+        return _ceil_block(self.card_at() + self._unsafe()) + BLOCK
+
+    @property
+    def action(self):
+        """rtmixer's action playing the ring, None before it plays."""
+        return self._action
+
+    @property
+    def base(self):
+        """The stream's frame the ring playing now began with."""
+        return self._base
 
     def shown(self, frame):
         """What `fill` returned for the block that holds `frame`, None for one
@@ -213,9 +243,11 @@ class RingOutput:
     # ---------- mixing ----------
 
     def _lead(self, frame, heard):
+        """How long after now the block from `frame` is heard; None while
+        nothing of the ring is (see heard), for a fill that marks a clock
+        with it to leave it unmarked."""
         if heard is None:
-            behind = self.card_at() - int(_output_latency(self.mixer) * self.rate)
-            return (frame - behind) / self.rate
+            return None
         return (frame - heard) / self.rate
 
     def _mix(self, state, out, frame, heard, edits=()):
@@ -306,20 +338,23 @@ class RingOutput:
         self._cursor = None
         self._landed = self.written
 
-    def _play(self):
-        self._action = self.mixer.play_ringbuffer(self.ring)
+    def _play(self, at=0):
+        self._action = self.mixer.play_ringbuffer(self.ring, start=at)
 
     # ---------- what the owner calls ----------
 
-    def start(self, worker=True):
+    def start(self, worker=True, when=None):
         """Fills a second and plays it; with `worker`, a thread keeps it
-        filled (without, `service` is called by hand, as the tests do)."""
+        filled (without, `service` is called by hand, as the tests do).
+        `when()`, asked once the second is mixed, is the stream time the
+        ring is to be heard from (`requested`); without it, at once."""
         with self._lock:
             self._new_ring()
             self._end = self._state() if self._state is not None else None
             while self.ring.read_available < self.target:
                 self._add(None)
-            self._play()
+            self.requested = when() if when is not None else 0
+            self._play(self.requested)
             self._started = True
         if self._heartbeat is not None:
             self._heartbeat.start()
@@ -335,11 +370,14 @@ class RingOutput:
         a stream opened next goes on from what was heard, not from a second
         ahead of it."""
         self._stop.set()
+        self._wake.set()
         thread, self._thread = self._thread, None
         if thread is not None and thread is not threading.current_thread():
             thread.join(JOIN_SEC)
         with self._lock:
             frame = self.heard()
+            if frame is not None:
+                frame = max(self._base, frame)
             if self._landed is not None and (frame is None or self._landed > frame):
                 frame = self._landed
             state = None if frame is None else self._states.get(frame - frame % BLOCK)
@@ -349,6 +387,7 @@ class RingOutput:
             for edit in moves:
                 edit()
             self._made = self._asked
+            self._made_now.notify_all()
         if self._heartbeat is not None:
             self._heartbeat.stop()
         action = self._action
@@ -364,10 +403,18 @@ class RingOutput:
 
     def move(self, edit):
         """`edit()` is applied a block ahead of the card, and the ring after it
-        mixed from there: Play, Pause, a seek, the loop."""
+        mixed from there: Play, Pause, a seek, the loop. With a thread filling
+        the ring, it is woken for it, and the move made when this returns
+        (MOVE_WAIT_SEC at most)."""
         with self._lock:
             self._moves.append(edit)
             self._asked += 1
+            asked = self._asked
+            thread = self._thread
+            if thread is None or thread is threading.current_thread() or self._stop.is_set():
+                return
+            self._wake.set()
+            self._made_now.wait_for(lambda: self._made >= asked or self._stop.is_set(), MOVE_WAIT_SEC)
 
     @property
     def landed(self):
@@ -390,6 +437,7 @@ class RingOutput:
         mixed, topped up to a second."""
         with self._lock:
             self._service()
+            self._made_now.notify_all()
 
     def _service(self):
         heard = self.heard()
@@ -441,7 +489,8 @@ class RingOutput:
                 self.service()
             except Exception as e:  # noqa: BLE001  the thread must go on
                 self.fault = repr(e)
-            self._stop.wait(OUTPUT_TICK_SEC)
+            self._wake.wait(OUTPUT_TICK_SEC)
+            self._wake.clear()
 
     fault = None
 
@@ -476,6 +525,12 @@ class RingInput:
         self._stop = threading.Event()
         self._thread = None
         self.fault = None
+        # How long the last read waited on the one before: how sure its
+        # arrival time is (see RingMarks).
+        self.window_ns = None
+        # The stream time the ring's frame 0 was captured at, once the card
+        # has begun recording into it.
+        self.started_time = None
 
     @property
     def action(self):
@@ -518,6 +573,8 @@ class RingInput:
         if action is None:
             return
         last, self._last_ns = self._last_ns, now
+        if self.started_time is None and action.actual_time > 0:
+            self.started_time = action.actual_time
         if self._gap_from is not None:
             if action.actual_time <= 0:
                 return  # the new recording has not begun: nothing in the ring yet
@@ -538,11 +595,18 @@ class RingInput:
         if have:
             n = self.ring.readinto(self._buf[:have])
             arrival = now if last is None else (last + now) // 2
-            self._consume(self._buf[:n], self.frames, arrival)
-            self.frames += n
-            if self._heartbeat is not None:
-                self._heartbeat.enter()
-                self._heartbeat.leave()
+            self.window_ns = None if last is None else now - last
+            # Inside the heartbeat, as a callback is: a disk slow to take the
+            # frames is the app busy with them, not the card gone.
+            beat = self._heartbeat
+            if beat is not None:
+                beat.enter()
+            try:
+                self._consume(self._buf[:n], self.frames, arrival)
+            finally:
+                self.frames += n
+                if beat is not None:
+                    beat.leave()
         if dropped and not self._stop.is_set():
             # The ring filled and rtmixer let it go. Recording again at once;
             # what the card captured meanwhile is handed over as silence.
@@ -563,25 +627,52 @@ class RingMarks:
     """
     The notes' clock (midi/clock.AudioClock) marked from a recording ring's
     reads (Part 5). Each read that found frames says they arrived at
-    `arrival_ns`; their first frame was captured the stream's input latency
-    before. Once a second of frames has passed, one mark: the mean of that
-    second's reads, so a coarse sleep between reads costs no precision.
+    `arrival_ns`, give or take half of `window_ns`, the time since the read
+    before; the first frame of the card call that brought them was captured
+    the stream's input latency before. Once a second of frames has passed,
+    one mark: the mean of that second's reads, so a coarse sleep between
+    reads costs no precision. The first comes after FIRST_MARK_SEC, so a
+    take's click on another device has a clock to start by.
+
+    A read that waited longer than WINDOW_SEC on the one before says too
+    little of when its frames came, and is left out. Each read kept is the
+    clock's latest mark besides (AudioClock.mark_latest), not kept for the
+    fit: take.clock writes the kept marks up to the latest.
     """
 
-    def __init__(self, clock, samplerate, latency_sec):
+    FIRST_MARK_SEC = 0.25
+    WINDOW_SEC = 0.01
+
+    def __init__(self, clock, samplerate, latency_sec, block=BLOCK):
         self.clock = clock
         self.rate = samplerate
         self.latency_ns = int(round(latency_sec * _NS))
+        self.block = block
         self._reads = []
+        self._span = self.FIRST_MARK_SEC * samplerate
 
-    def read(self, first_frame, frames, arrival_ns):
+    def read(self, first_frame, frames, arrival_ns, window_ns=None):
         if arrival_ns is None or frames <= 0:
             return
+        if window_ns is not None and window_ns > self.WINDOW_SEC * _NS:
+            return
         reads = self._reads
-        reads.append((arrival_ns - self.latency_ns, first_frame))
-        if first_frame - reads[0][1] >= self.rate:
+        # Several calls in one read came together: the last is the one that
+        # arrived then.
+        frame = first_frame + max(0, frames - self.block)
+        seen = (arrival_ns - self.latency_ns, frame)
+        reads.append(seen)
+        if frame - reads[0][1] >= self._span:
             n = len(reads)
             ns = round(sum(r[0] for r in reads) / n)
-            frame = round(sum(r[1] for r in reads) / n)
-            self.clock.mark_at(ns, frame)
+            mean = round(sum(r[1] for r in reads) / n)
+            # Cleared first: a clock that raises is asked again in a second,
+            # not at every read after.
             reads.clear()
+            self._span = self.rate
+            self.clock.mark_at(ns, mean)
+        # The newest frame seen, between the marks, as a callback's every
+        # block said it.
+        latest = getattr(self.clock, "mark_latest", None)
+        if latest is not None:
+            latest(*seen)

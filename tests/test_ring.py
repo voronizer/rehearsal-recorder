@@ -257,6 +257,27 @@ def dry_ring_restarts():
     ring.stop()
 
 
+def move_made_before_it_returns():
+    print("\n[14] A move asked of a ring its thread fills is made before move() returns")
+    from rehearsal_recorder.audio.ring import RingOutput
+    fake_rtmixer.card.reset()
+    mixer = rtmixer.Mixer(channels=2, samplerate=RATE, blocksize=1024)
+    mixer.start()
+    take = Counter()
+    ring = RingOutput(mixer, 2, RATE, take.fill, take.state, take.restore)
+    ring.start()
+    try:
+        _play(mixer, 3)
+        landed = []
+        for i in range(20):
+            ring.move(lambda i=i: setattr(take, "pos", (i + 1) * RATE))
+            landed.append(ring.landed is not None and ring.settled() is False and ring._made == ring._asked)
+        ok("each of 20 seeks has landed as move() returns, so the playhead is where it was sent",
+           all(landed))
+    finally:
+        ring.stop()
+
+
 def heard_falls_back():
     print("\n[6] The frame heard, from the ring when the clock is not believable")
     fake_rtmixer.card.reset()
@@ -328,7 +349,7 @@ def marks_mean_of_second():
         if j > first:
             marks.read(first * 1024, (j - first) * 1024, (last + now) // 2)
         last = now
-    kept = clock.marks()
+    kept = list(clock._kept)
     off = [abs(ns - (t0 + frame * ns_per_frame)) / 1e6 for ns, frame in kept]
     ok(f"a mark a second ({len(kept)} for 10 s)", 9 <= len(kept) <= 11)
     ok(f"each mark within 1.5 ms of the true line (worst {max(off):.2f} ms)", max(off) < 1.5)
@@ -337,6 +358,146 @@ def marks_mean_of_second():
               for s in (1.0, 3.3, 5.0, 7.7, 9.0)]
     ok(f"a note is placed within 0.5 ms of where it was played (worst {max(placed):.2f} ms)",
        max(placed) < 0.5)
+
+
+def _wav(path):
+    """A WAV's samples as whole numbers, frames by channels."""
+    import wave
+    with wave.open(str(path), "rb") as w:
+        width, channels, raw = w.getsampwidth(), w.getnchannels(), w.readframes(w.getnframes())
+    if width == 2:
+        return np.frombuffer(raw, dtype="<i2").reshape(-1, channels).astype(np.int64)
+    b = np.frombuffer(raw, dtype=np.uint8).reshape(-1, 3).astype(np.int64)
+    v = b[:, 0] | (b[:, 1] << 8) | (b[:, 2] << 16)
+    v = np.where(v >= 1 << 23, v - (1 << 24), v)
+    return v.reshape(-1, channels)
+
+
+def _recorder(folder, **kw):
+    from rehearsal_recorder.audio.capture import AudioRecorder
+    fake_rtmixer.card.reset()
+    tracks = kw.pop("tracks", [{"name": "Gtr", "channel": 1}, {"name": "Keys", "channel": 2, "stereo": True}])
+    rec = AudioRecorder(0, RATE, tracks, folder, **kw)
+    rec.start()
+    return rec
+
+
+def take_writes_every_frame(tmp):
+    print("\n[9] A take writes every frame the card captured, bit for bit")
+    rng = np.random.default_rng(9)
+    for depth, top in ((16, 1 << 15), (24, 1 << 23)):
+        rec = _recorder(tmp / f"take{depth}", bit_depth=depth)
+        sent = rng.integers(-top, top, size=(10 * RATE, 3))
+        at = 0
+        while at < len(sent):
+            n = int(rng.integers(64, 2049))
+            fake_rtmixer.call(rec._stream, (sent[at:at + n] / top).astype(np.float32))
+            if rng.random() < 0.5:
+                rec._input.service()
+            at += n
+        rec._input.service()
+        result = rec.stop()
+        files = {t["name"]: t["file"] for t in result["tracks"]}
+        gtr, keys = _wav(files["Gtr"]), _wav(files["Keys"])
+        ok(f"{depth} bits: all 10 s are there, mono and stereo",
+           len(gtr) == len(sent) and len(keys) == len(sent) and keys.shape[1] == 2)
+        ok(f"{depth} bits: and every sample is what the card captured",
+           np.array_equal(gtr[:, 0], sent[:, 0]) and np.array_equal(keys, sent[:, 1:3]))
+        ok(f"{depth} bits: the ring never filled", rec._input.counts["overflowed"] == 0)
+
+
+def card_gone_stops_take(tmp):
+    print("\n[10] A card that sends nothing for 3 s stops the take")
+    import time as _time
+    from rehearsal_recorder.audio.capture import STALLED
+    rec = _recorder(tmp / "gone")
+    fake_rtmixer.recorded(rec, np.zeros((1024, 3), np.float32))
+    ok("a card that sends is not stopped", rec.problem() is None)
+    rec._heartbeat._last = _time.monotonic() - 3.5
+    fake_rtmixer.recorded(rec, np.zeros((1024, 3), np.float32))
+    ok("frames arriving count as the card being there", rec.problem() is None)
+    rec._heartbeat._last = _time.monotonic() - 3.5
+    rec._input.service()
+    ok("3 s with none: the take says the card has gone", rec.problem() == STALLED)
+    rec.stop()
+
+
+def _click_take(tmp, name, tempo=120):
+    from rehearsal_recorder.audio.click import Voices
+    from rehearsal_recorder.audio.take_click import TakeClick
+    voices = Voices("click", RATE, 0.7)
+    click = TakeClick(tempo, "4/4", 1, voices, (0, 1), lead_sec=0.1)
+    rec = _recorder(tmp / name, tracks=[{"name": "Gtr", "channel": 1}], click=click)
+    return rec, click, voices
+
+
+def click_on_card_lands_on_grid(tmp):
+    print("\n[11] The click on the recording card lands on the take's grid")
+    from rehearsal_recorder.audio.click import click_frame
+    rec, click, voices = _click_take(tmp, "grid")
+    play, record = rec._output.action, rec._input.action
+    ok("the take's stream plays and records", rec._output is not None and record is not None)
+    played = [fake_rtmixer.recorded(rec, np.zeros((1024, 1), np.float32)) for _ in range(60)]
+    played = np.concatenate(played)[:, 0]
+    ok("both rings started at the one time asked",
+       play.actual_time > 0 and play.actual_time == record.actual_time)
+    first = click.first_click_frame
+    ok(f"the first click is lead_sec after the take's first frame ({first})", first == round(0.1 * RATE))
+    begun = int(round((play.actual_time - 1.0) * RATE))
+    voice = voices.of(0)
+    onset = int(np.flatnonzero(np.abs(voice) > 0)[0])
+    heard = np.flatnonzero(np.abs(played) > 0)
+    ok("it is played on the frame it lands on in the take: play frame s for input frame s",
+       len(heard) and int(heard[0]) - begun == first + onset)
+    second = first + click_frame(1, 120, RATE)
+    ok("and the next on the grid after it",
+       np.abs(played[begun + second + onset]) > 0 and not np.abs(played[begun + second - 200:begun + second]).any())
+    rec.stop()
+
+
+def stop_on_quarter(tmp):
+    print("\n[12] Stop records on to the next quarter")
+    import threading
+    from rehearsal_recorder.audio.click import click_frame
+    rec, click, _ = _click_take(tmp, "quarter")
+    for _ in range(40):
+        fake_rtmixer.recorded(rec, np.zeros((1024, 1), np.float32))
+    first = click.first_click_frame
+    asked = rec._frames_written
+    done = []
+    stopping = threading.Thread(target=lambda: done.append(rec.stop()))
+    stopping.start()
+    calls = 0
+    while stopping.is_alive() and calls < 400:
+        fake_rtmixer.recorded(rec, np.zeros((1024, 1), np.float32))
+        calls += 1
+        stopping.join(0.002)
+    stopping.join(5)
+    quarter = click_frame(1, 120, RATE)
+    want = first + -(-(asked - first) // quarter) * quarter
+    ok(f"the take ends on the quarter after Stop ({click.end_frame} for {want})", click.end_frame == want)
+    gtr = _wav(done[0]["tracks"][0]["file"]) if done else np.zeros((0, 1))
+    ok("its file holds whole quarters from the first click", len(gtr) == want - first)
+
+
+def marks_reach_clock(tmp):
+    print("\n[13] A take with notes marks their clock from the ring")
+    from rehearsal_recorder.midi.clock import AudioClock
+    clock = AudioClock(RATE)
+    rec = _recorder(tmp / "notes", tracks=[{"name": "Gtr", "channel": 1}], clock=clock)
+    calls = 0
+    while not clock._kept and calls < 300:
+        fake_rtmixer.recorded(rec, np.zeros((1024, 1), np.float32))
+        calls += 1
+    ok(f"the first mark comes within 0.3 s of frames ({calls * 1024} frames)", calls * 1024 <= 0.3 * RATE)
+    while calls * 1024 < 5 * RATE:
+        fake_rtmixer.recorded(rec, np.zeros((1024, 1), np.float32))
+        calls += 1
+    kept = clock._kept
+    ok(f"after 5 s, a mark about every second ({len(kept)} kept)", 4 <= len(kept) <= 5)
+    ok("each on the take's frames, in order",
+       all(b[1] - a[1] >= RATE for a, b in zip(kept, kept[1:])) and kept[-1][1] < 5 * RATE)
+    rec.stop()
 
 
 def main():
@@ -348,6 +509,15 @@ def main():
     heard_falls_back()
     input_pads_overflow()
     marks_mean_of_second()
+    move_made_before_it_returns()
+    import tempfile
+    with tempfile.TemporaryDirectory() as folder:
+        tmp = Path(folder)
+        take_writes_every_frame(tmp)
+        card_gone_stops_take(tmp)
+        click_on_card_lands_on_grid(tmp)
+        stop_on_quarter(tmp)
+        marks_reach_clock(tmp)
     if problems:
         print(f"\n{len(problems)} problem(s):")
         for p in problems:

@@ -6,6 +6,7 @@ from pathlib import Path
 # Reuse the engine suite's fake sounddevice and isolated Api factory. Importing
 # the module does not run its suite or touch the user's recording library.
 from test_engine import fresh_api, np, SR
+import fake_rtmixer  # noqa: E402  (test_engine put tests/ on the path)
 
 
 def main():
@@ -21,7 +22,7 @@ def main():
             assert api.transport_state()["state"] == "recording"
             assert api.transport_command("play_stop")["result"] == "busy"
             assert not api.finish_rehearsal()["ok"]
-            api._recorder._callback(np.full((512, 1), 1000, dtype=np.int32), 512, None, None)
+            fake_rtmixer.recorded(api._recorder, np.full((512, 1), 1000, dtype=np.int32), 512, None, None)
             original_keep = api.keep_take
             entered, release = threading.Event(), threading.Event()
             def slow_keep(*args, **kwargs):
@@ -66,7 +67,7 @@ def main():
             assert api.transport_command("record_stop")["ok"]
             # Record releases the output stream, not merely its play flag.
             assert not api.player_state()["open"]
-            api._recorder._callback(np.full((512, 1), 2000, dtype=np.int32), 512, None, None)
+            fake_rtmixer.recorded(api._recorder, np.full((512, 1), 2000, dtype=np.int32), 512, None, None)
             api.keep_take = lambda *args, **kwargs: {"ok": False, "error": "Disk refused save"}
             failed = api.transport_command("stop_keep")
             assert not failed["ok"] and api.transport_state()["state"] == "error"
@@ -85,7 +86,7 @@ def main():
             # An exception in finalisation retains the raw draft for recovery.
             assert api.transport_command("start")["ok"]
             raw = Path(api._recorder_temp_dir)
-            api._recorder._callback(np.full((512, 1), 3000, dtype=np.int32), 512, None, None)
+            fake_rtmixer.recorded(api._recorder, np.full((512, 1), 3000, dtype=np.int32), 512, None, None)
             original_stop = api._recorder.stop
             def broken_stop(*args, **kwargs):
                 api._recorder = None
@@ -127,9 +128,9 @@ def metronome():
                 for _ in range(blocks):
                     data = np.zeros((1024, 1), rec._dtype)
                     if rec.click is not None:
-                        rec._duplex_callback(data, np.zeros((1024, rec.click.width), np.float32), 1024, None, None)
+                        fake_rtmixer.recorded_duplex(rec, data, np.zeros((1024, rec.click.width), np.float32), 1024, None, None)
                     else:
-                        rec._callback(data, 1024, None, None)
+                        fake_rtmixer.recorded(rec, data, 1024, None, None)
 
             # A song with a tempo of its own, and the row holding another.
             api.set_next_take_name("Palyn")
@@ -157,7 +158,12 @@ def metronome():
                 # The band comes in on the click after the count-in's last, at
                 # input frame `end`: the controller's display reads 0:00 until then.
                 end = click.first_click_frame + click_frame(click.count_in_clicks, click.tempo, SR)
-                feed(end // 1024 - 1)
+                # The card's first 0.1 s go by before its rings begin: fed
+                # up to the last block before `end`, by what was written.
+                for _ in range(end // 1024 + 10):
+                    if api._recorder._frames_written + 1024 > end:
+                        break
+                    feed(1)
                 assert api._recorder._frames_written <= end
                 assert api.transport_state()["elapsed"] == 0
                 feed(1)

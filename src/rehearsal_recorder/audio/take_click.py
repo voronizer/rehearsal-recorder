@@ -11,20 +11,22 @@ project's.
 Two ways to be heard:
 
 - On the recording card (`duplex`, no `output`): the take's stream has outputs
-  as well as inputs, and the recorder's callback hands each block's output to
-  `on_duplex_block` before it writes the inputs. What is written there comes
-  back into the inputs a round trip later, so the click of input frame s is
-  written at output frame s less the round trip, and a beat played on it lands
-  on s.
+  as well as inputs. The recorder plays them from a ring it keeps a second
+  ahead (audio/ring.py) and starts it with the recording's, at the same
+  moment, so play frame s is heard as input frame s is captured: `fill_card`
+  mixes each block of it. What is played comes back into the inputs a round
+  trip later, nothing when the two rings started together, so the click of
+  input frame s is written at play frame s less the round trip, and a beat
+  played on it lands on s.
 - On another device (`output`, an audio/click_output.ClickOutput): that
   device's stream renders the click, each placed by two clocks. The recording's
   (midi/clock.AudioClock, marked by the recorder) says when, on the computer's
   clock, input frame s is captured; the output's says which of its frames is
-  heard then. The recorder's callback calls `on_input` with every block, and
-  the first click is chosen at the first block after the output's first, so the
-  whole count-in is heard however late the output starts. An output that is not
-  there (or stops) changes nothing in the take: its grid stands, and the screen
-  still hears when each click falls.
+  heard then. The recorder calls `on_input` with every arrival of the inputs,
+  and the first click is chosen once both clocks are running, no sooner than
+  the output can still be changed, so the whole count-in is heard however late
+  the output starts. An output that is not there (or stops) changes nothing in
+  the take: its grid stands, and the screen still hears when each click falls.
 
 A song's backing track (backing-track spec, Parts 3 and 4) is placed on the same
 grid (`TakeBacking`): its bar 1 on the first click after the count-in. It is
@@ -35,12 +37,12 @@ first click then waits for every output the take has. A take with a backing
 track and no click (`clicks` False) has no count-in: its files start where the
 backing track's first frame is heard, and end where Stop comes.
 
-The callbacks take no lock: what other threads read is in single attributes,
-set once.
+Nothing here takes a lock: what other threads read is in single attributes,
+set once. A stream that renders ahead is told when the first click is chosen
+(each source's `changed`), and mixes again what it has not played.
 """
 
 import math
-import time
 from pathlib import Path
 
 from rehearsal_recorder.audio.backing_file import open_ready
@@ -49,7 +51,6 @@ from rehearsal_recorder.audio.click import (
     SIGNATURES, Voices, click_frame, per_bar, per_quarter, quarter_tempo, tempo_range)
 from rehearsal_recorder.audio.click_output import SilentOutput
 from rehearsal_recorder.audio.click_source import ClickSource
-from rehearsal_recorder.audio.click_timing import lead_of, round_trip_frames
 from rehearsal_recorder.audio.wavfile import Acid
 from rehearsal_recorder.midi.smf import meter_of
 
@@ -174,6 +175,9 @@ class TakeClick:
         self.end_frame = None
         self._round_trip = None
         self._in_clock = None
+        # The frame the recording card's outputs play now, for the fade at
+        # Stop: set by the recorder that plays them.
+        self.card_heard = None
         self._on = bool(on) and self.clicks
         self.source = None
         if self.clicks:
@@ -225,33 +229,28 @@ class TakeClick:
 
     # ---------- the take's own stream ----------
 
-    def on_duplex_block(self, outdata, frames_done, frames, time_info, latency, now_ns=None):
+    @property
+    def card_sources(self):
+        """What the take's own stream plays: the click, the backing track or
+        both."""
+        return self._card
+
+    def fill_card(self, out, play_frame, now_ns, lead_sec, round_trip):
         """
-        The take's stream, with outputs, has a block: `frames_done` frames
-        were written before it, and its output `outdata` (zeroed) is the same
-        frames on the output's side. `latency` is the stream's own (input,
-        output) latency, what is believed where the driver's times are not;
-        None until the stream says it, as its first blocks can come before
-        it is open. The first block whose round trip is known, the driver's
-        or from the stream's own latencies (never the ones asked for),
-        chooses the first click: `lead_sec` on, and a round trip after, since
-        it comes back into the inputs that much later. A take with a part on
-        another device chooses it in `on_input` instead, once that output has
-        started too.
+        A block of the recording card's outputs, from its `play_frame`, into
+        `out` (zeroed), heard `lead_sec` after `now_ns` (None before the card
+        plays). Input frame s comes back on play frame s plus `round_trip`
+        (nothing, when the play and record rings started together; measured
+        once they have). The first block chooses the first click: `lead_sec`
+        of the take on from it (TakeClick's, not this block's), a round trip
+        after. A take with a part on another device chooses it in `on_input`
+        instead, once that output can play it.
         """
-        if self._round_trip is None:
-            trip = round_trip_frames(time_info, None if latency is None else latency[0] + latency[1],
-                                     self.samplerate)
-            if trip is None:
-                return
-            self._round_trip = trip
-            if not self._elsewhere:
-                self._choose(frames_done + round(self.lead_sec * self.samplerate) + trip)
-        lead = lead_of(time_info, None if latency is None else latency[1])
-        if lead is not None:
-            now = time.perf_counter_ns() if now_ns is None else now_ns
-            for source in self._card:
-                source.render(outdata, frames_done, now, lead)
+        self._round_trip = round_trip
+        if self.first_click_frame is None and not self._elsewhere:
+            self._choose(play_frame + round(self.lead_sec * self.samplerate) + round_trip)
+        for source in self._card:
+            source.render(out, play_frame, now_ns, lead_sec)
 
     def without_outputs(self, name, reason):
         """
@@ -297,43 +296,67 @@ class TakeClick:
 
     def on_input(self, frames_done, clock):
         """
-        The recording's block from frame `frames_done` is in, and `clock` (an
-        AudioClock) is marked with it. The first block after the first of
-        every output on another device, or after the wait for them, chooses
-        the first click: heard no sooner than each output's block after the
-        one it may be writing now, and on the recording card no sooner than
-        the round trip lets it be.
+        The recording's frames from `frames_done` are in, and `clock` (an
+        AudioClock) is marked with them. Once the clock has its first mark,
+        and every output on another device is playing (or the wait for them
+        is over), the first click is chosen: heard no sooner than each output
+        can still be changed (its `soonest`, or the block after the one it
+        may be writing, for one that plays as it renders), and on the
+        recording card no sooner than the round trip lets it be.
         """
         if self.first_click_frame is not None:
             return
         if self._card and self._round_trip is None:
             return
         rate = self.samplerate
-        if frames_done < OUTPUT_WAIT_SEC * rate:
-            for output, source in self._elsewhere:
-                if not (source.started or output.problem() is not None):
-                    return
+        waiting = frames_done < OUTPUT_WAIT_SEC * rate
+        if waiting and not clock.marked():
+            return
+        dues = []
+        for output, source in self._elsewhere:
+            if output.problem() is not None:
+                continue
+            soonest = getattr(output, "soonest", None)
+            if soonest is None:
+                if not source.started:
+                    if waiting:
+                        return
+                    continue
+                written = source.written
+                due = None if written is None else source.clock.ns_at(written[0] + written[1])
+            else:
+                at = soonest()
+                due = None if at is None else source.clock.ns_at(at)
+                if due is None:
+                    if waiting:
+                        return
+                    continue
+            if due is not None:
+                dues.append(due)
         first = frames_done + round(OTHER_DEVICE_LEAD_SEC * rate)
         if self._card:
             first = max(first, frames_done + round(self.lead_sec * rate) + self._round_trip)
         step = round(LATER_STEP_SEC * rate)
         latest = frames_done + round(LATEST_SEC * rate)
-        for _, source in self._elsewhere:
-            written = source.written
-            if written is None:
-                continue
-            due = source.clock.ns_at(written[0] + written[1])
-            while due is not None and first < latest and clock.ns_at(first) < due:
+        for due in dues:
+            while first < latest and clock.ns_at(first) < due:
                 first += step
         self._in_clock = clock
         self._choose(first)
 
     def _choose(self, first):
         """The first click is `first`. Whether the backing track is heard is
-        settled first, so whoever sees the frame sees that too."""
+        settled first, so whoever sees the frame sees that too. Each stream
+        that renders ahead mixes again what it has not played, now with it."""
         if self.backing is not None:
             self.backing.heard = self.backing.problem() is None
         self.first_click_frame = first
+        told = set()
+        for source in (*self._card, *(source for _, source in self._elsewhere)):
+            changed = getattr(source, "changed", None)
+            if changed is not None and id(changed) not in told:
+                told.add(id(changed))
+                changed()
 
     # ---------- where each click goes ----------
 
@@ -407,12 +430,21 @@ class TakeClick:
 
     def backing_faded(self):
         """Whether the fade at Stop has been heard, or never will be: no
-        backing track, one that never played, or its output gone."""
+        backing track, one that never played, or its output gone. A stream
+        that renders ahead has it mixed before it is heard: then it is heard
+        once that stream plays the frame it was over by."""
         b = self.backing
         if b is None:
             return True
         source = b.source
-        return source.done or not source.started or b.problem() is not None
+        if not source.started or b.problem() is not None:
+            return True
+        if not source.done:
+            return False
+        done_at = getattr(source, "done_at", None)
+        heard = self.card_heard if b.output is None else getattr(b.output, "heard_frame", None)
+        frame = None if heard is None else heard()
+        return done_at is None or frame is None or frame >= done_at
 
     def backing_record(self):
         """The take's backing track as take.json keeps it, {"file", "from_frame",

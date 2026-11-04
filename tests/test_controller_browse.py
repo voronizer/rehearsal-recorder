@@ -2,6 +2,7 @@
 import tempfile
 from pathlib import Path
 from test_engine import fresh_api, np, SR
+import fake_rtmixer  # noqa: E402  (test_engine put tests/ on the path)
 from fake_midi import FakePortSystem
 from rehearsal_recorder.midi.ports import PortInfo
 from rehearsal_recorder.midi.controller import Controller
@@ -32,7 +33,7 @@ def main():
             api._session['set']={'songs':['One','Two','Three']};api.set_next_take_name('One')
             for _ in range(2):
                 assert api._transport.command('record_stop')['ok']
-                api._recorder._callback(np.full((512,1),1000,dtype=np.int32),512,None,None)
+                fake_rtmixer.recorded(api._recorder, np.full((512,1),1000,dtype=np.int32),512,None,None)
                 assert api._transport.command('record_stop')['ok']
             ctl.snapshot();tag=ctl._browse_tag
             for _ in range(200):ctl.tick()

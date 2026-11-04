@@ -18,16 +18,24 @@ the take does not jump from before the sleep to after it. The take hears it
 from the system when the system says so (platform_support.SleepWatch), and
 sees it for itself when it does not: see `_seen`.
 
+The card's inputs come through rtmixer (audio/ring.py, and the spec
+docs/superpowers/specs/2026-11-04-sound-process-design.md): its C callback
+copies them into a ring, and a thread here takes them out every 2 ms and
+writes them, so nothing Python is busy with makes the card wait. rtmixer hands
+them over as float32; they are written as the 16 or 24 bits the take asked for,
+the very samples the card sent.
+
 A take recorded to the metronome's click (audio/take_click.py) starts its files
 at the first click of its count-in, and Stop records on to the next quarter, so
 the files hold whole quarters (metronome spec, Part 3). One stopped before its
 first click was chosen keeps all its audio, as a take with no click. When the
-click is on the recording card, the take's stream has outputs as well as inputs
-and the click is written into them in the callback that reads the inputs; on
-another device, the recorder only tells the click where the take is. Either way
-the click's troubles are its own: they never stop the take, nor show in
-`problem`. A card that will not open its outputs with its inputs records from
-its inputs alone, its click to no output and its grid kept.
+click is on the recording card, the take's stream has outputs as well as inputs:
+they play from a ring of their own, kept a second ahead, started at the same
+moment as the recording's, so a frame played is heard as the same frame is
+captured. On another device, the recorder only tells the click where the take
+is. Either way the click's troubles are its own: they never stop the take, nor
+show in `problem`. A card that will not open its outputs with its inputs
+records from its inputs alone, its click to no output and its grid kept.
 
 A song's backing track rides the take the same way (backing-track spec, Parts 3
 and 4), on the recording card or on another device, through the take's click
@@ -37,6 +45,7 @@ volume and switch change only what was heard.
 """
 
 import json
+import logging
 import math
 import os
 import threading
@@ -64,8 +73,11 @@ from rehearsal_recorder.audio.format import (
     normalize_depth,
     pack24,
 )
+from rehearsal_recorder.audio.ring import RingInput, RingMarks, RingOutput
 from rehearsal_recorder.audio.wavfile import WavWriter
 from rehearsal_recorder.midi.clock import AudioClock
+
+log = logging.getLogger(__name__)
 
 FLUSH_INTERVAL_SEC = 30
 
@@ -102,6 +114,11 @@ RUN_ON_QUIET_SEC = 0.5
 # its outputs with its inputs.
 OUTPUTS_REFUSED = "Its outputs would not open with its inputs."
 
+# A take with its click on the recording card starts playing and recording
+# this long after the stream says it is now: time for both rings to be asked
+# before either begins, so they begin together.
+START_AHEAD_SEC = 0.1
+
 
 def slept_notice(at):
     """What the screen says once the laptop wakes, `at` being when it fell
@@ -127,24 +144,6 @@ RAW_SUFFIX = ".raw"
 # channel of twice the length. It also says which tracks are recording notes
 # and from which port, since a .midraw holds nothing but their events.
 TAKE_RECORD = "take.json"
-
-
-def _block_age(time_info):
-    """
-    How old a block's first frame is as the callback runs, in seconds, as the
-    driver says it — or None when it does not say. A field it left at zero is
-    not a time, and neither is one that is not there at all: the callback is
-    handed None when it is called by hand, and PortAudio's struct has only the
-    fields the host API fills in.
-    """
-    try:
-        now = time_info.currentTime
-        captured = time_info.inputBufferAdcTime
-        if not now or not captured:
-            return None
-        return now - captured
-    except Exception:
-        return None
 
 
 def _stream_latency(stream, asked):
@@ -190,8 +189,9 @@ class AudioRecorder:
         out_dir: where this take's files are written.
         bit_depth: 16 or 24 — see audio/format.py for what that costs and buys.
         clock: an AudioClock (midi/clock.py) when the take has notes to place
-               on this audio. Every block marks it, and start() tells it when
-               the take began and how late the stream says it is.
+               on this audio. The ring's reads mark it (audio/ring.RingMarks),
+               and start() tells it when the take began and how late the
+               stream says it is.
         notes: [{"file": str, "port": str}], the tracks recording notes beside
                this audio; written into the take's record, so that after a
                crash the notes can be told from the sound.
@@ -228,11 +228,9 @@ class AudioRecorder:
         self.out_dir.mkdir(parents=True, exist_ok=True)
 
         # Why the notes' clock failed, if it did: repr() of the first error
-        # `clock.mark` raised in the audio callback, which carries on without
-        # it (the notes lose the drift correction, the audio loses nothing).
-        # A single assignment, because nothing more is allowed on the audio
-        # thread: no print, no log. The app reads it when the take stops and
-        # writes it to the log there.
+        # marking it raised, the take carrying on without it (the notes lose
+        # the drift correction, the audio loses nothing). The app reads it
+        # when the take stops and writes it to the log there.
         self.clock_fault = None
         # The same for the click: what it raised first, the take going on.
         # Stop adds what the click's own rendering kept (ClickSource.fault),
@@ -244,6 +242,16 @@ class AudioRecorder:
         self._duplex_latency = None
 
         self._stream = None
+        # The rings: the inputs' (RingInput), and the click's on the
+        # recording card (RingOutput) when it is there; the marks the inputs'
+        # reads make on the notes' clock.
+        self._input = None
+        self._output = None
+        self._marks = None
+        # Input frame s comes back on the card's play frame s plus this (see
+        # _card_fill), and the play action it was measured for.
+        self._trip = 0
+        self._trip_for = None
         self._raw_files = {}
         self._frames_written = 0
         # Whether the card is still delivering blocks.
@@ -270,9 +278,12 @@ class AudioRecorder:
         self._levels = {t["name"]: [0.0] * self._width[t["name"]] for t in tracks}
         self._levels_lock = threading.Lock()
 
-        # One contiguous scratch buffer per track, allocated once. The
-        # callback runs on the audio thread; asking the allocator for memory
-        # there every 21 ms is the kind of thing that only ever hurts.
+        # The inputs as whole numbers, made from rtmixer's floats (see
+        # _whole), grown to the largest read.
+        self._ints = np.zeros((BLOCK_FRAMES, self._max_channel), dtype=self._dtype)
+        self._floats = np.zeros((BLOCK_FRAMES, self._max_channel), dtype=np.float32)
+        # One contiguous scratch buffer per track, allocated once and grown
+        # only for a read longer than a block.
         self._scratch = {
             t["name"]: np.zeros(
                 (BLOCK_FRAMES, self._width[t["name"]]), dtype=self._dtype
@@ -294,6 +305,7 @@ class AudioRecorder:
         # The last PortAudio status (xrun and friends), for whoever asks.
         self.last_status = None
         self._stopped = False
+        self._logged = False
 
         # Why the recording stopped on its own — almost always an unplugged
         # interface. The interface polls this and can stop the take, keeping
@@ -375,62 +387,103 @@ class AudioRecorder:
     def is_active(self):
         return bool(self._stream is not None and self._stream.active)
 
-    def _callback(self, indata, frames, time_info, status):
-        self._block(indata, None, frames, time_info, status)
+    def _arrived(self, block, first_frame, arrival_ns):
+        """
+        The input ring's thread has frames for the take: `block`, float32
+        frames by inputs, from the stream's `first_frame`, arrived at
+        `arrival_ns` (None for silence in place of frames the ring could not
+        take). Inside the heartbeat (RingInput), as a callback was.
+        """
+        self._seen(time.time())
+        frames = len(block)
+        # Once a stop is under way the files may be closing. After a sleep
+        # the take has ended where the laptop slept.
+        if frames == 0 or self._stopping or self._asleep:
+            return
+        marks = self._marks
+        if marks is not None:
+            # A fault in the notes' clock must not cost the audio: the notes
+            # would be placed from when the take started, and the take goes on.
+            try:
+                window = None if self._input is None else self._input.window_ns
+                marks.read(first_frame, frames, arrival_ns, window)
+            except Exception as e:
+                if self.clock_fault is None:
+                    self.clock_fault = repr(e)
+        click = self.click
+        if click is not None and click.elsewhere:
+            # A click or a backing track on another device: where the take
+            # is, by the clock just marked.
+            try:
+                click.on_input(self._frames_written, self._clock)
+            except Exception as e:
+                if self.click_fault is None:
+                    self.click_fault = repr(e)
+        self._take_block(self._whole(block), frames)
 
-    def _duplex_callback(self, indata, outdata, frames, time_info, status):
-        # The take's stream has outputs: they are the click's and the backing
-        # track's alone, silent but for them.
-        outdata.fill(0)
-        self._block(indata, outdata, frames, time_info, status)
+    def _whole(self, block):
+        """rtmixer's floats as the whole numbers the take writes: what the
+        card sent, sample for sample. PortAudio made each float from them by
+        dividing by 2 to the bits less one, which a float32 holds exactly to
+        24 bits, so multiplying back gives them again."""
+        frames = len(block)
+        if len(self._ints) < frames:
+            self._ints = np.zeros((frames, self._max_channel), dtype=self._dtype)
+            self._floats = np.zeros((frames, self._max_channel), dtype=np.float32)
+        floats, ints = self._floats[:frames], self._ints[:frames]
+        if self.bit_depth == 24:
+            np.multiply(block, np.float32(1 << 23), out=floats)
+            np.rint(floats, out=floats)
+            np.clip(floats, -(1 << 23), (1 << 23) - 1, out=floats)
+            np.copyto(ints, floats, casting="unsafe")
+            # In the top three bytes, as the 32-bit samples pack24 takes.
+            np.left_shift(ints, 8, out=ints)
+        else:
+            np.multiply(block, np.float32(1 << 15), out=floats)
+            np.rint(floats, out=floats)
+            np.clip(floats, -(1 << 15), (1 << 15) - 1, out=floats)
+            np.copyto(ints, floats, casting="unsafe")
+        return ints
 
-    def _block(self, indata, outdata, frames, time_info, status):
-        # No print() here: this is the audio thread. A dropped block is worth
-        # knowing about, not worth stalling the stream over.
-        self._heartbeat.enter()
+    def _card_fill(self, out, frame, now_ns, lead_sec):
+        """A block of the recording card's outputs: the click's and the
+        backing track's alone, silent but for them."""
+        self._measure_trip()
         try:
-            self._seen(time.time())
-            if status:
-                self.last_status = str(status)
-            # Once a stop is under way the files may be closing, whether or
-            # not the driver has let go of the stream yet. After a sleep the
-            # take has ended where the laptop slept.
-            if frames == 0 or self._stopping or self._asleep:
-                return
-            click = self.click
-            if outdata is not None:
-                # Before the block is written: the click's frames are the
-                # inputs' frames, the next one to go to disk first.
-                try:
-                    click.on_duplex_block(outdata, self._frames_written, frames,
-                                          time_info, self._duplex_latency)
-                except Exception as e:
-                    if self.click_fault is None:
-                        self.click_fault = repr(e)
-            clock = self._clock
-            if clock is not None:
-                # The block's first frame is the next one to go to disk. A
-                # fault in the notes' clock must not cost the audio: the
-                # notes would be placed from when the take started, and the
-                # take goes on.
-                try:
-                    clock.mark(time.perf_counter_ns(),
-                               self._frames_written + frames, frames,
-                               _block_age(time_info))
-                except Exception as e:
-                    if self.clock_fault is None:
-                        self.clock_fault = repr(e)
-            if click is not None and click.elsewhere:
-                # A click or a backing track on another device: where the
-                # take is, by the clock just marked.
-                try:
-                    click.on_input(self._frames_written, clock)
-                except Exception as e:
-                    if self.click_fault is None:
-                        self.click_fault = repr(e)
-            self._take_block(indata, frames)
-        finally:
-            self._heartbeat.leave()
+            self.click.fill_card(out, frame, now_ns, lead_sec, self._trip)
+        except Exception as e:
+            if self.click_fault is None:
+                self.click_fault = repr(e)
+
+    def _measure_trip(self):
+        """
+        Where an input frame comes back on the card's outputs, once both
+        rings have begun: by the stream's clock, the play ring's frame 0 is
+        heard at its start and the record ring's frame 0 captured at its
+        own, so the frames differ by the time between the two. Nothing when
+        they began together, as asked; a ring begun again after running dry
+        is measured again. A change mixes the click again from the guard.
+        """
+        output, record = self._output, self._input
+        play = None if output is None else output.action
+        if play is None or play is self._trip_for or record is None:
+            return
+        began, recorded = play.actual_time, record.started_time
+        if began <= 0 or recorded is None:
+            return
+        self._trip_for = play
+        trip = int(round((began - recorded) * self.samplerate)) - output.base
+        if trip != self._trip:
+            self._trip = trip
+            output.change()
+
+    def _card_state(self):
+        return tuple((source, source.keep()) for source in self.click.card_sources
+                     if hasattr(source, "keep"))
+
+    def _card_restore(self, state):
+        for source, kept in state:
+            source.put_back(kept)
 
     def _take_block(self, indata, frames):
         peaks = {}
@@ -534,6 +587,7 @@ class AudioRecorder:
                     # clock, so the take keeps its grid and the screen still
                     # lights the beat.
                     print(f"[audio] the click's outputs did not open: {e}")
+                    self._close_rings()
                     click.without_outputs(_device_name(self.device_index), OUTPUTS_REFUSED)
                     if self._clock is None:
                         self._clock = AudioClock(self.samplerate)
@@ -542,15 +596,15 @@ class AudioRecorder:
             if click is not None:
                 # The streams on other devices after the take's: PortAudio
                 # opens one ASIO stream at a time, and the take is the one that
-                # must open. The take waits for their first blocks before it
-                # chooses its first click (TakeClick.on_input).
+                # must open. The take waits for them to play before it chooses
+                # its first click (TakeClick.on_input).
                 click.start()
         except BaseException:
             if click is not None:
                 click.stop()
+            self._close_rings()
             self._discard_files()
             raise
-        self._heartbeat.start()
         self._seen_wall = time.time()
 
         self._stop_flush.clear()
@@ -562,51 +616,91 @@ class AudioRecorder:
     def _open_duplex(self, latency):
         """The take's stream with the card's outputs too, which carry the
         click on the card's own clock: never a second stream on a card the
-        take holds."""
+        take holds. The click's ring is mixed a second ahead first, then
+        both rings are asked to begin at one moment, START_AHEAD_SEC on."""
+        import rtmixer  # the sound process's alone
+
         asked = (latency, output_latency(sd, self.device_index))
         with STREAM_LOCK:
             if self._clock is not None:
-                # As in _open_input; the click's round trip waits for the
-                # stream's own latencies (TakeClick.on_duplex_block).
                 self._clock.started_ns = time.perf_counter_ns()
                 self._clock.latency_sec = latency
             self._stream = open_stream(
-                sd.Stream,
+                rtmixer.MixerAndRecorder,
                 device=(self.device_index, self.device_index),
                 channels=(self._max_channel, self.click.width),
                 samplerate=self.samplerate,
-                dtype=(self._dtype, "float32"),
                 blocksize=BLOCK_FRAMES,
                 latency=asked,
-                callback=self._duplex_callback,
                 finished_callback=self._finished,
             )
         self._duplex_latency = _duplex_latency(self._stream, asked)
-        if self._clock is not None:
-            self._clock.latency_sec = self._duplex_latency[0]
+        said = self._duplex_latency[0]
+        click = self.click
+        self._output = RingOutput(self._stream, click.width, self.samplerate, self._card_fill,
+                                  self._card_state, self._card_restore)
+        for source in click.card_sources:
+            if hasattr(source, "keep"):
+                source.changed = self._output.change
+        click.card_heard = self._output.heard
+        self._start_input(said, ready=lambda: self._output.start(
+            when=lambda: self._stream.time + START_AHEAD_SEC))
 
     def _open_input(self, latency):
         """The take's stream, inputs only."""
+        import rtmixer  # the sound process's alone
+
         with STREAM_LOCK:
             if self._clock is not None:
-                # open_stream starts the stream, and its first block can
-                # be marked before it returns: the clock has the latency
-                # that was asked for until the stream says what it is.
+                # The clock has the latency that was asked for until the
+                # stream says what it is.
                 self._clock.started_ns = time.perf_counter_ns()
                 self._clock.latency_sec = latency
             self._stream = open_stream(
-                sd.InputStream,
+                rtmixer.Recorder,
                 device=self.device_index,
                 channels=self._max_channel,
                 samplerate=self.samplerate,
-                dtype=self._dtype,
                 blocksize=BLOCK_FRAMES,
                 latency=latency,
-                callback=self._callback,
                 finished_callback=self._finished,
             )
+        self._start_input(_stream_latency(self._stream, latency))
+
+    def _start_input(self, said, ready=None):
+        """The inputs' ring, recording from the moment the outputs' ring was
+        asked to begin when `ready()` starts one, at once when there is none.
+        `said`: the input latency the stream says it has."""
         if self._clock is not None:
-            self._clock.latency_sec = _stream_latency(self._stream, latency)
+            self._clock.latency_sec = said
+            self._marks = RingMarks(self._clock, self.samplerate, said)
+        self._input = RingInput(self._stream, self._max_channel, self.samplerate, self._arrived,
+                                heartbeat=self._heartbeat)
+        at = 0
+        if ready is not None:
+            ready()
+            at = self._output.requested
+        self._input.start(at=at)
+
+    def _close_rings(self):
+        """The rings stopped and the stream they were on closed, for a start
+        that did not get through. Never raises."""
+        for ring in (self._output, self._input):
+            if ring is not None:
+                try:
+                    ring.stop() if ring is self._output else ring.stop(drain=False)
+                except Exception as e:
+                    print(f"[audio] ring: {e}")
+        self._output = self._input = self._marks = None
+        if self.click is not None:
+            self.click.card_heard = None
+        with STREAM_LOCK:
+            stream, self._stream = self._stream, None
+            if stream is not None:
+                try:
+                    close_stream(stream)
+                except Exception as e:
+                    print(f"[audio] close: {e}")
 
     def _discard_files(self):
         """
@@ -837,15 +931,30 @@ class AudioRecorder:
 
     def _let_go(self):
         """The stream closed and every byte on disk — what stopping and
-        abandoning have in common."""
+        abandoning have in common. What the input ring holds is written
+        first; then the rings let go, and the stream closes."""
         self._stop_flush.set()
         for thread in (self._flush_thread, self._tick_thread):
             if thread is not None:
                 thread.join(timeout=2)
 
+        recording = self._input
+        if recording is not None:
+            try:
+                recording.stop(drain=True)
+            except Exception as e:
+                print(f"[audio] ring: {e}")
         # Mark the stop as ours, otherwise finished_callback would report it
         # as a vanished interface.
         self._stopping = True
+        playing = self._output
+        if playing is not None:
+            try:
+                playing.stop()
+            except Exception as e:
+                print(f"[audio] ring: {e}")
+        if self.click is not None:
+            self.click.card_heard = None
         with STREAM_LOCK:
             stream, self._stream = self._stream, None
             try:
@@ -857,6 +966,22 @@ class AudioRecorder:
         self.flush()
         for f in self._raw_files.values():
             f.close()
+        self._log_take()
+
+    def _log_take(self):
+        """One line in the log for the take: how much it recorded, how full
+        the input ring got, and whether it ever filled."""
+        recording = self._input
+        if recording is None or self._logged:
+            return
+        self._logged = True
+        counts = recording.counts
+        rate = float(self.samplerate)
+        log.info(
+            "take: %d frames recorded (%.1f s); input ring at most %.2f s full of %.2f s; "
+            "filled %d times, %.2f s lost",
+            self._frames_written, self._frames_written / rate, counts["fullest_frames"] / rate,
+            recording.size / rate, counts["overflowed"], counts["lost_frames"] / rate)
 
 
 def safe_name(name):

@@ -98,6 +98,9 @@ class BackingSource:
         self.started = False
         self.written = None
         self.fault = None
+        # The stream's frame the fade at Stop was over by, once it is: a
+        # stream that renders ahead is heard to have faded only there.
+        self.done_at = None
 
     # ---------- from other threads ----------
 
@@ -127,13 +130,13 @@ class BackingSource:
         """What rendering has moved on since the block began, for put_back."""
         return (self._gain, self._ramp_from, self._ramp_to, self._ramp_done, self._origin,
                 self._pos, self._past_end, self.position_sec, self._rendered_at,
-                self.written, self.started)
+                self.written, self.started, self.done_at)
 
     def put_back(self, kept):
         """Back to where `keep` was, to render a block again."""
         (self._gain, self._ramp_from, self._ramp_to, self._ramp_done, self._origin,
          self._pos, self._past_end, self.position_sec, self._rendered_at,
-         self.written, self.started) = kept
+         self.written, self.started, self.done_at) = kept
 
     def heard_sec(self, now_ns=None):
         """Seconds into the file of what is heard at `now_ns` (now): the last
@@ -181,6 +184,8 @@ class BackingSource:
         self.written = (first_frame + n, n)
         self.started = True
         gain = self._gain_for(n)
+        if self.done_at is None and self._fading and self._ramp_done >= self._fade and self._gain == 0.0:
+            self.done_at = first_frame + n
         at = self._where(first_frame, n)
         if at is None:
             return

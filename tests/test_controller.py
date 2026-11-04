@@ -2,6 +2,7 @@
 import tempfile
 from pathlib import Path
 from test_engine import fresh_api, np, SR
+import fake_rtmixer  # noqa: E402  (test_engine put tests/ on the path)
 from fake_midi import FakePortSystem
 from rehearsal_recorder.midi.ports import PortInfo
 from rehearsal_recorder.midi.rig import MidiRig
@@ -55,7 +56,7 @@ def main():
             assert api._recorder is not None
             assert any(fake.feedback[i:i+2] == [bytes([0xBF,114,2]), bytes([0xBF,116,2])]
                        for i in range(len(fake.feedback)-1))
-            api._recorder._callback(np.full((512,1),1000,dtype=np.int32),512,None,None)
+            fake_rtmixer.recorded(api._recorder, np.full((512,1),1000,dtype=np.int32),512,None,None)
             press(3)
             assert api._recorder is None and len(api._session_takes()) == 1
             press(3)
@@ -75,7 +76,7 @@ def main():
             send([0xBF,117,1]); press(7)
             assert api._recorder is not None
             assert not api.set_controller(None)["ok"]
-            api._recorder._callback(np.full((512,1),1000,dtype=np.int32),512,None,None)
+            fake_rtmixer.recorded(api._recorder, np.full((512,1),1000,dtype=np.int32),512,None,None)
             press(8)
             assert len(api._session_takes()) == 2
             press(10,63)

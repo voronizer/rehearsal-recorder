@@ -97,6 +97,10 @@ class StreamClock:
             out.append(latest)
         return out
 
+    def marked(self):
+        """Whether a mark has been kept: until then there is no line."""
+        return self._line is not None
+
     def ns_at(self, frame):
         """When `frame` is on the line through the kept marks, as a whole ns on
         the computer's clock; ahead of the last mark, the line read forward.
@@ -160,6 +164,15 @@ class AudioClock(StreamClock):
         (audio/ring.RingMarks). Single assignments and one append, as mark.
         """
         self._keep((ns, frame))
+
+    def mark_latest(self, ns, frame):
+        """
+        The newest of the take's frames seen, `frame` captured at `ns`, as a
+        mark of its own and not one kept for the fit: what a ring's read
+        says between the marks it makes once a second (audio/ring.RingMarks),
+        as a callback's every block did. One assignment.
+        """
+        self._latest = (ns, frame)
 
     def to_seconds(self, ns):
         """
