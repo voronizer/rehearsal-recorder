@@ -68,6 +68,7 @@ jobs:
         run: python -c "import rehearsal_recorder, sounddevice as sd; print(sd.query_hostapis()); print(sd.query_devices())"
 
       - name: Play and record, ASIO buffer 1024 then 256
+        if: false  # run 12 has it
         shell: bash
         working-directory: .github/rtmixer-probe
         run: |
@@ -91,7 +92,17 @@ jobs:
               --label "asio$buf" --results results.jsonl || echo "rec probe asio$buf failed"
           done
 
+      # Run 13: a take recorded in the second process, with the load in this
+      # one; where the card is and a level come back through shared memory.
+      - name: Record in a second process
+        shell: bash
+        working-directory: .github/rtmixer-probe
+        run: |
+          printf 'backend = "Windows WASAPI"\nbufferSizeSamples = 1024\n' > "$USERPROFILE/FlexASIO.toml"
+          for i in 1 2; do python proc_duplex.py "pd_asio_$i.wav" 30 FlexASIO ASIO || echo "duplex $i failed"; done
+
       - name: Frozen, also from a second process
+        if: false  # run 12 has it
         shell: bash
         working-directory: .github/rtmixer-probe
         run: |
@@ -150,6 +161,7 @@ jobs:
       # neither a bigger reserve nor bigger blocks fix it. Run 12: the sound
       # mixed in a process of its own ("rtp"), the load stays in this one.
       - name: Sound in its own process
+        if: false  # run 12 has it
         working-directory: .github/rtmixer-probe
         run: |
           python probe.py --out-device BlackHole --out-api "Core Audio" --loop-device BlackHole --loop-api "Core Audio" \
@@ -163,7 +175,15 @@ jobs:
           python rec_probe.py --in-device BlackHole --in-api "Core Audio" --tone-device BlackHole --tone-api "Core Audio" \
             --label coreaudio --results results.jsonl || echo "rec probe failed"
 
+      # Run 13: a take recorded in the second process, with the load in this
+      # one; where the card is and a level come back through shared memory.
+      - name: Record in a second process
+        working-directory: .github/rtmixer-probe
+        run: |
+          for i in 1 2; do python proc_duplex.py "pd_mac_$i.wav" 30 BlackHole "Core Audio" || echo "duplex $i failed"; done
+
       - name: Frozen, also from a second process
+        if: false  # run 12 has it
         working-directory: .github/rtmixer-probe
         run: |
           pyinstaller --noconfirm --onedir --log-level WARN --collect-data _sounddevice_data --collect-data sounddevice freeze_check.py
