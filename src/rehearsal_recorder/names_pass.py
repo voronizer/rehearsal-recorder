@@ -58,10 +58,11 @@ class NamesPass:
         # Whether a pass over the whole library has been asked for.
         self._whole = False
 
-    def run(self, todo=None, title=TITLE):
+    def run(self, todo=None, title=TITLE, said=None):
         """One pass, over the library or over the takes `todo`, as find()
         gives them; how many takes it renamed. Shows nothing at all when
-        every name already matches."""
+        every name already matches. `said` is what its line says when done,
+        in place of how many it renamed."""
         if todo is None:
             todo = self._find()
         if not todo:
@@ -89,7 +90,7 @@ class NamesPass:
             if failed:
                 entry.fail(_failures(failed))
             elif renamed:
-                entry.done("1 take renamed" if renamed == 1 else f"{renamed} takes renamed")
+                entry.done(said or ("1 take renamed" if renamed == 1 else f"{renamed} takes renamed"))
             else:
                 # Everything it found was left for later (open in the player):
                 # nothing happened worth a line.
@@ -106,11 +107,12 @@ class NamesPass:
         self._whole = True
         self._asked.set()
 
-    def request_takes(self, todo, title):
+    def request_takes(self, todo, title, said=None):
         """A pass over the takes `todo` only, [(folder, take_number, name)],
-        under `title`, once the one running (if any) is over."""
+        under `title`, once the one running (if any) is over; `said` as
+        run() has it."""
         with self._queue_lock:
-            self._queued.append((list(todo), title))
+            self._queued.append((list(todo), title, said))
         self._asked.set()
 
     def run_queued(self):
@@ -123,9 +125,9 @@ class NamesPass:
             with self._queue_lock:
                 if not self._queued:
                     break
-                todo, title = self._queued.popleft()
+                todo, title, said = self._queued.popleft()
             try:
-                renamed += self.run(todo, title)
+                renamed += self.run(todo, title, said)
             except Exception as e:
                 print(f"{title} failed: {e}", file=sys.stderr)
         return renamed

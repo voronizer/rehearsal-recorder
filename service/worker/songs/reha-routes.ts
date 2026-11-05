@@ -55,7 +55,9 @@ export const rehaSongRoutes = newApp()
     createRoute({
       method: "post",
       path: "/api/reha/songs",
-      description: "A song made in РЭХА, before its first take: its number. A title the band has is that song.",
+      description:
+        "A song made in РЭХА, before its first take: its number. A title the band has is that song, and takes " +
+        "РЭХА's tempo and signature when РЭХА has them, as at the first check.",
       middleware: [needKey] as const,
       security: rehaKey,
       request: { headers: RehaHeaders, body: body(z.object({ title: Title }).and(Meter)) },
@@ -67,8 +69,9 @@ export const rehaSongRoutes = newApp()
       const refused = titleRefused(title)
       if (refused) return fail(c, 400, refused)
       const found = await findSong(db, title)
-      if (found) return c.json({ id: found.id }, 200)
-      return c.json({ id: await makeSong(db, title, { tempo, signature } as SongMeter, null) }, 200)
+      if (!found) return c.json({ id: await makeSong(db, title, { tempo, signature } as SongMeter, null) }, 200)
+      if (tempo !== null) await setMeter(db, found.id, { tempo, signature } as SongMeter, null)
+      return c.json({ id: found.id }, 200)
     }
   )
   .openapi(
@@ -99,16 +102,14 @@ export const rehaSongRoutes = newApp()
       const { title, tempo, signature } = c.req.valid("json")
       const [s] = await db.select({ id: song.id, title: song.title }).from(song).where(eq(song.id, id)).limit(1)
       if (!s) return fail(c, 404, NO_SONG)
-      if (tempo !== undefined || signature !== undefined) {
-        const meter = Meter.safeParse({ tempo: tempo ?? null, signature: signature ?? null })
-        if (!meter.success) return fail(c, 400, meter.error.issues[0].message)
-        await setMeter(db, id, meter.data as SongMeter, null)
-      }
-      if (title !== undefined && title !== s.title) {
-        const refused = await clash(db, title, id)
-        if (refused) return fail(c, refused.code, refused.words)
-        await renameSong(db, id, title, null)
-      }
+      // Both looked at before either is kept: a title turned down keeps the tempo as it was too.
+      const renamed = title !== undefined && title !== s.title
+      const refused = renamed ? await clash(db, title, id) : null
+      if (refused) return fail(c, refused.code, refused.words)
+      const meter = tempo !== undefined || signature !== undefined ? Meter.safeParse({ tempo: tempo ?? null, signature: signature ?? null }) : null
+      if (meter && !meter.success) return fail(c, 400, meter.error.issues[0].message)
+      if (meter) await setMeter(db, id, meter.data as SongMeter, null)
+      if (renamed) await renameSong(db, id, title, null)
       return c.json({ ok: true as const }, 200)
     }
   )

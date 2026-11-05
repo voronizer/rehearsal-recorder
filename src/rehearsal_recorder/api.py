@@ -2533,6 +2533,9 @@ class Api:
         self._tap.take_over(lambda: self._midi.use(tracks))
         self._midi.reset_counts()
         self._follow_next()
+        # What the band changed in the band service's songs since: the next
+        # take's name finds it.
+        self._sending.get("service").check_soon()
         return {"ok": True, "folder": str(folder)}
 
     def _session_rehearsal(self):
@@ -2561,7 +2564,10 @@ class Api:
             for e in entries:
                 if e["kind"] == "cloud" and e["state"] == "waiting":
                     e["step"] = "After the take"
-        return {"entries": entries, "recording": recording}
+        # The last check of the band service's songs that brought changes:
+        # {"id", "text"}, said once per id (song sync spec, What РЭХА shows).
+        news = self._sending.get("service").songs.news
+        return {"entries": entries, "recording": recording, **({"news": news} if news else {})}
 
     def _sound_busy(self):
         """
@@ -4117,6 +4123,12 @@ class Api:
         already belongs to, if that is why: merge_songs into it is what to
         offer instead.
         """
+        return self._rename_song(song_id, title)
+
+    def _rename_song(self, song_id, title, said=None):
+        """rename_song, for the band service's songs too (service_songs.py):
+        `said` is what the names pass's line says when it is done, who
+        renamed it there."""
         try:
             done = self._lib.rename_song(song_id, title)
         except SongRefused as e:
@@ -4127,7 +4139,7 @@ class Api:
         if done["takes"]:
             self._names_pass.request_takes(
                 done["takes"],
-                f"Renaming {done['from']} to {done['title']} · {_takes(done['takes'])}")
+                f"Renaming {done['from']} to {done['title']} · {_takes(done['takes'])}", said)
         for folder, take_number, _ in done["takes"]:
             self._sending.edited(folder, take_number)
         return {"ok": True, "title": done["title"], "goes": len(done["takes"])}

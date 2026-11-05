@@ -2770,7 +2770,7 @@
     },
     "/api/reha/songs": {
       "post": {
-        "description": "A song made in РЭХА, before its first take: its number. A title the band has is that song.",
+        "description": "A song made in РЭХА, before its first take: its number. A title the band has is that song, and takes РЭХА's tempo and signature when РЭХА has them, as at the first check.",
         "security": [
           {
             "rehaKey": []

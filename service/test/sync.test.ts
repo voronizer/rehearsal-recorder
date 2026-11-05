@@ -121,6 +121,9 @@ test("a song made in РЭХА gets its number; a title the band has is that song
   expect(made.status).toBe(200)
   expect(await called(alex, "Zorka")).toMatchObject({ id: made.body.id, tempo: 128, signature: "4/4" })
   expect((await answer(r.post("/api/reha/songs", { title: "ZORKA", tempo: null, signature: null }))).body).toEqual({ id: made.body.id })
+  // РЭХА's tempo is the song's, as at the first check.
+  expect((await answer(r.post("/api/reha/songs", { title: "zorka", tempo: 140, signature: "3/4" }))).body).toEqual({ id: made.body.id })
+  expect(await called(alex, "Zorka")).toMatchObject({ tempo: 140, signature: "3/4" })
   expect((await r.post("/api/reha/songs", { title: "Take 4", tempo: null, signature: null })).status).toBe(400)
   expect((await r.post("/api/reha/songs", { title: "Kupalle", tempo: 128, signature: null })).status).toBe(400)
   expect((await r.post("/api/reha/songs", { title: "Kupalle", tempo: 400, signature: "4/4" })).status).toBe(400)
@@ -140,6 +143,9 @@ test("a change from РЭХА: the title with its takes' names, the tempo with it
     status: 409,
     body: { error: "“Zorka” is another song in the band service now. Merge them in РЭХА if they are one song." },
   })
+  // Turned down whole: the tempo sent with the title stays as it was.
+  expect((await r.patch(`/api/reha/songs/${dym.id}`, { title: "Zorka", tempo: 100, signature: "4/4" })).status).toBe(409)
+  expect(await called(alex, "Dym nad vadoj")).toMatchObject({ tempo: 198, signature: "6/8" })
   expect((await r.patch(`/api/reha/songs/${dym.id}`, { tempo: 128, signature: null })).status).toBe(400)
   expect((await r.patch("/api/reha/songs/9999", { title: "Kupalle" })).status).toBe(404)
   const listed = (await answer(r.get("/api/reha/songs"))).body as Listed

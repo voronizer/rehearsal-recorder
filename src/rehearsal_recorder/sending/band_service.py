@@ -22,6 +22,9 @@ it goes, and its cloud button sends it again. РЭХА learns of it from the
 service's answer to a change, and by asking which takes the service has
 when it starts and then every hour, which also finds a take put back there
 with Restore, and one deleted there for good.
+
+Songs go both ways (service_songs.py): РЭХА's changes to them go before any
+take, and the check reads the band's changes there first.
 """
 
 import math
@@ -36,6 +39,7 @@ from rehearsal_recorder.sending import false_start, service_files
 from rehearsal_recorder.sending.service_client import (
     NOT_A_KEY, Gone, Offline, Refused, ServiceClient, address_of, parse_key,
 )
+from rehearsal_recorder.sending.service_songs import ServiceSongs
 from rehearsal_recorder.store.names import take_name
 
 # The service's part size (R2 wants every part but the last the same size).
@@ -56,6 +60,14 @@ PLAYING_STEP = "Sound is playing: carries on when it stops"
 COUNTING_STEP = "Counting the tempo"
 # What a band service is and how to run one, for Settings › Folders.
 SERVICE_HELP_URL = "https://reha.stream/band-service"
+# What a service from 0.24.0 on tells an older РЭХА (service/worker/signin/
+# guards.ts). Takes it turned down with it go again once this one starts.
+UPDATE_REHA = "Update РЭХА to send takes here"
+# What a take's details carry only when РЭХА changed its song since it last
+# sent them: otherwise the service keeps the take's song and name, so a ★
+# does not undo a move made there. The song's tempo is the song's, sent with
+# it (service_songs.py), and is kept here only to see that it moved.
+SONG_FIELDS = ("song", "song_id", "name")
 
 
 def staging_root():
@@ -123,6 +135,8 @@ class BandService:
         # again in this run, unless the take changes.
         self._drift_refused = set()
         self._active = None
+        # The songs: their numbers in the service, and what goes both ways.
+        self.songs = ServiceSongs(self)
         # Files are being made, or a take's WAVs read for its tempo: the
         # names pass waits, since it moves folders.
         self.making = False
@@ -517,6 +531,7 @@ class BandService:
         dropped, every line of it, and the files made for it. A pass under
         way stops at its next part, finding its take gone."""
         self._lib.forget_service()
+        self.songs.forget()
         with self._lock:
             entries, self._entries = list(self._entries.values()), {}
             self._edits.clear()
@@ -600,9 +615,19 @@ class BandService:
 
     def reopen(self):
         """The app has opened: what it still had to send is back in the list
-        at once, as waiting."""
+        at once, as waiting, and the takes an older РЭХА was turned away
+        with go again."""
         if self._keyed():
+            again = self._lib.requeue_service_refusals(UPDATE_REHA)
+            if again:
+                print(f"Band service: {again} takes an older РЭХА could not send go again", file=sys.stderr)
             self._tidy()
+
+    def check_soon(self):
+        """A rehearsal has started: the service is asked what the band
+        changed there, at the next turn."""
+        self._next_check = 0.0
+        self._wake.set()
 
     def run_next(self):
         """One take, or one deletion. False when there was nothing to do,
@@ -616,6 +641,9 @@ class BandService:
             self._next_check = now + self.CHECK_SEC
             self._compare()
             return True
+        # A song goes before any take: a take carries its song's number.
+        if self._later.get("songs", 0) <= now and self.songs.owed() is not None:
+            self._push_songs()
         for d in self._deletes():
             if self._later.get(("delete", d["uid"]), 0) <= now:
                 return self._delete(d)
@@ -653,8 +681,23 @@ class BandService:
                 self._wake.wait(1.0)
                 self._wake.clear()
 
+    def _push_songs(self):
+        """РЭХА's changes to its songs, to the service; a take goes after
+        them in the same turn. No internet tries
+        again soon; a service that turned it down (one from before songs had
+        numbers, say) is asked again in an hour."""
+        try:
+            self.songs.push(self._client())
+        except Offline:
+            self._later["songs"] = time.monotonic() + self.RETRY_SEC
+        except (Refused, Gone) as e:
+            print(f"Band service: songs could not go: {e}", file=sys.stderr)
+            self._later["songs"] = time.monotonic() + self.CHECK_SEC
+
     def _compare(self):
         """
+        The songs first (service_songs.py), then the takes.
+
         Which of its takes the service has, against what РЭХА holds of them.
         A take the band deleted there, or the service deleted for good, is
         taken out here. A take РЭХА had taken out that is back there (someone
@@ -664,6 +707,14 @@ class BandService:
         reached the service yet is left as it is. No internet asks again soon; a
         service that turned the question down is asked again in an hour.
         """
+        try:
+            self.songs.check(self._client())
+        except Offline:
+            self._next_check = time.monotonic() + self.RETRY_SEC
+            return
+        except (Refused, Gone) as e:
+            # A service from before songs had numbers: the takes all the same.
+            print(f"Band service: the songs could not be checked: {e}", file=sys.stderr)
         try:
             listed = self._client().takes()
         except Offline:
@@ -791,7 +842,7 @@ class BandService:
         entry.start("Sending the details")
         cut = float(row["pending_cut"] or 0)
         meta = self._details(take, folder, gen, cut)
-        answer = client.put_take(uid, {**meta, "by_hand": bool(row["by_hand"])})
+        answer = client.put_take(uid, {**self._put(meta, row["sent"]), "by_hand": bool(row["by_hand"])})
         if row["by_hand"]:
             lib.change_service_row(take_id, lambda r: {"by_hand": False})
         if isinstance(answer, dict) and answer.get("in_trash"):
@@ -848,6 +899,20 @@ class BandService:
         lib.drop_service_files(take_id)
         shutil.rmtree(staging_root() / uid, ignore_errors=True)
         entry.done("MP3 and FLAC of every track")
+
+    def _put(self, meta, sent):
+        """What of the take's details goes: all of them, but its song and
+        name only when they differ from what was last sent (and the first
+        time), with the song's number when it has one."""
+        out = {k: v for k, v in meta.items() if k != "tempo"}
+        if sent is not None and all(sent.get(k) == meta.get(k) for k in ("song", "name")):
+            for k in SONG_FIELDS:
+                out.pop(k, None)
+            return out
+        number = self.songs.number_of(meta.get("song"))
+        if number is not None:
+            out["song_id"] = number
+        return out
 
     def _details(self, take, folder, gen, cut):
         """The take's details as the service takes them (service_files.meta)."""
@@ -923,7 +988,9 @@ class BandService:
                 fresh = self._details(take, row["folder"], gen, 0)
                 # Nothing to move: the service shows this generation already.
                 details = {**sent, "cut_start": 0, "meter": fresh["meter"], "notes": fresh["notes"]}
-                answer = client.put_take(row["uid"], {**details, "by_hand": False})
+                # Its song and name as they were: left out, so a move made there stays.
+                put = {k: v for k, v in details.items() if k not in (*SONG_FIELDS, "tempo")}
+                answer = client.put_take(row["uid"], {**put, "by_hand": False})
                 self._lib.change_service_row(take_id, lambda r: {"sent": details} if r["gen"] == gen else {})
                 if isinstance(answer, dict) and answer.get("in_trash"):
                     self._taken_out(take_id)

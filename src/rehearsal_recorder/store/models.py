@@ -397,3 +397,37 @@ class ServiceDelete(Base):
     uid: Mapped[str] = mapped_column(String, primary_key=True)
     # Its name as it was, for its line in the list of background work.
     name: Mapped[str] = mapped_column(String, default="")
+
+
+class ServiceSong(Base):
+    """
+    A song's number in the band service, and what РЭХА and the service last
+    agreed on for it (migration 0014; sending/service_songs.py). Against
+    what each side has now, it says who changed what: only РЭХА's differs,
+    the change is РЭХА's and goes there; only the service's, РЭХА takes it;
+    both, РЭХА's has not reached the service yet, and goes and wins. No row:
+    the song has no number yet.
+    """
+
+    __tablename__ = "service_song"
+
+    song_id: Mapped[int] = mapped_column(
+        ForeignKey("song.id", ondelete="CASCADE"), primary_key=True
+    )
+    # Its number in the service, given by the service and never changed.
+    sid: Mapped[int] = mapped_column(Integer, unique=True)
+    title: Mapped[str] = mapped_column(String)
+    tempo: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    signature: Mapped[str | None] = mapped_column(String, nullable=True)
+
+
+class ServiceSongMerge(Base):
+    """Songs merged in РЭХА and not yet in the band service: the merged
+    song's number there, and the song it went into here, which may have no
+    number yet."""
+
+    __tablename__ = "service_song_merge"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    from_sid: Mapped[int] = mapped_column(Integer)
+    into_song_id: Mapped[int] = mapped_column(ForeignKey("song.id", ondelete="CASCADE"))
