@@ -419,6 +419,9 @@ class ServiceSong(Base):
     title: Mapped[str] = mapped_column(String)
     tempo: Mapped[int | None] = mapped_column(Integer, nullable=True)
     signature: Mapped[str | None] = mapped_column(String, nullable=True)
+    # Deleted in the service for good while its takes kept it here: it gets
+    # no new number; a take sent again makes it there, and the check links it.
+    gone: Mapped[bool] = mapped_column(Boolean, default=False)
 
 
 class ServiceSongMerge(Base):

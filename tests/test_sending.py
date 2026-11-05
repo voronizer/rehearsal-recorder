@@ -937,6 +937,25 @@ def songs_both_ways(api, fake, service, drain, entries, keep, uid_of, take, fold
     ok("changed on both sides: the change from REHA goes, and wins",
        fake.song_called("Hušča")["tempo"] == 100 and song("Hušča")["tempo"] == 100)
 
+    # A tempo the service had from takes, before songs had signatures there.
+    fake.song_called("Hušča").update(tempo=150, signature=None, meter_by="Vik")
+    check()
+    check()
+    ok("a tempo there with no signature is 4/4 here, said once",
+       (song("Hušča")["tempo"], song("Hušča")["signature"]) == (150, "4/4")
+       and lines().count(("Hušča: 150 bpm · 4/4", "Vik changed the tempo in the band service")) == 1)
+
+    # A refusal that says nothing of the change (the key, here) leaves it
+    # owed: the next check sends it, and does not take the service's back.
+    fake.refuse = (401, "This key does not work")
+    api.set_song_tempo(lib.song_id("Hušča"), 112, "4/4")
+    drain()
+    fake.refuse = None
+    service()._later.pop("songs", None)
+    check()
+    ok("a change turned down for the key goes once the key works",
+       fake.song_called("Hušča")["tempo"] == 112 and song("Hušča")["tempo"] == 112)
+
     n_m = keep("Hušča", band=["Drums"])
     drain()
     uid_m = uid_of(n_m)
@@ -952,6 +971,36 @@ def songs_both_ways(api, fake, service, drain, entries, keep, uid_of, take, fold
     ok("and sent with its new song and name, which ends the wait there",
        uid_m not in fake.moved and fake.takes[uid_m]["name"] == "Rečka 1"
        and fake.takes[uid_m]["song_id"] == number("Rečka"))
+
+    # Moved there while its FLAC still went, and the connection dropped.
+    n_f = keep("Hušča", band=["Drums"], seconds=6.0)
+    uid_f = uid_of(n_f)
+
+    def move_at_flac(words):
+        if words.startswith(f"part {uid_f} 1.flac") and uid_f not in fake.moved and not fake.drop:
+            fake.move_in_service(uid_f, "Rečka")
+            fake.drop = 1
+
+    fake.on_call = move_at_flac
+    drain()
+    fake.on_call = None
+    ok("a take moved there while its files went stays moved when they go again",
+       fake.takes[uid_f]["song"] == "Rečka" and uid_f in fake.moved and take(n_f)["service"]["flac"])
+    check()
+    ok("and is then renamed here", take(n_f)["song"] == "Rečka" and uid_f not in fake.moved)
+
+    # Renamed here, not sent yet, when the band moves it there.
+    n_r = keep("Hušča", band=["Drums"])
+    drain()
+    uid_r = uid_of(n_r)
+    fake.move_in_service(uid_r, "Rečka")
+    api.rename_take(folder(), n_r, "Lipa")
+    service()._next_check = 0
+    service().run_next()  # the check, before the take's new name goes
+    ok("a take renamed here before the band moved it keeps REHA's name",
+       take(n_r)["song"] == "Lipa")
+    drain()
+    ok("which goes and wins there", fake.takes[uid_r]["song"] == "Lipa" and uid_r not in fake.moved)
 
     made = api.add_song("Kalyhanka")
     api.add_song("Kalychanka")
@@ -969,6 +1018,41 @@ def songs_both_ways(api, fake, service, drain, entries, keep, uid_of, take, fold
        song("Kalyhanka") is None and ("Kalyhanka", "Ira deleted it in the band service") in lines())
     ok("one with takes here stays", song("Rečka") is not None and take(n_m)["song"] == "Rečka")
     fake.songs[number("Rečka")].update(trashed=False, trashed_by=None)
+
+    api.add_song("Viasna nanova")
+    api.add_song("Dudka")
+    drain()
+    fake.delete_song_in_service("Viasna nanova", by="Ira")
+    check()
+    gone_here = song("Viasna nanova") is None
+    api.add_song("Viasna nanova")
+    drain()
+    check()
+    ok("a song made here again, its title in the Trash there, brings that one back and stays",
+       gone_here and song("Viasna nanova") is not None and not fake.song_called("Viasna nanova")["trashed"])
+
+    # Gone from the service for good while its takes keep it here.
+    rečka = number("Rečka")
+    fake.songs.pop(rečka)
+    check()
+    drain()
+    ok("a song gone there for good, with takes here, gets no new number",
+       number("Rečka") is None and fake.song_called("Rečka") is None
+       and all(x["title"] != "Rečka" for x in lib.songs_without_number()))
+
+    # The band gives a song the title somebody gives a new song here.
+    fake.rename_in_service("Dudka", "Dudka nočču", by="Ivan")
+    dudka = number("Dudka")
+    api.add_song("Dudka nočču")
+    drain()
+    ok("a new song here does not take the number of the song the band renamed to its title",
+       number("Dudka") == dudka and any(x["title"] == "Dudka nočču" for x in lib.songs_without_number()))
+    check()
+    check()
+    ok("the clash is said once, with what to do",
+       [e for e in lines("failed") if e[0] == "Renaming Dudka to Dudka nočču"]
+       == [("Renaming Dudka to Dudka nočču", "Ivan renamed it in the band service, and “Dudka nočču” is "
+            "another song here. Rename song merges them if they are one song.")])
 
     # A key to another service: the first look there joins songs renamed
     # here before by the titles they had.

@@ -25,8 +25,10 @@ export function TempoControls({ song }: { song: Song }) {
   const change = useChangeSong()
   // What was picked, until the band's answer has it.
   const [held, setHeld] = useState<{ tempo: number | null; signature: Signature } | null>(null)
+  // A signature picked before any tempo: kept here, it goes with the tempo.
+  const [first, setFirst] = useState<Signature | null>(null)
   const tempo = held ? held.tempo : song.tempo === null ? null : Math.round(song.tempo)
-  const signature = held?.signature ?? signatureOf(song)
+  const signature = held?.signature ?? (tempo === null ? first : null) ?? signatureOf(song)
   const save = (t: number | null, s: Signature) => {
     setHeld({ tempo: t, signature: s })
     change.mutate({ id: song.id, tempo: t, signature: t === null ? null : s }, { onSettled: () => setHeld(null) })
@@ -34,7 +36,7 @@ export function TempoControls({ song }: { song: Song }) {
   return (
     <span className="flex items-center gap-1.5 text-sm font-normal">
       <TempoField tempo={tempo} signature={signature} onChange={(t) => save(t, signature)} />
-      <SignatureSelect value={signature} onChange={(s) => tempo !== null && save(tempo, s)} />
+      <SignatureSelect value={signature} onChange={(s) => (tempo === null ? setFirst(s) : save(tempo, s))} />
       {change.error && (
         <span role="alert" className="text-xs text-destructive">
           {change.error.message}

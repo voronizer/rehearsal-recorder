@@ -7,13 +7,16 @@ import { song, take, user } from "../shared/schema"
 import { needKey } from "../signin/guards"
 import { Signature, tempoRefused } from "../takes/meta"
 import { shownName } from "../takes/rows"
+import { songBack } from "../takes/store"
 import { findSong, linkSongs, makeSong, mergeSong, renameSong, setMeter, titleRefused, type SongMeter } from "./sync"
 
 const rehaKey = [{ rehaKey: [] }]
 const Id = z.object({ id: z.coerce.number().int().min(1) })
 const NO_SONG = "No such song"
-const TITLE = "A song's title is 1 to 100 characters"
-const Title = z.string().trim().min(1, { error: TITLE }).max(100, { error: TITLE })
+// Longer than the band's 100: РЭХА has no limit of its own, and one long
+// title turned down would stop every song's numbers.
+const TITLE = "A song's title is 1 to 1000 characters"
+const Title = z.string().trim().min(1, { error: TITLE }).max(1000, { error: TITLE })
 
 /** A tempo and its signature, both or neither, as РЭХА keeps them. */
 const Meter = z
@@ -31,6 +34,7 @@ async function clash(db: ReturnType<typeof database>, title: string, id: number)
   if (refused) return { code: 400 as const, words: refused }
   const other = await findSong(db, title, id)
   if (!other) return null
+  if (other.trashedAt) return { code: 409 as const, words: `“${other.title}” is in the band service's Trash. Restore it there to merge the two in РЭХА.` }
   return { code: 409 as const, words: `“${other.title}” is another song in the band service now. Merge them in РЭХА if they are one song.` }
 }
 
@@ -56,8 +60,9 @@ export const rehaSongRoutes = newApp()
       method: "post",
       path: "/api/reha/songs",
       description:
-        "A song made in РЭХА, before its first take: its number. A title the band has is that song, and takes " +
-        "РЭХА's tempo and signature when РЭХА has them, as at the first check.",
+        "A song made in РЭХА, before its first take: its number. A title the band has is that song, out of the " +
+        "Trash if it was there, with РЭХА's spelling, and РЭХА's tempo and signature when РЭХА has them: made in " +
+        "РЭХА, it is the later change.",
       middleware: [needKey] as const,
       security: rehaKey,
       request: { headers: RehaHeaders, body: body(z.object({ title: Title }).and(Meter)) },
@@ -70,6 +75,8 @@ export const rehaSongRoutes = newApp()
       if (refused) return fail(c, 400, refused)
       const found = await findSong(db, title)
       if (!found) return c.json({ id: await makeSong(db, title, { tempo, signature } as SongMeter, null) }, 200)
+      if (found.trashedAt) await db.batch([...songBack(db, found.id)] as never)
+      if (found.title !== title) await renameSong(db, found.id, title, null)
       if (tempo !== null) await setMeter(db, found.id, { tempo, signature } as SongMeter, null)
       return c.json({ id: found.id }, 200)
     }

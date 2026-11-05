@@ -8,7 +8,8 @@ Songs are kept the same in РЭХА and the band service
 (docs/superpowers/specs/2026-11-05-song-sync-design.md): a song has one
 number, given by the service, and a title, tempo and signature that change
 on either side. Two tables: `service_song`, each song's number and what the
-two sides last agreed on for it; and `service_song_merge`, songs merged in
+two sides last agreed on for it, or that the song is gone there for good;
+and `service_song_merge`, songs merged in
 РЭХА that the service has not been told of yet. A song's rows go with it.
 
 Going back drops the two tables; an app from before sends a take's song by
@@ -33,6 +34,7 @@ def upgrade() -> None:
         sa.Column("title", sa.String(), nullable=False),
         sa.Column("tempo", sa.Integer(), nullable=True),
         sa.Column("signature", sa.String(), nullable=True),
+        sa.Column("gone", sa.Boolean(), nullable=False, server_default=sa.false()),
         sa.ForeignKeyConstraint(["song_id"], ["song.id"], ondelete="CASCADE"),
         sa.PrimaryKeyConstraint("song_id"),
         sa.UniqueConstraint("sid"),

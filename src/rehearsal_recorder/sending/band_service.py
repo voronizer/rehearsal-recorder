@@ -849,6 +849,14 @@ class BandService:
             # Someone in the band deleted it there: taken out here too.
             self._taken_out(take_id)
             raise _Changed()
+        sent_before = row["sent"] or {}
+        if row["sent"] is None or any(sent_before.get(k) != meta.get(k) for k in ("song", "name")):
+            # The service has its song and name now. Kept at once, not with
+            # the rest once the files are up: a take the band moves to
+            # another song while its FLAC still goes stays moved when this
+            # goes again after a pause, a ★ or a dropped connection.
+            lib.change_service_row(take_id, lambda r: {} if r["removed"] else {
+                "sent": {**(r["sent"] or {}), "song": meta.get("song"), "name": meta.get("name")}})
 
         mp3s = len(service_files.plan(take, {"mp3"}))
         if row["mp3_gen"] != gen or row["flac_gen"] != gen:
@@ -877,8 +885,7 @@ class BandService:
             lib.change_service_row(take_id, lambda r: {"flac_gen": gen})
         # Counted again for a new click, song or song's tempo: what the line
         # is measured against has moved.
-        sent = row["sent"] or {}
-        moved = any(sent.get(k) != meta.get(k) for k in ("meter", "song", "tempo"))
+        moved = any(sent_before.get(k) != meta.get(k) for k in ("meter", "song", "tempo"))
         if isinstance(answer, dict) and "drift_gen" in answer and (answer["drift_gen"] != gen or moved):
             try:
                 self._send_drift(client, take_id, uid, gen, folder, number, entry)

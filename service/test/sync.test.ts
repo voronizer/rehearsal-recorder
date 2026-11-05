@@ -75,6 +75,8 @@ test("first check: a title in any case is that song, one renamed in РЭХА kee
   expect(linked.body.ids).toEqual([old.id, vy.id, zorka.id])
   expect(await called(alex, "Pałyn")).toMatchObject({ id: old.id, tempo: 132, signature: "4/4", takes: 1 })
   expect(await takeOf(polyn)).toMatchObject({ name: "Pałyn 1", song_id: old.id })
+  // A title that differs only in capitals takes РЭХА's.
+  expect(await called(alex, "вясна")).toMatchObject({ id: vy.id })
   expect(zorka).toMatchObject({ tempo: 198, signature: "6/8", takes: 0 })
   // Asked again, its first answer lost on the way: the same numbers.
   const again = await answer(
@@ -115,15 +117,23 @@ test("first check: a song left empty by a rename in РЭХА is merged into the 
   expect(new Uint8Array(await file.arrayBuffer())).toEqual(bytes)
 })
 
-test("a song made in РЭХА gets its number; a title the band has is that song", async () => {
+test("a song made in РЭХА gets its number; a title the band has is that song, out of the Trash, spelt as in РЭХА", async () => {
   const { alex, r } = await band()
   const made = await answer(r.post("/api/reha/songs", { title: "Zorka", tempo: 128, signature: "4/4" }))
   expect(made.status).toBe(200)
   expect(await called(alex, "Zorka")).toMatchObject({ id: made.body.id, tempo: 128, signature: "4/4" })
   expect((await answer(r.post("/api/reha/songs", { title: "ZORKA", tempo: null, signature: null }))).body).toEqual({ id: made.body.id })
+  expect(await called(alex, "ZORKA")).toMatchObject({ id: made.body.id, tempo: 128 })
   // РЭХА's tempo is the song's, as at the first check.
   expect((await answer(r.post("/api/reha/songs", { title: "zorka", tempo: 140, signature: "3/4" }))).body).toEqual({ id: made.body.id })
-  expect(await called(alex, "Zorka")).toMatchObject({ tempo: 140, signature: "3/4" })
+  expect(await called(alex, "zorka")).toMatchObject({ tempo: 140, signature: "3/4" })
+  // Deleted here, then made again in РЭХА: the later change, so it comes back.
+  expect((await del(`/api/songs/${made.body.id}`, alex)).status).toBe(200)
+  expect(await called(alex, "zorka")).toBeUndefined()
+  expect((await answer(r.post("/api/reha/songs", { title: "Zorka", tempo: null, signature: null }))).body).toEqual({ id: made.body.id })
+  expect(await called(alex, "Zorka")).toMatchObject({ id: made.body.id })
+  // A long title from РЭХА, which has no limit of its own, is taken.
+  expect((await r.post("/api/reha/songs", { title: "Doŭhaja ".repeat(20).trim(), tempo: null, signature: null })).status).toBe(200)
   expect((await r.post("/api/reha/songs", { title: "Take 4", tempo: null, signature: null })).status).toBe(400)
   expect((await r.post("/api/reha/songs", { title: "Kupalle", tempo: 128, signature: null })).status).toBe(400)
   expect((await r.post("/api/reha/songs", { title: "Kupalle", tempo: 400, signature: "4/4" })).status).toBe(400)
@@ -146,6 +156,12 @@ test("a change from РЭХА: the title with its takes' names, the tempo with it
   // Turned down whole: the tempo sent with the title stays as it was.
   expect((await r.patch(`/api/reha/songs/${dym.id}`, { title: "Zorka", tempo: 100, signature: "4/4" })).status).toBe(409)
   expect(await called(alex, "Dym nad vadoj")).toMatchObject({ tempo: 198, signature: "6/8" })
+  const kupalle = (await answer(r.post("/api/reha/songs", { title: "Kupalle", tempo: null, signature: null }))).body.id
+  await del(`/api/songs/${kupalle}`, alex)
+  expect(await answer(r.patch(`/api/reha/songs/${dym.id}`, { title: "Kupalle" }))).toEqual({
+    status: 409,
+    body: { error: "“Kupalle” is in the band service's Trash. Restore it there to merge the two in РЭХА." },
+  })
   expect((await r.patch(`/api/reha/songs/${dym.id}`, { tempo: 128, signature: null })).status).toBe(400)
   expect((await r.patch("/api/reha/songs/9999", { title: "Kupalle" })).status).toBe(404)
   const listed = (await answer(r.get("/api/reha/songs"))).body as Listed
@@ -177,6 +193,13 @@ test("the band renames a song and sets its tempo where it stands, by РЭХА's 
   expect(await answer(patch(`/api/songs/${dym.id}`, { title: "VIASNA" }, ivan))).toEqual({
     status: 409,
     body: { error: "“Viasna” is another song. Songs are merged in РЭХА: Rename song there." },
+  })
+  // One in the Trash is restored first, then the two merged in РЭХА.
+  const kupalle = (await answer(post("/api/songs", { title: "Kupalle" }, alex))).body.id
+  await del(`/api/songs/${kupalle}`, alex)
+  expect(await answer(patch(`/api/songs/${dym.id}`, { title: "kupalle" }, ivan))).toEqual({
+    status: 409,
+    body: { error: "“Kupalle” is in the Trash. Restore it, then merge the two in РЭХА: Rename song there." },
   })
   expect(await answer(patch(`/api/songs/${dym.id}`, { title: "Take 3" }, ivan))).toEqual({
     status: 400,
@@ -223,6 +246,12 @@ test("a take moves to a new song made here; a title the band has is turned down"
   expect(await answer(patch(`/api/takes/${uid}`, { new_song: "ZORKA" }, ivan))).toEqual({
     status: 409,
     body: { error: "“zorka” is already a song: pick it in the list." },
+  })
+  const gone = (await answer(post("/api/songs", { title: "Kupalle" }, alex))).body.id
+  await del(`/api/songs/${gone}`, alex)
+  expect(await answer(patch(`/api/takes/${uid}`, { new_song: "kupalle" }, ivan))).toEqual({
+    status: 409,
+    body: { error: "“Kupalle” is in the Trash: restore it to move the take there." },
   })
   const listed = (await answer(r.get("/api/reha/songs"))).body as Listed
   expect(listed.songs.find((s) => s.id === zorka.id)).toMatchObject({ made_by: "Ivan" })

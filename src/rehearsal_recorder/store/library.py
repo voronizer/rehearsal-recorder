@@ -899,7 +899,8 @@ class Library:
                 merge.into_song_id = target.id
             numbered = db.get(ServiceSong, source.id)
             if numbered is not None:
-                db.add(ServiceSongMerge(from_sid=numbered.sid, into_song_id=target.id))
+                if not numbered.gone:
+                    db.add(ServiceSongMerge(from_sid=numbered.sid, into_song_id=target.id))
                 db.delete(numbered)
             # Everything off the song before it goes, so nothing of it is
             # left for the database's ON DELETE to touch.
@@ -2010,12 +2011,13 @@ class Library:
         """[{"song_id", "sid", "title", "tempo", "signature", "now"}]: every
         song with a number, with what was agreed and, under "now", the
         song's own "title", "tempo", "signature" and whether it has "takes"
-        on this computer. One query."""
+        on this computer. Not one gone from the service for good. One query."""
         with self._session() as db:
             rows = db.execute(
                 select(ServiceSong, Song.title, Song.tempo, Song.signature,
                        exists().where(Take.song_id == Song.id))
                 .join(Song, ServiceSong.song_id == Song.id)
+                .where(ServiceSong.gone.is_(False))
                 .order_by(ServiceSong.sid)
             ).all()
             return [{**self._columns(row),
@@ -2026,7 +2028,8 @@ class Library:
         """[{"id", "title", "tempo", "signature", "also"}]: the songs History
         shows that have no number in the band service yet, each with its old
         names: one with takes, and one with none that never had a take or
-        holds a backing track (_shown_without_takes)."""
+        holds a backing track (_shown_without_takes). Not one gone from the
+        service for good, which only a take sent again brings back there."""
         with self._session() as db:
             shown = exists().where(Take.song_id == Song.id) | self._shown_without_takes()
             rows = db.execute(
@@ -2047,7 +2050,8 @@ class Library:
                 return False
             db.execute(ServiceSong.__table__.delete().where(
                 ServiceSong.sid == sid, ServiceSong.song_id != song_id))
-            db.merge(ServiceSong(song_id=song_id, sid=int(sid), title=title, tempo=tempo, signature=signature))
+            db.merge(ServiceSong(song_id=song_id, sid=int(sid), title=title, tempo=tempo, signature=signature,
+                                 gone=False))
             return True
 
     def agree_service_song(self, song_id, **fields):
@@ -2059,12 +2063,13 @@ class Library:
                 for key, value in fields.items():
                     setattr(row, key, value)
 
-    def unlink_service_song(self, song_id):
-        """The song has no number any more: gone from the service for good."""
+    def service_song_gone(self, song_id):
+        """The song is gone from the service for good, and its takes keep it
+        here: no number goes for it until a take of it is sent again."""
         with self._session.begin() as db:
             row = db.get(ServiceSong, song_id)
             if row is not None:
-                db.delete(row)
+                row.gone = True
 
     def service_song_merges(self):
         """[{"id", "from_sid", "into_song_id"}]: merges made here that the

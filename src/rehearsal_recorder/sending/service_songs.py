@@ -27,6 +27,10 @@ from rehearsal_recorder.store.library import SongRefused
 
 # The lines' kind in the list: the band service's.
 KIND = "service"
+# What the service answers about the change itself: bad, no such song,
+# another song's title. Anything else (the key, the version) ends the turn,
+# and the change waits for the next one.
+ANSWERS = (400, 404, 409)
 
 
 def _meter(tempo, signature):
@@ -38,6 +42,15 @@ def _meter(tempo, signature):
 
 def _tempo(value):
     return None if value is None else int(round(float(value)))
+
+
+def _as_read(song):
+    """A song as the service lists it, a tempo with no signature in 4/4, as
+    the service shows it: a tempo that came with takes before songs had
+    signatures there."""
+    if song.get("tempo") is not None and song.get("signature") is None:
+        return {**song, "signature": "4/4"}
+    return song
 
 
 def news_text(names, songs):
@@ -68,6 +81,9 @@ class ServiceSongs:
         # What was owed when a push left it owed (a merge whose song has no
         # number, say): not tried again until it changes, or the next check.
         self._stuck = None
+        # (song id, title) of renames from the band that clash with a song
+        # here, said once a run.
+        self._clashes = set()
 
     @property
     def _api(self):
@@ -135,9 +151,16 @@ class ServiceSongs:
                 lib.link_service_song(s["id"], sid, s["title"], s["tempo"], s["signature"])
             print(f"Band service: songs linked: {len(todo)}", file=sys.stderr)
             return
+        numbered = {r["sid"] for r in lib.service_songs()}
         for s in todo:
             sid = client.add_song(s["title"], s["tempo"], s["signature"])
+            if sid in numbered:
+                # The band gave another song this title since the last check;
+                # the check brings that rename here, and says if they clash.
+                print(f"Band service: {s['title']} is another song's title there now", file=sys.stderr)
+                continue
             lib.link_service_song(s["id"], sid, s["title"], s["tempo"], s["signature"])
+            numbered.add(sid)
 
     def _merges(self, client):
         lib = self._lib
@@ -149,6 +172,8 @@ class ServiceSongs:
             try:
                 client.merge_song(m["from_sid"], into)
             except Refused as e:
+                if e.status not in ANSWERS:
+                    raise  # the key, the version: the merge waits for the next turn
                 # The song it went into is gone there, say: nothing to merge into.
                 print(f"Band service: a merge was turned down: {e.words}", file=sys.stderr)
             lib.drop_service_song_merge(m["id"])
@@ -180,15 +205,17 @@ class ServiceSongs:
             client.change_song(r["sid"], **fields)
         except Refused as e:
             if e.status == 404:
-                # Gone from the service for good: a number again at the next turn.
-                self._lib.unlink_service_song(r["song_id"])
+                # Gone from the service for good.
+                self._lib.service_song_gone(r["song_id"])
                 return
             if "title" in fields and e.status == 409:
                 self._title_back(r, e.words)
                 return
+            if e.status not in ANSWERS:
+                raise  # the key, the version: nothing was said about this change
+            # Not agreed: each side keeps its own, and the next check tries
+            # again. Agreeing would have the check take the service's back.
             print(f"Band service: a change to {now['title']} was turned down: {e.words}", file=sys.stderr)
-            # Not sent again and again: the service keeps what it has.
-            self._lib.agree_service_song(r["song_id"], **fields)
             return
         self._lib.agree_service_song(r["song_id"], **fields)
 
@@ -215,7 +242,7 @@ class ServiceSongs:
         self._number(client)
         self._merges(client)
         listed = client.songs()
-        there = {s["id"]: s for s in listed["songs"]}
+        there = {s["id"]: _as_read(s) for s in listed["songs"]}
         done = []  # (who, song key) for each change the band made there
         for r in self._lib.service_songs():
             s = there.get(r["sid"])
@@ -241,7 +268,7 @@ class ServiceSongs:
         takes it stays, and a take sent again brings it back there."""
         if r["now"]["takes"]:
             if s is None:
-                self._lib.unlink_service_song(r["song_id"])
+                self._lib.service_song_gone(r["song_id"])
             return
         try:
             removed = self._lib.remove_song(r["song_id"])
@@ -288,6 +315,13 @@ class ServiceSongs:
             got = self._api._rename_song(r["song_id"], title, said=said)
         if not got.get("ok"):
             print(f"Band service: {r['title']} could not be renamed {title}: {got.get('error')}", file=sys.stderr)
+            clash = got.get("into")
+            if clash and (r["song_id"], title) not in self._clashes:
+                # Said once a run: it is tried again at every check.
+                self._clashes.add((r["song_id"], title))
+                self._api._journal.begin(KIND, f"Renaming {r['title']} to {title}").fail(
+                    f"{said}, and “{clash['title']}” is another song here. "
+                    "Rename song merges them if they are one song.")
             return
         self._lib.agree_service_song(r["song_id"], title=title)
         if not got.get("goes"):
@@ -342,6 +376,11 @@ class ServiceSongs:
                 continue
             take = lib.take(row["folder"], row["take_number"])
             if take is None:
+                continue
+            sent = row["sent"] or {}
+            if (take.get("song") or None, take["name"]) != (sent.get("song"), sent.get("name")):
+                # Renamed here since it last went: РЭХА's change goes and
+                # wins, as with a song's title.
                 continue
             if (take.get("song") or "").casefold() == title.casefold():
                 # Its song here already: its song and name go again, so the

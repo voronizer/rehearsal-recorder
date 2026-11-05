@@ -221,7 +221,8 @@ share.
 Migration `0014_service_songs`.
 
 - `service_song`: a song's number in the service and what the two sides
-  last agreed on for it (title, tempo, signature). One row per song.
+  last agreed on for it (title, tempo, signature), or that it is gone from
+  the service for good while its takes keep it here. One row per song.
 - `service_song_merge`: a merge made in РЭХА and not yet told to the
   service, by the two numbers.
 
@@ -235,7 +236,9 @@ the service's differs, it is the service's and РЭХА takes it. If both
 differ, РЭХА's change has not reached the service yet (it was made with no
 internet); it goes now, reaches the service later, and wins, as round 3
 said. A take's song works the same way, with what РЭХА last sent of the
-take (`ServiceCopy.sent`).
+take (`ServiceCopy.sent`), whose song and name are kept as soon as the
+service has them. A refusal that says nothing of the change itself (the
+key, the version) leaves it owed, never agreed.
 
 ### Sending its own changes
 
@@ -266,7 +269,11 @@ When РЭХА starts, when a rehearsal starts, and every hour:
      check;
    - a song in the service's Trash, or gone from it, is removed here when
      this computer has none of its takes, its backing track to РЭХА's Trash.
-     With takes here, it stays.
+     With takes here, it stays; one gone for good gets no new number, and a
+     take of it sent again makes it there, and the check links it;
+   - a title the band gave a song that another song here already has is
+     not taken: a failed line says so once a run, and that **Rename song**
+     merges them.
 4. The takes, as now (`GET /api/reha/takes`).
 
 ### What РЭХА shows

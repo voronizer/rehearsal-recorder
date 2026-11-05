@@ -101,6 +101,7 @@ export type RehaSong = { title: string; old_names: string[] } & SongMeter
  * A song here with the title is that song. Songs here titled as one of its
  * old names were the same song before a rename in РЭХА: the first is
  * renamed to the title when no song has it, and the rest are merged in.
+ * A title here that differs only in capitals takes РЭХА's.
  * A song that matches nothing is made. The tempo and signature are РЭХА's
  * where it has one: before numbers, only РЭХА changed them. Asked again
  * after an answer that never came, it gives the same numbers.
@@ -114,8 +115,11 @@ export async function linkSongs(env: Bindings, songs: RehaSong[]): Promise<numbe
     const found = all.find((x) => same(x.title, s.title))
     const before = all.filter((x) => x !== found && olds.has(fold(x.title)) && !ids.includes(x.id))
     let id: number
-    if (found) id = found.id
-    else if (before.length) {
+    if (found) {
+      id = found.id
+      // Its spelling is РЭХА's: before numbers, only РЭХА renamed songs.
+      if (found.title !== s.title) await renameSong(db, id, s.title, null)
+    } else if (before.length) {
       id = before.shift()!.id
       await renameSong(db, id, s.title, null)
     } else id = await makeSong(db, s.title, { tempo: s.tempo, signature: s.signature }, null)

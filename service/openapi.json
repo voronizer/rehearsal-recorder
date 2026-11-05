@@ -2658,7 +2658,7 @@
                             "title": {
                               "type": "string",
                               "minLength": 1,
-                              "maxLength": 100
+                              "maxLength": 1000
                             },
                             "old_names": {
                               "type": "array",
@@ -2770,7 +2770,7 @@
     },
     "/api/reha/songs": {
       "post": {
-        "description": "A song made in РЭХА, before its first take: its number. A title the band has is that song, and takes РЭХА's tempo and signature when РЭХА has them, as at the first check.",
+        "description": "A song made in РЭХА, before its first take: its number. A title the band has is that song, out of the Trash if it was there, with РЭХА's spelling, and РЭХА's tempo and signature when РЭХА has them: made in РЭХА, it is the later change.",
         "security": [
           {
             "rehaKey": []
@@ -2799,7 +2799,7 @@
                       "title": {
                         "type": "string",
                         "minLength": 1,
-                        "maxLength": 100
+                        "maxLength": 1000
                       }
                     },
                     "required": [
@@ -3082,7 +3082,7 @@
                   "title": {
                     "type": "string",
                     "minLength": 1,
-                    "maxLength": 100
+                    "maxLength": 1000
                   },
                   "tempo": {
                     "type": [

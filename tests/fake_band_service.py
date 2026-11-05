@@ -378,6 +378,8 @@ class FakeBandService:
                 ids = []
                 for x in data["songs"]:
                     song = self._find_song(x["title"])
+                    if song is not None and song["title"] != x["title"]:
+                        self._rename_song(song, x["title"], None)  # РЭХА's spelling
                     if song is None:
                         old = next((self._find_song(n) for n in x["old_names"] if self._find_song(n)), None)
                         if old is not None:
@@ -394,8 +396,13 @@ class FakeBandService:
                 song = self._find_song(data["title"])
                 if song is None:
                     song = self._make_song(data["title"], data["tempo"], data["signature"])
-                elif data["tempo"] is not None:
-                    song.update(tempo=data["tempo"], signature=data["signature"], meter_by=None)
+                else:
+                    # Made in РЭХА, the later change: out of the Trash, its spelling.
+                    song.update(trashed=False, trashed_by=None)
+                    if song["title"] != data["title"]:
+                        self._rename_song(song, data["title"], None)
+                    if data["tempo"] is not None:
+                        song.update(tempo=data["tempo"], signature=data["signature"], meter_by=None)
                 self.order.append(f"song {data['title']}")
                 return 200, {"id": song["id"]}
             song = self.songs.get(int(rest[0])) if rest and rest[0].isdigit() else None

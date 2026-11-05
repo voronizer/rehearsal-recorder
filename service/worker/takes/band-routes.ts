@@ -217,6 +217,7 @@ export const takeRoutes = newApp()
         const refused = titleRefused(to.new_song)
         if (refused) return fail(c, 400, refused)
         const other = await findSong(db, to.new_song)
+        if (other?.trashedAt) return fail(c, 409, `“${other.title}” is in the Trash: restore it to move the take there.`)
         if (other) return fail(c, 409, `“${other.title}” is already a song: pick it in the list.`)
         id = await makeSong(db, to.new_song, { tempo: null, signature: null }, me)
       }

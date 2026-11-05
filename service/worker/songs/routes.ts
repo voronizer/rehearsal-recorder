@@ -233,6 +233,7 @@ export const songRoutes = newApp()
         const refused = titleRefused(title)
         if (refused) return fail(c, 400, refused)
         const other = await findSong(db, title, id)
+        if (other?.trashedAt) return fail(c, 409, `“${other.title}” is in the Trash. Restore it, then merge the two in РЭХА: Rename song there.`)
         if (other) return fail(c, 409, `“${other.title}” is another song. Songs are merged in РЭХА: Rename song there.`)
         await renameSong(db, id, title, me)
       }
