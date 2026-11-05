@@ -161,8 +161,9 @@ points the app at temporary folders of its own), and one after another took
 75 s in a four-core container where side by side took 50, the time of
 test_engine alone (on CI's Mac, 145 s and 64). Each suite's output is
 printed whole as it finishes, so the log reads one suite at a time, as
-before. A suite still running after LIMIT seconds has hung: it is stopped
-and what it wrote so far is printed, which shows where it stuck.
+before; a suite that failed is printed last, just above the summary. A
+suite still running after LIMIT seconds has hung: it is stopped and what
+it wrote so far is printed, which shows where it stuck.
 """
 
 import os
@@ -195,19 +196,29 @@ def run(suite):
         return subprocess.CompletedProcess(hung.cmd, 1, (hung.output or b"") + stopped)
 
 
+def show(suite, result):
+    print(f"\n{'=' * 60}\n{suite}\n{'=' * 60}", flush=True)
+    # The bytes as the suite wrote them: decoded and encoded again,
+    # a character the console cannot show would fail here instead.
+    sys.stdout.buffer.write(result.stdout)
+    sys.stdout.buffer.flush()
+
+
 def main():
     failed = []
     with ThreadPoolExecutor(len(SUITES)) as pool:
         runs = {pool.submit(run, suite): suite for suite in SUITES}
         for done in as_completed(runs):
             suite, result = runs[done], done.result()
-            print(f"\n{'=' * 60}\n{suite}\n{'=' * 60}", flush=True)
-            # The bytes as the suite wrote them: decoded and encoded again,
-            # a character the console cannot show would fail here instead.
-            sys.stdout.buffer.write(result.stdout)
-            sys.stdout.buffer.flush()
             if result.returncode != 0:
-                failed.append(suite)
+                failed.append((suite, result))
+            else:
+                show(suite, result)
+    # A suite that failed is printed last, by the summary: the end of a
+    # long CI log is what is read first, and sometimes all that is kept.
+    for suite, result in failed:
+        show(suite, result)
+    failed = [suite for suite, _ in failed]
 
     print(f"\n{'=' * 60}")
     if failed:
