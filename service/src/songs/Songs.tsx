@@ -76,7 +76,7 @@ export function Songs() {
   if (!songs.data) return null
   const { statuses, songs: all, not_named } = songs.data
   if (!all.length && !not_named.length)
-    return <Empty title={head} text="No songs yet. A song appears with its first take from РЭХА, or press New song to keep its notes and files here before that." />
+    return <Empty title={head} text="No songs yet. A song made in РЭХА appears here, or press New song to start one here." />
   const takes = all.reduce((n, s) => n + s.takes, 0) + not_named.length
   return (
     <Page title={head} sub={`${count(all.length, "song")} · ${count(takes, "take")}`}>

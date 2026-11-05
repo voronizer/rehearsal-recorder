@@ -119,16 +119,14 @@ do, so the Worker before keeps working while the new one goes up.
   renamed it, last changed its tempo or signature, or made it in the
   service; null when РЭХА did. They are what РЭХА's lines say (“Ivan renamed
   it in the band service”).
-- `take.go`: the take's number within its song, as РЭХА gives it. The
-  migration fills it from the names the service has, where a name is its
-  song's title, a space and a number.
 - `take.moved_by`: the member who moved the take to another song in the
   service, until РЭХА has given it its number there; null otherwise.
 
-A take's name is worked out when it is read: its song's title and its go
-(“Pałyn 8”), the stored name for a take with no song (“Take 14”) or with no
-go yet. A rename in the service renames the takes at once, with nothing to
-wait for.
+A rename in the service renames the song's takes at once, by the title at
+the start of their names: “Dym 3” becomes “Dym nad vadoj 3”, keeping its
+number, and a take moved there and not numbered yet takes the title as it
+is. Nothing waits for РЭХА. (Built so in place of a `take.go` column: the
+names the service has already are the numbers.)
 
 Titles follow РЭХА's rules on both sides, compared case-blind in every
 alphabet: “Take 14” is what a take with no song is called and cannot be a
@@ -146,14 +144,14 @@ All with РЭХА's key, as now.
   number. A song is matched by its title. A song of the service whose title
   is one of the РЭХА song's old names is joined to it: renamed when the
   РЭХА title matches no song there, merged into it otherwise. A song that
-  matches nothing is made. The service does this in one batch, so a check
-  cut short leaves nothing half joined.
+  matches nothing is made. Asked again after an answer that never came, it
+  gives the same numbers, so a check cut short is finished by the next one.
 - `POST /api/reha/songs`: a song made in РЭХА, with its tempo and
   signature; the answer is its number. A title the service already has is
-  that song.
+  that song, and takes РЭХА's tempo when РЭХА has one.
 - `PATCH /api/reha/songs/{id}`: a change made in РЭХА: the title, or the
   tempo and signature together. A title another song has is turned down
-  (409), saying which song.
+  (409), saying which song, and the tempo sent with it is turned down too.
 - `POST /api/reha/songs/{id}/merge` with `into`: a merge made in РЭХА. The
   takes move to `into`; `into` keeps its status, and its key, or takes the
   merged song's when it has none; the notes go one under the other; the
@@ -162,12 +160,13 @@ All with РЭХА's key, as now.
   signature, whether it is in the Trash, and who last changed what (by
   name); and every take moved in the service and not yet numbered by РЭХА,
   with its song and who moved it.
-- `PUT /api/reha/takes/{uid}` changes: it carries the song's number and the
-  take's go (`song_id`, `go`) when РЭХА changed the take's song since it last
-  sent it (and always the first time), and leaves them out otherwise; then
-  the take keeps its song in the service. While a take waits to be numbered
-  after a move in the service, a PUT without them leaves its song and go
-  alone, so a ★ does not undo the move. The song's `tempo` no longer rides
+- `PUT /api/reha/takes/{uid}` changes: it carries the song's title and
+  number and the take's name (`song`, `song_id`, `name`) when РЭХА changed
+  the take's song or name since it last sent it (and always the first
+  time), and leaves them out otherwise; then the take keeps its song in the
+  service. While a take waits to be numbered after a move in the service, a
+  PUT without them leaves its song and name alone, so a ★ does not undo the
+  move. The song's `tempo` no longer rides
   with a take; the take's own `meter` stays.
 
 `MIN_REHA_VERSION` goes up to the version after the last release, 0.23.1
@@ -199,8 +198,8 @@ share.
 - **A song's title**, on its page and in the panel from the right: ✎ beside
   it makes it a field in place. Enter or ✓ renames, Esc or ✕ leaves it. A
   line under the field says only what cannot be seen: why a title is turned
-  down, or that its takes become “Dym nad vadoj 1, Dym nad vadoj 2…”,
-  each keeping its number.
+  down, or that its takes are renamed with it: “Its 5 takes are renamed
+  with it.”
 - **Tempo and signature** beside Key, with РЭХА's own tempo field and
   signature list, saved at once. In 6/8 the service writes ♪ in place of
   “bpm”, as РЭХА does.
@@ -263,7 +262,7 @@ When РЭХА starts, when a rehearsal starts, and every hour:
      forgotten there first;
    - a tempo and signature are set as the song's page sets them;
    - a take moved there is renamed as **Rename take** renames it, and then
-     sent with its new song and go. One being cropped waits for the next
+     sent with its new song and name. One being cropped waits for the next
      check;
    - a song in the service's Trash, or gone from it, is removed here when
      this computer has none of its takes, its backing track to РЭХА's Trash.
@@ -342,9 +341,8 @@ Alex did not pick these; each can change.
    sent.
 3. Who changed a song or moved a take is kept in the service, so РЭХА's
    lines can name them.
-4. A take's name in the service is worked out from its song's title and its
-   go, so a rename there needs no wait; the migration fills the go from the
-   names already there.
+4. A rename in the service renames its takes at once, by the title their
+   names start with, so it needs no wait for РЭХА.
 5. A take moved in the service shows “Pałyn · number from РЭХА” until the
    check.
 6. **Delete song** in the service puts a song that never had a take in the
