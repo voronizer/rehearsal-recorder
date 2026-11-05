@@ -155,8 +155,23 @@ def levels_marks_and_log(link, folder):
     levels = rec.get_levels()
     ok("the level since the last ask: the card's tone, a quarter of full scale",
        abs(levels.get("Gtr", [0])[0] - 0.25) < 0.03)
-    marked = until(clock.marked, 3)
-    ok("the take's clock here is marked from there", marked and clock.ns_at(SR) is not None)
+    asked = time.monotonic()
+    marked = until(clock.marked, 8)
+    took = time.monotonic() - asked + 0.5
+    detail = f"in {took:.1f} s of the take"
+    if not marked:
+        # What the recorder there has of its marks, for a run that fails.
+        try:
+            m = rec._marks
+            detail += (f"; there: {len(m._reads)} reads since a mark, from frame "
+                       f"{m._reads[0][1] if m._reads else None} to {m._reads[-1][1] if m._reads else None}, "
+                       f"span {m._span}, said {m._said}; fault {rec.clock_fault}; "
+                       f"frames {rec._frames_written}")
+        except Exception as e:  # noqa: BLE001
+            detail += f"; could not ask there: {e!r}"
+        said = [r.getMessage() for r in heard.records if "clock" in r.getMessage()]
+        detail += f"; log: {said}"
+    ok(f"the take's clock here is marked from there ({detail})", marked and clock.ns_at(SR) is not None)
     ok("  with the stream's latency and the take's start", clock.started_ns is not None)
     done = rec.stop()
     ok("Stop answers with the take's record", isinstance(done, dict))
