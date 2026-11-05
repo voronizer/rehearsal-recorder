@@ -165,7 +165,10 @@ test("versions compare by their release", () => {
   expect(tooOld("0.9.0", "0.10.0")).toBe(true)
   expect(tooOld("unknown", "0.17.0")).toBe(false)
   expect(tooOld(undefined, MIN_REHA_VERSION)).toBe(true)
-  expect(tooOld("0.0.1", MIN_REHA_VERSION)).toBe(false)
+  // Songs have numbers from 0.24: 0.23 is turned away, a build of main after it is not.
+  expect(tooOld("0.23.0", MIN_REHA_VERSION)).toBe(true)
+  expect(tooOld("0.23.1.dev4+gabc", MIN_REHA_VERSION)).toBe(false)
+  expect(tooOld("0.24.0", MIN_REHA_VERSION)).toBe(false)
 })
 
 test("stand-in routes are not there without STAND_INS", async () => {

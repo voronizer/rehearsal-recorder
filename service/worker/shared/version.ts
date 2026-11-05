@@ -2,7 +2,7 @@
  * The lowest РЭХА the service takes. The service only ever adds fields, so
  * this goes up only when a change cannot work with an older РЭХА.
  */
-export const MIN_REHA_VERSION = "0.0.0"
+export const MIN_REHA_VERSION = "0.23.1"
 
 /**
  * Whether a РЭХА that says it is `version` is too old. Versions compare by

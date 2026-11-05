@@ -52,14 +52,14 @@ test("a change from РЭХА leaves a take the band deleted in the trash", async
 
   expect(await answer(r.put(`/api/reha/takes/${uid}`, takeMeta({ name: "Viasna 12b" })))).toEqual({
     status: 200,
-    body: { ok: true, in_trash: true, drift_gen: null },
+    body: { ok: true, in_trash: true, drift_gen: null, song_id: expect.any(Number) },
   })
   // Its details are kept up to date, so it comes back as РЭХА has it.
   expect((await trash(alex)).takes).toMatchObject([{ uid, name: "Viasna 12b", by: "Ivan" }])
 
   expect(await answer(r.put(`/api/reha/takes/${uid}`, takeMeta({ name: "Viasna 12b", by_hand: true })))).toEqual({
     status: 200,
-    body: { ok: true, in_trash: false, drift_gen: null },
+    body: { ok: true, in_trash: false, drift_gen: null, song_id: expect.any(Number) },
   })
   expect((await trash(alex)).takes).toEqual([])
 })
@@ -71,7 +71,7 @@ test("a take РЭХА removed comes out on any change, as before", async () => {
   expect((await r.del(`/api/reha/takes/${uid}`)).status).toBe(200)
   expect((await trash(alex)).takes).toMatchObject([{ uid, by: null }])
 
-  expect(await answer(r.put(`/api/reha/takes/${uid}`, takeMeta()))).toEqual({ status: 200, body: { ok: true, in_trash: false, drift_gen: null } })
+  expect(await answer(r.put(`/api/reha/takes/${uid}`, takeMeta()))).toEqual({ status: 200, body: { ok: true, in_trash: false, drift_gen: null, song_id: expect.any(Number) } })
   expect((await trash(alex)).takes).toEqual([])
 })
 
@@ -141,7 +141,7 @@ test("a new take of a song in the trash brings the song back", async () => {
   const fresh = crypto.randomUUID()
   expect(await answer(r.put(`/api/reha/takes/${fresh}`, takeMeta({ song: "Pałyn", number: 3, name: "Pałyn 3" })))).toEqual({
     status: 200,
-    body: { ok: true, in_trash: false, drift_gen: null },
+    body: { ok: true, in_trash: false, drift_gen: null, song_id: expect.any(Number) },
   })
   expect((await r.post(`/api/reha/takes/${fresh}/ready`, { gen: 1, what: "mp3" })).status).toBe(200)
   expect(await songCalled(alex, "Pałyn")).toMatchObject({ id, takes: 1 })
@@ -161,13 +161,14 @@ test("a song whose only take is still on its way says so, and goes to the trash"
   expect((await trash(alex)).songs).toMatchObject([{ id, title: "Zorka" }])
 })
 
-test("a song that never had a take is deleted at once", async () => {
+test("a song that never had a take goes to the trash too, for РЭХА to learn of it, and comes back", async () => {
   const alex = await signInOwner()
   const { id } = (await answer(post("/api/songs", { title: "Kupalle" }, alex))).body
   expect((await del(`/api/songs/${id}`, alex)).status).toBe(200)
   expect(await songCalled(alex, "Kupalle")).toBeUndefined()
-  expect((await trash(alex)).songs).toEqual([])
-  expect(await env.DB.prepare("SELECT id FROM song WHERE id = ?").bind(id).first()).toBeNull()
+  expect((await trash(alex)).songs).toMatchObject([{ id, title: "Kupalle", takes: 0 }])
+  expect((await post(`/api/trash/songs/${id}/restore`, {}, alex)).status).toBe(200)
+  expect(await songCalled(alex, "Kupalle")).toMatchObject({ id, takes: 0 })
 })
 
 test("New song with the title of a song in the trash says so", async () => {

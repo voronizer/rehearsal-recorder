@@ -1,8 +1,9 @@
-import { and, eq, gt, isNotNull, isNull, ne, or, sql, type SQL } from "drizzle-orm"
+import { and, eq, isNotNull, isNull, sql, type SQL } from "drizzle-orm"
 import { tellChat } from "../chat/tell"
 import { database, type Database } from "../shared/db"
 import type { Bindings } from "../shared/env"
-import { firstStatus, labelsFor } from "../labels/match"
+import { labelsFor } from "../labels/match"
+import { findSong, makeSong } from "../songs/sync"
 import { comment, rehearsal, song, take } from "../shared/schema"
 import { iso } from "../shared/time"
 import type { Drift, TakeMeta } from "./meta"
@@ -13,42 +14,28 @@ import { makeShape } from "./shape"
 const markKey = (at: number) => Math.round(at * 100)
 
 /**
- * The song with this title, whatever its case, made with the first status
- * if there is none (putTake brings it out of the trash). The song's
- * tempo is the one its newest take carries (the latest rehearsal, then the
- * highest number): an older take sent again, from a computer whose РЭХА has
- * an old tempo, leaves it.
+ * The song a take's details name: by its number, or by its title, made when
+ * the band has none (a song РЭХА has no number for yet). Undefined when the
+ * details leave the song out; "no song" for a number the service has not.
  */
-async function songId(env: Bindings, uid: string, meta: TakeMeta): Promise<number | null> {
-  const { song: title, tempo } = meta
-  if (title === null) return null
+async function songOf(env: Bindings, meta: TakeMeta): Promise<number | null | undefined | "no song"> {
   const db = database(env)
-  await db
-    .insert(song)
-    .values({ title, statusId: await firstStatus(db), createdAt: iso() })
-    .onConflictDoNothing()
-  const named = sql`${song.title} = ${title} COLLATE NOCASE`
-  const [row] = await db.select({ id: song.id }).from(song).where(named).limit(1)
-  if (tempo === undefined) return row.id
-  const { date } = meta.rehearsal
-  const [newer] = await db
-    .select({ uid: take.uid })
-    .from(take)
-    .innerJoin(rehearsal, eq(take.rehearsalUid, rehearsal.uid))
-    .where(
-      and(
-        eq(take.songId, row.id),
-        ne(take.uid, uid),
-        or(gt(rehearsal.date, date), and(eq(rehearsal.date, date), gt(take.number, meta.number)))
-      )
-    )
-    .limit(1)
-  if (!newer) await db.update(song).set({ tempo }).where(eq(song.id, row.id))
-  return row.id
+  if (meta.song_id !== undefined) {
+    if (meta.song_id === null) return null
+    const [row] = await db.select({ id: song.id }).from(song).where(eq(song.id, meta.song_id)).limit(1)
+    return row ? row.id : "no song"
+  }
+  if (meta.song === undefined) return undefined
+  if (meta.song === null) return null
+  const found = await findSong(db, meta.song)
+  return found ? found.id : makeSong(db, meta.song, { tempo: null, signature: null }, null)
 }
 
 /**
  * A take РЭХА sent: made or brought up to date, with its rehearsal and song.
+ * Details that leave the song out keep the take's song and name: РЭХА sends
+ * them only when it changed them, so a ★ does not undo a move made here.
+ * Ones that name it end a move made here: РЭХА has numbered the take.
  * Marks from РЭХА replace the earlier ones, matched by their moment, so
  * replies to a mark still there stay; a mark РЭХА no longer sends goes,
  * unless the band talked under it.
@@ -67,17 +54,21 @@ export async function putTake(
   env: Bindings,
   uid: string,
   meta: TakeMeta
-): Promise<{ inTrash: boolean; driftGen: number | null }> {
+): Promise<{ inTrash: boolean; driftGen: number | null; songId: number | null } | "no song" | "no name"> {
   const db = database(env)
   const [before] = await db.select().from(take).where(eq(take.uid, uid)).limit(1)
   const stays = before?.trashedAt != null && (before.trashedBy !== null || before.withSong) && !meta.by_hand
+  const named = stays ? undefined : await songOf(env, meta)
+  if (named === "no song") return named
+  if (!before && (named === undefined || meta.name === undefined)) return "no name"
   const pending = meta.gen > (before?.shownGen ?? 0)
   const cut = pending ? meta.cut_start : 0
   const fields = {
     rehearsalUid: meta.rehearsal.uid,
     number: meta.number,
-    songId: stays ? before.songId : await songId(env, uid, meta),
-    name: meta.name,
+    songId: named === undefined ? before!.songId : named,
+    name: meta.name ?? before!.name,
+    ...(named !== undefined && { movedBy: null }),
     durationSec: meta.duration_sec,
     starredAtRehearsal: meta.starred,
     balance: meta.balance,
@@ -137,7 +128,7 @@ export async function putTake(
         : db.insert(comment).values({ ...row, takeUid: uid, at: m.at, fromReha: true, createdAt: iso() })
     }),
   ])
-  return { inTrash: stays, driftGen: before?.driftGen ?? null }
+  return { inTrash: stays, driftGen: before?.driftGen ?? null, songId: fields.songId }
 }
 
 /**

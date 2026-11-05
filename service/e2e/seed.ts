@@ -108,7 +108,7 @@ const peaks = (seed: number) =>
 
 /** РЭХА with a key, as its sending module calls the service. */
 export function reha(api: APIRequestContext, key: string) {
-  const headers = { "x-api-key": key.slice(key.lastIndexOf(":") + 1), "X-Reha-Version": "0.17.0" }
+  const headers = { "x-api-key": key.slice(key.lastIndexOf(":") + 1), "X-Reha-Version": "0.24.0" }
   const ok = async (res: Awaited<ReturnType<APIRequestContext["fetch"]>>) => {
     if (!res.ok()) throw new Error(`${res.url()}: ${res.status()} ${await res.text()}`)
     return res.json() as Promise<Record<string, string>>

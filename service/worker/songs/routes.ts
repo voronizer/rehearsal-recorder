@@ -1,19 +1,20 @@
 import { createRoute, z } from "@hono/zod-openapi"
 import { and, asc, count, eq, isNotNull, isNull, sql } from "drizzle-orm"
 import { firstStatus } from "../labels/match"
+import { same } from "../shared/names"
 import { isOrder, ORDER } from "../labels/routes"
 import { database, type Database } from "../shared/db"
 import { fail } from "../shared/errors"
-import { same } from "../shared/names"
 import type { Bindings } from "../shared/env"
 import { KEYS } from "../shared/keys"
 import { body, errors, json, newApp, Ok } from "../shared/openapi"
 import { song, songFile, status, take } from "../shared/schema"
 import { iso } from "../shared/time"
 import { needMember } from "../signin/guards"
-import { deleteFiles } from "../takes/purge"
 import { toTrash } from "../takes/store"
 import { bare, best, bestWhy, takeRows, TakeRow, type Loaded } from "../takes/rows"
+import { Signature, tempoRefused } from "../takes/meta"
+import { findSong, makeSong, renameSong, setMeter, titleRefused } from "./sync"
 import { FileView, fileViews } from "./files"
 
 const TITLE = "A song's title is 1 to 100 characters"
@@ -30,8 +31,9 @@ export const SongItem = z
     title: z.string(),
     status_id: z.number(),
     key: z.string().nullable(),
-    /** Beats per minute, from РЭХА. */
+    /** The tempo in its signature's own count, as РЭХА keeps it. */
     tempo: z.number().nullable(),
+    signature: Signature.nullable(),
     takes: z.number(),
     rehearsals: z.number(),
     last_date: z.string().nullable(),
@@ -54,6 +56,7 @@ function item(s: SongRowDb, rows: Loaded[], first: number): z.infer<typeof SongI
     status_id: s.statusId ?? first,
     key: s.key,
     tempo: s.tempo,
+    signature: s.signature as Signature | null,
     takes: rows.length,
     rehearsals: new Set(rows.map((r) => r.rehearsal_uid)).size,
     last_date: rows[0]?.date ?? null,
@@ -83,11 +86,6 @@ export async function songItems(env: Bindings) {
     )
   return { items, statuses, rows }
 }
-
-const titleTaken = async (db: Database, title: string, except?: number) =>
-  (await db.select({ id: song.id, title: song.title, trashedAt: song.trashedAt }).from(song)).find(
-    (s) => s.id !== except && same(s.title, title)
-  )
 
 /** The song the band has, or undefined: one in the trash is not there. */
 export async function liveSong(db: Database, id: number) {
@@ -135,14 +133,12 @@ export const songRoutes = newApp()
     async (c) => {
       const db = database(c.env)
       const { title } = c.req.valid("json")
-      const clash = await titleTaken(db, title)
+      const refused = titleRefused(title)
+      if (refused) return fail(c, 400, refused)
+      const clash = await findSong(db, title)
       if (clash?.trashedAt) return fail(c, 409, `“${clash.title}” is in the Trash. Restore it there.`)
       if (clash) return fail(c, 409, `There is already a song called “${clash.title}”.`)
-      const [made] = await db
-        .insert(song)
-        .values({ title, statusId: await firstStatus(db), createdAt: iso() })
-        .returning({ id: song.id })
-      return c.json({ id: made.id }, 200)
+      return c.json({ id: await makeSong(db, title, { tempo: null, signature: null }, c.var.member.id) }, 200)
     }
   )
   .openapi(
@@ -197,27 +193,49 @@ export const songRoutes = newApp()
     createRoute({
       method: "patch",
       path: "/api/songs/{id}",
-      description: "A song's status, key and notes. Its title comes from РЭХА.",
+      description:
+        "A song's title, tempo and signature, status, key and notes. The title, tempo and signature reach РЭХА at its " +
+        "next check; a title another song has is turned down, as songs are merged in РЭХА.",
       middleware: [needMember] as const,
       request: {
         params: Id,
         body: body(
           z.object({
+            title: z.string().trim().min(1, { error: TITLE }).max(100, { error: TITLE }).optional(),
+            /** With its signature; null takes both away. */
+            tempo: z.int().nullable().optional(),
+            signature: Signature.nullable().optional(),
             status_id: z.int().optional(),
             key: z.enum(KEYS as [string, ...string[]], { error: "A key is one of the 24, such as “E minor”" }).nullable().optional(),
             notes: z.string().max(10_000, { error: "Notes are up to 10,000 characters" }).optional(),
           })
         ),
       },
-      responses: { 200: json(Ok), ...errors(400, 401, 404) },
+      responses: { 200: json(Ok), ...errors(400, 401, 404, 409) },
     }),
     async (c) => {
       const db = database(c.env)
       const { id } = c.req.valid("param")
-      const { status_id, key, notes } = c.req.valid("json")
-      if (!(await liveSong(db, id))) return fail(c, 404, NO_SONG)
+      const { title, tempo, signature, status_id, key, notes } = c.req.valid("json")
+      const s = await liveSong(db, id)
+      if (!s) return fail(c, 404, NO_SONG)
       if (status_id !== undefined && !(await db.select().from(status).where(eq(status.id, status_id))).length)
         return fail(c, 400, NO_STATUS)
+      const me = c.var.member.id
+      if (tempo !== undefined || signature !== undefined) {
+        const both = (tempo ?? null) === null ? null : (signature ?? null)
+        if ((tempo ?? null) !== null && both === null) return fail(c, 400, "A tempo goes with its signature")
+        const refused = both && tempoRefused(tempo!, both)
+        if (refused) return fail(c, 400, refused)
+        if (tempo !== s.tempo || both !== s.signature) await setMeter(db, id, { tempo: tempo ?? null, signature: both }, me)
+      }
+      if (title !== undefined && title !== s.title) {
+        const refused = titleRefused(title)
+        if (refused) return fail(c, 400, refused)
+        const other = await findSong(db, title, id)
+        if (other) return fail(c, 409, `“${other.title}” is another song. Songs are merged in РЭХА: Rename song there.`)
+        await renameSong(db, id, title, me)
+      }
       const change = {
         ...(status_id !== undefined && { statusId: status_id }),
         ...(key !== undefined && { key }),
@@ -232,8 +250,8 @@ export const songRoutes = newApp()
       method: "delete",
       path: "/api/songs/{id}",
       description:
-        "**Delete song**: a song with takes, in the trash or not, goes to the trash with the ones that are not; " +
-        "one that never had a take is deleted at once, with its files.",
+        "**Delete song**: the song goes to the trash with its takes that are not there yet, also one that never " +
+        "had a take, so РЭХА learns of it at its check. It is deleted for good after 30 days.",
       middleware: [needMember] as const,
       request: { params: Id },
       responses: { 200: json(Ok), ...errors(401, 404) },
@@ -245,18 +263,12 @@ export const songRoutes = newApp()
       if (!s) return fail(c, 404, NO_SONG)
       // Someone whose page was behind pressed it again.
       if (s.trashedAt) return c.json({ ok: true as const }, 200)
-      const [one] = await db.select({ uid: take.uid }).from(take).where(eq(take.songId, id)).limit(1)
-      if (one) {
-        const at = iso()
-        const me = c.var.member.id
-        await db.batch([
-          db.update(song).set({ trashedAt: at, trashedBy: me }).where(eq(song.id, id)),
-          toTrash(db, eq(take.songId, id), me, true, at),
-        ])
-        return c.json({ ok: true as const }, 200)
-      }
-      await db.batch([db.delete(songFile).where(eq(songFile.songId, id)), db.delete(song).where(eq(song.id, id))])
-      await deleteFiles(c.env, `songs/${id}/`, () => true)
+      const at = iso()
+      const me = c.var.member.id
+      await db.batch([
+        db.update(song).set({ trashedAt: at, trashedBy: me }).where(eq(song.id, id)),
+        toTrash(db, eq(take.songId, id), me, true, at),
+      ])
       return c.json({ ok: true as const }, 200)
     }
   )

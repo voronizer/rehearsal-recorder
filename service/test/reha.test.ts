@@ -49,8 +49,6 @@ const labelOf = async (text: string) => {
   return row
 }
 
-const songRow = () => env.DB.prepare("SELECT tempo FROM song WHERE title = 'Viasna'").first<{ tempo: number | null }>()
-
 const bytes = (n: number, fill: number) => new Uint8Array(n).fill(fill)
 
 const sha256 = async (data: BufferSource) =>
@@ -330,35 +328,6 @@ test("two takes sent at once under a new label make it once, and both marks get 
   expect((await labels()).filter((l) => l.name === "Count in")).toHaveLength(1)
   expect(await labelOf("Sticks")).toEqual({ name: "Count in", colour: "teal" })
   expect(await labelOf("Clicks")).toEqual({ name: "Count in", colour: "teal" })
-})
-
-test("the tempo sent with a take is its song's; a take without one leaves it", async () => {
-  const r = await reha()
-  expect((await r.put(`/api/reha/takes/${TAKE}`, takeMeta({ tempo: 120 }))).status).toBe(200)
-  expect(await songRow()).toEqual({ tempo: 120 })
-  const other = crypto.randomUUID()
-  expect((await r.put(`/api/reha/takes/${other}`, takeMeta({ number: 13, name: "Viasna 13" }))).status).toBe(200)
-  expect(await songRow()).toEqual({ tempo: 120 })
-  expect((await r.put(`/api/reha/takes/${other}`, takeMeta({ number: 13, name: "Viasna 13", tempo: null }))).status).toBe(200)
-  expect(await songRow()).toEqual({ tempo: null })
-  expect((await r.put(`/api/reha/takes/${TAKE}`, takeMeta({ tempo: 0 }))).status).toBe(400)
-})
-
-test("the song's tempo is its newest take's: an older take sent again leaves it", async () => {
-  const r = await reha()
-  expect((await r.put(`/api/reha/takes/${TAKE}`, takeMeta({ tempo: 120 }))).status).toBe(200)
-  // A take from the week before, sent again from a laptop whose РЭХА still has the old tempo.
-  const before = { uid: crypto.randomUUID(), name: "Thursday", date: "2025-10-23" }
-  const older = crypto.randomUUID()
-  expect((await r.put(`/api/reha/takes/${older}`, takeMeta({ rehearsal: before, number: 3, name: "Viasna 3", tempo: 96 }))).status).toBe(200)
-  expect(await songRow()).toEqual({ tempo: 120 })
-  // An earlier take of the same evening is older too.
-  const earlier = crypto.randomUUID()
-  expect((await r.put(`/api/reha/takes/${earlier}`, takeMeta({ number: 11, name: "Viasna 11", tempo: 96 }))).status).toBe(200)
-  expect(await songRow()).toEqual({ tempo: 120 })
-  // The newest take sent again with a new tempo moves it.
-  expect((await r.put(`/api/reha/takes/${TAKE}`, takeMeta({ tempo: 132 }))).status).toBe(200)
-  expect(await songRow()).toEqual({ tempo: 132 })
 })
 
 test("a song made by a take gets the first status", async () => {

@@ -34,6 +34,8 @@ export const TakeRow = z
     marks: z.array(MarkTick),
     stars: z.array(Star),
     starred_at_rehearsal: z.boolean(),
+    /** Moved to another song here and not numbered by РЭХА yet: its name is the song's title alone. */
+    moved: z.boolean(),
   })
   .openapi("TakeRow")
 
@@ -76,6 +78,7 @@ export async function takeRows(env: Bindings, where?: SQL): Promise<Loaded[]> {
       gen: take.shownGen,
       tracks: take.tracks,
       shape: take.shape,
+      movedBy: take.movedBy,
     })
     .from(take)
     .innerJoin(rehearsal, eq(take.rehearsalUid, rehearsal.uid))
@@ -119,6 +122,7 @@ export async function takeRows(env: Bindings, where?: SQL): Promise<Loaded[]> {
       marks: marksOf.get(t.uid) ?? [],
       stars: starsOf.get(t.uid) ?? [],
       starred_at_rehearsal: t.starredAtRehearsal,
+      moved: t.movedBy !== null,
       shown_at: t.shownAt,
       trashed_at: t.trashedAt,
     }))

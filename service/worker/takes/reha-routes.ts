@@ -8,6 +8,7 @@ import { Drift, TakeMeta } from "./meta"
 import { putDrift, putTake, ready, trash } from "./store"
 
 const Params = z.object({ uid: z.uuid() })
+const NO_SONG = "No such song"
 const rehaKey = [{ rehaKey: [] }]
 
 /** The routes РЭХА calls with its key, for a take and its details. */
@@ -31,18 +32,24 @@ export const rehaRoutes = newApp()
       description:
         "A take's details: made, or brought up to date. A take РЭХА removed comes out of the trash; " +
         "one the band deleted, or one that went with its song, only when sent `by_hand`. " +
-        "`in_trash` says it is still there; `drift_gen` is the generation whose tempo the service has.",
+        "Its song and name come only when РЭХА changed them, and the first time; left out, the take keeps " +
+        "what it has here. `in_trash` says it is still there; `drift_gen` is the generation whose tempo the " +
+        "service has; `song_id` is its song's number. 409 for a song number the service does not have.",
       middleware: [needKey] as const,
       security: rehaKey,
       request: { headers: RehaHeaders, params: Params, body: body(TakeMeta) },
       responses: {
-        200: json(z.object({ ok: z.literal(true), in_trash: z.boolean(), drift_gen: z.number().nullable() })),
-        ...errors(400, 401, 426),
+        200: json(
+          z.object({ ok: z.literal(true), in_trash: z.boolean(), drift_gen: z.number().nullable(), song_id: z.number().nullable() })
+        ),
+        ...errors(400, 401, 409, 426),
       },
     }),
     async (c) => {
-      const { inTrash, driftGen } = await putTake(c.env, c.req.valid("param").uid, c.req.valid("json"))
-      return c.json({ ok: true as const, in_trash: inTrash, drift_gen: driftGen }, 200)
+      const done = await putTake(c.env, c.req.valid("param").uid, c.req.valid("json"))
+      if (done === "no song") return fail(c, 409, NO_SONG)
+      if (done === "no name") return fail(c, 400, "A new take comes with its name and song")
+      return c.json({ ok: true as const, in_trash: done.inTrash, drift_gen: done.driftGen, song_id: done.songId }, 200)
     }
   )
   .openapi(

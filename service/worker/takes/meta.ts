@@ -1,6 +1,22 @@
 import { z } from "@hono/zod-openapi"
 
-const Signature = z.enum(["4/4", "3/4", "2/4", "6/8"])
+export const Signature = z.enum(["4/4", "3/4", "2/4", "6/8"])
+export type Signature = z.infer<typeof Signature>
+
+/** A song's tempo as РЭХА's metronome keeps it: a whole number from 30 to
+ *  300, from 60 to 600 in 6/8, where it counts eighths. */
+export const TEMPO_RANGE: Record<Signature, readonly [number, number]> = {
+  "4/4": [30, 300],
+  "3/4": [30, 300],
+  "2/4": [30, 300],
+  "6/8": [60, 600],
+}
+
+/** Why a tempo cannot be the song's, or null when it can. */
+export function tempoRefused(tempo: number, signature: Signature): string | null {
+  const [low, high] = TEMPO_RANGE[signature]
+  return Number.isInteger(tempo) && tempo >= low && tempo <= high ? null : `A tempo in ${signature} is a whole number from ${low} to ${high}`
+}
 
 /** A take's click as РЭХА keeps it. One recorded with the click off has a
  *  tempo and `click` false; one with no tempo has neither. */
@@ -43,9 +59,15 @@ export const TakeMeta = z
       date: z.iso.date(),
     }),
     number: z.int().min(1),
-    name: z.string().min(1),
-    /** null for a take nobody named. */
-    song: z.string().trim().min(1).nullable(),
+    /** Its name, sent with its song when РЭХА changed which song it is a
+     *  take of (or its number there), and the first time. Left out, the take
+     *  keeps its song and name, so a ★ does not undo a move made here. */
+    name: z.string().min(1).optional(),
+    /** Its song by number, null for a take nobody named. */
+    song_id: z.int().min(1).nullable().optional(),
+    /** Its song by title, made when the band has none, for a song РЭХА has
+     *  no number for yet; null for a take nobody named. */
+    song: z.string().trim().min(1).nullable().optional(),
     duration_sec: z.number().min(0),
     /** 1, and one more for each crop. */
     gen: z.int().min(1),
@@ -67,9 +89,6 @@ export const TakeMeta = z
       z.object({ position: z.int().min(1), name: z.string(), file: z.string(), icon: z.string().nullable().optional() })
     ),
     marks: z.array(z.object({ at: z.number().min(0), label: z.string(), colour: z.string(), note: z.string() })),
-    /** The song's beats per minute as РЭХА keeps it, null when it has none.
-     *  Missing from РЭХА 0.17 and older: the song keeps what it had. */
-    tempo: z.number().positive().max(999).nullable().optional(),
     /** The take's own click. Missing from РЭХА 0.21 and older: the take
      *  keeps what it had. */
     meter: Meter.optional(),
@@ -77,6 +96,9 @@ export const TakeMeta = z
      *  deleted comes out of the trash only then. Missing from РЭХА 0.20
      *  and older. */
     by_hand: z.boolean().optional(),
+  })
+  .refine((m) => (m.song_id === undefined && m.song === undefined) || m.name !== undefined, {
+    error: "A take's song goes with its name",
   })
   .openapi("TakeMeta")
 

@@ -30,7 +30,7 @@ const song = (cookie: string, id: number) => read<SongPage>(`/api/songs/${id}`, 
 test("the songs table: every song with its status, takes, length and best take", async () => {
   const owner = await signInOwner()
   const ira = await member(owner, "ira@example.com")
-  const one = await shownTake({ number: 1, name: "Viasna 1", duration_sec: 245, date: "2025-10-23", tempo: 120 })
+  const one = await shownTake({ number: 1, name: "Viasna 1", duration_sec: 245, date: "2025-10-23" })
   await shownTake({ number: 2, name: "Viasna 2", duration_sec: 250, date: "2025-10-30" })
   await shownTake({ song: "Pałyn", number: 1, name: "Pałyn 1", duration_sec: 200, date: "2025-10-30" })
   await shownTake({ song: null, number: 7, name: "Take 7", date: "2025-10-30" })
@@ -46,7 +46,7 @@ test("the songs table: every song with its status, takes, length and best take",
   expect(viasna).toMatchObject({
     status_id: list.statuses[0].id,
     key: null,
-    tempo: 120,
+    tempo: null,
     takes: 2,
     rehearsals: 2,
     last_date: "2025-10-30",

@@ -2,7 +2,9 @@ import { createRoute, z } from "@hono/zod-openapi"
 import { and, eq, isNotNull, isNull } from "drizzle-orm"
 import { database } from "../shared/db"
 import { fail } from "../shared/errors"
-import { errors, json, newApp, Ok } from "../shared/openapi"
+import { body, errors, json, newApp, Ok } from "../shared/openapi"
+import { iso } from "../shared/time"
+import { findSong, makeSong, titleRefused } from "../songs/sync"
 import { loadMarks, MarkView } from "../marks/view"
 import { rehearsal, song, star, take, user } from "../shared/schema"
 import { needMember } from "../signin/guards"
@@ -12,6 +14,7 @@ import { songBack, toTrash } from "./store"
 import { fillShapes } from "./shape"
 
 const NO_TAKE = "No such take"
+const TITLE = "A song's title is 1 to 100 characters"
 
 const Uid = z.object({ uid: z.uuid() })
 
@@ -52,6 +55,8 @@ const TakePage = z
     /** The originals are still on their way. */
     flac_coming: z.boolean(),
     trashed_at: z.string().nullable(),
+    /** Moved to another song here and not numbered by РЭХА yet. */
+    moved: z.boolean(),
   })
   .openapi("TakePage")
 
@@ -166,9 +171,58 @@ export const takeRoutes = newApp()
           files,
           flac_coming: files.some((f) => f.mp3) && !flacUp,
           trashed_at: t.trashedAt,
+          moved: t.movedBy !== null,
         },
         200
       )
+    }
+  )
+  .openapi(
+    createRoute({
+      method: "patch",
+      path: "/api/takes/{uid}",
+      description:
+        "**Move to song**: the take moves to the song `song`, or to a new song titled `new_song`. Its name is the " +
+        "song's title until РЭХА gives it its number there, at its next check.",
+      middleware: [needMember] as const,
+      request: {
+        params: Uid,
+        body: body(
+          z.union([
+            z.object({ song: z.int().min(1) }),
+            z.object({ new_song: z.string().trim().min(1, { error: TITLE }).max(100, { error: TITLE }) }),
+          ])
+        ),
+      },
+      responses: { 200: json(Ok), ...errors(400, 401, 404, 409) },
+    }),
+    async (c) => {
+      const db = database(c.env)
+      const uid = c.req.valid("param").uid
+      const to = c.req.valid("json")
+      const t = await shown(db, uid)
+      if (!t) return fail(c, 404, NO_TAKE)
+      const me = c.var.member.id
+      let id: number
+      if ("song" in to) {
+        const [s] = await db
+          .select({ id: song.id })
+          .from(song)
+          .where(and(eq(song.id, to.song), isNull(song.trashedAt)))
+          .limit(1)
+        if (!s) return fail(c, 404, "No such song")
+        id = s.id
+        if (id === t.songId) return c.json({ ok: true as const }, 200)
+      } else {
+        const refused = titleRefused(to.new_song)
+        if (refused) return fail(c, 400, refused)
+        const other = await findSong(db, to.new_song)
+        if (other) return fail(c, 409, `“${other.title}” is already a song: pick it in the list.`)
+        id = await makeSong(db, to.new_song, { tempo: null, signature: null }, me)
+      }
+      const [s] = await db.select({ title: song.title }).from(song).where(eq(song.id, id)).limit(1)
+      await db.update(take).set({ songId: id, name: s.title, movedBy: me, updatedAt: iso() }).where(eq(take.uid, uid))
+      return c.json({ ok: true as const }, 200)
     }
   )
   .openapi(

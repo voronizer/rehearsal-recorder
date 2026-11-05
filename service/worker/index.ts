@@ -22,6 +22,7 @@ import { levelRoutes } from "./levels/routes"
 import { markRoutes } from "./marks/routes"
 import { rehearsalRoutes } from "./rehearsals/routes"
 import { songFileRoutes } from "./songs/files"
+import { rehaSongRoutes } from "./songs/reha-routes"
 import { songRoutes } from "./songs/routes"
 import { fileRoutes } from "./files/routes"
 import { consumeChat } from "./chat/consume"
@@ -88,6 +89,7 @@ const routes = app
   .route("/", meRoutes)
   .route("/", memberRoutes)
   .route("/", rehaRoutes)
+  .route("/", rehaSongRoutes)
   .route("/", uploadRoutes)
   .route("/", bandRoutes)
   .route("/", homeRoutes)
