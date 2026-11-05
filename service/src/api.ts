@@ -273,9 +273,9 @@ export const useBandPicture = () =>
 export const useRestore = () => useChange((uid: string) => data(client.api.trash[":uid"].restore.$post({ param: { uid } })))
 export const useRestoreSong = () => useChange((n: number) => data(client.api.trash.songs[":id"].restore.$post({ param: id(n) })))
 export const useDeleteTake = () => useChange((uid: string) => data(client.api.takes[":uid"].$delete({ param: { uid } })))
-/** **Move to song**: to a song of the band's, or to a new one. */
+/** **Move to song**: to a song of the band's, out of its song (`song` null), or to a new one. */
 export const useMoveTake = () =>
-  useChange(({ uid, ...json }: { uid: string } & ({ song: number } | { new_song: string })) =>
+  useChange(({ uid, ...json }: { uid: string } & ({ song: number | null } | { new_song: string })) =>
     data(client.api.takes[":uid"].$patch({ param: { uid }, json }))
   )
 

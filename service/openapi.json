@@ -5897,7 +5897,7 @@
         }
       },
       "patch": {
-        "description": "**Move to song**: the take moves to the song `song`, or to a new song titled `new_song`. Its name is the song's title until РЭХА gives it its number there, at its next check.",
+        "description": "**Move to song**: the take moves to the song `song`, out of its song with `song` null, or to a new song titled `new_song`. In a song its name is the song's title until РЭХА gives it its number there, at its next check; out of one it is “Take” and its number at once, as РЭХА names a take with no song.",
         "parameters": [
           {
             "schema": {
@@ -5919,7 +5919,10 @@
                     "type": "object",
                     "properties": {
                       "song": {
-                        "type": "integer",
+                        "type": [
+                          "integer",
+                          "null"
+                        ],
                         "minimum": 1
                       }
                     },

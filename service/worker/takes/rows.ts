@@ -11,6 +11,9 @@ export const initial = (name: string, email: string) => (Array.from((name || ema
 /** The name the band sees for a member: their own, or their address until they give one. */
 export const shownName = (name: string, email: string) => name || email
 
+/** Moved to a song here and not numbered by РЭХА yet: its name is the song's title alone. A take moved out of its song has its number. */
+export const waits = (t: { movedBy: string | null; songId: number | null }) => t.movedBy !== null && t.songId !== null
+
 export const Star = z.object({ member_id: z.string(), initial: z.string(), name: z.string() }).openapi("Star")
 
 /** A take's mark as a list draws it: a tick on its bar, a line under it. */
@@ -122,7 +125,7 @@ export async function takeRows(env: Bindings, where?: SQL): Promise<Loaded[]> {
       marks: marksOf.get(t.uid) ?? [],
       stars: starsOf.get(t.uid) ?? [],
       starred_at_rehearsal: t.starredAtRehearsal,
-      moved: t.movedBy !== null,
+      moved: waits(t),
       shown_at: t.shownAt,
       trashed_at: t.trashedAt,
     }))

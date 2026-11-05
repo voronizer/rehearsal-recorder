@@ -498,11 +498,13 @@ test.describe("deleting a take, as Alex", () => {
 test.describe("moving a take", () => {
   test.use({ storageState: as("alex") })
 
-  test("Move to song: to a new song, then to one the band has", async ({ page }) => {
+  test("Move to song: to a new song, to one the band has, out of its song", async ({ page }) => {
     await page.goto("/songs")
     const named = page.getByRole("region", { name: "Not named" })
     await named.getByRole("button", { name: "What to do with Take 7", exact: true }).click()
     await page.getByRole("menuitem", { name: "Move to song" }).click()
+    // A take with no song: Not named is ticked.
+    await expect(page.getByRole("menuitemradio", { name: "Not named" })).toHaveAttribute("aria-checked", "true")
     await page.getByRole("menuitem", { name: "New song…" }).click()
     // From a list the take's panel opens, the field in its line.
     const panel = page.getByLabel("Panel")
@@ -525,6 +527,16 @@ test.describe("moving a take", () => {
     await expect(panel.getByRole("heading", { level: 2 }).first()).toHaveText("Pałyn · number from РЭХА")
     // In a row, the song's title alone.
     await page.goto(`/songs/${band().songs["Pałyn"]}`)
-    await expect(page.getByRole("main").locator('[data-take="Pałyn"]')).toBeVisible()
+    const row = page.getByRole("main").locator('[data-take="Pałyn"]')
+    await expect(row).toBeVisible()
+
+    // Out of its song from its row: Take 7 again at once, under Not named.
+    // The take's ⋯ in its rehearsal's fold, not the song's by its title.
+    await page.getByRole("main").getByRole("region").getByRole("button", { name: "What to do with Pałyn", exact: true }).click()
+    await page.getByRole("menuitem", { name: "Move to song" }).click()
+    await page.getByRole("menuitemradio", { name: "Not named" }).click()
+    await expect(row).toHaveCount(0)
+    await page.goto("/songs")
+    await expect(named.locator('[data-take="Take 7"]')).toBeVisible()
   })
 })
