@@ -1,3 +1,4 @@
+import { formatMeter } from "@/lib/format"
 import { Plus } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
@@ -46,7 +47,7 @@ function SongLine({ song }: { song: SongItem }) {
       <span className="min-w-0 flex-1">
         {name}
         <span className="block truncate text-xs text-muted-foreground">
-          {[song.key, song.tempo && `${Math.round(song.tempo)} bpm`, song.takes && count(song.takes, "take")].filter(Boolean).join(" · ")}
+          {[song.key, song.tempo !== null && formatMeter(Math.round(song.tempo), song.signature ?? "4/4"), song.takes && count(song.takes, "take")].filter(Boolean).join(" · ")}
         </span>
       </span>
       {best}

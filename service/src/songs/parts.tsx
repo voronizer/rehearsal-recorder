@@ -21,6 +21,7 @@ import { Group, Groups, OPENS, Props, Rows, TEXTAREA, Tile, Trouble, useFlash, W
 import { usePanel } from "../shell/panel"
 import { clock, count, quoted } from "../shell/words"
 import { TakeLine, TakeName } from "../takes/parts"
+import { InPlaceTitle, TempoControls } from "./edit"
 
 type Song = SongPage["song"]
 
@@ -245,21 +246,21 @@ export function AddFile({ song }: { song: Song }) {
 }
 
 /**
- * ⋯ › **Delete song**. A song with takes, here or in the Trash, goes to
- * the Trash with them, so the button is the accent; one that never had a
- * take (made by **New song** by mistake) goes at once, on the red button.
+ * ⋯ › **Delete song**. The song goes to the Trash, with its takes when it
+ * has any, so the button is the accent. One that never had a take goes there
+ * too, so РЭХА learns of it at its check and removes it as well.
  */
 export function SongMenu({ song, onGone }: { song: Song; onGone: () => void }) {
   const remove = useDeleteSong()
   const [asking, setAsking] = useState(false)
-  // Any take at all, in the Trash or still on its way from РЭХА, sends the song to the Trash.
-  const trashed = song.takes > 0 || song.trashed_takes > 0 || song.coming_takes > 0
+  // Any take at all, in the Trash or still on its way from РЭХА: the takes stay in РЭХА.
+  const taken = song.takes > 0 || song.trashed_takes > 0 || song.coming_takes > 0
   const said =
     song.takes > 0
       ? `It goes to the Trash with its ${count(song.takes, "take")}, notes and files, where anyone in the band can put it back for 30 days. In РЭХА the takes stay as they are.`
-      : trashed
+      : taken
         ? "It goes to the Trash with its notes and files, where anyone in the band can put it back for 30 days."
-        : "Its notes and files go with it."
+        : "It goes to the Trash with its notes and files, where anyone in the band can put it back for 30 days. РЭХА removes it too, unless that computer has takes of it."
   return (
     <>
       <DropdownMenu>
@@ -283,7 +284,7 @@ export function SongMenu({ song, onGone }: { song: Song; onGone: () => void }) {
         title={asking ? `Delete ${quoted(song.title)}?` : null}
         description={asking ? said : null}
         actionLabel="Delete song"
-        destructive={!trashed}
+        destructive={false}
         // Away from the song first, so its panel or page does not ask for it once it is gone.
         onConfirm={() => {
           onGone()
@@ -305,11 +306,13 @@ export function SongPanel({ id }: { id: number }) {
     <div className="flex flex-col gap-6" aria-label={song.title}>
       {/* The title opens the song's page and wraps when long (Alex's pick D, 2026-11-04). */}
       <div className="flex items-start gap-2">
-        <h2 className="min-w-0 flex-1 py-0.5 text-lg font-semibold [overflow-wrap:anywhere]">
-          <Link to="/songs/$id" params={{ id: String(id) }} className={OPENS}>
-            {song.title}
-          </Link>
-        </h2>
+        <InPlaceTitle song={song} size="panel">
+          <h2 className="min-w-0 py-0.5 text-lg font-semibold [overflow-wrap:anywhere]">
+            <Link to="/songs/$id" params={{ id: String(id) }} className={OPENS}>
+              {song.title}
+            </Link>
+          </h2>
+        </InPlaceTitle>
         <SongMenu song={song} onGone={close} />
         <Button variant="ghost" size="icon-row" aria-label="Close" onClick={close}>
           <X />
@@ -321,18 +324,7 @@ export function SongPanel({ id }: { id: number }) {
             rows={[
               ["Status", <StatusMenu song={song} />],
               ["Key", <KeySelect song={song} />],
-              [
-                "Tempo",
-                song.tempo ? (
-                  <span className="tnum">{Math.round(song.tempo)} bpm</span>
-                ) : (
-                  // A dash until РЭХА sends a take with the song's tempo.
-                  <span className="text-muted-foreground">
-                    <span aria-hidden>—</span>
-                    <span className="sr-only">Not set yet</span>
-                  </span>
-                ),
-              ],
+              ["Tempo", <TempoControls song={song} />],
               [
                 "Length",
                 song.best ? (

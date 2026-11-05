@@ -11,6 +11,7 @@ import { usePanel } from "../shell/panel"
 import { clock, longDay } from "../shell/words"
 import { usePlayer, useTime } from "./player/one"
 import { Play, StarButton, TakeName, Wave } from "./parts"
+import { SongWord } from "./move"
 import { TakeMenu } from "./TakeMenu"
 
 /** A track's own wave from РЭХА's 1200 numbers, at the 120 a lane draws. */
@@ -107,14 +108,16 @@ export function TakePanel({ uid, markAt }: { uid: string; markAt?: number }) {
         <Link to="/rehearsals/$uid" params={{ uid: t.rehearsal.uid }} className={OPENS}>
           {longDay(t.date)}
         </Link>
-        {t.song && (
-          <>
-            <span>·</span>
-            <button type="button" className={OPENS} onClick={() => open({ kind: "song", id: t.song!.id })}>
-              {t.song.title}
-            </button>
-          </>
-        )}
+        <SongWord take={t}>
+          {t.song && (
+            <>
+              <span>·</span>
+              <button type="button" className={OPENS} onClick={() => open({ kind: "song", id: t.song!.id })}>
+                {t.song.title}
+              </button>
+            </>
+          )}
+        </SongWord>
       </p>
       <Groups>
         <Group>

@@ -3,6 +3,7 @@ import { useSong, type TakeRow } from "../api"
 import { Back, Columns, Group, Groups, Page, Trouble, useTitle } from "../shell/parts"
 import { clock, count, longDay } from "../shell/words"
 import { TakeLine } from "../takes/parts"
+import { InPlaceTitle, TempoControls, TitleFacts } from "./edit"
 import { AddFile, BestTake, Files, KeySelect, Notes, SongMenu, StatusMenu, why } from "./parts"
 
 /** A song's takes by rehearsal, newest first, the newest rehearsal open. */
@@ -35,8 +36,8 @@ export function Song() {
   if (page.error) return <Trouble error={page.error} retry={() => void page.refetch()} />
   if (!page.data) return null
   const { song, takes, files } = page.data
+  // The tempo is not among them: its field stands by the key.
   const facts = [
-    song.tempo && `${Math.round(song.tempo)} bpm`,
     song.best && clock(song.best.duration_sec),
     takes.length ? `${count(takes.length, "take")} on ${count(song.rehearsals, "rehearsal")}` : "no takes yet",
   ]
@@ -47,13 +48,18 @@ export function Song() {
       head={<Back to="/songs" label="Songs" />}
       title={
         <span className="flex flex-wrap items-center gap-3">
-          <span className="min-w-0 [overflow-wrap:anywhere]">{song.title}</span>
+          <InPlaceTitle song={song} size="page">
+            <span className="min-w-0 [overflow-wrap:anywhere]">{song.title}</span>
+          </InPlaceTitle>
           <StatusMenu song={song} />
           <KeySelect song={song} />
+          <TempoControls song={song} />
+          {/* ⋯ is the song's, not the tempo's: at the row's far end, as in the panel (Alex, 5 November). */}
+          <span className="flex-1" />
           <SongMenu song={song} onGone={() => navigate({ to: "/songs" })} />
         </span>
       }
-      sub={facts}
+      sub={<TitleFacts song={song}>{facts}</TitleFacts>}
     >
       <Groups>
         <Group title="Best take" hint={why(song)}>

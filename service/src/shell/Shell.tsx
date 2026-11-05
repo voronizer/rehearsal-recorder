@@ -27,7 +27,7 @@ function PanelView() {
       key={JSON.stringify(panel)}
       aria-label="Panel"
       className={cn(
-        "absolute inset-y-0 right-0 z-20 flex flex-col overflow-y-auto border-l bg-panel p-5 text-sm shadow-lg animate-in slide-in-from-right duration-200",
+        "absolute inset-y-0 right-0 z-20 flex flex-col overflow-y-auto border-l bg-side p-5 text-sm shadow-lg animate-in slide-in-from-right duration-200",
         size === "phone" ? "w-full border-l-0" : "w-[28rem] max-w-[calc(100%-3rem)]"
       )}
     >
