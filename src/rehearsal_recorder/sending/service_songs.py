@@ -15,8 +15,8 @@ service later, and wins.
 carries its song's number. The check (when РЭХА starts, when a rehearsal
 starts, and every hour) also reads the service's songs and does here what
 the band did there: a rename, a tempo, a new song, a song deleted, a take
-moved to another song. Each is a line in the list of background work, and a
-check that brought any shows one notice (`news`).
+moved to another song or out of its song. Each is a line in the list of
+background work, and a check that brought any shows one notice (`news`).
 """
 
 import sys
@@ -363,16 +363,18 @@ class ServiceSongs:
             done.append((s.get("made_by"), ("song", s["id"])))
 
     def _moves(self, moved, done):
-        """Takes the band moved to another song there: renamed here as Rename
-        take renames them, the song's next number and folder, and then sent
+        """Takes the band moved to another song there, or out of their song
+        to Not named: renamed here as Rename take renames them, the song's
+        next number and folder, or Take and the take's number, and then sent
         with their new song and name, which ends the wait there. One being
         cropped waits for the next check."""
         lib = self._lib
         titles = {r["sid"]: r["now"]["title"] for r in lib.service_songs()}
         for m in moved:
+            out = m.get("song_id") is None
             title = titles.get(m.get("song_id"))
             row = lib.service_row_by_uid(m["uid"])
-            if title is None or row is None or row["removed"]:
+            if (title is None and not out) or row is None or row["removed"]:
                 continue
             take = lib.take(row["folder"], row["take_number"])
             if take is None:
@@ -382,18 +384,26 @@ class ServiceSongs:
                 # Renamed here since it last went: РЭХА's change goes and
                 # wins, as with a song's title.
                 continue
-            if (take.get("song") or "").casefold() == title.casefold():
+            if out and not take.get("song"):
+                # No song here already: its name goes again, so the service
+                # stops waiting for it.
+                lib.change_service_row(row["take_id"], lambda c: {"sent": {**(c["sent"] or {}), "name": None}})
+                self.service.edited(row["folder"], row["take_number"])
+                continue
+            if not out and (take.get("song") or "").casefold() == title.casefold():
                 # Its song here already: its song and name go again, so the
                 # service knows РЭХА has numbered it.
                 lib.change_service_row(row["take_id"], lambda c: {"sent": {**(c["sent"] or {}), "song": None}})
                 self.service.edited(row["folder"], row["take_number"])
                 continue
-            got = self._api.rename_take(row["folder"], row["take_number"], title)
+            name = f"Take {row['take_number']}" if out else title
+            got = self._api.rename_take(row["folder"], row["take_number"], name)
             if not got.get("ok"):
-                print(f"Band service: {take['name']} could not move to {title}: {got.get('error')}", file=sys.stderr)
+                print(f"Band service: {take['name']} could not move to {name}: {got.get('error')}", file=sys.stderr)
                 continue
             self._line(f"{take['name']} → {got['take']['name']}", _by(m.get("by"), "moved it", "Moved"))
-            done.append((m.get("by"), ("song", m.get("song_id"))))
+            # The song it left, for one out of its song: that is the song changed.
+            done.append((m.get("by"), ("song", self.number_of(take.get("song")) if out else m.get("song_id"))))
 
     def _line(self, title, detail):
         """A change the band made there, done, as a line in the list."""
