@@ -5,7 +5,7 @@ versioning](https://semver.org/): until 1.0 the shape of things can still
 move, though recordings on disk are never left behind — old rehearsals keep
 opening.
 
-## Unreleased
+## 0.24.0
 
 - **Songs stay the same in РЭХА and the band service.** Rename a song or
   change its tempo in either place, and the other follows. In the band
