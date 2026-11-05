@@ -1,19 +1,25 @@
-import { useState } from "react"
+import { useRef, useState } from "react"
 import { Ellipsis } from "lucide-react"
 import { ConfirmDialog } from "@/components/ConfirmDialog"
 import { Button } from "@/components/ui/button"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
-import { useDeleteTake } from "../api"
+import { useDeleteTake, useMoveTake } from "../api"
 import { quoted } from "../shell/words"
+import { MoveSub, type Movable } from "./move"
 
 /**
- * ⋯ by a take, with **Delete take**. The take goes to the Trash, where
- * anyone can put it back for 30 days, so the button is the accent, not red.
- * `onGone` takes the panel or page away from the take before it goes.
+ * ⋯ by a take, with **Move to song** and **Delete take**. The take goes to
+ * the Trash, where anyone can put it back for 30 days, so the button is the
+ * accent, not red. `onGone` takes the panel or page away from the take
+ * before it goes. `row`: the menu of a take in a list.
  */
-export function TakeMenu({ take, onGone }: { take: { uid: string; name: string }; onGone?: () => void }) {
+export function TakeMenu({ take, onGone, row }: { take: Movable & { name: string }; onGone?: () => void; row?: boolean }) {
   const remove = useDeleteTake()
+  const move = useMoveTake()
   const [asking, setAsking] = useState(false)
+  // New song… puts the focus in its field; the menu, closing, must not take it back to ⋯.
+  const naming = useRef(false)
+  const error = remove.error ?? move.error
   return (
     <>
       <DropdownMenu>
@@ -22,13 +28,20 @@ export function TakeMenu({ take, onGone }: { take: { uid: string; name: string }
             <Ellipsis />
           </Button>
         </DropdownMenuTrigger>
-        <DropdownMenuContent align="end">
+        <DropdownMenuContent
+          align="end"
+          onCloseAutoFocus={(e) => {
+            if (naming.current) e.preventDefault()
+            naming.current = false
+          }}
+        >
+          <MoveSub take={take} move={move} row={row} onNew={() => (naming.current = true)} />
           <DropdownMenuItem onSelect={() => setAsking(true)}>Delete take</DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
-      {remove.error && (
+      {error && (
         <span role="alert" className="text-xs text-destructive">
-          {remove.error.message}
+          {error.message}
         </span>
       )}
       <ConfirmDialog

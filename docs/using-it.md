@@ -555,7 +555,8 @@ To rename a song, use the pencil after its title on its page in History.
 Every take is renamed, with its folder on disk and its copies in the cloud
 folder; the files follow in the background, and the list of work in the
 background says so (see [Following the copies](#following-the-copies)).
-Takes in the band service get the new name too. A title that differs only in
+Takes in the band service get the new name too, and so does the song there
+(see [Songs on both sides](#songs-on-both-sides)). A title that differs only in
 capitals respells the song. Here a number at the
 end is part of the title: “Opus 5” is the whole of it. “Take 4” cannot be a
 song's title, since it is what a take with no song is called.
@@ -876,12 +877,10 @@ On a take that is in the band service, the cloud button opens a dialog,
 moves the take to the service's **Trash**, where the band can still play it
 and put it back for 30 days. The take on this computer stays as it is.
 
-What you change in РЭХА follows the take there: a new name for the take or
-its song, a crop (its files go up again), a ★, a mark. Each take also
-carries its song's tempo, when the song has one (see [A song's
-tempo](#a-songs-tempo)), and the song's page in the service shows it. A
-take you delete goes to the service's **Trash** once its **Undo** notice
-has gone, with the band's marks and stars.
+What you change in РЭХА follows the take there: a new name, a crop (its
+files go up again), a ★, a mark. A take you delete goes to the service's
+**Trash** once its **Undo** notice has gone, with the band's marks and
+stars.
 
 Anyone in the band can delete a take in the service too, with ⋯ › **Delete
 take**, or a song with all its takes, with ⋯ › **Delete song**. They wait in
@@ -890,6 +889,39 @@ are, but what you change in them no longer goes up. The cloud button sends a
 take again and brings it out of the Trash, with the band's marks and stars.
 If someone presses **Restore** in the service, РЭХА finds out within an
 hour, or when it next starts, and sends the take's changes again.
+
+### Songs on both sides
+
+A song is the same song in РЭХА and in the band service. Its title and its
+tempo can be changed on either side, and the other side follows.
+
+- In РЭХА, rename a song or set its tempo as usual (see [A song's
+  tempo](#a-songs-tempo)). The service has the change at once, or as soon
+  as you are online. A song you make with **New song** shows in the service
+  before it has a take.
+- In the service, the pencil after a song's title renames it, and the tempo
+  and time signature stand next to its key. A take filed under the wrong
+  song moves with ⋯ › **Move to song**, to one of the band's songs or to a
+  **New song…**. Until РЭХА gives it a number in its new song, the take
+  shows there without one.
+
+РЭХА asks the service what the band changed when it starts, every hour, and
+when a rehearsal starts. It renames the takes and their folders as **Rename
+song** and **Rename take** do, and a notice says who changed how many
+songs: “Ivan changed 4 songs in the band service”. **See** opens the list of
+work in the background, where each change is a line with who made it under
+it, such as “Pałyn: 132 bpm · 4/4” over “Ivan changed the tempo in the band
+service”. A song made in the service comes to РЭХА too. A song deleted in
+the service goes from РЭХА, unless a take of it is on this computer.
+
+If a song was changed on both sides before РЭХА could ask, the change made
+in РЭХА wins. Two songs are merged only in РЭХА, so each side turns down a
+title another song has: the service says to merge them in РЭХА, and a rename
+in РЭХА is put back, with the reason in its line in the list.
+
+The rest of a song stays on its own side. Its status, key, notes and files
+are the service's, and nothing of them comes to РЭХА. Its backing track is
+РЭХА's only. Sets are kept apart.
 
 ### Following the sending
 

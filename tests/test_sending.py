@@ -189,12 +189,17 @@ def run(tmp, fake):
     n_short = keep("Palyn", seconds=2.0)
     ok("a false start stays at home", take(n_short)["service"] is None and uid_of(n_short) is None)
 
-    ok("a song with no tempo sends none", "tempo" in meta and meta["tempo"] is None)
+    ok("a take's details carry no song tempo: the song has its own", "tempo" not in meta)
+    ok("the first look at the service gives every song its number",
+       fake.count("link ") == 1 and meta["song_id"] == fake.song_called("Viasna")["id"])
     # A song of its own, so the other songs' take numbers stay as they are.
     api._lib.set_song_tempo(api._lib.add_song("Zorka")["id"], 120, "4/4")
     n_tempo = keep("Zorka")
     drain()
-    ok("its details carry the song's tempo", fake.takes[uid_of(n_tempo)]["tempo"] == 120)
+    zorka = fake.song_called("Zorka") or {}
+    ok("a new song goes with its tempo, before its take, which carries its number",
+       zorka.get("tempo") == 120 and fake.takes[uid_of(n_tempo)]["song_id"] == zorka.get("id")
+       and fake.order.index("song Zorka") < fake.order.index(f"put {uid_of(n_tempo)}"))
 
     print("\n[3] Cut short")
     n2 = keep("Kupalle", band=["Drums"])
@@ -662,6 +667,7 @@ def run(tmp, fake):
     other = api.set_service_key("127.0.0.1:9:" + fake.key.rpartition(":")[2])
     ok("a key for another service forgets the old one's takes",
        other["ok"] and uid_of(n10) is None and uid_of(n_make) is None and take(n_make)["service"] is None)
+    ok("and the songs' numbers there", api._lib.service_songs() == [])
     api.disconnect_service()
 
     api.set_service_key(fake.key)
@@ -672,12 +678,17 @@ def run(tmp, fake):
        api.session_state()["cloud_queue"] == {} and uid_of(n11) is not None)
 
     fake.too_old = True
-    service().run_next()
+    drain()
     fake.too_old = False
     failed = [e for e in entries(state="failed") if e["take_number"] == n11]
     entry = failed[0] if failed else {}
     ok("an old REHA is told to update",
        entry.get("state") == "failed" and entry.get("error") == "Update РЭХА to send takes here")
+    # The songs were turned away too, and wait an hour: not now.
+    service()._later.pop("songs", None)
+    service().reopen()
+    drain()
+    ok("a take turned away so goes again when REHA starts", take(n11)["service"]["up"])
 
     print("\n[9] The band's tempo along Master")
     ok("a click take's details carry its tempo, signature and click",
@@ -841,12 +852,223 @@ def run(tmp, fake):
     finally:
         api.take_drift = real_drift
 
+    songs_both_ways(api, fake, service, drain, entries, keep, uid_of, take, folder)
+
     ok("every request matches the service's description", fake.mismatches == [])
     # Cloudflare's Browser Integrity Check turns away Python-urllib/3.x.
     ok("REHA names itself in every request, not as Python",
        fake.user_agents == {f"Reha/{__version__}"})
     if fake.mismatches:
         print("\n".join("    " + m for m in fake.mismatches[:5]))
+
+
+def songs_both_ways(api, fake, service, drain, entries, keep, uid_of, take, folder):
+    """Songs kept the same in REHA and the band service (service_songs.py)."""
+    print("\n[10] Songs both ways")
+    lib = api._lib
+
+    def song(title):
+        sid = lib.song_id(title)
+        return None if sid is None else lib.song(sid)
+
+    def number(title):
+        return next((r["sid"] for r in lib.service_songs() if r["now"]["title"] == title), None)
+
+    def check():
+        service()._next_check = 0
+        drain()
+
+    def lines(state="done"):
+        """Every line in the list in that state, the names pass's too."""
+        return [(e["title"], e["detail"] if state == "done" else e["error"])
+                for e in api._journal.snapshot() if e["state"] == state]
+
+    drain()
+    ok("every song has its number there, under its title",
+       lib.songs_without_number() == []
+       and all(fake.songs[r["sid"]]["title"] == r["now"]["title"] for r in lib.service_songs()))
+
+    n_a = keep("Hušča", band=["Drums"])
+    drain()
+    husca = lib.song_id("Hušča")
+    api.rename_song(husca, "Hušča vosień")
+    api.set_song_tempo(husca, 132, "4/4")
+    drain()
+    api._names_pass.run_queued()
+    there = fake.songs.get(number("Hušča vosień")) or {}
+    ok("a rename and a tempo made here go at once, the takes' names with them",
+       there.get("title") == "Hušča vosień" and there.get("tempo") == 132 and there.get("signature") == "4/4"
+       and fake.takes[uid_of(n_a)]["name"] == take(n_a)["name"] == "Hušča vosień 1")
+
+    fake.new_in_service("Rečka")
+    api.rename_song(husca, "rečka")
+    drain()
+    api._names_pass.run_queued()
+    ok("a rename to another song's title there is put back here, and its line says why",
+       song("Hušča vosień") is not None and fake.songs[number("Hušča vosień")]["title"] == "Hušča vosień"
+       and ("Renaming Hušča vosień to rečka",
+            "“Rečka” is another song in the band service now. Merge them in РЭХА if they are one song.")
+       in lines("failed"))
+
+    fake.rename_in_service("Hušča vosień", "Hušča", by="Ivan")
+    fake.tempo_in_service("Hušča", 198, "6/8", by="Vik")
+    check()
+    api._names_pass.run_queued()
+    ok("a rename there is done here as Rename song does, its line saying who",
+       song("Hušča") is not None and take(n_a)["name"] == "Hušča 1"
+       and ("Renaming Hušča vosień to Hušča · 1 take", "Ivan renamed it in the band service") in lines())
+    ok("a tempo there is the song's here, its line saying who",
+       (song("Hušča") or {}).get("tempo") == 198 and song("Hušča")["signature"] == "6/8"
+       and ("Hušča: 198 ♪ · 6/8", "Vik changed the tempo in the band service") in lines())
+    ok("a song made there is made here, even with the title an old name had",
+       song("Rečka") is not None and ("Rečka", "New song from Ivan in the band service") in lines())
+    ok("the check says once who changed how many songs",
+       (api.activity().get("news") or {}).get("text") == "Ivan and Vik changed 2 songs in the band service")
+    said = api.activity()["news"]["id"]
+    check()
+    ok("a check with nothing new says nothing new", api.activity()["news"]["id"] == said)
+
+    # With no internet REHA's change waits; meanwhile the band changes the same.
+    service()._later["songs"] = time.monotonic() + 3600
+    api.set_song_tempo(lib.song_id("Hušča"), 100, "4/4")
+    fake.tempo_in_service("Hušča", 140, "4/4", by="Vik")
+    service()._later.pop("songs")
+    check()
+    ok("changed on both sides: the change from REHA goes, and wins",
+       fake.song_called("Hušča")["tempo"] == 100 and song("Hušča")["tempo"] == 100)
+
+    # A tempo the service had from takes, before songs had signatures there.
+    fake.song_called("Hušča").update(tempo=150, signature=None, meter_by="Vik")
+    check()
+    check()
+    ok("a tempo there with no signature is 4/4 here, said once",
+       (song("Hušča")["tempo"], song("Hušča")["signature"]) == (150, "4/4")
+       and lines().count(("Hušča: 150 bpm · 4/4", "Vik changed the tempo in the band service")) == 1)
+
+    # A refusal that says nothing of the change (the key, here) leaves it
+    # owed: the next check sends it, and does not take the service's back.
+    fake.refuse = (401, "This key does not work")
+    api.set_song_tempo(lib.song_id("Hušča"), 112, "4/4")
+    drain()
+    fake.refuse = None
+    service()._later.pop("songs", None)
+    check()
+    ok("a change turned down for the key goes once the key works",
+       fake.song_called("Hušča")["tempo"] == 112 and song("Hušča")["tempo"] == 112)
+
+    n_m = keep("Hušča", band=["Drums"])
+    drain()
+    uid_m = uid_of(n_m)
+    fake.move_in_service(uid_m, "Rečka")
+    api.set_take_star(folder(), n_m, True)
+    drain()
+    ok("a star from REHA leaves a take moved there where it is",
+       fake.takes[uid_m]["song"] == "Rečka" and uid_m in fake.moved)
+    check()
+    ok("a take moved there is renamed here as Rename take does",
+       take(n_m)["name"] == "Rečka 1"
+       and ("Hušča 2 → Rečka 1", "Ivan moved it in the band service") in lines())
+    ok("and sent with its new song and name, which ends the wait there",
+       uid_m not in fake.moved and fake.takes[uid_m]["name"] == "Rečka 1"
+       and fake.takes[uid_m]["song_id"] == number("Rečka"))
+
+    # Moved there while its FLAC still went, and the connection dropped.
+    n_f = keep("Hušča", band=["Drums"], seconds=6.0)
+    uid_f = uid_of(n_f)
+
+    def move_at_flac(words):
+        if words.startswith(f"part {uid_f} 1.flac") and uid_f not in fake.moved and not fake.drop:
+            fake.move_in_service(uid_f, "Rečka")
+            fake.drop = 1
+
+    fake.on_call = move_at_flac
+    drain()
+    fake.on_call = None
+    ok("a take moved there while its files went stays moved when they go again",
+       fake.takes[uid_f]["song"] == "Rečka" and uid_f in fake.moved and take(n_f)["service"]["flac"])
+    check()
+    ok("and is then renamed here", take(n_f)["song"] == "Rečka" and uid_f not in fake.moved)
+
+    # Renamed here, not sent yet, when the band moves it there.
+    n_r = keep("Hušča", band=["Drums"])
+    drain()
+    uid_r = uid_of(n_r)
+    fake.move_in_service(uid_r, "Rečka")
+    api.rename_take(folder(), n_r, "Lipa")
+    service()._next_check = 0
+    service().run_next()  # the check, before the take's new name goes
+    ok("a take renamed here before the band moved it keeps REHA's name",
+       take(n_r)["song"] == "Lipa")
+    drain()
+    ok("which goes and wins there", fake.takes[uid_r]["song"] == "Lipa" and uid_r not in fake.moved)
+
+    made = api.add_song("Kalyhanka")
+    api.add_song("Kalychanka")
+    drain()
+    gone = number("Kalychanka")
+    api.merge_songs(lib.song_id("Kalychanka"), made["id"])
+    drain()
+    ok("songs merged here are merged there", gone is not None and gone not in fake.songs
+       and lib.service_song_merges() == [] and fake.songs[number("Kalyhanka")]["title"] == "Kalyhanka")
+
+    fake.delete_song_in_service("Kalyhanka", by="Ira")
+    fake.delete_song_in_service("Rečka", by="Ira")
+    check()
+    ok("a song deleted there with no takes here goes here too",
+       song("Kalyhanka") is None and ("Kalyhanka", "Ira deleted it in the band service") in lines())
+    ok("one with takes here stays", song("Rečka") is not None and take(n_m)["song"] == "Rečka")
+    fake.songs[number("Rečka")].update(trashed=False, trashed_by=None)
+
+    api.add_song("Viasna nanova")
+    api.add_song("Dudka")
+    drain()
+    fake.delete_song_in_service("Viasna nanova", by="Ira")
+    check()
+    gone_here = song("Viasna nanova") is None
+    api.add_song("Viasna nanova")
+    drain()
+    check()
+    ok("a song made here again, its title in the Trash there, brings that one back and stays",
+       gone_here and song("Viasna nanova") is not None and not fake.song_called("Viasna nanova")["trashed"])
+
+    # Gone from the service for good while its takes keep it here.
+    rečka = number("Rečka")
+    fake.songs.pop(rečka)
+    check()
+    drain()
+    ok("a song gone there for good, with takes here, gets no new number",
+       number("Rečka") is None and fake.song_called("Rečka") is None
+       and all(x["title"] != "Rečka" for x in lib.songs_without_number()))
+
+    # The band gives a song the title somebody gives a new song here.
+    fake.rename_in_service("Dudka", "Dudka nočču", by="Ivan")
+    dudka = number("Dudka")
+    api.add_song("Dudka nočču")
+    drain()
+    ok("a new song here does not take the number of the song the band renamed to its title",
+       number("Dudka") == dudka and any(x["title"] == "Dudka nočču" for x in lib.songs_without_number()))
+    check()
+    check()
+    ok("the clash is said once, with what to do",
+       [e for e in lines("failed") if e[0] == "Renaming Dudka to Dudka nočču"]
+       == [("Renaming Dudka to Dudka nočču", "Ivan renamed it in the band service, and “Dudka nočču” is "
+            "another song here. Rename song merges them if they are one song.")])
+
+    # A key to another service: the first look there joins songs renamed
+    # here before by the titles they had.
+    fake2 = FakeBandService().start()
+    try:
+        old = fake2.new_in_service("Hušča vosień", by=None)
+        api.disconnect_service()
+        api.set_service_key(fake2.key)
+        drain()
+        ok("the first look at another service joins a song by the title it had here",
+           fake2.songs[old]["title"] == "Hušča" and number("Hušča") == old and fake2.count("link ") == 1)
+        ok("every request to it matches the service's description", fake2.mismatches == [])
+    finally:
+        api.disconnect_service()
+        api.set_service_key(fake.key)
+        fake2.stop()
 
 
 if __name__ == "__main__":

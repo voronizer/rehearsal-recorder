@@ -31,6 +31,10 @@ const known = new Map<number, ActivityEntry["state"]>()
 const listeners = new Set<() => void>()
 const settledListeners = new Set<(e: ActivityEntry) => void>()
 const namesListeners = new Set<(e: ActivityEntry) => void>()
+const openListeners = new Set<() => void>()
+// The news about songs this page has said. Python keeps news only while it
+// runs, so news in the first answer is this run's and is said all the same.
+let saidNews = 0
 
 function emit() {
   for (const l of listeners) l()
@@ -71,12 +75,44 @@ function announce(next: ActivityEntry[]) {
   }
 }
 
+/** A check that brought the band's changes to songs says so once, with See
+ *  for the list where each change is a line (sending/service_songs.py). It
+ *  waits while a take records: Recording has no list for See to open. With
+ *  the list open it says nothing, the lines being there to see. */
+function announceNews(next: Activity) {
+  const news = next.news
+  if (!news || news.id === saidNews || next.recording) return
+  saidNews = news.id
+  if (listOpen) return
+  notify({
+    key: "songs",
+    kind: "done",
+    text: news.text,
+    action: { label: "See", run: openList, undo: false },
+  })
+}
+
+/** Opens the list of background work, as pressing its button does. */
+export function openList() {
+  if (!current.entries.length) return
+  for (const l of openListeners) l()
+}
+
+/** Calls `open` when something asks for the list, for the button that has it. */
+export function onListAsked(open: () => void) {
+  openListeners.add(open)
+  return () => {
+    openListeners.delete(open)
+  }
+}
+
 async function tick() {
   inFlight = true
   try {
     const next = await poll("activity")
     announce(next.entries)
     primed = true
+    announceNews(next)
     // Most answers are the one before: waking every screen that reads the
     // store — each a whole screen, waveforms and all — for nothing, several
     // times a second while a copy runs, is what this saves.

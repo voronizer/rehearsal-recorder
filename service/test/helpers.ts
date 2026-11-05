@@ -87,11 +87,14 @@ export async function makeKey(owner: string, name = "Rehearsal room"): Promise<s
   return key
 }
 
+/** The РЭХА the tests are: one the service takes. */
+export const REHA_VERSION = "0.24.0"
+
 /** A request from РЭХА with the key as pasted, `<host>:<secret>`. */
 export function fromReha(
   path: string,
   key: string,
-  version: string | null = "0.17.0",
+  version: string | null = REHA_VERSION,
   init: { method?: string; json?: unknown; bytes?: Uint8Array<ArrayBuffer> } = {}
 ): Promise<Response> {
   const headers = new Headers({ "x-api-key": key.slice(key.lastIndexOf(":") + 1) })
@@ -112,10 +115,11 @@ export async function reha() {
   const key = await makeKey(await signInOwner())
   return {
     get: (path: string) => fromReha(path, key),
-    put: (path: string, json: unknown) => fromReha(path, key, "0.17.0", { method: "PUT", json }),
-    post: (path: string, json: unknown) => fromReha(path, key, "0.17.0", { method: "POST", json }),
-    del: (path: string) => fromReha(path, key, "0.17.0", { method: "DELETE" }),
-    part: (path: string, bytes: Uint8Array<ArrayBuffer>) => fromReha(path, key, "0.17.0", { method: "PUT", bytes }),
+    put: (path: string, json: unknown) => fromReha(path, key, REHA_VERSION, { method: "PUT", json }),
+    post: (path: string, json: unknown) => fromReha(path, key, REHA_VERSION, { method: "POST", json }),
+    patch: (path: string, json: unknown) => fromReha(path, key, REHA_VERSION, { method: "PATCH", json }),
+    del: (path: string) => fromReha(path, key, REHA_VERSION, { method: "DELETE" }),
+    part: (path: string, bytes: Uint8Array<ArrayBuffer>) => fromReha(path, key, REHA_VERSION, { method: "PUT", bytes }),
   }
 }
 

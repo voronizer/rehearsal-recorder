@@ -77,6 +77,9 @@ showcase and reha.stream all import. A screen uses the names (`bg-primary`,
   a hover and what is selected. The `Card` component
   is C7. Fields, buttons and dialogs keep their frames. The bordered panels
   lose theirs as each screen is redone.
+  One exception: the band service's panel from the right is white in the
+  light theme, as a page is (Alex, 5 November 2026). Its column on the left
+  stays grey, and in the dark theme the panel keeps its colour.
 
 ### Type
 

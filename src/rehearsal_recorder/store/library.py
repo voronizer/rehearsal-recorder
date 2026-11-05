@@ -23,7 +23,7 @@ from rehearsal_recorder.midi import rules
 from rehearsal_recorder.store.db import MIGRATIONS, open_engine
 from rehearsal_recorder.store.models import (
     AUDIO_FILE, BACKING_FILE, NOTES_FILE, CloudCopy, Label, Marker, Rehearsal, ServiceCopy, ServiceDelete,
-    ServiceFile, Song, SongName, SongSet, Take, TakeFile, Track,
+    ServiceFile, ServiceSong, ServiceSongMerge, Song, SongName, SongSet, Take, TakeFile, Track,
 )
 from rehearsal_recorder.store.names import UNNAMED_TAKE, legacy_song, split_go, take_name
 
@@ -892,6 +892,16 @@ class Library:
             for name in db.scalars(select(SongName).where(SongName.song_id == source.id)):
                 name.song_id = target.id
             db.add(SongName(song_id=target.id, name=source.title))
+            # The band service is told at its next turn (service_songs.py):
+            # a song with a number there merges into the target there too,
+            # and merges told to go into the source now go into the target.
+            for merge in db.scalars(select(ServiceSongMerge).where(ServiceSongMerge.into_song_id == source.id)):
+                merge.into_song_id = target.id
+            numbered = db.get(ServiceSong, source.id)
+            if numbered is not None:
+                if not numbered.gone:
+                    db.add(ServiceSongMerge(from_sid=numbered.sid, into_song_id=target.id))
+                db.delete(numbered)
             # Everything off the song before it goes, so nothing of it is
             # left for the database's ON DELETE to touch.
             db.flush()
@@ -1966,8 +1976,134 @@ class Library:
         """Everything the band service's sending kept: the key was taken
         away, and what it still had to send goes with it."""
         with self._session.begin() as db:
-            for model in (ServiceFile, ServiceCopy, ServiceDelete):
+            for model in (ServiceFile, ServiceCopy, ServiceDelete, ServiceSong, ServiceSongMerge):
                 db.execute(model.__table__.delete())
+
+    def requeue_service_refusals(self, words):
+        """Every take the service turned down with `words` goes again, as
+        if Retry were pressed: what an older РЭХА was told, once this one
+        starts (song sync spec, Shipping). How many."""
+        with self._session.begin() as db:
+            rows = db.scalars(select(ServiceCopy).where(ServiceCopy.error == words)).all()
+            for row in rows:
+                row.error, row.due = None, True
+            return len(rows)
+
+    def service_row_by_uid(self, uid):
+        """The band service row of the take the service knows as `uid`, with
+        the take's "folder" and "take_number", or None."""
+        with self._session() as db:
+            found = db.execute(
+                select(ServiceCopy, Take.take_number, Rehearsal.folder)
+                .join(Take, ServiceCopy.take_id == Take.id)
+                .join(Rehearsal, Take.rehearsal_id == Rehearsal.id)
+                .where(ServiceCopy.uid == uid)
+            ).first()
+            return None if found is None else self._service_out(*found)
+
+    # ---------- songs in the band service ----------
+    #
+    # Each song's number there and what the two sides last agreed on for it
+    # (models.ServiceSong); sending/service_songs.py reads them against what
+    # each side has now.
+
+    def service_songs(self):
+        """[{"song_id", "sid", "title", "tempo", "signature", "now"}]: every
+        song with a number, with what was agreed and, under "now", the
+        song's own "title", "tempo", "signature" and whether it has "takes"
+        on this computer. Not one gone from the service for good. One query."""
+        with self._session() as db:
+            rows = db.execute(
+                select(ServiceSong, Song.title, Song.tempo, Song.signature,
+                       exists().where(Take.song_id == Song.id))
+                .join(Song, ServiceSong.song_id == Song.id)
+                .where(ServiceSong.gone.is_(False))
+                .order_by(ServiceSong.sid)
+            ).all()
+            return [{**self._columns(row),
+                     "now": {"title": title, "tempo": tempo, "signature": signature, "takes": bool(takes)}}
+                    for row, title, tempo, signature, takes in rows]
+
+    def songs_without_number(self):
+        """[{"id", "title", "tempo", "signature", "also"}]: the songs History
+        shows that have no number in the band service yet, each with its old
+        names: one with takes, and one with none that never had a take or
+        holds a backing track (_shown_without_takes). Not one gone from the
+        service for good, which only a take sent again brings back there."""
+        with self._session() as db:
+            shown = exists().where(Take.song_id == Song.id) | self._shown_without_takes()
+            rows = db.execute(
+                select(Song.id, Song.title, Song.tempo, Song.signature)
+                .where(shown, ~exists().where(ServiceSong.song_id == Song.id))
+                .order_by(Song.id)
+            ).all()
+            also = self._also(db)
+        return [{"id": i, "title": t, "tempo": tempo, "signature": sig, "also": also.get(i, [])}
+                for i, t, tempo, sig in rows]
+
+    def link_service_song(self, song_id, sid, title, tempo, signature):
+        """Song `song_id` is number `sid` in the service, with what the two
+        sides agree on for it now. A row another song had under `sid` goes:
+        the number is this song's. False when the song is gone."""
+        with self._session.begin() as db:
+            if db.get(Song, song_id) is None:
+                return False
+            db.execute(ServiceSong.__table__.delete().where(
+                ServiceSong.sid == sid, ServiceSong.song_id != song_id))
+            db.merge(ServiceSong(song_id=song_id, sid=int(sid), title=title, tempo=tempo, signature=signature,
+                                 gone=False))
+            return True
+
+    def agree_service_song(self, song_id, **fields):
+        """What the two sides agree on for a song now: some of "title",
+        "tempo", "signature"."""
+        with self._session.begin() as db:
+            row = db.get(ServiceSong, song_id)
+            if row is not None:
+                for key, value in fields.items():
+                    setattr(row, key, value)
+
+    def service_song_gone(self, song_id):
+        """The song is gone from the service for good, and its takes keep it
+        here: no number goes for it until a take of it is sent again."""
+        with self._session.begin() as db:
+            row = db.get(ServiceSong, song_id)
+            if row is not None:
+                row.gone = True
+
+    def service_song_merges(self):
+        """[{"id", "from_sid", "into_song_id"}]: merges made here that the
+        service has not been told of, the oldest first."""
+        with self._session() as db:
+            return [self._columns(m) for m in db.scalars(select(ServiceSongMerge).order_by(ServiceSongMerge.id))]
+
+    def drop_service_song_merge(self, merge_id):
+        with self._session.begin() as db:
+            row = db.get(ServiceSongMerge, merge_id)
+            if row is not None:
+                db.delete(row)
+
+    def remove_song(self, song_id):
+        """
+        A song deleted in the band service that has no takes on this
+        computer goes from here too: its row, its old names and its number.
+        Returns {"title", "backing"}, the copy of its backing track for the
+        Trash, or None for none; None when no song has the id. Refused
+        (SongRefused) for a song with takes, which stays.
+        """
+        with self._session.begin() as db:
+            song = db.get(Song, song_id)
+            if song is None:
+                return None
+            if db.scalars(select(Take.id).where(Take.song_id == song.id).limit(1)).first() is not None:
+                raise SongRefused("It has takes on this computer")
+            backing = None if song.backing_file is None else self._backing_path(song.backing_file)
+            title = song.title
+            for model in (SongName, ServiceSong, ServiceSongMerge):
+                column = model.into_song_id if model is ServiceSongMerge else model.song_id
+                db.execute(model.__table__.delete().where(column == song.id))
+            db.delete(song)
+        return {"title": title, "backing": backing}
 
     # ---------- sets ----------
     #

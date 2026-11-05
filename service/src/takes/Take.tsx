@@ -23,6 +23,7 @@ import { notesAlone, notesOf } from "./player/lanes"
 import { CANNOT_PLAY, usePlayer } from "./player/one"
 import { useServiceSound, type ServiceSound } from "./player/sound"
 import { StarButton, TakeName } from "./parts"
+import { SongWord } from "./move"
 import { TakeMenu } from "./TakeMenu"
 import { TakePlayer } from "./TakePanel"
 
@@ -248,6 +249,7 @@ function TakeView({ take }: { take: TakePage }) {
           <Link to="/rehearsals/$uid" params={{ uid: take.rehearsal.uid }} className={OPENS}>
             {longDay(take.date)}
           </Link>
+          <SongWord take={take} />
           {` · ${clock(take.duration_sec)} · ${count(tracks, "track")}`}
         </>
       }

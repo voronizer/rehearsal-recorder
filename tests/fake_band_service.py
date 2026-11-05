@@ -15,6 +15,10 @@ drop it, to forget its uploads, to refuse with words, or to say РЭХА is too
 old. A test can delete a take as someone in the band does, and press
 Restore on it. It can be a service from before the tempo along Master,
 which neither keeps a take's tempo nor says which it has.
+
+It keeps songs by number as the service does (service/worker/songs/sync.ts),
+and a test can rename one, give it a tempo, make one, delete one or move a
+take to another, as someone in the band does there.
 """
 
 import json
@@ -88,6 +92,13 @@ class FakeBandService:
         # Called with the call's words ("part <uid> <name> <n>") just before
         # it is answered: a test does something while РЭХА waits.
         self.on_call = None
+        # id: {"id", "title", "tempo", "signature", "trashed", "title_by",
+        # "meter_by", "made_by", "trashed_by"}, as GET /api/reha/songs has them.
+        self.songs = {}
+        self._next_song = 1
+        # uid: {"song_id", "by"}, a take moved to another song here and not
+        # numbered by РЭХА yet.
+        self.moved = {}
         self._server = None
 
     # ---------- running it ----------
@@ -104,7 +115,7 @@ class FakeBandService:
             def _any(self):
                 fake._answer(self)
 
-            do_GET = do_PUT = do_POST = do_DELETE = _any
+            do_GET = do_PUT = do_POST = do_DELETE = do_PATCH = _any
 
         self._server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
         self._server.daemon_threads = True
@@ -150,6 +161,56 @@ class FakeBandService:
         """Someone in the band presses Restore in the Trash."""
         with self._lock:
             self.takes[uid].update(trashed=False, trashed_by=None)
+
+    # ---------- songs, as the band changes them there ----------
+
+    def song_called(self, title):
+        with self._lock:
+            return self._find_song(title)
+
+    def _find_song(self, title):
+        key = (title or "").casefold()
+        return next((x for x in self.songs.values() if x["title"].casefold() == key), None)
+
+    def _make_song(self, title, tempo=None, signature=None, by=None):
+        song = {"id": self._next_song, "title": title, "tempo": tempo, "signature": signature, "trashed": False,
+                "title_by": None, "meter_by": None, "made_by": by, "trashed_by": None}
+        self._next_song += 1
+        self.songs[song["id"]] = song
+        return song
+
+    def _rename_song(self, song, title, by):
+        old = song["title"]
+        for t in self.takes.values():
+            if t.get("song_id") == song["id"]:
+                name = t.get("name") or ""
+                t["name"] = title if name == old else title + name[len(old):] if name.startswith(old + " ") else name
+                t["song"] = title
+        song.update(title=title, title_by=by)
+
+    def rename_in_service(self, title, to, by="Ivan"):
+        with self._lock:
+            self._rename_song(self._find_song(title), to, by)
+
+    def tempo_in_service(self, title, tempo, signature, by="Ivan"):
+        with self._lock:
+            self._find_song(title).update(tempo=tempo, signature=signature, meter_by=by)
+
+    def new_in_service(self, title, by="Ivan"):
+        with self._lock:
+            return self._make_song(title, by=by)["id"]
+
+    def delete_song_in_service(self, title, by="Ira"):
+        with self._lock:
+            self._find_song(title).update(trashed=True, trashed_by=by)
+
+    def move_in_service(self, uid, title, by="Ivan"):
+        """⋯ › Move to song on a take: named by the song's title until
+        РЭХА gives it its number."""
+        with self._lock:
+            song = self._find_song(title)
+            self.takes[uid].update(song_id=song["id"], song=song["title"], name=song["title"])
+            self.moved[uid] = {"song_id": song["id"], "by": by}
 
     # ---------- answering ----------
 
@@ -198,6 +259,8 @@ class FakeBandService:
     def _route(self, method, parts, q, body):
         if method == "GET" and parts == ["hello"]:
             return 200, {"ok": True}
+        if parts[:1] == ["songs"]:
+            return self._songs_route(method, parts[1:], body)
         if method == "GET" and parts == ["takes"]:
             with self._lock:
                 listed = [{"uid": uid, "trashed": t["trashed"], "mp3_gen": self.gens.get(uid, {}).get("mp3"),
@@ -213,12 +276,27 @@ class FakeBandService:
             meta = json.loads(body)
             with self._lock:
                 was = self.takes.get(uid) or {}
+                if "song_id" in meta or "song" in meta:
+                    # РЭХА names the take's song: by its number, or its title.
+                    if meta.get("song_id") is not None:
+                        song = self.songs.get(meta["song_id"])
+                        if song is None:
+                            return 409, {"error": "No such song"}
+                    elif meta.get("song"):
+                        song = self._find_song(meta["song"]) or self._make_song(meta["song"])
+                    else:
+                        song = None
+                    meta = {**meta, "song_id": song and song["id"], "song": song and song["title"]}
+                    self.moved.pop(uid, None)
+                else:
+                    # Left out: the take keeps its song and name.
+                    meta = {**meta, **{k: was[k] for k in ("song", "song_id", "name") if k in was}}
                 # One the band deleted comes out of the trash only when sent by hand.
                 stays = was.get("trashed") and was.get("trashed_by") and not meta.get("by_hand")
                 self.takes[uid] = {**meta, "trashed": bool(stays), "trashed_by": was.get("trashed_by") if stays else None}
                 gen = self._drift_gen(uid)
             self._said(f"put {uid}")
-            return 200, {"ok": True, "in_trash": bool(stays), **gen}
+            return 200, {"ok": True, "in_trash": bool(stays), "song_id": meta.get("song_id"), **gen}
         if method == "PUT" and rest == ["drift"] and self.keeps_tempo:
             data = json.loads(body)
             if self.refuse_drift is not None:
@@ -287,6 +365,74 @@ class FakeBandService:
                 self.files[f"{uid}/{upload['gen']}/{upload['name']}"] = whole
             self._said(f"file {uid} {upload['name']}")
             return 200, {"ok": True}
+        return 404, {"error": "No such call"}
+
+    def _songs_route(self, method, rest, body):
+        data = json.loads(body) if body else {}
+        with self._lock:
+            if method == "GET" and not rest:
+                self.order.append("songs")
+                return 200, {"songs": [dict(x) for x in self.songs.values()],
+                             "moved": [{"uid": uid, **m} for uid, m in self.moved.items()]}
+            if method == "POST" and rest == ["link"]:
+                ids = []
+                for x in data["songs"]:
+                    song = self._find_song(x["title"])
+                    if song is not None and song["title"] != x["title"]:
+                        self._rename_song(song, x["title"], None)  # РЭХА's spelling
+                    if song is None:
+                        old = next((self._find_song(n) for n in x["old_names"] if self._find_song(n)), None)
+                        if old is not None:
+                            self._rename_song(old, x["title"], None)
+                            song = old
+                    if song is None:
+                        song = self._make_song(x["title"])
+                    if x["tempo"] is not None:
+                        song.update(tempo=x["tempo"], signature=x["signature"], meter_by=None)
+                    ids.append(song["id"])
+                self.order.append(f"link {len(ids)}")
+                return 200, {"ids": ids}
+            if method == "POST" and not rest:
+                song = self._find_song(data["title"])
+                if song is None:
+                    song = self._make_song(data["title"], data["tempo"], data["signature"])
+                else:
+                    # Made in РЭХА, the later change: out of the Trash, its spelling.
+                    song.update(trashed=False, trashed_by=None)
+                    if song["title"] != data["title"]:
+                        self._rename_song(song, data["title"], None)
+                    if data["tempo"] is not None:
+                        song.update(tempo=data["tempo"], signature=data["signature"], meter_by=None)
+                self.order.append(f"song {data['title']}")
+                return 200, {"id": song["id"]}
+            song = self.songs.get(int(rest[0])) if rest and rest[0].isdigit() else None
+            if method == "PATCH" and len(rest) == 1:
+                if song is None:
+                    return 404, {"error": "No such song"}
+                if "title" in data and data["title"] != song["title"]:
+                    other = self._find_song(data["title"])
+                    if other is not None and other is not song:
+                        return 409, {"error": f"“{other['title']}” is another song in the band service now. "
+                                              "Merge them in РЭХА if they are one song."}
+                if "tempo" in data:
+                    song.update(tempo=data["tempo"], signature=data["signature"], meter_by=None)
+                if "title" in data and data["title"] != song["title"]:
+                    self._rename_song(song, data["title"], None)
+                self.order.append(f"change {song['title']}")
+                return 200, {"ok": True}
+            if method == "POST" and rest[1:] == ["merge"]:
+                into = self.songs.get(data["into"])
+                if into is None:
+                    return 404, {"error": "No such song"}
+                if song is not None:
+                    for t in self.takes.values():
+                        if t.get("song_id") == song["id"]:
+                            t.update(song_id=into["id"], song=into["title"])
+                    if into["tempo"] is None:
+                        into.update(tempo=song["tempo"], signature=song["signature"])
+                    del self.songs[song["id"]]
+                self.order.append(f"merge into {into['title']}")
+                return 200, {"ok": True}
         return 404, {"error": "No such call"}
 
     def _drift_gen(self, uid):

@@ -859,6 +859,10 @@ export type Activity = {
   entries: ActivityEntry[]
   /** A take is being recorded: cloud copies wait until it stops. */
   recording: boolean
+  /** The last check of the band service that brought changes to songs,
+   *  said once in a notice: “Ivan changed 4 songs in the band service”.
+   *  A new check with changes gives a new id (sending/service_songs.py). */
+  news?: { id: number; text: string }
 }
 
 /** Whether the card is still sending while the signal is checked. */

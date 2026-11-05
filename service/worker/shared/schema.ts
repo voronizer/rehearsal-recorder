@@ -238,14 +238,23 @@ export const song = sqliteTable(
     statusId: integer("status_id").references(() => status.id),
     /** One of the 24 keys, “E minor”, or null. */
     key: text("key"),
-    /** Beats per minute as РЭХА keeps it for the song, or null. */
+    /** The song's tempo as РЭХА keeps it: a whole number in its signature's
+     *  own count (eighths a minute in 6/8), or null. */
     tempo: real("tempo"),
+    /** “4/4”, “3/4”, “2/4” or “6/8”; null with no tempo, and for a song
+     *  whose tempo came with a take before songs had numbers. */
+    signature: text("signature"),
     notes: text("notes").notNull().default(""),
     createdAt: text("created_at"),
     /** When someone deleted it, with its takes; null while the band has it. */
     trashedAt: text("trashed_at"),
     /** Who deleted it. */
     trashedBy: text("trashed_by").references(() => user.id),
+    /** Who last renamed it, last changed its tempo or signature, or made it,
+     *  in the service; null when РЭХА did. РЭХА's lines name them. */
+    titleBy: text("title_by").references(() => user.id),
+    meterBy: text("meter_by").references(() => user.id),
+    madeBy: text("made_by").references(() => user.id),
   },
   // Songs match by title whatever its case.
   (table) => [uniqueIndex("song_title_nocase").on(sql`${table.title} COLLATE NOCASE`)]
@@ -309,6 +318,9 @@ export const take = sqliteTable(
      *  was counted for; both null until РЭХА sends it. */
     drift: text("drift", { mode: "json" }).$type<Drift>(),
     driftGen: integer("drift_gen"),
+    /** Who moved it to another song in the service, until РЭХА has given it
+     *  its number there; null otherwise. */
+    movedBy: text("moved_by").references(() => user.id),
   },
   (table) => [index("take_rehearsal_idx").on(table.rehearsalUid), index("take_song_idx").on(table.songId)]
 )

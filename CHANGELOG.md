@@ -5,6 +5,21 @@ versioning](https://semver.org/): until 1.0 the shape of things can still
 move, though recordings on disk are never left behind — old rehearsals keep
 opening.
 
+## 0.24.0
+
+- **Songs stay the same in РЭХА and the band service.** Rename a song or
+  change its tempo in either place, and the other follows. In the band
+  service the pencil after a song's title renames it where it stands, the
+  tempo and time signature sit next to the key, and ⋯ › **Move to song**
+  moves a take filed under the wrong song. РЭХА asks what the band changed
+  when it starts, every hour and when a rehearsal starts, renames the takes
+  and their folders, and says who changed what: “Ivan changed 4 songs in the
+  band service”, with **See** for the list. A song made in РЭХА shows in the
+  service before its first take. The service now turns an older РЭХА away
+  with “Update РЭХА to send takes here”; once РЭХА is updated, those takes
+  go again by themselves. The band service's panel from the right is white
+  in the light theme.
+
 ## 0.23.0
 
 - **Icons in place of words.** A lane of notes in the player has its **M**

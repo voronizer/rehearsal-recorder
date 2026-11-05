@@ -21,6 +21,8 @@ export type TakeLike = {
   shape: number[]
   stars: { member_id: string; initial: string; name: string }[]
   marks: { id: number; at: number; label_id: number; note: string; closed: boolean }[]
+  song_id?: number | null
+  moved?: boolean
 }
 
 /** The band's labels by id; a label not read yet is drawn as the first. */
@@ -36,17 +38,30 @@ export const colourCss = (l: Label) => `var(${labelLook(l.colour).cssVar})`
  * “Viasna 12” as РЭХА writes a take: the song's title, then the number a
  * shade lighter. `short`: the number alone. A long title gives way and the
  * number stays, so two takes of one song never read the same. `wrap`: a
- * heading's, the whole name over as many lines as it takes.
+ * heading's, the whole name over as many lines as it takes. A take moved to
+ * another song here is the song's title alone until РЭХА numbers it, and a
+ * heading says so.
  */
-export function TakeName({ take, short, wrap, className }: { take: { name: string; number: number }; short?: boolean; wrap?: boolean; className?: string }) {
+export function TakeName({
+  take,
+  short,
+  wrap,
+  className,
+}: {
+  take: { name: string; number: number; moved?: boolean }
+  short?: boolean
+  wrap?: boolean
+  className?: string
+}) {
   const end = ` ${take.number}`
-  const title = take.name.endsWith(end) ? take.name.slice(0, -end.length) : take.name
+  const title = !take.moved && take.name.endsWith(end) ? take.name.slice(0, -end.length) : take.name
   const split = title !== take.name
   if (wrap)
     return (
       <span className={cn("[overflow-wrap:anywhere]", className)}>
         {title}
         {split && <span className="tnum text-muted-foreground"> {take.number}</span>}
+        {take.moved && <span className="text-sm font-normal text-muted-foreground"> · number from РЭХА</span>}
       </span>
     )
   return (
@@ -268,7 +283,7 @@ export function TakeLine({ take, marks, short, after }: { take: TakeLike; marks?
         </div>
         <span className="flex items-center gap-1">
           <StarButton take={take} />
-          <TakeMenu take={take} />
+          <TakeMenu take={take} row />
         </span>
       </div>
       {marks &&

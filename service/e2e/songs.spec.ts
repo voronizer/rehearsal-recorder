@@ -54,6 +54,58 @@ test("a new song is refused for a title the band has in another case", async ({ 
   await expect(page.getByRole("region", { name: "Learning" }).locator('[data-song="Zorka"]')).toContainText("No takes yet")
 })
 
+test("a song's title changes where it stands, its takes with it", async ({ page }) => {
+  await page.goto(`/songs/${band().songs["Pałyn"]}`)
+  const main = page.getByRole("main")
+  const field = main.getByRole("textbox", { name: "Song title" })
+  await main.getByRole("button", { name: "Rename song Pałyn" }).click()
+  await expect(field).toBeFocused()
+  // In the facts' place, a line says what only it can.
+  await field.fill("viasna")
+  await expect(main.getByText("“Viasna” is another song. Songs are merged in РЭХА: Rename song there.")).toBeVisible()
+  await expect(main.getByRole("button", { name: "Rename", exact: true })).toBeDisabled()
+  await field.fill("Take 3")
+  await expect(main.getByText("Take 3 is what a take with no song is called.")).toBeVisible()
+  await field.fill("Pałyn vosień")
+  await expect(main.getByText("Its 2 takes are renamed with it.")).toBeVisible()
+  await field.press("Escape")
+  await expect(field).toHaveCount(0)
+  await expect(main.getByRole("heading", { level: 1 })).toContainText("Pałyn")
+  await expect(main.getByText(/^\d:\d\d · 2 takes on 2 rehearsals$/)).toBeVisible()
+
+  await main.getByRole("button", { name: "Rename song Pałyn" }).click()
+  await field.fill("Pałyn vosień")
+  await field.press("Enter")
+  await expect(main.getByRole("heading", { level: 1 })).toContainText("Pałyn vosień")
+  await expect(main.locator('[data-take="Pałyn vosień 9"]').first()).toBeVisible()
+  // Put back, for the tests after.
+  await main.getByRole("button", { name: "Rename song Pałyn vosień" }).click()
+  await field.fill("Pałyn")
+  await main.getByRole("button", { name: "Rename", exact: true }).click()
+  await expect(main.locator('[data-take="Pałyn 9"]').first()).toBeVisible()
+})
+
+test("a song's tempo and signature are set in its panel and kept", async ({ page }) => {
+  await page.goto(`/songs?panel=song:${band().songs["Pałyn"]}`)
+  const panel = page.getByLabel("Panel")
+  const tempo = panel.getByRole("textbox", { name: "Tempo" })
+  await expect(tempo).toHaveValue("")
+  await tempo.fill("96")
+  await tempo.press("Enter")
+  await panel.getByRole("combobox", { name: "Time signature" }).click()
+  await page.getByRole("option", { name: "6/8" }).click()
+  await expect(panel.getByRole("combobox", { name: "Time signature" })).toHaveText("6/8")
+  await page.reload()
+  await expect(tempo).toHaveValue("96")
+  await expect(panel.getByRole("combobox", { name: "Time signature" })).toHaveText("6/8")
+  await expect(page.getByRole("region", { name: "Learning" }).locator('[data-song="Pałyn"]')).toContainText("96")
+  // Empty, the song has no tempo again.
+  await tempo.fill("")
+  await tempo.press("Enter")
+  await page.reload()
+  await expect(tempo).toHaveValue("")
+})
+
 test("a song page puts the best take on top", async ({ page }) => {
   await page.goto(`/songs/${band().songs["Viasna"]}`)
   // Viasna 11 has two members' stars; Viasna 12 is newer and has none.
@@ -110,6 +162,13 @@ test("a file and a song with no takes go only after asking", async ({ page }) =>
   await ask.getByRole("button", { name: "Delete song" }).click()
   await expect(panel).toHaveCount(0)
   await expect(page.getByRole("main").getByRole("button", { name: "Kalyhanka", exact: true })).toHaveCount(0)
+  // It waits in the Trash, so РЭХА can learn of it; put back for the tests after.
+  await page.getByRole("navigation", { name: "Sections" }).getByRole("link", { name: "Trash" }).click()
+  const kept = page.locator('[data-song="Kalyhanka"]')
+  await expect(kept).toContainText(/^Kalyhankasong with notes and files · deleted by Alex/)
+  await kept.getByRole("button", { name: "Restore" }).click()
+  await expect(page.getByRole("status")).toHaveText("“Kalyhanka” is back.")
+  await page.getByRole("navigation", { name: "Sections" }).getByRole("link", { name: "Songs" }).click()
 
   // A song with takes has the menu too, to send it to the Trash with them. Its row opens by keyboard.
   await page.getByRole("region", { name: "Learning" }).getByRole("button", { name: "Pałyn", exact: true }).focus()

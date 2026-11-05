@@ -234,10 +234,17 @@ export const useDeleteLabel = () =>
 
 export const useAddSong = () => useChange((title: string) => data(client.api.songs.$post({ json: { title } })))
 export const useDeleteSong = () => useChange((n: number) => data(client.api.songs[":id"].$delete({ param: id(n) })))
+export type SongChange = {
+  id: number
+  title?: string
+  tempo?: number | null
+  signature?: "4/4" | "3/4" | "2/4" | "6/8" | null
+  status_id?: number
+  key?: string | null
+  notes?: string
+}
 export const useChangeSong = () =>
-  useChange(({ id: n, ...json }: { id: number; status_id?: number; key?: string | null; notes?: string }) =>
-    data(client.api.songs[":id"].$patch({ param: id(n), json }))
-  )
+  useChange(({ id: n, ...json }: SongChange) => data(client.api.songs[":id"].$patch({ param: id(n), json })))
 export const useAddStatus = () => useChange((name: string) => data(client.api.statuses.$post({ json: { name } })))
 export const useChangeStatus = () =>
   useChange(({ id: n, name }: { id: number; name: string }) => data(client.api.statuses[":id"].$patch({ param: id(n), json: { name } })))
@@ -266,6 +273,11 @@ export const useBandPicture = () =>
 export const useRestore = () => useChange((uid: string) => data(client.api.trash[":uid"].restore.$post({ param: { uid } })))
 export const useRestoreSong = () => useChange((n: number) => data(client.api.trash.songs[":id"].restore.$post({ param: id(n) })))
 export const useDeleteTake = () => useChange((uid: string) => data(client.api.takes[":uid"].$delete({ param: { uid } })))
+/** **Move to song**: to a song of the band's, or to a new one. */
+export const useMoveTake = () =>
+  useChange(({ uid, ...json }: { uid: string } & ({ song: number } | { new_song: string })) =>
+    data(client.api.takes[":uid"].$patch({ param: { uid }, json }))
+  )
 
 export function useSaveName() {
   const qc = useQueryClient()

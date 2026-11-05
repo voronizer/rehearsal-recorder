@@ -57,6 +57,8 @@ The band stars the good ones, and a song opens on the favourite. You come to the
 
 Every take the band sends is there, by song, including the Viasna from three weeks ago when the bridge finally worked. A take or a song deleted in the service, or a take deleted in РЭХА, waits in the **Trash** for 30 days, and anyone in the band can press **Restore**.
 
+A Kupalle saved as Viasna moves to its own song with ⋯ › **Move to song**, and a song's title and tempo change right where they stand. РЭХА learns of it by the next rehearsal at the latest, renames the takes on the laptop and says who changed what.
+
 ![Viasna 3, from three weeks before, with the band's green mark on its bridge](three-weeks-ago)
 
 ## Take your track home

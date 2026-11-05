@@ -5,6 +5,17 @@
 @source "../../ui/src/hooks";
 @source "../../ui/src/lib";
 
+/* The panel from the right: white in light, as a page is; dark as РЭХА's side panels (design system F4). */
+:root {
+  --side: var(--background);
+}
+.dark {
+  --side: var(--panel);
+}
+@theme inline {
+  --color-side: var(--side);
+}
+
 body {
   background: var(--panel);
   /* A web page: words can be copied, the key for РЭХА above all. */
