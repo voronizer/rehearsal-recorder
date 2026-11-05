@@ -350,6 +350,23 @@ def selftest():
             raise RuntimeError(f"20 s of a click at 120 bpm counted as {found}")
         return f"{len(found['bars'])} bars of a click at 120 bpm, counted in a second process"
 
+    def sound_apart():
+        # Every stream to a card runs in a second process (audio/sound), in a
+        # built app this program started again, with rtmixer there. A build
+        # that cannot start it, or lost rtmixer, plays and records nothing.
+        from rehearsal_recorder.audio import sound
+        from rehearsal_recorder.audio.sound import view
+
+        link = sound.start()
+        try:
+            if not link.wait_started():
+                raise RuntimeError("it did not start in 30 s")
+            devices = view.query_devices()
+            mixer = sound.function("rtmixer_version")
+            return f"started (pid {link.pid()}), {len(devices)} devices, rtmixer {mixer}"
+        finally:
+            sound.stop()
+
     def interface():
         index = app_root() / "ui" / "dist" / "index.html"
         if not index.exists():
@@ -444,6 +461,7 @@ def selftest():
     check("sample formats", encoder)
     check("backing track", backing_track)
     check("drift in a second process", drift_apart)
+    check("sound in a second process", sound_apart)
     check("numpy", numpy_works)
     check("Python's turns", python_turns)
     check("history database", database)
@@ -554,6 +572,13 @@ def main():
         "Starting app (dev=%s, frozen=%s)", dev, bool(getattr(sys, "frozen", False))
     )
 
+    # Every stream to a card runs in a second process (audio/sound), started
+    # before the window: PortAudio asks every card and driver what it is
+    # there while the window opens.
+    from rehearsal_recorder.audio import sound
+
+    sound.start()
+
     import webview
 
     from rehearsal_recorder.platform_support import APP_NAME, CRASH_LOG, claim_taskbar_identity, window_icon
@@ -599,8 +624,8 @@ def main():
             if not window.events.loaded.wait(15):
                 raise RuntimeError("The startup screen did not load")
 
-            # Importing the Api starts PortAudio, which asks every sound card
-            # and driver what it is.
+            # The sound process starts PortAudio, which asks every sound card
+            # and driver what it is; the Api reads its device list.
             say("Starting the audio engine…")
             from rehearsal_recorder.api import Api
             from rehearsal_recorder.midi.diagnostics import configure_trace
@@ -678,6 +703,7 @@ def main():
         if api is not None:
             log.info("Window closed; shutting down")
             api.shutdown()
+        sound.stop()
     return 1 if app_state["failed"] else 0
 
 

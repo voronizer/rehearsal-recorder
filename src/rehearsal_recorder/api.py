@@ -34,8 +34,6 @@ import wave
 from datetime import datetime
 from pathlib import Path, PurePosixPath
 
-import sounddevice as sd
-
 from rehearsal_recorder import __version__
 from rehearsal_recorder.audio.capture import TAKE_RECORD, AudioRecorder
 from rehearsal_recorder.audio.drafts import (
@@ -72,7 +70,13 @@ from rehearsal_recorder.audio.devices import (
     recording_formats,
     rescan,
     saved_device,
+    sd,
 )
+from rehearsal_recorder.audio import sound
+from rehearsal_recorder.audio.sound import SoundUnavailable
+from rehearsal_recorder.audio.sound.link import DOWN as SOUND_DOWN
+from rehearsal_recorder.audio.sound.link import NOT_ANSWERING as SOUND_NOT_ANSWERING
+from rehearsal_recorder.audio.sound.link import STOPPED as SOUND_STOPPED
 from rehearsal_recorder.audio import drift as driftmod
 from rehearsal_recorder.audio import tempo as tempomod
 from rehearsal_recorder.audio.click import (
@@ -167,6 +171,68 @@ TAP_QUIET_SEC = 2.0
 TAP_POLL_SEC = 0.1
 
 log = logging.getLogger(__name__)
+
+# The player's problem, and the signal check's, once РЭХА's sound process
+# stopped under them, as a lost output's is said (audio/player.py
+# _check_output).
+PLAYBACK_STOPPED = "Playback stopped: РЭХА's sound stopped working. Press play to try it again."
+CHECK_STOPPED = "РЭХА's sound stopped working. Press Check signal to try it again."
+
+
+class _LostPlayer:
+    """
+    The open player once its sound process stopped: it shows the take where
+    it was, paused, with PLAYBACK_STOPPED as its problem, and does nothing
+    else. Play opens the take again in the sound process started since
+    (Api._reopen_output).
+    """
+
+    kind = "LostPlayer"
+    playing = False
+    free_click = None
+    free_backing = None
+    samplerate = 48000
+    route = (0, 1)
+
+    def __init__(self, seen, gone=None):
+        if isinstance(gone, _LostPlayer):
+            seen = gone.seen
+        # The player's state as the screen last saw it, {} when never seen.
+        self.seen = dict(seen or {})
+
+    def state(self):
+        seen = self.seen
+        return {
+            "position": 0.0, "duration": 0.0, "finished": False, "loop": None, "soloed": None,
+            "muted": [], "volumes": {}, "master": 1.0, "master_muted": False, "click": False,
+            **seen,
+            "playing": False, "problem": PLAYBACK_STOPPED, "master_level": 0.0,
+            "levels": {name: [0.0] * len(levels) for name, levels in seen.get("levels", {}).items()},
+        }
+
+    def output_problem(self):
+        return PLAYBACK_STOPPED
+
+    def skips(self):
+        return 0.0, 0, None
+
+    def holds(self, device_index):
+        return False
+
+    def __getattr__(self, name):
+        if name.startswith("__"):
+            raise AttributeError(name)
+        return lambda *args, **kw: None
+
+
+def _draft_first_click(folder):
+    """The first click a take's take.json says it chose, or None."""
+    try:
+        record = json.loads((Path(folder) / TAKE_RECORD).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    click = record.get("click") if isinstance(record, dict) else None
+    return click.get("first_click_frame") if isinstance(click, dict) else None
 
 # The drift lines kept in memory (take_drift): enough for the takes of an
 # evening opened again, and nothing on disk.
@@ -813,7 +879,17 @@ class Api:
         self._controller = Controller(self._controller_system, self.controls, threads=MIDI_THREADS)
         self._midi = MidiRig(system, midi_error, threads=MIDI_THREADS)
         # Settings › Under the hood's check of the interface; see probe.py.
-        self._check = InterfaceCheck()
+        # Made in the sound process at its first use (_check).
+        self._check_made = None
+        # The take being recorded lost РЭХА's sound process (_sound_event):
+        # the health check says so and Stop keeps what is on disk.
+        # The recorder whose sound process stopped under it, or None.
+        self._take_lost = None
+        # The player's last state, for a player whose sound process stopped.
+        self._player_seen = None
+        link = sound.current()
+        if link is not None:
+            link.on_event(self._sound_event)
         self._player = None
         # What the open player was opened with, so a step that has to let go of
         # the files can put back exactly the take that was playing.
@@ -1309,7 +1385,7 @@ class Api:
         if hood.get("libsndfile"):
             cloud += f"; compressing through libsndfile {hood['libsndfile']}"
         return {"ok": True,
-                "text": diagnostics.report_text(hood, tracks, cloud, self._check.state())}
+                "text": diagnostics.report_text(hood, tracks, cloud, self._check_state())}
 
     def show_file(self, which):
         """Opens the folder one of the app's own files is in, with the file
@@ -1377,8 +1453,7 @@ class Api:
         """The input chosen in Settings › Audio, or the system's default,
         opened and closed again. Whatever goes wrong, the take will ask."""
         try:
-            with sd.InputStream(device=saved_device(self._config, "device", True), channels=1):
-                time.sleep(0.5)
+            sound.function("microphone", saved_device(self._config, "device", True))
         except Exception:  # noqa: BLE001 — the question comes at the first take instead
             pass
 
@@ -1431,6 +1506,54 @@ class Api:
             self._updates.wake()
         return {"ok": True, "check_updates": self._config["check_updates"]}
 
+    @property
+    def _check(self):
+        """The interface check, made where the sound is at its first use."""
+        if self._check_made is None:
+            self._check_made = sound.new(InterfaceCheck)
+        return self._check_made
+
+    def _check_state(self):
+        """The interface check's state, or an idle one when the sound
+        process cannot be asked."""
+        try:
+            return self._check.state()
+        except SoundUnavailable:
+            return {"running": False}
+
+    @staticmethod
+    def _sound_down():
+        """SOUND_DOWN when the sound process stopped twice and is left down,
+        else None: a take, the signal check and the interface check say so
+        before they start."""
+        link = sound.apart()
+        return SOUND_DOWN if link is not None and not link.alive else None
+
+    def _sound_event(self, name, payload):
+        """
+        РЭХА's sound process stopped (docs/superpowers/specs/2026-11-04-sound-
+        process-design.md, Part 9). A take being recorded ends as one whose
+        card went quiet does, kept up to there: the health check says so and
+        the screen stops it. The player says its output stopped, as one lost
+        does, and Play opens it again in the sound process started again.
+        What played between takes is let go of.
+        """
+        if name != "sound_stopped":
+            return
+        if self._recorder is not None:
+            self._take_lost = self._recorder
+        # A check running there is gone with it; the next one is made in
+        # the sound process started again.
+        self._check_made = None
+        with self._player_lock:
+            if self._player is not None and sound.kind_of(self._player) == "TakePlayer":
+                self._player = _LostPlayer(self._player_seen, self._player)
+        for part in (self._metronome, self._backing):
+            try:
+                part.sound_lost()
+            except Exception:  # noqa: BLE001 - the next part still lets go
+                log.exception("What played between takes could not be let go of")
+
     def start_interface_check(self):
         """
         Checks the recording interface the way --audio-probe does, in the
@@ -1441,7 +1564,10 @@ class Api:
         """
         if self._recorder is not None:
             return {"ok": False, "error": "Stop the take first"}
-        if self._check.state().get("running"):
+        down = self._sound_down()
+        if down:
+            return {"ok": False, "error": down}
+        if self._check_state().get("running"):
             return {"ok": False, "error": "A check is already running"}
         self.stop_monitor()
         try:
@@ -1457,10 +1583,13 @@ class Api:
 
     def interface_check(self):
         """What the check has found so far, or its verdict once done."""
-        return self._check.state()
+        return self._check_state()
 
     def stop_interface_check(self):
-        self._check.stop()
+        try:
+            self._check.stop()
+        except SoundUnavailable:
+            pass
         return {"ok": True}
 
     def set_recordings_dir(self, path):
@@ -2091,6 +2220,9 @@ class Api:
         self.stop_monitor()
         if self._recorder is not None:
             return {"ok": False, "error": "Recording in progress"}
+        down = self._sound_down()
+        if down:
+            return {"ok": False, "error": down}
         # A check would put the rig on its own ports while a Stop is still
         # ending the take's notes on them.
         if self._stopping or self._transport.saving:
@@ -2107,7 +2239,7 @@ class Api:
             if stray:
                 return {"ok": False, "error": stray}
 
-            monitor = LevelMonitor(device_index, samplerate, audio)
+            monitor = sound.new(LevelMonitor, device_index, samplerate, audio)
             try:
                 monitor.start()
             except Exception as e:
@@ -2121,7 +2253,10 @@ class Api:
     def monitor_levels(self):
         if self._monitor is None:
             return {}
-        return self._monitor.get_levels()
+        try:
+            return self._monitor.get_levels()
+        except SoundUnavailable:
+            return {}
 
     def monitor_health(self):
         """
@@ -2133,7 +2268,11 @@ class Api:
         monitor = self._monitor
         if monitor is None:
             return {"checking": False, "problem": None}
-        return {"checking": True, "problem": monitor.problem()}
+        try:
+            return {"checking": True, "problem": monitor.problem()}
+        except SoundUnavailable:
+            # The sound process stopped under the check: the screen stops it.
+            return {"checking": True, "problem": CHECK_STOPPED}
 
     def stop_monitor(self, keep_ports=False):
         """Lets go of the card, and of the MIDI ports the check opened unless
@@ -2261,16 +2400,27 @@ class Api:
 
         s = self._session
         # The take's Backing track is written at Stop: one more track.
-        channel_count = (_channels_of(s["tracks"]) if s else 1) + self._backing.take_channels()
+        recorder = self._recorder
+        if recorder is not None and self._take_lost is recorder:
+            return {"recording": True, "error": SOUND_STOPPED, "active": False}
+        try:
+            backing = self._backing.take_channels()
+            error, active = recorder.problem(), recorder.is_active()
+        except SoundUnavailable as e:
+            if str(e) != SOUND_NOT_ANSWERING:
+                return {"recording": True, "error": SOUND_STOPPED, "active": False}
+            # Slow to answer is not stopped: the take records on there, and
+            # the next poll asks again.
+            backing, error, active = 0, None, True
+        channel_count = (_channels_of(s["tracks"]) if s else 1) + backing
         samplerate = s["samplerate"] if s else 48000
         estimate = self.disk_estimate(
             channel_count, samplerate, s.get("bit_depth", LEGACY_DEPTH) if s else LEGACY_DEPTH
         )
-
         return {
             "recording": True,
-            "error": self._recorder.problem(),
-            "active": self._recorder.is_active(),
+            "error": error,
+            "active": active,
             "free_bytes": estimate.get("free_bytes"),
             "minutes_left": estimate.get("minutes"),
             "low_space": estimate.get("low", False),
@@ -2848,6 +2998,9 @@ class Api:
         # the one the old Stop then ends, with the old take's notes unmade.
         if self._stopping:
             return {"ok": False, "error": "Still saving the last take"}
+        down = self._sound_down()
+        if down:
+            return {"ok": False, "error": down}
 
         s = self._session
         # Only the tracks that record sound reach the card: a MIDI track has no
@@ -2908,7 +3061,8 @@ class Api:
 
         # A click on another device places itself by a clock of the take's
         # audio, which the recorder makes when the notes have not.
-        recorder = AudioRecorder(
+        recorder = sound.new(
+            AudioRecorder,
             s["device_index"],
             s["samplerate"],
             audio,
@@ -3021,9 +3175,29 @@ class Api:
         except Exception:
             default = f"Take {take_number}"
 
+        # Whether РЭХА's sound process stopped under the take: said by its
+        # event, or found by Stop itself when the event has not come yet.
+        lost = [self._take_lost is recorder]
+        self._take_lost = None
+        session = self._session or {}
+
+        def from_disk(progress):
+            # The take's files are on disk as a crash leaves them, and
+            # written up as a draft is.
+            done = finalize(temp_dir, session.get("samplerate", 48000),
+                            session.get("bit_depth", LEGACY_DEPTH), progress=progress)
+            return {**done, "notes": self._end_notes(None, band, temp_dir, done["duration_sec"])}
+
         def finish(progress):
+            if lost[0]:
+                return from_disk(progress)
             try:
                 done = recorder.stop(progress=progress)
+            except SoundUnavailable as e:
+                if str(e) == SOUND_NOT_ANSWERING:
+                    raise
+                lost[0] = True
+                return from_disk(progress)
             except BaseException:
                 # The sound did not finish, so the notes do not either: they
                 # stay as raw files, as a crash would leave them, for the
@@ -3046,17 +3220,25 @@ class Api:
             self._awake.release()
             self._metronome.end_take()
             self._backing.end_take()
-            # As the notes' clock's: the audio callback keeps the click's
-            # first fault and says nothing.
-            fault = getattr(recorder, "click_fault", None)
-            if fault is not None:
-                log.error("The take's click failed during the take and went quiet; "
-                          "the take recorded on: %s", fault)
-            # A take whose first click was never chosen (Stop before the
-            # card's first block, or a click output slow to start) is no
-            # click take: its files start where they started. Its take.json
-            # says so, and so does this, for Keep in this session.
-            meter["click"] = meter["click"] and whole(getattr(recorder.click, "first_click_frame", None))
+            if not lost[0]:
+                try:
+                    # As the notes' clock's: the audio callback keeps the
+                    # click's first fault and says nothing.
+                    fault = getattr(recorder, "click_fault", None)
+                    if fault is not None:
+                        log.error("The take's click failed during the take and went quiet; "
+                                  "the take recorded on: %s", fault)
+                    # A take whose first click was never chosen (Stop before
+                    # the card's first block, or a click output slow to
+                    # start) is no click take: its files start where they
+                    # started. Its take.json says so, and so does this, for
+                    # Keep in this session.
+                    meter["click"] = meter["click"] and whole(getattr(recorder.click, "first_click_frame", None))
+                except SoundUnavailable:
+                    lost[0] = True
+            if lost[0]:
+                # As take.json said it last: what the drafts read too.
+                meter["click"] = meter["click"] and whole(_draft_first_click(temp_dir))
         notes, missing = self._note_lanes(band, result["tracks"], result["notes"])
         # Each with its track's icon, as Keep will keep it, so the review
         # screen draws the take as it was started.
@@ -4798,7 +4980,7 @@ class Api:
         after), and this one opened."""
         self._close_player()
         try:
-            player = TakePlayer(tracks)
+            player = sound.new(TakePlayer, tracks)
             index = saved_device(self._config, "output_device", False)
             # A click between takes with a stream of its own there lets go of
             # it first; _resink then carries it on in this one. STREAM_LOCK
@@ -4815,6 +4997,24 @@ class Api:
         except Exception as e:
             return {"ok": False, "error": str(e)}
 
+        self._set_up_player(player, tracks)
+        self._player = player
+        self._open_tracks = tracks
+        try:
+            selected = next((t for t in self._session_takes() if t["tracks"] == tracks), None)
+            self._transport.playback_take_number = selected["take_number"] if selected else None
+            self._transport.playback_take_name = selected["name"] if selected else None
+        except Exception:
+            self._transport.playback_take_number = None
+        result = {"ok": True, **player.state()}
+        if warning:
+            result["warning"] = warning
+        return result
+
+    def _set_up_player(self, player, tracks):
+        """What a take opened in the player starts with: the saved faders,
+        Master and its mute, and a click take's click (_open_player, and
+        _reopen_output once the sound process was started again)."""
         for name, v in self._config.get("volumes", {}).items():
             player.set_volume(name, v)
         player.set_master(self._config.get("master_volume", 1.0))
@@ -4829,19 +5029,6 @@ class Api:
         except Exception:
             # The take plays all the same, without its click.
             log.exception("The take's click could not be set up in the player")
-
-        self._player = player
-        self._open_tracks = tracks
-        try:
-            selected = next((t for t in self._session_takes() if t["tracks"] == tracks), None)
-            self._transport.playback_take_number = selected["take_number"] if selected else None
-            self._transport.playback_take_name = selected["name"] if selected else None
-        except Exception:
-            self._transport.playback_take_number = None
-        result = {"ok": True, **player.state()}
-        if warning:
-            result["warning"] = warning
-        return result
 
     def _take_click_of(self, tracks):
         """
@@ -4888,7 +5075,11 @@ class Api:
             self._transport.playback_take_number = None
             self._transport.playback_take_name = None
             if player is not None:
-                player.close()
+                try:
+                    player.close()
+                except SoundUnavailable:
+                    # Its sound process stopped: the stream went with it.
+                    pass
         if player is not None:
             # Outside the lock: the line asks the sending what is waiting.
             self._say_skips(player)
@@ -4941,7 +5132,11 @@ class Api:
         player = self._player
         if player is None:
             return {"open": False}
-        state = player.state()
+        try:
+            state = player.state()
+        except SoundUnavailable:
+            state = _LostPlayer(self._player_seen, player).state()
+        self._player_seen = state
         if not state["playing"]:
             # A take that played to its end: the screen asks this a few
             # times a second, so its listening is said here.
@@ -4951,13 +5146,16 @@ class Api:
     def _say_skips(self, player):
         """
         One line in the log for a listening that skipped, once it stops: how
-        often the card ran short, how many blocks came late and the latest,
-        and how many takes waited to be sent meanwhile. Nothing for one that
-        played clean. It is for finding out after a rehearsal whether takes
-        still skip, and with what going on beside them.
+        often the reserve ran dry, the least it held, and how many takes
+        waited to be sent meanwhile. Nothing for one that played clean. It is
+        for finding out after a rehearsal whether takes still skip, and with
+        what going on beside them.
         """
-        seconds, short, late, latest = player.skips()
-        if not short and not late:
+        try:
+            seconds, dry, least = player.skips()
+        except SoundUnavailable:
+            return
+        if not dry:
             return
         try:
             waiting = self.sending_left()["takes"]
@@ -4965,8 +5163,8 @@ class Api:
             waiting = None
         minutes, rest = divmod(int(round(seconds)), 60)
         log.warning(
-            "Playback skipped: in %d:%02d of a take the card ran short %d times and %d blocks "
-            "came late, the latest by %d ms%s", minutes, rest, short, late, round(latest * 1000),
+            "Playback skipped: in %d:%02d of a take the reserve ran dry %d times%s%s",
+            minutes, rest, dry, "" if least is None else f"; the least it held was {least:.2f} s",
             "" if not waiting else f"; takes waiting to be sent: {waiting}")
 
     @serialised
@@ -4999,7 +5197,14 @@ class Api:
         {"reopened": True, "warning"?: ...} when it was done, or the failure.
         """
         with self._player_lock:
-            if self._player is None or self._player.output_problem() is None:
+            if self._player is None:
+                return {}
+            try:
+                problem = self._player.output_problem()
+            except SoundUnavailable:
+                problem = SOUND_STOPPED
+                self._player = _LostPlayer(self._player_seen, self._player)
+            if problem is None:
                 return {}
             reopened = self._reopen_output()
         self._resink()
@@ -5091,11 +5296,20 @@ class Api:
         with self._player_lock:
             if self._player is None:
                 return {"ok": True}
+            lost = seen = None
+            if isinstance(self._player, _LostPlayer):
+                # Its sound process stopped: the take opened again in the one
+                # started since, where it was, as it was mixed.
+                lost, seen = self._player.state(), self._player.seen
+                try:
+                    self._player = sound.new(TakePlayer, self._open_tracks)
+                except Exception as e:  # noqa: BLE001 - said as a failed reopen
+                    return {"ok": False, "error": str(e)}
 
             # Only the stream is reopened. close() would also let go of the
             # take itself, which used to leave the player running on nothing
             # but silence after a device change.
-            state = self._player.state()
+            state = lost if lost is not None else self._player.state()
             try:
                 index = saved_device(self._config, "output_device", False)
                 # As in _open_player: never a second stream on the click's.
@@ -5108,10 +5322,31 @@ class Api:
                     )
             except Exception as e:
                 return {"ok": False, "error": str(e)}
+            if lost is not None:
+                self._mix_as_seen(self._player, seen)
             self._player.seek(state["position"])
             if state["playing"]:
                 self._player.play()
             return {"ok": True, **({"warning": warning} if warning else {})}
+
+    def _mix_as_seen(self, player, seen):
+        """A take opened again after its sound process stopped: set up as
+        any take, then the faders, Master, M, S and the loop as the screen
+        last saw them."""
+        self._set_up_player(player, self._open_tracks)
+        if not seen:
+            return
+        for name, v in (seen.get("volumes") or {}).items():
+            player.set_volume(name, v)
+        if seen.get("master") is not None:
+            player.set_master(seen["master"])
+        for name in seen.get("muted") or []:
+            player.set_muted(name, True)
+        if seen.get("soloed"):
+            player.set_solo(seen["soloed"])
+        loop = seen.get("loop")
+        if loop:
+            player.set_loop(loop["a"], loop["b"])
 
     # ---------- the metronome ----------
 

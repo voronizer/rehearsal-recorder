@@ -113,8 +113,13 @@ a = Analysis(
     # an app without MIDI still starts), which is the other thing the
     # analysis does not follow. soxr is the same: imported only when a
     # backing track is made ready, and compiled (soxr.soxr_ext).
+    # rtmixer is imported only in the sound process, which multiprocessing
+    # starts by name, so it is named here too, with its compiled half
+    # (_rtmixer), the ring it is built on and cffi's backend, which the
+    # compiled half loads without an import the analysis can see.
     hiddenimports=["send2trash", "sqlalchemy.dialects.sqlite", "mako",
-                   "pylibremidi", "soxr", "soxr.soxr_ext", *collect_submodules("alembic")],
+                   "pylibremidi", "soxr", "soxr.soxr_ext", *collect_submodules("alembic"),
+                   "rtmixer", "_rtmixer", "pa_ringbuffer", "_cffi_backend"],
     hookspath=[],
     excludes=[
         # Nothing here draws with these, and they are large.

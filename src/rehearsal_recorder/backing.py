@@ -37,11 +37,11 @@ import threading
 import time
 from pathlib import Path
 
-from rehearsal_recorder.audio import backing_count, backing_file
+from rehearsal_recorder.audio import backing_count, backing_file, sound
 from rehearsal_recorder.audio.backing_source import FADE_SEC, BackingSource, Sources
-from rehearsal_recorder.audio.click import click_frame, tempo_range
+from rehearsal_recorder.audio.click import tempo_range
 from rehearsal_recorder.audio.click_output import ClickOutput, SilentOutput
-from rehearsal_recorder.audio.click_source import ClickSource
+from rehearsal_recorder.audio.click_source import following
 from rehearsal_recorder.audio.devices import STREAM_LOCK
 from rehearsal_recorder.audio.player import channel_label
 from rehearsal_recorder.audio.take_click import TakeBacking, whole
@@ -299,7 +299,7 @@ class Backing:
         here = device if device is not None else self._metronome.devices()[2]
         if here is not None and here == device_index:
             return rates
-        other = ClickOutput(device, channels or (1, 2)).samplerate
+        other = sound.new(ClickOutput, device, channels or (1, 2)).samplerate
         if other not in rates:
             rates.append(other)
         return rates
@@ -570,8 +570,8 @@ class Backing:
         if output is not None and output.samplerate != int(samplerate):
             played = self._ready(copy, output.samplerate)
         try:
-            return TakeBacking(ready, backing["first_bar"], route=route, output=output,
-                               volume=self._setting("backing_volume"), played=played)
+            return sound.new(TakeBacking, ready, backing["first_bar"], route=route, output=output,
+                             volume=self._setting("backing_volume"), played=played)
         except (OSError, ValueError):
             log.exception("The take's backing track could not be opened, so it records without it")
             return None
@@ -589,7 +589,7 @@ class Backing:
         the disk line counts them as one more track's."""
         with self._lock:
             take = self._take if self._taking else None
-        return 0 if take is None else take.opened[4]
+        return 0 if take is None else take.channels
 
     def end_take(self):
         with self._lock:
@@ -689,7 +689,7 @@ class Backing:
             for kind, device, channels in places:
                 if kind == "own":
                     wanted.setdefault(device, set()).update(channels)
-            outputs = {device: ClickOutput(device, sorted(channels)) for device, channels in wanted.items()}
+            outputs = {device: sound.new(ClickOutput, device, sorted(channels)) for device, channels in wanted.items()}
             sinks = []
             for kind, where, route in places:
                 if kind == "player":
@@ -698,11 +698,11 @@ class Backing:
                     output = outputs[where]
                     sinks.append(("own", output, tuple(c - 1 for c in route)))
                 else:
-                    output = SilentOutput(self._label(where))
+                    output = sound.new(SilentOutput, self._label(where))
                     sinks.append(("own", output, output.route))
             kind, sink, route = sinks[0]
-            source = BackingSource(opened, route, self._setting("backing_volume"), start=start,
-                                   samplerate=sink.samplerate)
+            source = sound.new(BackingSource, opened, route, self._setting("backing_volume"), start=start,
+                               samplerate=sink.samplerate)
             parts = [(kind, sink, source)]
             if click is not None:
                 parts.append(self._click_part(source, sink, sinks[1], click))
@@ -711,7 +711,7 @@ class Backing:
                 streams.setdefault(id(sink), (kind, sink, []))[2].append(part)
             played = []
             for kind, sink, group in streams.values():
-                one = group[0] if len(group) == 1 else Sources(*group)
+                one = group[0] if len(group) == 1 else sound.new(Sources, *group)
                 if kind == "player":
                     sink.play_free_backing(one)
                 else:
@@ -720,7 +720,7 @@ class Backing:
                     except Exception:
                         # Counted by the computer's clock instead, so the row
                         # still shows how far it is and says why it is not heard.
-                        sink = SilentOutput(sink.name, sink.problem(), sink.samplerate)
+                        sink = sound.new(SilentOutput, sink.name, sink.problem(), sink.samplerate)
                         sink.start(one)
                 played.append((kind, sink))
             free = _Free(source, shown, song_id, tuple(played), next(self._plays))
@@ -735,20 +735,10 @@ class Backing:
         a take's click on another device is placed."""
         kind, sink, route = where
         tempo, signature, bar_one = click
-        rate = backing.samplerate
-        same = sink is backing_sink
-
-        def place(k):
-            origin = backing.origin
-            if origin is None:
-                return None
-            frame = origin + round(bar_one * rate) + click_frame(k, tempo, rate)
-            if same:
-                return frame
-            at = backing.clock.ns_at(frame)
-            return None if at is None else source.clock.frame_at(at)
-
-        source = ClickSource(tempo, signature, self._metronome.voices(sink.samplerate), route, place=place)
+        # Made where the sound is: its place is asked on the stream's thread
+        # (click_source.following).
+        source = sound.new(following, tempo, signature, self._metronome.voices(sink.samplerate), route,
+                           backing, bar_one, sink is backing_sink)
         return kind, sink, source
 
     def stop(self):
@@ -805,7 +795,7 @@ class Backing:
         second stream on a device it holds. Inside the player's locks."""
         with STREAM_LOCK:
             free = self._free
-            if free is not None and any(isinstance(sink, ClickOutput) and sink.device_index == device_index
+            if free is not None and any(sound.kind_of(sink) == "ClickOutput" and sink.device_index == device_index
                                         for kind, sink in free.sinks if kind == "own"):
                 self._stop_free()
 
@@ -827,6 +817,14 @@ class Backing:
         self.stop()
         self._jobs.put(None)
 
+    def sound_lost(self):
+        """РЭХА's sound process stopped: what played between takes and the
+        take's backing track went with it. Let go of here, with nothing
+        asked of them."""
+        with self._lock:
+            self._free = None
+            self._take = None
+
     # ---------- for the screen ----------
 
     def state(self):
@@ -836,7 +834,7 @@ class Backing:
             taking, take, free = self._taking, self._take, self._free
         if free is not None:
             for _, sink in free.sinks:
-                if isinstance(sink, SilentOutput):
+                if sound.kind_of(sink) == "SilentOutput":
                     sink.pump()
         shown, getting_ready = None, False
         if not free_name and song is not None:
@@ -857,10 +855,10 @@ class Backing:
         if taking:
             if take is not None:
                 playing = True
-                position = take.source.position_sec or 0
+                position = take.source.heard_sec() or 0
         elif free is not None and free.shown and not free.source.done:
             playing = True
-            position = free.source.position_sec or 0
+            position = free.source.heard_sec() or 0
         return {"song": shown, "on": self._setting("backing_on"), "volume": self._setting("backing_volume"),
                 "row": self._setting("backing_row") or self._row_from_library(), "playing": playing,
                 "position_sec": max(0, round(position, 2)),
@@ -899,5 +897,5 @@ class Backing:
         if free is not None:
             for kind, sink in free.sinks:
                 if kind == "own" and sink.problem() is not None:
-                    return self._label(sink.name) if not isinstance(sink, SilentOutput) else sink.name
+                    return self._label(sink.name) if sound.kind_of(sink) != "SilentOutput" else sink.name
         return None

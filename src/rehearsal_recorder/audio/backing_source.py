@@ -25,6 +25,7 @@ read is in single attributes, each replaced whole, taken up at the next block.
 """
 
 import math
+import time
 
 import numpy as np
 
@@ -52,6 +53,9 @@ class BackingSource:
     `o` plays, `follow` says it comes through another device's clock, and the
     file before its frame `floor` is not heard: the take has not begun there.
     """
+
+    # What the sound process calls this kind (audio/sound/host.py).
+    kind = "BackingSource"
 
     def __init__(self, opened, route, volume, place=None, follow=False, start=0, floor=0,
                  samplerate=None):
@@ -88,6 +92,8 @@ class BackingSource:
         # Seconds into the file at the start of the last block rendered: None
         # before it plays, and on past the file's end in a take.
         self.position_sec = None
+        # (the stream's first frame of that block, file frames a stream frame)
+        self._rendered_at = None
         # As ClickSource's: a take on another device waits for `started`
         # before it chooses its first frame, and `written` says how far the
         # stream has rendered. repr() of the first error in render, which
@@ -95,19 +101,58 @@ class BackingSource:
         self.started = False
         self.written = None
         self.fault = None
+        # The stream's frame the fade at Stop was over by, once it is: a
+        # stream that renders ahead is heard to have faded only there.
+        self.done_at = None
 
     # ---------- from other threads ----------
 
     def set_on(self, on):
         """The row's switch: off, it goes on playing and is not heard."""
         self._on = bool(on)
+        self._tell()
 
     def set_volume(self, volume):
         self._volume = float(volume)
+        self._tell()
 
     def fade_out(self):
         """Stop: what is heard fades out over FADE_SEC, then is silent."""
         self._fading = True
+        self._tell()
+
+    # As ClickSource's: set by a stream that renders ahead of what is heard.
+    changed = None
+
+    def _tell(self):
+        changed = self.changed
+        if changed is not None:
+            changed()
+
+    def keep(self):
+        """What rendering has moved on since the block began, for put_back."""
+        return (self._gain, self._ramp_from, self._ramp_to, self._ramp_done, self._origin,
+                self._pos, self._past_end, self.position_sec, self._rendered_at,
+                self.written, self.started, self.done_at)
+
+    def put_back(self, kept):
+        """Back to where `keep` was, to render a block again."""
+        (self._gain, self._ramp_from, self._ramp_to, self._ramp_done, self._origin,
+         self._pos, self._past_end, self.position_sec, self._rendered_at,
+         self.written, self.started, self.done_at) = kept
+
+    def heard_sec(self, now_ns=None):
+        """Seconds into the file of what is heard at `now_ns` (now): the last
+        block rendered, taken back by as far as the stream renders ahead of
+        what is heard, by its clock. None before it plays."""
+        pos, rendered = self.position_sec, self._rendered_at
+        if pos is None or rendered is None:
+            return pos
+        first_frame, step = rendered
+        heard = self.clock.frame_at(time.perf_counter_ns() if now_ns is None else now_ns)
+        if heard is None or heard >= first_frame:
+            return pos
+        return max(0.0, pos - (first_frame - heard) * step / self.file_rate)
 
     @property
     def done(self):
@@ -142,11 +187,14 @@ class BackingSource:
         self.written = (first_frame + n, n)
         self.started = True
         gain = self._gain_for(n)
+        if self.done_at is None and self._fading and self._ramp_done >= self._fade and self._gain == 0.0:
+            self.done_at = first_frame + n
         at = self._where(first_frame, n)
         if at is None:
             return
         pos, step = at
         self.position_sec = pos / self.file_rate
+        self._rendered_at = (first_frame, step)
         if self._place is None and pos >= self._frames:
             self._past_end = True
         if not isinstance(gain, np.ndarray) and gain == 0.0:
@@ -264,6 +312,9 @@ class Sources:
     """Several sources in one stream (the click and the backing track on one
     device), rendered in turn: the contract of each, the route of all."""
 
+    # What the sound process calls this kind (audio/sound/host.py).
+    kind = "Sources"
+
     def __init__(self, *sources):
         self.sources = tuple(sources)
         self.route = tuple(sorted({c for s in self.sources for c in s.route}))
@@ -275,3 +326,19 @@ class Sources:
     def render(self, out, first_frame, arrival_ns, lead_sec):
         for source in self.sources:
             source.render(out, first_frame, arrival_ns, lead_sec)
+
+    @property
+    def changed(self):
+        return self.sources[0].changed if self.sources else None
+
+    @changed.setter
+    def changed(self, tell):
+        for source in self.sources:
+            source.changed = tell
+
+    def keep(self):
+        return tuple(s.keep() for s in self.sources)
+
+    def put_back(self, kept):
+        for source, one in zip(self.sources, kept):
+            source.put_back(one)

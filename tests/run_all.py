@@ -135,6 +135,19 @@ things to be true:
                        deletion and its Undo, the close dialog, disconnect.
                        Needs openapi-core 0.23.1.
 
+    test_ring.py       rtmixer's rings on a fake card (tests/fake_rtmixer.py):
+                       a second kept ahead, a setting heard from two card
+                       calls on, an exact move, a dry ring started again,
+                       a record ring that filled, the notes' clock, a take
+                       written bit for bit, the click on the take's grid.
+
+    test_sound.py      the sound process, spawned as the app spawns it, with
+                       the fake card running in it: calls and answers, a
+                       recorder's levels, clock and log reaching the main
+                       process, the sound process killed mid-take (its files
+                       kept, started again once, then left down) and the
+                       main process killed (the sound process ends too).
+
 The interface's tests are in ui/, beside the code they test: `npm test` and
 `npm run test:e2e` there. See tests/README.md.
 
@@ -148,8 +161,9 @@ points the app at temporary folders of its own), and one after another took
 75 s in a four-core container where side by side took 50, the time of
 test_engine alone (on CI's Mac, 145 s and 64). Each suite's output is
 printed whole as it finishes, so the log reads one suite at a time, as
-before. A suite still running after LIMIT seconds has hung: it is stopped
-and what it wrote so far is printed, which shows where it stuck.
+before; a suite that failed is printed last, just above the summary. A
+suite still running after LIMIT seconds has hung: it is stopped and what
+it wrote so far is printed, which shows where it stuck.
 """
 
 import os
@@ -161,7 +175,7 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 SUITES = ("test_control_api.py", "test_controller_browse.py", "test_controller_diagnostics.py", "test_controller_extensions.py", "test_controller_recovery.py", "test_controller.py", "test_transport.py", "test_engine.py", "test_platform.py", "test_store.py", "test_ports.py",
           "test_midi.py", "test_click.py", "test_tempo.py", "test_drift.py", "test_backing.py",
-          "test_sending.py")
+          "test_sending.py", "test_ring.py", "test_sound.py")
 
 # Four times the longest any suite has taken (test_engine, 145 s on CI's Mac).
 LIMIT = 600
@@ -182,19 +196,29 @@ def run(suite):
         return subprocess.CompletedProcess(hung.cmd, 1, (hung.output or b"") + stopped)
 
 
+def show(suite, result):
+    print(f"\n{'=' * 60}\n{suite}\n{'=' * 60}", flush=True)
+    # The bytes as the suite wrote them: decoded and encoded again,
+    # a character the console cannot show would fail here instead.
+    sys.stdout.buffer.write(result.stdout)
+    sys.stdout.buffer.flush()
+
+
 def main():
     failed = []
     with ThreadPoolExecutor(len(SUITES)) as pool:
         runs = {pool.submit(run, suite): suite for suite in SUITES}
         for done in as_completed(runs):
             suite, result = runs[done], done.result()
-            print(f"\n{'=' * 60}\n{suite}\n{'=' * 60}", flush=True)
-            # The bytes as the suite wrote them: decoded and encoded again,
-            # a character the console cannot show would fail here instead.
-            sys.stdout.buffer.write(result.stdout)
-            sys.stdout.buffer.flush()
             if result.returncode != 0:
-                failed.append(suite)
+                failed.append((suite, result))
+            else:
+                show(suite, result)
+    # A suite that failed is printed last, by the summary: the end of a
+    # long CI log is what is read first, and sometimes all that is kept.
+    for suite, result in failed:
+        show(suite, result)
+    failed = [suite for suite, _ in failed]
 
     print(f"\n{'=' * 60}")
     if failed:

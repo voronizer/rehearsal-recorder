@@ -24,6 +24,10 @@ with a callback. From the main thread in blocking mode, the probe could not
 see a card that refuses any other thread, and that same Realtek driver
 crashed under it.
 
+Each attempt asks PortAudio for what rtmixer, which records the takes, asks
+for: float32 samples, whatever the take writes. A card is never asked a bit
+depth, so no attempt changes it.
+
 This is a diagnostic, not part of recording. Nothing here is called while a
 rehearsal is running — every attempt opens and closes a stream, which an ASIO
 driver only tolerates when it is otherwise idle.
@@ -35,14 +39,13 @@ import time
 import numpy as np
 
 from rehearsal_recorder.audio import heartbeat
-from rehearsal_recorder.audio.format import capture_dtype, normalize_depth
+from rehearsal_recorder.audio.format import normalize_depth
 
 # The attempts, by name. Each name is also how the report refers to it, so
 # they read as sentences rather than as identifiers.
 AS_CONFIGURED = "the settings in force"
 FEWER_CHANNELS = "the first two channels only"
 DRIVER_RATE = "the rate the driver is already at"
-SIXTEEN_BIT = "16 bits instead of 24"
 DRIVER_BLOCKS = "the block size left to the driver"
 WITH_OUTPUTS = "the outputs opened alongside the inputs"
 
@@ -52,7 +55,6 @@ CAUSE_OF = {
     AS_CONFIGURED: None,
     FEWER_CHANNELS: "channels",
     DRIVER_RATE: "samplerate",
-    SIXTEEN_BIT: "bit_depth",
     DRIVER_BLOCKS: "blocksize",
     WITH_OUTPUTS: "input_only",
 }
@@ -79,8 +81,7 @@ FLOWING_SHARE = 0.5
 SIGNAL_PEAK = 10 ** (-60 / 20)
 
 
-def attempts(samplerate, channels, bit_depth, driver_samplerate,
-             has_outputs=True):
+def attempts(samplerate, channels, driver_samplerate, has_outputs=True):
     """
     The openings to try, in order, each differing from the first in one way.
 
@@ -88,7 +89,6 @@ def attempts(samplerate, channels, bit_depth, driver_samplerate,
     when two is already the count — is left out: it would prove nothing and
     would cost another load of the driver.
     """
-    depth = normalize_depth(bit_depth)
     samplerate = int(samplerate)
     channels = int(channels)
 
@@ -100,7 +100,8 @@ def attempts(samplerate, channels, bit_depth, driver_samplerate,
                 "kind": "duplex" if label == WITH_OUTPUTS else "input",
                 "channels": channels,
                 "samplerate": samplerate,
-                "dtype": capture_dtype(depth),
+                # What rtmixer opens every stream with.
+                "dtype": "float32",
                 "blocksize": BLOCK_FRAMES,
                 **params,
             },
@@ -112,8 +113,6 @@ def attempts(samplerate, channels, bit_depth, driver_samplerate,
         plan.append(entry(FEWER_CHANNELS, channels=2))
     if driver_samplerate and int(driver_samplerate) != samplerate:
         plan.append(entry(DRIVER_RATE, samplerate=int(driver_samplerate)))
-    if depth != 16:
-        plan.append(entry(SIXTEEN_BIT, dtype=capture_dtype(16)))
     plan.append(entry(DRIVER_BLOCKS, blocksize=0))
     if has_outputs:
         plan.append(entry(WITH_OUTPUTS))
@@ -132,8 +131,8 @@ _VERDICTS = {
     ),
     "driver": (
         "The driver would not open the interface at all.",
-        "No combination of settings got in, so this is not about the rate, "
-        "the depth or the channels. An ASIO interface belongs to one program at a "
+        "No combination of settings got in, so this is not about the rate "
+        "or the channels. An ASIO interface belongs to one program at a "
         "time: close anything else that uses it (a DAW, the interface's control "
         "panel or mixer, a second copy of this app) and try again. If "
         "nothing else is running, the interface is unplugged or its driver needs "
@@ -170,11 +169,6 @@ _VERDICTS = {
         "will not change at all while locked to an external clock. Either set "
         "the app to the rate the interface is on, or change the interface's rate in its "
         "own control panel first.",
-    ),
-    "bit_depth": (
-        "The interface opened at 16 bits but not at 24.",
-        "Unusual, and worth reporting. Record at 16 bits for now: the "
-        "rehearsal is worth more than the headroom.",
     ),
     "blocksize": (
         "The interface opened when the driver chose its own block size.",
@@ -213,7 +207,7 @@ def verdict(results):
         # Order matters: a card that works both with fewer channels and at
         # another rate is short of channels first — that is the one the person
         # can act on.
-        for candidate in ("channels", "samplerate", "bit_depth", "blocksize"):
+        for candidate in ("channels", "samplerate", "blocksize"):
             if LABEL_FOR[candidate] in working:
                 cause = candidate
                 break
@@ -414,7 +408,6 @@ def plan_for(sd, config, device_index=None):
         "plan": attempts(
             samplerate=samplerate,
             channels=channels,
-            bit_depth=depth,
             driver_samplerate=int(info["default_samplerate"]),
             has_outputs=info.get("max_output_channels", 0) > 0,
         ),
@@ -430,6 +423,9 @@ class InterfaceCheck:
     The listening times are read when it starts rather than bound when this
     file loads, so the suites can shorten them.
     """
+
+    # What the sound process calls this kind (audio/sound/host.py).
+    kind = "InterfaceCheck"
 
     def __init__(self):
         self._lock = threading.Lock()

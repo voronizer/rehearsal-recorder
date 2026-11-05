@@ -54,12 +54,13 @@ import logging
 import threading
 import time
 
-import sounddevice as sd
-
+from rehearsal_recorder.audio import sound
+# Where a parameter is called `sound` (a click's sound), this is sound.new.
+from rehearsal_recorder.audio.sound import new as sound_new
 from rehearsal_recorder.audio.click import SIGNATURE_RULE, SIGNATURES, SOUNDS, Voices, per_bar, tempo_range
 from rehearsal_recorder.audio.click_output import ClickOutput, SilentOutput
 from rehearsal_recorder.audio.click_source import ClickSource
-from rehearsal_recorder.audio.devices import STREAM_LOCK, _is_asio
+from rehearsal_recorder.audio.devices import STREAM_LOCK, _is_asio, sd
 from rehearsal_recorder.audio.take_click import TakeClick, whole
 from rehearsal_recorder.store.names import UNNAMED_TAKE
 
@@ -211,19 +212,19 @@ def take_output(device, channels, missing, here, device_index, samplerate, empty
     as it would either way.
     """
     if missing is not None:
-        return SilentOutput(missing, samplerate=int(samplerate)), None
+        return sound.new(SilentOutput, missing, samplerate=int(samplerate)), None
     if here is not None and here == device_index:
         outputs = _outputs(here)
         channels = channels or [1, 2]
         if max(channels) > outputs:
             channels = [1, 2] if outputs >= 2 else [1]
         if outputs < 1:
-            return SilentOutput(_name(here), empty, int(samplerate)), None
+            return sound.new(SilentOutput, _name(here), empty, int(samplerate)), None
         return None, tuple(c - 1 for c in channels)
     if here is not None and _asio(device_index) and _asio(here):
         # The take's stream is the one ASIO stream PortAudio opens.
-        return SilentOutput(_name(here), ANOTHER_ASIO, int(samplerate)), None
-    return ClickOutput(device, channels or (1, 2)), None
+        return sound.new(SilentOutput, _name(here), ANOTHER_ASIO, int(samplerate)), None
+    return sound.new(ClickOutput, device, channels or (1, 2)), None
 
 
 def _refusal(tempo, signature):
@@ -500,7 +501,7 @@ class Metronome:
         """("player", the player, route) or ("own", an output, route)."""
         device, channels, missing = self._target()
         if missing is not None:
-            silent = SilentOutput(missing)
+            silent = sound.new(SilentOutput, missing)
             return "own", silent, silent.route
         player = self._player()
         if player is not None and player.holds(device):
@@ -508,7 +509,7 @@ class Metronome:
             # has outputs of its own there.
             own = channels is not None and self._saved()
             return "player", player, tuple(c - 1 for c in channels) if own else player.route
-        output = ClickOutput(device, channels or (1, 2))
+        output = sound.new(ClickOutput, device, channels or (1, 2))
         return "own", output, output.route
 
     def click_sink(self):
@@ -532,7 +533,8 @@ class Metronome:
         if tempo is None or not on:
             if backing is None:
                 return None
-            return TakeClick(tempo, signature, 0, None, (), clicks=False, backing=backing, samplerate=samplerate)
+            return sound.new(TakeClick, tempo, signature, 0, None, (), clicks=False, backing=backing,
+                             samplerate=samplerate)
         device, channels, missing = self._target()
         # The system output is a device too: when it is the recording card,
         # the click rides the take's stream there as well.
@@ -540,13 +542,14 @@ class Metronome:
         output, route = take_output(device, channels, missing, here, device_index, samplerate,
                                     "It has no outputs to click on.")
         route = route or output.route
-        if (backing is not None and type(output) is ClickOutput and type(backing.output) is ClickOutput
+        if (backing is not None and sound.kind_of(output) == "ClickOutput"
+                and sound.kind_of(backing.output) == "ClickOutput"
                 and backing.output.device_index == output.device_index):
             # Both on one other device: one stream there, as wide as both
             # need, each on its own outputs.
-            output = backing.output = ClickOutput(output.device_index,
-                                                  sorted(set(output.channels) | set(backing.output.channels)))
-        return TakeClick(tempo, signature, self._setting("count_in_bars"),
+            output = backing.output = sound.new(ClickOutput, output.device_index,
+                                                sorted(set(output.channels) | set(backing.output.channels)))
+        return sound.new(TakeClick, tempo, signature, self._setting("count_in_bars"),
                          self.voices(int(samplerate)), route,
                          wav_tempo=self._setting("tempo_in_wav"), output=output, samplerate=samplerate,
                          backing=backing)
@@ -627,8 +630,8 @@ class Metronome:
         with STREAM_LOCK:
             self._stop_free()
             kind, sink, route = self._sink()
-            source = ClickSource(tempo, signature, self.voices(sink.samplerate, sound), route,
-                                 bars=bars, start_k=start_k)
+            source = sound_new(ClickSource, tempo, signature, self.voices(sink.samplerate, sound), route,
+                               bars=bars, start_k=start_k)
             if kind == "player":
                 sink.play_free_click(source)
             else:
@@ -638,7 +641,7 @@ class Metronome:
                     # Counted by the computer's clock instead, at the rate
                     # the source was made for, so the beat still flashes
                     # on time and the screen says why nothing is heard.
-                    sink = SilentOutput(sink.name, sink.problem(), sink.samplerate)
+                    sink = sound_new(SilentOutput, sink.name, sink.problem(), sink.samplerate)
                     sink.start(source)
             free = _Free(source, kind, sink, shown, fixed)
             with self._lock:
@@ -681,7 +684,7 @@ class Metronome:
         with STREAM_LOCK:
             with self._lock:
                 free = self._free
-            if (free is None or free.kind != "own" or not isinstance(free.sink, ClickOutput)
+            if (free is None or free.kind != "own" or sound.kind_of(free.sink) != "ClickOutput"
                     or free.sink.device_index != device_index):
                 return
             if free.shown:
@@ -741,7 +744,8 @@ class Metronome:
             # for the player (make_room) is no stream.
             if kind == free.kind and route == free.source.route and (
                     sink is free.sink and sink.free_click is free.source if kind == "player"
-                    else type(sink) is type(free.sink) and sink.device_index == free.sink.device_index
+                    else sound.kind_of(sink) == sound.kind_of(free.sink)
+                    and sink.device_index == free.sink.device_index
                     and not free.sink.closed):
                 return
             source = free.source
@@ -751,6 +755,15 @@ class Metronome:
     def close(self):
         """The app is closing."""
         self.stop()
+
+    def sound_lost(self):
+        """РЭХА's sound process stopped: the click between takes and the
+        take's went with it. Let go of here, with nothing asked of them."""
+        with self._lock:
+            self._free = None
+            if self._take is not None:
+                tempo, signature, _ = self._take
+                self._take = (tempo, signature, None)
 
     # ---------- for the screen ----------
 
@@ -775,11 +788,11 @@ class Metronome:
         now = time.perf_counter_ns()
         free = self._free
         if free is not None:
-            if isinstance(free.sink, SilentOutput):
+            if sound.kind_of(free.sink) == "SilentOutput":
                 free.sink.pump(now)
             # A bar for a setting, played: let go of here unless that closes a
             # stream, which its timer does.
-            if free.source.done and not isinstance(free.sink, ClickOutput):
+            if free.source.done and sound.kind_of(free.sink) != "ClickOutput":
                 self._reap(free, wait=False)
                 free = self._free
         on = self._setting("metronome_on")

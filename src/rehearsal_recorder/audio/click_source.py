@@ -53,6 +53,9 @@ class ClickSource:
     None while the take has not chosen its first click.
     """
 
+    # What the sound process calls this kind (audio/sound/host.py).
+    kind = "ClickSource"
+
     def __init__(self, tempo, signature, voices, route, place=None, bars=None, start_k=0, heard=None):
         self.voices = voices
         self.route = tuple(route)
@@ -117,15 +120,38 @@ class ClickSource:
     def set_on(self, on):
         """Off: the clicks go on being counted and are not heard."""
         self._on = bool(on)
+        self._tell()
 
     def set_voices(self, voices):
         """Another sound or volume, at the same rate, from the next click."""
         self.voices = voices
+        self._tell()
 
     def retime(self, tempo, signature):
         """A new tempo or signature, from the next click (a free click only)."""
         number = 1 if self._asked is None else self._asked[0] + 1
         self._asked = (number, tempo, signature)
+        self._tell()
+
+    # Set by the stream that plays it, when that stream renders ahead of what
+    # is heard (audio/ring.py): told of a change here, it renders the blocks
+    # not yet heard again, from what `keep` saved before each.
+    changed = None
+
+    def _tell(self):
+        changed = self.changed
+        if changed is not None:
+            changed()
+
+    def keep(self):
+        """What rendering has moved on since the block began, for put_back."""
+        return (self._next, self._sounding, self._last, self._grid, self._taken,
+                self.written, self.started)
+
+    def put_back(self, kept):
+        """Back to where `keep` was, to render a block again."""
+        (self._next, self._sounding, self._last, self._grid, self._taken,
+         self.written, self.started) = kept
 
     def upcoming(self, now_ns, within_sec=1.5):
         """
@@ -288,3 +314,31 @@ class ClickSource:
             else:
                 origin, from_k = first_frame, self._next
         self._grid = (origin, from_k, tempo, bar_from, signature)
+
+
+def following(tempo, signature, voices, route, backing, bar_one, same):
+    """
+    A click that keeps to a backing track's bars, played between takes: its
+    click k on bar `bar_one` (seconds into the file) and k beats after, on
+    the backing track's own frames when `same` (both on one stream), else
+    through both streams' clocks. None for a click whose place is not known
+    yet (the backing track not playing). Made where the sound is, as the
+    place is asked on the stream's own thread.
+    """
+    rate = backing.samplerate
+
+    def place(k):
+        origin = backing.origin
+        if origin is None:
+            return None
+        frame = origin + round(bar_one * rate) + click_frame(k, tempo, rate)
+        if same:
+            return frame
+        at = backing.clock.ns_at(frame)
+        return None if at is None else source.clock.frame_at(at)
+
+    source = ClickSource(tempo, signature, voices, route, place=place)
+    return source
+
+
+following.kind = "FollowingClick"

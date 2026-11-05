@@ -98,6 +98,15 @@ _sd.InputStream = _FakeStream
 # A stream with inputs and outputs: a take whose click is on the recording card.
 _sd.Stream = _FakeStream
 sys.modules["sounddevice"] = _sd
+# rtmixer plays and records from rings: its stand-in, whose card a check runs
+# by hand (tests/fake_rtmixer.py).
+sys.path.insert(0, str(PROJECT / "tests"))
+import fake_rtmixer  # noqa: E402
+
+# Its streams are opened through the sounddevice stand-ins above, so a check
+# that swaps those for a card that refuses, hangs or is ASIO's one at a time
+# has rtmixer's streams behave the same.
+fake_rtmixer.install(_sd)
 # No suite opens a real MIDI port. With None in sys.modules, importing the
 # library raises ImportError, which midi/ports.open_system() answers as "MIDI is
 # not available" — whatever is plugged into the machine running them.
@@ -141,6 +150,13 @@ def write_wav(path, value, seconds=2.0, depth=16):
         else:
             frame = struct.pack("<i", value * 256)[:3]  # little-endian, low 3
         w.writeframes(frame * int(SR * seconds))
+
+
+def by_hand(player):
+    """The player's ring looked after by the check, not its thread: each
+    `player._ring.service()` is one look, and the fake card moves only when
+    pumped, so what the card hears is known exactly."""
+    return fake_rtmixer.by_hand(player._ring)
 
 
 def settle(player, blocks=40, frames=512):
@@ -359,40 +375,38 @@ def main():
     ok("a bigger block grows it once", bigger.shape[0] == 4096)
     ok("and then keeps that one", p._render(4096).base is bigger.base)
 
-    print("\n[4b2] Skips are counted while the take plays")
-    # The card's calls, timed by hand: a block on time, one the card ran
-    # short of, one that came a whole block late, and one while paused.
-    period = 512 / SR
-    card = np.zeros((512, 2), dtype=np.int16)
-
-    class _Short:
-        output_underflow = True
-
-        def __bool__(self):
-            return True
-
-    p.skips()
-    p.seek(0)
-    p.play()
-    ok("the player says it plays", p.playing is True)
-    p._fill(card, 512, None, now=10.0)
-    p._fill(card, 512, None, now=10.0 + period)
-    p._fill(card, 512, _Short(), now=10.0 + 2 * period)
-    p._fill(card, 512, None, now=10.0 + 4 * period)
-    seconds, short, late, latest = p.skips()
-    ok("the card running short is counted", short == 1)
-    ok("a block a whole block late is counted, by how late",
-       late == 1 and abs(latest - period) < 1e-9)
-    ok("and the time played", abs(seconds - 4 * period) < 1e-9)
-    ok("the count starts again once asked", p.skips()[1:3] == (0, 0))
-    p.pause()
-    ok("paused, it says it does not play", p.playing is False)
-    p._fill(card, 512, _Short(), now=20.0)
-    p.play()
-    p._fill(card, 512, None, now=20.0 + period)
-    ok("nothing counts while paused, and the first block after is timed from the pause",
-       p.skips()[1:3] == (0, 0))
+    print("\n[4b2] Skips: the ring running dry is counted while the take plays")
     p.close()
+    fake_rtmixer.card.reset()
+    dry = TakePlayer(tracks)
+    dry.open_output(0)
+    ring = by_hand(dry)
+    dry.skips()
+    dry.play()
+    ok("the player says it plays as Play is pressed", dry.playing is True)
+    ring.service()
+    for _ in range(4):
+        fake_rtmixer.card.pump(1024)
+    ring.service()
+    seconds, short, least = dry.skips()
+    ok("the time played is counted, a ring that did not run dry is not",
+       seconds > 0 and short == 0)
+    ok("  and the least the ring held is said, in seconds", least is not None and 0.5 < least <= 1.1)
+    for _ in range(60):
+        fake_rtmixer.card.pump(1024)
+    ring.service()
+    ok("a ring that ran dry is counted", dry.skips()[1] == 1)
+    ok("the count starts again once asked", dry.skips()[1:] == (0, None))
+    for _ in range(60):
+        fake_rtmixer.card.pump(1024)
+    ring.service()
+    dry.close_output()
+    told = dry.skips()
+    ok("a dry run just before the output closes is still counted, with the least it held",
+       told[1] == 1 and told[2] is not None)
+    dry.pause()
+    ok("paused, it says it does not play", dry.playing is False)
+    dry.close()
 
     print("\n[4c] Opening and closing the output")
     from rehearsal_recorder.audio.devices import usable_output
@@ -419,11 +433,11 @@ def main():
     # raise "'NoneType' object has no attribute 'close'".
     p3 = TakePlayer(tracks)
     p3.open_output(0)
-    before = _sd.OutputStream.closed
+    stream = p3._stream
     p3.close_output()
     p3.close_output()
     ok("closing twice closes the stream once",
-       _sd.OutputStream.closed == before + 1)
+       stream.closed and stream not in fake_rtmixer.card.streams and p3._stream is None)
     ok("and the take is still loaded", len(p3.tracks) == 2)
 
     # Switching device keeps the take: close() would have thrown it away.
@@ -549,10 +563,13 @@ def main():
     complaint = p4.open_output(3, (3, 4))
     ok("the stream is opened wide enough to reach 3–4",
        p4._stream.kw["channels"] == 4 and complaint is None)
+    by_hand(p4)
     p4.play()
+    p4._ring.service()
     settle(p4)
-    block = np.zeros((512, 4), dtype=np.int16)
-    p4._callback(block, 512, None, None)
+    block = np.zeros((1024, 4), dtype=np.float32)
+    p4._ring_fill(block, 0, 0, 0.0)
+    block *= 32768
     ok("the mix comes out of 3 and 4",
        abs(int(block[:, 2].mean()) - 3000) < 30
        and abs(int(block[:, 3].mean()) - 3000) < 30)
@@ -561,8 +578,10 @@ def main():
     complaint = p4.open_output(3, (5,))
     ok("one output on its own opens as far as that output",
        p4._stream.kw["channels"] == 5 and complaint is None)
-    block = np.full((512, 5), 7, dtype=np.int16)
-    p4._callback(block, 512, None, None)
+    by_hand(p4)
+    block = np.zeros((1024, 5), dtype=np.float32)
+    p4._ring_fill(block, 0, 0, 0.0)
+    block *= 32768
     ok("the mix comes out of that one alone, at the same level",
        abs(int(block[:, 4].mean()) - 3000) < 30 and not block[:, :4].any())
 
@@ -764,7 +783,7 @@ def main():
     rec24._raw_files = {"Gtr": open(tmp / "rec24" / "Gtr.raw", "wb")}
     block32 = np.zeros((256, 1), dtype=np.int32)
     block32[:, 0] = 1000 * 256 * 256  # a mid-level sample at 24-bit scale
-    rec24._callback(block32, 256, None, None)
+    fake_rtmixer.recorded(rec24, block32, 256, None, None)
     rec24._raw_files["Gtr"].close()
     raw_size = (tmp / "rec24" / "Gtr.raw").stat().st_size
     ok("three bytes per sample on disk", raw_size == 256 * 3)
@@ -847,7 +866,7 @@ def main():
     block = np.zeros((256, 2), dtype=np.int16)
     block[:, 0] = -32000  # a loud negative peak must still read as loud
     block[:, 1] = 100
-    rec4._callback(block, 256, None, None)
+    fake_rtmixer.recorded(rec4, block, 256, None, None)
     levels = rec4.get_levels()
     ok("a negative peak counts", abs(levels["Gtr"][0] - 32000 / 32768) < 0.001)
     ok("a quiet track reads quiet", levels["Voc"][0] < 0.01)
@@ -1651,15 +1670,15 @@ def main():
     api_logger = _logs.getLogger("rehearsal_recorder.api")
     api_logger.addHandler(keep_log)
     try:
-        a._say_skips(_Skipped((252.4, 3, 5, 0.0414)))
-        a._say_skips(_Skipped((60.0, 0, 0, 0.0)))
+        a._say_skips(_Skipped((252.4, 3, 0.0414)))
+        a._say_skips(_Skipped((60.0, 0, 0.9)))
     finally:
         api_logger.removeHandler(keep_log)
     said = [r.getMessage() for r in caught if r.levelno == _logs.WARNING]
     ok("a listening that skipped is one line in the log",
        len(said) == 1 and said[0].startswith(
-           "Playback skipped: in 4:12 of a take the card ran short 3 times and 5 blocks "
-           "came late, the latest by 41 ms"))
+           "Playback skipped: in 4:12 of a take the reserve ran dry 3 times; "
+           "the least it held was 0.04 s"))
     ok("but once recording stops it publishes", a._sending.get("cloud").queue.run_next() is True)
     take4 = a.get_rehearsal(str(folder))["takes"][3]
     ok("and now it is in the cloud folder", Path(take4["cloud"]["mix"]).exists())
@@ -3209,12 +3228,13 @@ def main():
     print("\n[28] Telling apart why a card refuses to open")
     from rehearsal_recorder.audio.probe import AS_CONFIGURED, attempts, verdict
 
-    plan = attempts(samplerate=48000, channels=4, bit_depth=24,
-                    driver_samplerate=44100)
+    plan = attempts(samplerate=48000, channels=4, driver_samplerate=44100)
     labels = [a["label"] for a in plan]
     ok("the settings in force are tried first", labels[0] == AS_CONFIGURED)
     ok("and each remaining attempt changes exactly one thing",
-       len(labels) >= 6 and len(set(labels)) == len(labels))
+       len(labels) >= 5 and len(set(labels)) == len(labels))
+    ok("each asks for float32 samples, as rtmixer opens a card",
+       all(a["params"]["dtype"] == "float32" for a in plan))
 
     def only(*opens):
         """A result per attempt, with only the named ones opening — and
@@ -3241,8 +3261,6 @@ def main():
        == "channels")
     ok("the driver's own rate opens — the rate was the problem",
        verdict(only(by_cause["samplerate"]))["cause"] == "samplerate")
-    ok("16-bit opens — the depth was the problem",
-       verdict(only(by_cause["bit_depth"]))["cause"] == "bit_depth")
     ok("the driver's own block size opens — the block size was the problem",
        verdict(only(by_cause["blocksize"]))["cause"] == "blocksize")
     ok("everything opens — the settings are not what refused",
@@ -3307,6 +3325,7 @@ def main():
             ins = kw["channels"][0] if duplex else kw["channels"]
             frames = kw.get("blocksize") or 512
             dtype = np.dtype(kw["dtype"])
+            loudest = (np.iinfo(dtype).max + 1) // 4 if dtype.kind == "i" else 0.25
             if self._halt.wait(self.delay):
                 return
             # Paced by the clock, not by the length of a sleep: each time it
@@ -3319,7 +3338,7 @@ def main():
                 while sent < due and (self.blocks is None or sent < self.blocks):
                     block = np.zeros((frames, ins), dtype=dtype)
                     if self.loud:
-                        block[:, 0] = (np.iinfo(dtype).max + 1) // 4
+                        block[:, 0] = loudest
                     if duplex:
                         out = np.ones((frames, kw["channels"][1]), dtype=dtype)
                         kw["callback"](block, out, frames, None, None)
@@ -3357,8 +3376,7 @@ def main():
     def card(cls):
         return types.SimpleNamespace(InputStream=cls, Stream=cls)
 
-    plan2 = attempts(samplerate=48000, channels=2, bit_depth=24,
-                     driver_samplerate=48000)
+    plan2 = attempts(samplerate=48000, channels=2, driver_samplerate=48000)
 
     def listen(cls, attempt=None, first_block=0.6):
         return probemod.try_attempt(card(cls), 0, attempt or plan2[0],
@@ -3790,7 +3808,7 @@ def main():
     block[:, 0] = 100   # Gtr, input 1
     block[:, 2] = 200   # Keys left, input 3
     block[:, 3] = 300   # Keys right, input 4
-    rec._callback(block, 128, None, None)
+    fake_rtmixer.recorded(rec, block, 128, None, None)
     for f in rec._raw_files.values():
         f.close()
 
@@ -3820,7 +3838,7 @@ def main():
     block32 = np.zeros((64, 2), dtype=np.int32)
     block32[:, 0] = 1000 * 256 * 256
     block32[:, 1] = -2000 * 256 * 256
-    rec24._callback(block32, 64, None, None)
+    fake_rtmixer.recorded(rec24, block32, 64, None, None)
     rec24._raw_files["Keys"].close()
     ok("at 24 bits a stereo frame is six bytes",
        (st24 / "Keys.raw").stat().st_size == 64 * 2 * 3)
@@ -3833,7 +3851,7 @@ def main():
     rec3 = _Rec(0, SR, [{"name": "Keys", "channel": 1, "stereo": True},
                         {"name": "Gtr", "channel": 3}], crashed, bit_depth=16)
     rec3.start()
-    rec3._callback(np.full((100, 4), 700, dtype=np.int16), 100, None, None)
+    fake_rtmixer.recorded(rec3, np.full((100, 4), 700, dtype=np.int16), 100, None, None)
     rec3._stop_flush.set()
     for f in rec3._raw_files.values():
         f.close()
@@ -4322,7 +4340,7 @@ def main():
     quiet.start()
     ok("a take that has only just started is not called stalled",
        quiet.problem() is None)
-    quiet._callback(np.zeros((256, 1), dtype=np.int16), 256, None, None)
+    fake_rtmixer.recorded(quiet, np.zeros((256, 1), dtype=np.int16), 256, None, None)
     quiet._heartbeat._last -= hbmod.SILENCE_SEC + 1
     said = quiet.problem() or ""
     ok("no sound for longer than that stops the take, and says why",
@@ -4337,11 +4355,11 @@ def main():
     flowing = AudioRecorder(0, SR, [{"name": "Gtr", "channel": 1}], quiet_dir / "f")
     flowing.start()
     flowing._heartbeat._last -= hbmod.SILENCE_SEC + 1
-    flowing._callback(np.zeros((256, 1), dtype=np.int16), 256, None, None)
+    fake_rtmixer.recorded(flowing, np.zeros((256, 1), dtype=np.int16), 256, None, None)
     ok("a block arriving means the card is still there",
        flowing.problem() is None)
     flowing.stop()
-    flowing._heartbeat._last -= hbmod.SILENCE_SEC + 1
+    flowing._heartbeat._last = _time.monotonic() - hbmod.SILENCE_SEC - 1
     ok("and a take that has been stopped is not called stalled afterwards",
        flowing.problem() is None)
 
@@ -4373,7 +4391,7 @@ def main():
         stuck = AudioRecorder(0, SR, [{"name": "Gtr", "channel": 1}],
                               quiet_dir / "stuck")
         stuck.start()
-        stuck._callback(np.full((256, 1), 900, dtype=np.int16), 256, None, None)
+        fake_rtmixer.recorded(stuck, np.full((256, 1), 900, dtype=np.int16), 256, None, None)
         began = _time.monotonic()
         result = stuck.stop()
         ok("stopping gives up on a driver that does not answer",
@@ -4605,7 +4623,7 @@ def main():
 
         real_file = slow._raw_files["Gtr"]
         slow._raw_files["Gtr"] = _SlowDisk()
-        writer = threading.Thread(target=lambda: slow._callback(
+        writer = threading.Thread(target=lambda: fake_rtmixer.recorded(slow, 
             np.zeros((256, 1), dtype=np.int16), 256, None, None))
         writer.start()
         _time.sleep(0.4)
@@ -4689,7 +4707,7 @@ def main():
     _, a37 = fresh_api(Path(tempfile.mkdtemp()))
     a37.start_rehearsal("Late night", 0, SR, [{"name": "Gtr", "channel": 1}], 16)
     a37.start_take()
-    a37._recorder._callback(np.full((256, 1), 900, dtype=np.int16), 256, None, None)
+    fake_rtmixer.recorded(a37._recorder, np.full((256, 1), 900, dtype=np.int16), 256, None, None)
     a37_files = list(a37._recorder._raw_files.values())
     folder37 = Path(a37._session["folder"])
     player_dir = Path(tempfile.mkdtemp())
@@ -4810,7 +4828,7 @@ def main():
 
     a39.start_monitor(0, 48000, one)
     a39._monitor._heartbeat._last -= hbmod.SILENCE_SEC + 1
-    a39._monitor._callback(np.zeros((256, 1), dtype=np.int16), 256, None, None)
+    fake_rtmixer.recorded(a39._monitor, np.zeros((256, 1), dtype=np.int16), 256, None, None)
     ok("a block arriving means the card is still there",
        a39.monitor_health()["problem"] is None)
     a39.stop_monitor()
@@ -5018,7 +5036,7 @@ def main():
                                           {"name": "Bass", "channel": 2}], 16)
     a42.start_take()
     # Three seconds: a crop has to leave at least one.
-    a42._recorder._callback(np.full((3 * SR, 2), 900, dtype=np.int16), 3 * SR,
+    fake_rtmixer.recorded(a42._recorder, np.full((3 * SR, 2), 900, dtype=np.int16), 3 * SR,
                             None, None)
     stopped = a42.stop_take()
     kinds = {e["kind"]: e for e in a42.activity()["entries"]}
@@ -5059,7 +5077,7 @@ def main():
     a43.set_cloud_dir(str(root43 / "Cloud"))
     a43.start_rehearsal("Evening", 0, SR, [{"name": "Gtr", "channel": 1}], 16)
     a43.start_take()
-    a43._recorder._callback(np.full((4800, 1), 900, dtype=np.int16), 4800, None, None)
+    fake_rtmixer.recorded(a43._recorder, np.full((4800, 1), 900, dtype=np.int16), 4800, None, None)
     s43 = a43.stop_take()
     a43.keep_take(s43["take_number"], s43["temp_dir"], "Polyn",
                   s43["duration_sec"], s43["tracks"])
@@ -5173,7 +5191,7 @@ def main():
     a44.set_cloud_dir(str(root44 / "Cloud"))
     a44.start_rehearsal("Evening", 0, SR, [{"name": "Gtr", "channel": 1}], 16)
     a44.start_take()
-    a44._recorder._callback(np.full((4800, 1), 900, dtype=np.int16), 4800, None, None)
+    fake_rtmixer.recorded(a44._recorder, np.full((4800, 1), 900, dtype=np.int16), 4800, None, None)
     s44 = a44.stop_take()
     a44.keep_take(s44["take_number"], s44["temp_dir"], "Polyn",
                   s44["duration_sec"], s44["tracks"])
@@ -5216,7 +5234,7 @@ def main():
     # Stop: the name of the take is looked up in the library; a lookup that
     # fails must not keep the take recording.
     a44.start_take()
-    a44._recorder._callback(np.full((4800, 1), 900, dtype=np.int16), 4800, None, None)
+    fake_rtmixer.recorded(a44._recorder, np.full((4800, 1), 900, dtype=np.int16), 4800, None, None)
     real_suggest = a44.suggest_take_name
     a44.suggest_take_name = locked
     try:
@@ -5237,7 +5255,7 @@ def main():
     a45.set_cloud_dir(str(root45 / "Cloud"))
     a45.start_rehearsal("Evening", 0, SR, [{"name": "Gtr", "channel": 1}], 16)
     a45.start_take()
-    a45._recorder._callback(np.full((4800, 1), 900, dtype=np.int16), 4800, None, None)
+    fake_rtmixer.recorded(a45._recorder, np.full((4800, 1), 900, dtype=np.int16), 4800, None, None)
     s45 = a45.stop_take()
     a45.keep_take(s45["take_number"], s45["temp_dir"], "Polyn",
                   s45["duration_sec"], s45["tracks"])
@@ -5771,7 +5789,7 @@ def main():
 
     def record51():
         a51.start_take()
-        a51._recorder._callback(np.full((SR, 1), 900, dtype=np.int16), SR, None, None)
+        fake_rtmixer.recorded(a51._recorder, np.full((SR, 1), 900, dtype=np.int16), SR, None, None)
         return a51.stop_take()
 
     first51 = record51()
@@ -6989,12 +7007,12 @@ def main():
           "so the take ends there. Everything up to that moment is saved.")
 
     told = recorder63("told")
-    told._callback(block63, 256, None, None)
-    told._callback(block63, 256, None, None)
+    fake_rtmixer.recorded(told, block63, 256, None, None)
+    fake_rtmixer.recorded(told, block63, 256, None, None)
     told.fell_asleep(at63)
     ok("a take told the laptop is going to sleep says so",
        told.problem() == capmod.slept_notice(at63))
-    told._callback(block63, 256, None, None)
+    fake_rtmixer.recorded(told, block63, 256, None, None)
     ok("and writes nothing after it", raw63(told) == 2 * 256 * 2)
     first63 = told.stop()
     ok("so the take ends where the laptop slept",
@@ -7006,18 +7024,18 @@ def main():
        second63 == first63 and frames63 == 512)
 
     gap = recorder63("gap")
-    gap._callback(block63, 256, None, None)
+    fake_rtmixer.recorded(gap, block63, 256, None, None)
     gap._seen_wall -= 12
     before63 = gap._seen_wall
-    gap._callback(block63, 256, None, None)
+    fake_rtmixer.recorded(gap, block63, 256, None, None)
     ok("two blocks more than ten seconds apart mean the laptop slept between them",
        gap.problem() == capmod.slept_notice(before63) and raw63(gap) == 256 * 2)
     gap.stop()
 
     soon = recorder63("soon")
-    soon._callback(block63, 256, None, None)
+    fake_rtmixer.recorded(soon, block63, 256, None, None)
     soon._seen_wall -= 9
-    soon._callback(block63, 256, None, None)
+    fake_rtmixer.recorded(soon, block63, 256, None, None)
     ok("a block soon after the last is just a block",
        soon.problem() is None and raw63(soon) == 2 * 256 * 2)
     soon.stop()
@@ -7031,7 +7049,7 @@ def main():
     tick.stop()
 
     woke = recorder63("woke")
-    woke._callback(block63, 256, None, None)
+    fake_rtmixer.recorded(woke, block63, 256, None, None)
     woke._seen_wall -= 12
     woke._heartbeat._last -= 12
     before63 = woke._seen_wall
@@ -7040,13 +7058,13 @@ def main():
     woke.stop()
 
     gone = recorder63("gone")
-    gone._callback(block63, 256, None, None)
+    fake_rtmixer.recorded(gone, block63, 256, None, None)
     gone._heartbeat._last -= 15
     said63 = gone.problem() or ""
     ok("a card unplugged while nobody asked says the interface, not sleep",
        "interface" in said63 and "sleep" not in said63)
     gone.fell_asleep(_t63.time())
-    gone._callback(block63, 256, None, None)
+    fake_rtmixer.recorded(gone, block63, 256, None, None)
     ok("a card already gone stays gone",
        gone.problem() == said63 and raw63(gone) == 256 * 2)
     gone.stop()
@@ -7055,7 +7073,7 @@ def main():
     # PortAudio's finished callback, which may come before the tick or the
     # poll: a sleep must still be told as the sleep it was.
     ended = recorder63("ended")
-    ended._callback(block63, 256, None, None)
+    fake_rtmixer.recorded(ended, block63, 256, None, None)
     ended._seen_wall -= 60
     before63 = ended._seen_wall
     ended._finished()
@@ -7063,14 +7081,14 @@ def main():
        ended.problem() == capmod.slept_notice(before63))
     ended.stop()
     awake63 = recorder63("awake")
-    awake63._callback(block63, 256, None, None)
+    fake_rtmixer.recorded(awake63, block63, 256, None, None)
     awake63._finished()
     ok("and one that ends while it is awake is still the interface",
        "interface stopped responding" in (awake63.problem() or ""))
     awake63.stop()
 
     short = recorder63("short")
-    short._callback(block63, 256, None, None)
+    fake_rtmixer.recorded(short, block63, 256, None, None)
     short._seen_wall -= 4
     short._heartbeat._last -= 4
     ok("a short silence is the silent card, as today",
@@ -7313,78 +7331,48 @@ def main():
        not imports & {"mido", "pylibremidi", "rehearsal_recorder.midi.ports"})
 
     print("\n[64] The recorder marks the clock")
-    # A take's notes are placed on the audio's own clock (spec F1): the recorder
-    # knows how many frames it has written when each block arrives, so it tells
-    # the clock, and the clock does the rest.
+    # A take's notes are placed on the audio's own clock (spec F1): the input
+    # ring's reads say when the card's frames arrived, and a mark a second
+    # goes to the clock (audio/ring.RingMarks, checked closely in test_ring).
     from rehearsal_recorder.audio.devices import input_latency
     from rehearsal_recorder.midi.clock import AudioClock
 
     marked_dir = tmp / "marked"
     marked_tracks = [{"name": "Gtr", "channel": 1}, {"name": "Voc", "channel": 2}]
     clock = AudioClock(SR)
-    clock.latency_sec = 0.010
     keys_note = [{"file": "Keys", "port": "Launchkey Mini MK3"}]
+    fake_rtmixer.card.reset()
+    fake_rtmixer.card.in_latency = 0.010
     rec_m = AudioRecorder(0, SR, marked_tracks, marked_dir, clock=clock, notes=keys_note)
-    rec_m._raw_files = {
-        t["name"]: open(marked_dir / f"{t['name']}.raw", "wb") for t in marked_tracks
-    }
-    block = np.zeros((256, 2), dtype=np.int16)
-    # The first frame of a block is as old as the block is long and the
-    # interface's latency, when the driver says nothing of it.
-    lag = 10_000_000 + 256 / SR * 1e9
-
+    rec_m.start()
+    ok("the clock has the latency the stream says it has", clock.latency_sec == 0.010)
+    block = np.zeros((1024, 2), dtype=np.int16)
     before = time.perf_counter_ns()
-    rec_m._callback(block, 256, None, None)
+    for _ in range(20):
+        fake_rtmixer.recorded(rec_m, block)
     after = time.perf_counter_ns()
-    one = clock.marks()
-    ok("a block leaves one mark", len(one) == 1)
-    ok("of its first frame", one[0][1] == 0)
-    ok("at the time that frame was captured, on the clock of this process",
-       before - lag <= one[0][0] <= after - lag)
-    rec_m._callback(block, 256, None, None)
-    ok("the next block, a moment later, is the latest and not another kept",
-       [m[1] for m in clock.marks()] == [0, 256])
+    one = clock._kept
+    ok("a quarter of a second in, the clock has its first mark", len(one) == 1)
+    # The latest is the mean of the reads since that mark (RingMarks).
+    ok("and the reads since, as its latest: newer than the mark, none past the newest frame",
+       bool(one) and one[0][1] < clock.marks()[-1][1] <= 19 * 1024)
+    ok("on a frame the take has written", one and 0 <= one[0][1] < 20 * 1024)
+    ok("at a time those frames were captured: after the take began, less the latency, and before now",
+       one and before - 10_000_000 <= one[0][0] <= after - 10_000_000)
 
-    # What the driver says of a block: its first frame was captured a certain time ago.
-    driver = types.SimpleNamespace(currentTime=12.500, inputBufferAdcTime=12.480, outputBufferDacTime=0.0)
-    before = time.perf_counter_ns()
-    rec_m._callback(block, 256, driver, None)
-    after = time.perf_counter_ns()
-    ns, frame = clock.marks()[-1]
-    ok("its word is taken: the frame was 20 ms old when the callback ran",
-       frame == 512 and before - 20_000_000 - 1000 <= ns <= after - 20_000_000 + 1000)
-    odd = [types.SimpleNamespace(currentTime=0.0, inputBufferAdcTime=0.0),
-           types.SimpleNamespace(currentTime=5.0, inputBufferAdcTime=0.0),
-           types.SimpleNamespace(currentTime=0.0, inputBufferAdcTime=5.0),
-           types.SimpleNamespace(currentTime=1.0, inputBufferAdcTime=2.0),
-           types.SimpleNamespace(currentTime=5.0, inputBufferAdcTime=3.0),
-           types.SimpleNamespace(currentTime=float("nan"), inputBufferAdcTime=1.0),
-           types.SimpleNamespace(), object()]
-    stray = []
-    for info in odd:
-        before = time.perf_counter_ns()
-        rec_m._callback(block, 256, info, None)
-        after = time.perf_counter_ns()
-        if not before - lag <= clock.marks()[-1][0] <= after - lag:
-            stray.append(info)
-    ok("a zero, a time that is not now, a missing field or no time_info are not believed", stray == [])
-
-    # A block that is not written is not marked.
-    count, last = len(clock.marks()), clock.marks()[-1]
-    rec_m._callback(block, 0, None, None)
+    # A block that comes after Stop is neither marked nor written.
+    count, written = len(clock.marks()), rec_m._frames_written
     rec_m._stopping = True
-    rec_m._callback(block, 256, None, None)
+    for _ in range(60):
+        fake_rtmixer.recorded(rec_m, block)
     rec_m._stopping = False
-    ok("a block of no frames, or one that came after Stop, is not", len(clock.marks()) == count and clock.marks()[-1] == last)
-    ok("the frame of a mark is the frames written before its block",
-       clock.marks()[-1][1] == rec_m._frames_written - 256)
-
+    ok("frames that come after Stop are not written, nor marked",
+       rec_m._frames_written == written and len(clock.marks()) == count)
     for _ in range(240):
-        rec_m._callback(np.zeros((1024, 2), dtype=np.int16), 1024, None, None)
-    ok("five seconds on, a mark a second and the latest", 5 <= len(clock.marks()) <= 8)
-    ok("the latest is the last block written", clock.marks()[-1][1] == rec_m._frames_written - 1024)
-    for f in rec_m._raw_files.values():
-        f.close()
+        fake_rtmixer.recorded(rec_m, block)
+    ok("five seconds on, a mark a second", 4 <= len(clock._kept) <= 6)
+    rec_m.abandon()
+    fake_rtmixer.card.in_latency = 0.0
 
     # What a crashed take's folder says of its notes.
     rec_m._write_record()
@@ -7406,7 +7394,7 @@ def main():
     plain._raw_files = {
         t["name"]: open(tmp / "unmarked" / f"{t['name']}.raw", "wb") for t in marked_tracks
     }
-    plain._callback(block, 256, driver, None)
+    fake_rtmixer.recorded(plain, block[:256])
     for f in plain._raw_files.values():
         f.close()
     ok("with no clock a block is written all the same",
@@ -7418,24 +7406,27 @@ def main():
     # first fault is kept, for the app to read at Stop.
     class _Broken:
         calls = 0
+        latency_sec = 0.0
+        started_ns = None
 
-        def mark(self, *args):
+        def mark_at(self, *args):
             _Broken.calls += 1
             raise RuntimeError(f"clock broke {_Broken.calls}")
 
     rec_b = AudioRecorder(0, SR, marked_tracks, tmp / "broken", clock=_Broken())
-    rec_b._raw_files = {
-        t["name"]: open(tmp / "broken" / f"{t['name']}.raw", "wb") for t in marked_tracks
-    }
-    loud = np.full((256, 2), 1234, dtype=np.int16)
-    rec_b._callback(loud, 256, None, None)
-    first_fault = rec_b.clock_fault
-    rec_b._callback(loud, 256, None, None)
-    for f in rec_b._raw_files.values():
-        f.close()
-    ok("a clock that raises costs the audio nothing: both blocks are written",
-       _Broken.calls == 2 and rec_b._frames_written == 512
-       and (tmp / "broken" / "Gtr.raw").read_bytes() == struct.pack("<h", 1234) * 512)
+    rec_b.start()
+    loud = np.full((1024, 2), 1234, dtype=np.int16)
+    faults = []
+    for _ in range(80):
+        fake_rtmixer.recorded(rec_b, loud)
+        if rec_b.clock_fault is not None and not faults:
+            faults.append(rec_b.clock_fault)
+    first_fault = faults[0] if faults else None
+    done_b = rec_b.stop()
+    with wave.open(done_b["tracks"][0]["file"]) as w:
+        heard_b = w.readframes(w.getnframes())
+    ok("a clock that raises costs the audio nothing: every block is written",
+       _Broken.calls == 2 and heard_b == struct.pack("<h", 1234) * (80 * 1024))
     ok("and the fault is named", first_fault == "RuntimeError('clock broke 1')")
     ok("a second one leaves the first in place", rec_b.clock_fault == first_fault)
 
@@ -8244,7 +8235,7 @@ def main():
         rec = a._recorder
         block = np.full((4800, rec._max_channel), 0 if silent else 900, dtype=np.int16)
         for i in range(blocks):
-            rec._callback(block, 4800, None, None)
+            fake_rtmixer.recorded(rec, block, 4800, None, None)
             if notes and i == 0:
                 fake.send(port, time.perf_counter_ns(), data[0])
             if notes and i == 2:
@@ -8432,11 +8423,11 @@ def main():
         rec = a._recorder
         block = np.full((4800, 2), 900, dtype=np.int16)
         for i in range(5):
-            rec._callback(block, 4800, None, None)
+            fake_rtmixer.recorded(rec, block, 4800, None, None)
             if i == 0:
                 fake.send("TD-17", time.perf_counter_ns(), on67)
         a._laptop_sleeping()
-        rec._callback(block, 4800, None, None)
+        fake_rtmixer.recorded(rec, block, 4800, None, None)
         fake.send("TD-17", time.perf_counter_ns() + 5_000_000_000, bytes([0x99, 40, 90]))
         stop = a.stop_take()
         _, data = heard67(stop["notes"][0]["file"])
@@ -8469,7 +8460,7 @@ def main():
         def broken(*args):
             raise RuntimeError("the clock broke")
 
-        clock.mark = broken
+        clock.mark_at = broken
         play67(a, fake)
         stop = a.stop_take()
         said = errors67(before)
@@ -8523,7 +8514,7 @@ def main():
         play67(a, fake, blocks=2, data=(on67, off67))
         fake.pull("TD-17")
         a._midi.tick()
-        a._recorder._callback(np.full((4800, 2), 900, dtype=np.int16), 4800, None, None)
+        fake_rtmixer.recorded(a._recorder, np.full((4800, 2), 900, dtype=np.int16), 4800, None, None)
         health = a.recording_health()
         ok("the kit pulled mid-take: the health check has no error and the take is still recording",
            health["recording"] is True and health["error"] is None and health["active"] is True)
@@ -8648,7 +8639,7 @@ def main():
             direct = Recorder67(0, SR, [{"name": "Gtr", "channel": 1}], folder, notes=notes)
             direct._write_record()
             direct._raw_files = {"Gtr": open(folder / "Gtr.raw", "wb")}
-            direct._callback(np.zeros((256, 1), dtype=np.int16), 256, None, None)
+            fake_rtmixer.recorded(direct, np.zeros((256, 1), dtype=np.int16), 256, None, None)
             direct.stop()
             ok(f"AudioRecorder.stop {label} {'leaves' if notes else 'removes'} take.json",
                (folder / "take.json").exists() == bool(notes) and (folder / "Gtr.wav").exists())
@@ -12512,9 +12503,9 @@ def main():
     def block80(rec, i):
         if rec.click is not None and rec.click.duplex:
             out = np.zeros((1024, 2), np.float32)
-            rec._duplex_callback(numbered80(i), out, 1024, info80(i), None)
+            fake_rtmixer.recorded_duplex(rec, numbered80(i), out, 1024, info80(i), None)
             return out
-        rec._callback(numbered80(i), 1024, info80(i), None)
+        fake_rtmixer.recorded(rec, numbered80(i), 1024, info80(i), None)
         return None
 
     def stop80(rec, blocks_done):
@@ -12572,30 +12563,38 @@ def main():
     rec80.start()
     kw80 = rec80._stream.kw
     ok("the click on the recording card: one stream with its inputs and its outputs",
-       kw80["device"] == (0, 0) and kw80["channels"] == (2, 2) and kw80["dtype"] == ("int16", "float32")
-       and kw80["callback"] == rec80._duplex_callback)
+       type(rec80._stream).__name__ == "MixerAndRecorder"
+       and kw80["device"] == (0, 0) and kw80["channels"] == (2, 2))
     ok("take.json has the click from the start, its first click not chosen yet",
        record80(duplex80)["click"] == {"tempo": 120, "signature": "4/4", "on": True, "wav_tempo": True,
                                        "first_click_frame": None, "end_frame": None})
     heard80 = np.concatenate([block80(rec80, i) for i in range(100)])
     first80 = tc80.first_click_frame
-    ok("the first block chose the first click: 0.1 s on, and a 10 ms round trip after that", first80 == 4800 + 480)
-    ok("  the click written into the outputs a round trip early",
-       not heard80[:4800].any() and np.array_equal(heard80[4800:4800 + len(voices80.of(2)), 0], voices80.of(2)))
+    # Playing and recording begin together, START_AHEAD_SEC after the stream
+    # opens: the card's frame `ahead80` is the take's first, heard and captured.
+    from rehearsal_recorder.audio.capture import START_AHEAD_SEC as ahead_sec80
+    ahead80 = round(ahead_sec80 * SR)
+    ok("the first click is chosen 0.1 s into the take, no round trip after it: both rings began at once",
+       first80 == 4800 and rec80._trip == 0)
+    ok("  and played on the card as the take's frame it lands on is captured",
+       not heard80[:ahead80 + 4800].any()
+       and np.array_equal(heard80[ahead80 + 4800:ahead80 + 4800 + len(voices80.of(2)), 0], voices80.of(2)))
     # The take's tick comes every 50 ms until take.json has it, not every second.
     ok("  and take.json written again once it was chosen, within moments",
        (written80(duplex80, deadline=0.5) or {}).get("first_click_frame") == first80)
     ok("a click take's problem is still only the recording's", rec80.problem() is None)
     result80 = stop80(rec80, 100)
-    # Stopped at frame 102400: the next quarter from the first click is its fifth,
-    # 2.5 s on.
-    end80 = first80 + cf80(5, 120, SR)
-    ok("Stop recorded on to the next quarter", tc80.end_frame == end80 and abs(result80["duration_sec"] - 2.5) < 1e-9)
+    # Stopped at the take's frame 97600 (the card's 102400 less the frames
+    # before the rings began): the next quarter from the first click is its
+    # fourth, 2 s on.
+    end80 = first80 + cf80(4, 120, SR)
+    ok("Stop recorded on to the next quarter", tc80.end_frame == end80 and abs(result80["duration_sec"] - 2.0) < 1e-9)
     gtr80 = wav80(duplex80 / "Gtr.wav")
     ok("each WAV starts at the first click and ends there",
-       len(gtr80) == end80 - first80 and gtr80[0] == first80 % 30000 and gtr80[-1] == (end80 - 1) % 30000
+       len(gtr80) == end80 - first80 and gtr80[0] == (first80 + ahead80) % 30000
+       and gtr80[-1] == (end80 - 1 + ahead80) % 30000
        and np.array_equal(wav80(duplex80 / "Voc.wav"), gtr80))
-    ok("  and carries the take's tempo: 120 in 4/4, five quarters", read_acid80(duplex80 / "Gtr.wav") == Acid80(120.0, 4, 4))
+    ok("  and carries the take's tempo: 120 in 4/4", read_acid80(duplex80 / "Gtr.wav") == Acid80(120.0, 4, 4))
     ok("take.json is kept for the take's grid, with where the files end",
        record80(duplex80)["click"]["first_click_frame"] == first80 and record80(duplex80)["click"]["end_frame"] == end80)
     ok("the click take's raw files are gone", not list(duplex80.glob("*.raw")))
@@ -12607,7 +12606,7 @@ def main():
         block80(rec80b, i)
     stop80(rec80b, 30)
     ok("with the setting off the WAVs carry no tempo, and still start at the first click",
-       read_acid80(plain80 / "Gtr.wav") is None and wav80(plain80 / "Gtr.wav")[0] == first80 % 30000)
+       read_acid80(plain80 / "Gtr.wav") is None and wav80(plain80 / "Gtr.wav")[0] == (first80 + ahead80) % 30000)
 
     # The app dies mid-take: the raw files, take.json, and the notes as the rig
     # left them. Recovered, the take is cut where the live one would have been.
@@ -12628,12 +12627,14 @@ def main():
     ]).encode("ascii"))
     (crash80 / "take.clock").write_bytes("".join(
         save_line80(m) for m in [(t80, 0), (t80 + 1_000_000_000, SR)]).encode("ascii"))
-    ok("the draft's length is counted from its first click", abs(describe80(crash80, SR)["duration_sec"] - (61440 - first80) / SR) < 1e-9)
+    taken80c = 60 * 1024 - ahead80  # the take's frames: the card's after the rings began
+    ok("the draft's length is counted from its first click",
+       abs(describe80(crash80, SR)["duration_sec"] - (taken80c - first80) / SR) < 1e-9)
     done80 = finalize80(crash80, SR, 16)
     gtr80c = wav80(crash80 / "Gtr.wav")
     ok("recovered, each WAV is cut at the same first click",
-       len(gtr80c) == 61440 - first80 and gtr80c[0] == first80 % 30000
-       and abs(done80["duration_sec"] - (61440 - first80) / SR) < 1e-9)
+       len(gtr80c) == taken80c - first80 and gtr80c[0] == (first80 + ahead80) % 30000
+       and abs(done80["duration_sec"] - (taken80c - first80) / SR) < 1e-9)
     ok("  and carries its tempo", read_acid80(crash80 / "Gtr.wav") == Acid80(120.0, 4, 4))
     names80, events80 = read_events80(crash80 / "Keys.mid")
     ok("its .mid starts at the first click too: the key half a second after it is at 0.5 s",
@@ -12643,13 +12644,13 @@ def main():
     early80 = tmp80 / "stopped in the count-in"
     rec80d = Rec80(0, SR, two80, early80, click=TakeClick80(120, "4/4", 1, voices80, (0, 1)))
     rec80d.start()
-    for i in range(20):  # 20480 frames: between the count-in's first click and its second
+    for i in range(20):  # the take's first 15680 frames: between the count-in's first click and its second
         block80(rec80d, i)
     result80d = stop80(rec80d, 20)
     gtr80d = wav80(early80 / "Gtr.wav")
     ok("Stop in the count-in ends on the next quarter: the count-in's second click",
        len(gtr80d) == cf80(1, 120, SR) and abs(result80d["duration_sec"] - 0.5) < 1e-9)
-    ok("  its WAVs start at the first click", gtr80d[0] == first80 % 30000)
+    ok("  its WAVs start at the first click", gtr80d[0] == (first80 + ahead80) % 30000)
     first_ns80d = t80 + first80 * 1_000_000_000 // SR
     (early80 / "Keys.midraw").write_bytes("".join([
         f"t {t80}\n", f"n {first_ns80d + 250 * ms80} 903c40\n", f"n {first_ns80d + 400 * ms80} 803c00\n"]).encode("ascii"))
@@ -12667,11 +12668,13 @@ def main():
     tc80f = TakeClick80(120, "4/4", 1, voices80, (0, 1))
     rec80f = Rec80(0, SR, two80, lost80, click=tc80f)
     rec80f.start()
-    block80(rec80f, 0)
+    for i in range(6):  # the take's first 1344 frames, before its first click
+        block80(rec80f, i)
     result80f = rec80f.stop()
-    ok("the card gone before the first click came: no grid, all 1024 frames kept, no tempo in the WAVs",
-       tc80f.first_click_frame is None and len(wav80(lost80 / "Gtr.wav")) == 1024
-       and read_acid80(lost80 / "Gtr.wav") is None and abs(result80f["duration_sec"] - 1024 / SR) < 1e-9
+    taken80f = 6 * 1024 - ahead80
+    ok("the card gone before the first click came: no grid, all its frames kept, no tempo in the WAVs",
+       tc80f.first_click_frame is None and len(wav80(lost80 / "Gtr.wav")) == taken80f
+       and read_acid80(lost80 / "Gtr.wav") is None and abs(result80f["duration_sec"] - taken80f / SR) < 1e-9
        and record80(lost80)["click"]["first_click_frame"] is None)
 
     # The card will not open its outputs with its inputs: Record still
@@ -12693,21 +12696,28 @@ def main():
     finally:
         _sd.Stream = duplex_kind80
     ok("a card whose outputs will not open with its inputs: the take records from its inputs alone",
-       rec80e._stream.kw["callback"] == rec80e._callback and rec80e._stream.kw["channels"] == 2
+       type(rec80e._stream).__name__ == "Recorder" and rec80e._stream.kw["channels"] == 2
+       and rec80e._output is None
        and not tc80e.duplex and tc80e.problem() == "Its outputs would not open with its inputs.")
     m80 = Metronome80({}, lambda: None, lambda: None, lambda key: None, None)
     m80.begin_take(120, "4/4", tc80e)
-    for i in range(10):
+    for i in range(15):
         block80(rec80e, i)
     state80 = m80.state()
-    ok("  its first click chosen at once, the screen told when each falls, and which card is mute",
-       tc80e.first_click_frame == 9600 and len(state80["upcoming"]) >= 2 and state80["output_missing"] == "Interface")
-    stop80(rec80e, 10)
+    # Chosen once the take's clock has its first mark, a quarter of a second
+    # in (the read of block 12), and 0.2 s on from there.
+    first80e = 12 * 1024 + 9600
+    ok("  its first click chosen once the take's clock runs, the screen told when each falls, and which card is mute",
+       tc80e.first_click_frame == first80e and len(state80["upcoming"]) >= 2
+       and state80["output_missing"] == "Interface")
+    stop80(rec80e, 15)
     m80.end_take()
     gtr80e = wav80(refused80 / "Gtr.wav")
     ok("  a click take all the same: its WAVs start at its first click and carry its tempo",
-       len(gtr80e) == cf80(1, 120, SR) and gtr80e[0] == 9600 and read_acid80(refused80 / "Gtr.wav") == Acid80(120.0, 4, 4)
-       and record80(refused80)["click"]["first_click_frame"] == 9600 and record80(refused80)["click"]["tempo"] == 120)
+       len(gtr80e) == cf80(1, 120, SR) and gtr80e[0] == first80e % 30000
+       and read_acid80(refused80 / "Gtr.wav") == Acid80(120.0, 4, 4)
+       and record80(refused80)["click"]["first_click_frame"] == first80e
+       and record80(refused80)["click"]["tempo"] == 120)
 
     print("\n[81] The click elsewhere")
     # The click on the desk while the interface records: the take's stream has
@@ -12724,9 +12734,13 @@ def main():
     elsewhere81 = tmp80 / "elsewhere"
     rec81 = Rec80(0, SR, two80, elsewhere81, click=tc81)
     opened81 = Streams81.opened
+    card81 = fake_rtmixer.card
+    # The interface's frames arrive 3 ms after a call's last one, as its
+    # stream's input latency says; the desk's are heard 15 ms after its call.
+    card81.in_latency, card81.out_latency = 1024 / SR + 0.003, 0.015
     rec81.start()
-    ok("the take's stream has inputs only", rec81._stream.kw["channels"] == 2 and rec81._stream.kw["device"] == 0
-       and rec81._stream.kw["callback"] == rec81._callback)
+    ok("the take's stream has inputs only", type(rec81._stream).__name__ == "Recorder"
+       and rec81._stream.kw["channels"] == 2 and rec81._stream.kw["device"] == 0)
     ok("and the click a second stream, on the desk's outputs 3-4, at the desk's rate",
        Streams81.opened == opened81 + 2 and out81._stream.kw["device"] == 3
        and out81._stream.kw["channels"] == 4 and out81.samplerate == 48000 and not tc81.duplex)
@@ -12735,36 +12749,41 @@ def main():
     now81 = [T81]
     time.perf_counter_ns = lambda: int(now81[0])
     desk81 = []
+    # Both rings looked after here, each when its card calls, on one made-up
+    # clock that is PortAudio's time for both streams too.
+    input81, output81 = fake_rtmixer.by_hand(rec81._input), fake_rtmixer.by_hand(out81._ring)
     try:
         i81 = j81 = 0
-        # The interface's blocks arrive 3 ms after their last frame; the desk's
-        # callbacks run 15 ms before what they write is heard, its first frame
-        # heard 60 ms after the take began. Halfway, the desk goes, and its
-        # callbacks with it.
+        # The interface's calls bring frames 3 ms after their last one; the
+        # desk's calls run 15 ms before what they play is heard, its first
+        # frame heard 60 ms after the take began. Halfway, the desk goes, and
+        # its calls with it.
         while i81 < 140:
             due_in = T81 + (i81 + 1) * 1024 / SR * 1e9 + 3e6
             due_out = T81 + 60e6 + j81 * 1024 / SR * 1e9 - 15e6
             if due_in <= due_out or out81.problem() is not None:
                 now81[0] = due_in
-                rec81._callback(numbered80(i81), 1024, types.SimpleNamespace(
-                    currentTime=due_in / 1e9, inputBufferAdcTime=(T81 + i81 * 1024 / SR * 1e9) / 1e9), None)
+                card81.time = due_in / 1e9
+                input81.service()  # the look before: nothing new since
+                fake_rtmixer.call(rec81._stream, numbered80(i81).astype(np.float32) / 32768, advance=False)
+                input81.service()
                 i81 += 1
                 if i81 == 70:
                     out81._finished()  # the headphone amp unplugged mid-take
             else:
                 now81[0] = due_out
-                block = np.zeros((1024, 4), np.float32)
-                out81._callback(block, 1024, types.SimpleNamespace(
-                    currentTime=due_out / 1e9, outputBufferDacTime=(due_out + 15e6) / 1e9), None)
-                desk81.append(block)
+                card81.time = due_out / 1e9
+                desk81.append(fake_rtmixer.call(out81._stream, frames=1024, advance=False))
+                output81.service()
                 j81 += 1
     finally:
         time.perf_counter_ns = real_ns81
+        card81.in_latency = card81.out_latency = 0.0
     first81 = tc81.first_click_frame
-    # The desk's first block ran at 45 ms, so the interface's block after it
-    # (block 1, in at 45.7 ms) chose the first click 0.2 s on.
-    ok("the first click chosen 0.2 s after the input block that followed the desk's first",
-       first81 == 1024 + 9600)
+    # The take's clock has its first mark at the read of block 12, a quarter
+    # of a second in, the desk long playing by then: the first click 0.2 s on.
+    ok("the first click chosen 0.2 s on, once the take's clock runs and the desk plays",
+       first81 == 12 * 1024 + 9600)
     desk81 = np.concatenate(desk81)
     # Each click's sound rises from silence: its first sample is 0.
     heard81 = [int(f) - 1 for f in np.flatnonzero(desk81[:, 2]) if not desk81[max(0, f - 200):f, 2].any()]
@@ -12899,12 +12918,15 @@ def main():
     ok("the player holds the click's device: the click's sink is the player", m82.click_sink() == ("player", p82))
     ok("play mixes into it and nothing else opens",
        m82.play()["ok"] and isinstance(p82._free_click, ClickSource82) and Streams81.opened == opened82 + 1)
-    out82 = np.zeros((4096, 4), np.int16)
-    for b in range(4):
-        p82._callback(out82[b * 1024:(b + 1) * 1024], 1024, None, None)
+    ring82 = by_hand(p82)
+    played82 = []
+    for b in range(12):
+        ring82.service()
+        played82.append(fake_rtmixer.call(p82._stream, frames=1024))
+    out82 = np.concatenate(played82)
     ok("the click on 3 and 4, outside the take's own outputs, at the metronome's volume",
        out82[:, 2].any() and np.array_equal(out82[:, 2], out82[:, 3]) and not out82[:, :2].any()
-       and abs(int(np.abs(out82[:, 2]).max()) - round(0.7 * 32767)) <= 2)
+       and abs(float(np.abs(out82[:, 2]).max()) - 0.7) <= 2 / 32767)
     ok("  out of the player's meters", p82.state()["master_level"] == 0.0)
     m82.stop()
     ok("Stop takes it out of the player's stream", p82._free_click is None)
@@ -12914,11 +12936,14 @@ def main():
        kind82 == "own" and isinstance(sink82, ClickOutput82) and sink82.device_index == 3 and sink82.channels == (3, 4))
     m82.play()
     ok("  which play opens", Streams81.opened == opened82 + 2 and Streams81.last.kw["device"] == 3
-       and Streams81.last.kw["channels"] == 4 and Streams81.last.kw["dtype"] == "float32")
+       and Streams81.last.kw["channels"] == 4)
     m82.stop()
     ok("  and Stop closes", m82.state()["phase"] == "idle")
 
     print("  The take's own click")
+    # What the player mixes, looked at block by block with no stream: Play
+    # and a seek then take effect at once, not a ring's look later.
+    p82.close_output()
     p82.set_take_click(120, "4/4", voices80)
     p82.set_click_on(True)
     ok("the player says its click is on", p82.state()["click"] is True)
@@ -13132,8 +13157,8 @@ def main():
         a82.metronome_set(120, "4/4")
         played82 = a82.metronome_play()
         own82 = a82._metronome._free
-        for b in range(30):  # 30720 frames at 120: clicks 0 and 1 played, click 2 next
-            own82.sink._callback(np.zeros((1024, 2), np.float32), 1024, None, None)
+        for b in range(30):  # 30720 frames at 120: clicks 0 and 1 heard, click 2 next
+            fake_rtmixer.card.pump(1024)
         opened82b = a82.player_open([{"name": "Quiet", "file": str(tmp82 / "Quiet.wav")}])
         moved82 = a82._metronome._free
         ok("play first, the take opened after on the click's card: the player opens there, no warning",
@@ -13194,9 +13219,9 @@ def main():
         for _ in range(blocks):
             indata = np.zeros((1024, 1), np.int16)
             if rec.click is not None and rec.click.duplex:
-                rec._duplex_callback(indata, np.zeros((1024, rec.click.width), np.float32), 1024, None, None)
+                fake_rtmixer.recorded_duplex(rec, indata, np.zeros((1024, rec.click.width), np.float32), 1024, None, None)
             else:
-                rec._callback(indata, 1024, None, None)
+                fake_rtmixer.recorded(rec, indata, 1024, None, None)
 
     def take83(a, keep=None, blocks=4):
         """Record, a few blocks, Stop, and keep the take as `keep`, or throw it away."""
@@ -13244,38 +13269,43 @@ def main():
         ok("the click on the recording card: one stream with its inputs and its outputs",
            started["ok"] and _sd.Stream.opened == opened + 1 and rec.click is not None and rec.click.duplex
            and rec._stream.kw["device"] == (0, 0))
-        ok("the moment Record returns, the screen hears a count-in whose first click is not chosen yet",
+        ok("the moment Record returns, the screen hears a count-in none of whose clicks is heard yet",
            state83(a83, "phase", "count", "since_count_in_ms", "tempo") == ("count", 0, None, 128))
         ok("take.json has the click at 128 in 4/4",
            json.loads((Path(a83._recorder_temp_dir) / "take.json").read_text("utf-8"))["click"]["tempo"] == 128)
 
-        # The card's blocks in made-up time, each arriving as its last frame is
-        # captured. With nothing said by the driver the round trip is the
-        # stream's two latencies, 0.1 s, and the first click is chosen 0.1 s
-        # on and that much later: frame 9600, written at frame 4800, heard
-        # 50 ms after its block is in. So click k is heard 0.15 s + k x 60/128
-        # in, and the count-in's end, click 4, at 2.025 s.
+        # The card's calls in made-up time, PortAudio's clock the same one,
+        # its latencies nothing. Both rings begin at the first call, together,
+        # so a frame played is heard as the same frame is captured, and the
+        # first click, chosen 0.1 s into the take, is frame 4800, heard 0.1 s
+        # in. So click k is heard 0.1 s + k x 60/128 in, and the count-in's
+        # end, click 4, at 1.975 s.
         real_ns = time.perf_counter_ns
         start_ns = 3_000_000_000_000
         now, fed = [start_ns], [0]
+        card = fake_rtmixer.card
+        playing, recording = fake_rtmixer.by_hand(rec._output), fake_rtmixer.by_hand(rec._input)
 
         def at(sec):
             while fed[0] * 1024 / SR <= sec:
                 now[0] = start_ns + fed[0] * 1024 * 1_000_000_000 // SR
-                feed83(a83, 1)
+                card.time = now[0] / 1e9
+                fake_rtmixer.call(rec._stream, np.zeros((1024, 1), np.float32), advance=False)
+                playing.service()
+                recording.service()
                 fed[0] += 1
             now[0] = start_ns + round(sec * 1e9)
             return a83.metronome_state()
 
         time.perf_counter_ns = lambda: int(now[0])
         try:
-            heard = [(s["phase"], s["count"]) for s in map(at, (0.1, 0.16, 0.63, 1.1, 1.57, 2.0))]
+            heard = [(s["phase"], s["count"]) for s in map(at, (0.05, 0.11, 0.58, 1.05, 1.52, 1.9))]
             first = rec.click.first_click_frame
-            ended = at(2.0252)
-            later = at(2.525)
+            ended = at(1.9752)
+            later = at(2.475)
         finally:
             time.perf_counter_ns = real_ns
-        ok("the first click chosen from the first block: frame 9600", first == 9600)
+        ok("the first click chosen 0.1 s into the take: frame 4800", first == 4800)
         ok("the count-in as it is heard: 1, 2, 3 and 4, each from its click",
            heard == [("count", 0), ("count", 1), ("count", 2), ("count", 3), ("count", 4), ("count", 4)])
         ok("then the take, from the count-in's end",
@@ -13291,8 +13321,8 @@ def main():
         ok("a click take thrown away, a false start, gives its song no tempo",
            a83._lib.tempo_for("Ahon")["song"]["tempo"] is None)
         ok("  and the row still holds 128", state83(a83, "tempo", "held") == (128, True))
-        # Twelve blocks, past the first click at frame 9600: a take whose card
-        # goes quiet before it is no click take ([80]).
+        # Twelve blocks, past the first click at frame 4800 once the rings
+        # begin: a take whose card goes quiet before it is no click take ([80]).
         stopped, kept = take83(a83, keep="Ahon", blocks=12)
         song = a83._lib.tempo_for("Ahon")["song"]
         ok("the first click take kept gives the song its tempo: 128 in 4/4",
@@ -14690,7 +14720,7 @@ def main():
 
     print("  a take under review")
     a90.start_take()
-    a90._recorder._callback(np.full((SR, 2), 900, dtype=np.int16), SR, None, None)
+    fake_rtmixer.recorded(a90._recorder, np.full((SR, 2), 900, dtype=np.int16), SR, None, None)
     record90 = json.loads((Path(a90._recorder.out_dir) / "take.json").read_text(encoding="utf-8"))
     ok("take.json says each track's icon, and none for a track with none",
        [(t["name"], t["icon"]) for t in record90["tracks"] if "icon" in t]
@@ -14799,6 +14829,91 @@ def main():
                                {"take_number": 1}])
     ok("the interface gets a wave for a kept take, None for one that is not there",
        asked92["ok"] and len(asked92["shapes"][0]) == 120 and asked92["shapes"][1:] == [None, None, None])
+
+    print("\n[93] The sound process stops mid-take")
+    # The take ends as one whose card went quiet does, kept up to there; an
+    # open take pauses with its own problem; a sound process left down
+    # refuses a take, the signal check and the interface check, in one
+    # sentence (audio/sound, the spec's Part 9).
+    from rehearsal_recorder.audio import sound as sound93
+    from rehearsal_recorder.audio.sound.link import DOWN as DOWN93
+    from rehearsal_recorder.audio.sound.link import STOPPED as STOPPED93
+
+    root93 = Path(tempfile.mkdtemp())
+    _, a93 = fresh_api(root93)
+    a93.start_rehearsal("Evening", 0, SR, [{"name": "Gtr", "channel": 1}], 16)
+    write_wav(root93 / "before" / "Gtr.wav", 900)
+    a93.player_open([{"name": "Gtr", "file": str(root93 / "before" / "Gtr.wav")}])
+    a93.player_set_master(0.3)
+    a93.player_set_muted("Gtr", True)
+    a93.player_set_loop(0.2, 0.8)
+    ok("a take is open in the player", a93.player_state().get("problem") is None)
+    a93.start_take()
+    fake_rtmixer.recorded(a93._recorder, np.full((2 * SR, 1), 900, dtype=np.int16), 2 * SR, None, None)
+    # What the sound process dying leaves: the raw files closed as they were.
+    a93._recorder.abandon()
+    a93._sound_event("sound_stopped", {})
+    health93 = a93.recording_health()
+    ok("the health check says the sound stopped, so the screen stops the take",
+       health93.get("error") == STOPPED93 and health93.get("active") is False)
+    ok("  and the open take pauses, saying so",
+       a93.player_state().get("problem") == apimod.PLAYBACK_STOPPED
+       and a93.player_state().get("playing") is False)
+    stopped93 = a93.stop_take()
+    ok("Stop keeps the take up to there",
+       stopped93.get("ok") and abs(stopped93["duration_sec"] - 2.0) < 0.05
+       and Path(stopped93["tracks"][0]["file"]).exists())
+    ok("  and the next take is not called stopped", a93._take_lost is None)
+    a93.discard_take(stopped93["temp_dir"])
+    played93 = a93.player_play()
+    ok("Play opens the take again, mixed as it was: Master, M and the loop",
+       played93.get("ok") and played93.get("problem") is None and played93.get("master") == 0.3
+       and played93.get("muted") == ["Gtr"] and abs((played93.get("loop") or {}).get("a", 0) - 0.2) < 0.01)
+    a93.player_pause()
+
+    # The sound process gone before its news came: Stop finds it so itself.
+    a93.start_take()
+    fake_rtmixer.recorded(a93._recorder, np.full((SR, 1), 900, dtype=np.int16), SR, None, None)
+    a93._recorder.abandon()
+
+    def _gone93(progress=None):
+        raise sound93.SoundUnavailable(STOPPED93)
+
+    a93._recorder.stop = _gone93
+    early93 = a93.stop_take()
+    ok("a Stop that finds the sound process gone keeps the take all the same",
+       early93.get("ok") and abs(early93.get("duration_sec", 0) - 1.0) < 0.05)
+    a93.discard_take(early93["temp_dir"])
+
+    # Slow to answer is not stopped.
+    from rehearsal_recorder.audio.sound.link import NOT_ANSWERING as SLOW93
+
+    a93.start_take()
+
+    def _slow93():
+        raise sound93.SoundUnavailable(SLOW93)
+
+    a93._recorder.problem = _slow93
+    slow93 = a93.recording_health()
+    ok("a sound process slow to answer does not stop the take",
+       slow93.get("error") is None and slow93.get("active") is True)
+    del a93._recorder.problem
+    a93.discard_take(a93.stop_take()["temp_dir"])
+
+    class _Down93:
+        local = False
+        alive = False
+
+    real93 = sound93._link
+    sound93._link = _Down93()
+    try:
+        refused93 = [a93.start_take(), a93.start_monitor(0, SR, [{"name": "Gtr", "channel": 1}]),
+                     a93.start_interface_check()]
+    finally:
+        sound93._link = real93
+    ok("a sound process left down refuses a take, the signal check and the interface check",
+       all(r.get("ok") is False and r.get("error") == DOWN93 for r in refused93))
+    ok("  and no take was begun", a93._recorder is None)
 
     print("\n" + "=" * 60)
     if problems:

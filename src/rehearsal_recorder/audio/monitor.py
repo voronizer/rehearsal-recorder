@@ -3,13 +3,11 @@ Listening to the inputs without recording — the "check signal" step.
 
 The point is to confirm, before the rehearsal starts, that the guitarist
 really lands on the guitar track and not the vocal one. The stream is opened
-exactly like it is for recording, but nothing is written to disk: only levels
-are measured.
+exactly like it is for recording, through rtmixer's ring (audio/ring.py), but
+nothing is written to disk: only levels are measured.
 """
 
 import threading
-
-import sounddevice as sd
 
 from rehearsal_recorder.audio import heartbeat
 from rehearsal_recorder.audio.devices import (
@@ -17,12 +15,18 @@ from rehearsal_recorder.audio.devices import (
     close_stream,
     input_latency,
     open_stream,
+    sd,
 )
+from rehearsal_recorder.audio.ring import RingInput
 
 BLOCK_FRAMES = 1024
 
 
 class LevelMonitor:
+
+    # What the sound process calls this kind (audio/sound/host.py).
+    kind = "LevelMonitor"
+
     def __init__(self, device_index, samplerate, tracks):
         if not tracks:
             raise ValueError("No tracks configured")
@@ -37,6 +41,7 @@ class LevelMonitor:
         )
 
         self._stream = None
+        self._input = None
         # Whether the card is still sending: unplugged mid-check, an ASIO
         # card leaves every bar at rest and says nothing.
         self._heartbeat = heartbeat.Heartbeat()
@@ -52,19 +57,12 @@ class LevelMonitor:
         self._lock = threading.Lock()
         self.last_status = None
 
-    def _callback(self, indata, frames, time_info, status):
-        # The audio thread: no printing, no allocating. max()/min() hand back
-        # scalars, so measuring a peak costs nothing.
-        self._heartbeat.enter()
-        try:
-            if status:
-                self.last_status = str(status)
-            if frames:
-                self._measure(indata, frames)
-        finally:
-            self._heartbeat.leave()
-
-    def _measure(self, indata, frames):
+    def _measure(self, indata, first_frame=0, arrival_ns=None):
+        """The ring's frames (float32, frames by inputs), each input's peak
+        kept until the next poll. max()/min() hand back scalars."""
+        frames = len(indata)
+        if not frames:
+            return
         with self._lock:
             for track in self.tracks:
                 name = track["name"]
@@ -72,24 +70,25 @@ class LevelMonitor:
                 held = self._levels.setdefault(name, [0.0] * self._width[name])
                 for c in range(self._width[name]):
                     column = indata[: frames, first + c]
-                    loudest = max(abs(int(column.max())), abs(int(column.min())))
-                    peak = loudest / 32768.0
+                    peak = min(1.0, max(abs(float(column.max())), abs(float(column.min()))))
                     if peak > held[c]:
                         held[c] = peak
 
     def start(self):
+        import rtmixer  # the sound process's alone
+
         with STREAM_LOCK:
             self._stream = open_stream(
-                sd.InputStream,
+                rtmixer.Recorder,
                 device=self.device_index,
                 channels=self._max_channel,
                 samplerate=self.samplerate,
-                dtype="int16",
                 blocksize=BLOCK_FRAMES,
                 latency=input_latency(sd, self.device_index),
-                callback=self._callback,
             )
-        self._heartbeat.start()
+        self._input = RingInput(self._stream, self._max_channel, self.samplerate, self._measure,
+                                heartbeat=self._heartbeat)
+        self._input.start()
 
     def problem(self):
         """
@@ -114,6 +113,9 @@ class LevelMonitor:
         return snapshot
 
     def stop(self):
+        recording, self._input = self._input, None
+        if recording is not None:
+            recording.stop(drain=False)
         self._heartbeat.stop()
         with STREAM_LOCK:
             stream, self._stream = self._stream, None

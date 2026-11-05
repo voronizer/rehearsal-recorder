@@ -6,6 +6,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 from test_engine import fresh_api, np, SR
+import fake_rtmixer  # noqa: E402  (test_engine put tests/ on the path)
 
 
 class BridgeCaller:
@@ -76,7 +77,7 @@ def main():
             # Laptop Stop leaves a draft for Review even if an old config enabled automatic keeping.
             api._config['automatic_keep'] = True
             assert adapter.execute('start')['ok']
-            api._recorder._callback(np.full((512,1),1000,dtype=np.int32),512,None,None)
+            fake_rtmixer.recorded(api._recorder, np.full((512,1),1000,dtype=np.int32),512,None,None)
             review = adapter.execute('stop_review')
             assert review['ok'] and not api._session_takes()
             assert adapter.state()['pending_take']['take_number'] == 1
@@ -85,7 +86,7 @@ def main():
             assert adapter.state()['state'] == 'ready'
             # Explicit stop-and-keep is available to any adapter.
             assert adapter.execute('record_stop')['ok']
-            api._recorder._callback(np.full((512,1),1000,dtype=np.int32),512,None,None)
+            fake_rtmixer.recorded(api._recorder, np.full((512,1),1000,dtype=np.int32),512,None,None)
             assert adapter.execute('record_stop')['ok'] and len(api._session_takes()) == 2
             api._transport.error = 'Save needs recovery'
             assert adapter.execute('set_volume', {'level':0.6})['ok']
@@ -132,7 +133,7 @@ def main():
             # Stop Review remains Saving even after stop_take clears its own
             # stopping flag, until the pending take is published atomically.
             assert adapter.execute('start')['ok']
-            api._recorder._callback(np.full((512, 1), 1000, dtype=np.int32), 512, None, None)
+            fake_rtmixer.recorded(api._recorder, np.full((512, 1), 1000, dtype=np.int32), 512, None, None)
             original_stop = api.stop_take
             stopped, finish_stop = threading.Event(), threading.Event()
             stop_results = []

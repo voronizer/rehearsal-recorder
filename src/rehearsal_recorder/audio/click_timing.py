@@ -34,8 +34,12 @@ class OutputClock(StreamClock):
         """
         The callback ran at `arrival_ns`, writing a block that begins with the
         stream's frame `first_frame`, which is heard `lead_sec` later (see
-        lead_of). Audio thread: single assignments and one append.
+        lead_of). Audio thread: single assignments and one append. A lead of
+        None (a ring the card has not reached, audio/ring.py) says nothing
+        of when the block is heard, and marks nothing.
         """
+        if lead_sec is None:
+            return
         self._keep((arrival_ns + round(lead_sec * _NS), first_frame))
 
     def frame_at(self, ns):

@@ -2,6 +2,7 @@
 import tempfile
 from pathlib import Path
 from test_engine import fresh_api, np, SR
+import fake_rtmixer  # noqa: E402  (test_engine put tests/ on the path)
 
 
 def main():
@@ -32,7 +33,7 @@ def main():
             assert t.command('previous_song')['ok']
             def record():
                 assert t.command('record_stop')['ok']
-                api._recorder._callback(np.full((512,1),1000,dtype=np.int32),512,None,None)
+                fake_rtmixer.recorded(api._recorder, np.full((512,1),1000,dtype=np.int32),512,None,None)
                 assert t.command('record_stop')['ok']
             record()
             assert t.state()['playback_take_number']==1
@@ -70,7 +71,7 @@ def main():
             assert t.command('play_stop')['ok'] and t.playback_take_number==2
             # Saving errors remain latched; recorded drafts are never thrown away.
             assert t.command('record_stop')['ok']
-            api._recorder._callback(np.full((512,1),1000,dtype=np.int32),512,None,None)
+            fake_rtmixer.recorded(api._recorder, np.full((512,1),1000,dtype=np.int32),512,None,None)
             keep=api.keep_take
             api.keep_take=lambda *a,**k:{'ok':False,'error':'Disk refused'}
             assert not t.command('record_stop')['ok']

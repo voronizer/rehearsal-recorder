@@ -28,6 +28,7 @@ from pathlib import Path
 # The engine suite's stand-in for the sound card library, then the tempo
 # suite's drums: importing either runs no suite.
 from test_engine import np  # noqa: F401  (the stand-ins come with it)
+import fake_rtmixer  # noqa: E402  (test_engine put tests/ on the path)
 from test_tempo import hit, write_wav
 
 import soundfile  # noqa: E402
@@ -142,21 +143,19 @@ def pads(path, seconds=30.0):
 
 RATE = 48000
 T = 3_000_000_000
-# The duplex blocks below are heard 4.5 ms after their callback runs and were
-# captured 5 ms before it: a round trip of 9.5 ms, 456 frames at 48 kHz.
+# The blocks below are mixed 4.5 ms before they are heard, and what is played
+# comes back a round trip of 9.5 ms later, 456 frames at 48 kHz, as a
+# recorder would measure it for rings begun that far apart.
 TRIP = 456
 
 
 def duplex_run(tc, blocks, width, start=0):
-    """Blocks of 1024 into a take's stream with inputs and outputs, as
-    test_click's: what the take wrote into the outputs, all of them."""
+    """Blocks of 1024 of the outputs of a take's stream with inputs and
+    outputs, as test_click's: what the take mixed into them, all of them."""
     heard = []
     for i in range(start, start + blocks):
         out = np.zeros((1024, width), np.float32)
-        now = 100.0 + i * 1024 / RATE
-        info = types.SimpleNamespace(currentTime=now, inputBufferAdcTime=now - 0.005,
-                                     outputBufferDacTime=now + 0.0045)
-        tc.on_duplex_block(out, i * 1024, 1024, info, (0.004, 0.004), now_ns=T + i * 1024 * 10 ** 9 // RATE)
+        tc.fill_card(out, i * 1024, T + i * 1024 * 10 ** 9 // RATE, 0.0045, TRIP)
         heard.append(out)
     return np.concatenate(heard)
 
@@ -269,9 +268,9 @@ def through_the_api(tmp):
         for i in range(n):
             indata = np.zeros((1024, 1), np.int16)
             if rec.click is not None and rec.click.duplex:
-                rec._duplex_callback(indata, np.zeros((1024, rec.click.width), np.float32), 1024, info(i), None)
+                fake_rtmixer.recorded_duplex(rec, indata, np.zeros((1024, rec.click.width), np.float32), 1024, info(i), None)
             else:
-                rec._callback(indata, 1024, info(i), None)
+                fake_rtmixer.recorded(rec, indata, 1024, info(i), None)
 
     try:
         s = a.get_settings()
@@ -497,7 +496,9 @@ def through_the_api(tmp):
             apimod.shutil.disk_usage = real_usage
         ok("  the disk line counts the file's channels as one more track's",
            file_channels > 0 and abs(health["minutes_left"] - 100) < 0.01)
-        blocks(8)
+        # 0.1 s of the card's frames go by before its rings begin, and the
+        # file 0.1 s into the take: 16 blocks leave it half a second.
+        blocks(16)
         ok("  no count-in on the screen", a.metronome_state()["phase"] == "take")
         done = a.stop_take()
         ok("  Stop keeps its Backing track; the take has its tempo and no click",
@@ -921,10 +922,10 @@ def main():
     player = TakePlayer([{"name": "Gtr", "file": str(tmp / "quiet.wav")}])
     between = BackingSource(backing_file.open_ready(ready6), (0, 1), 1.0)
     player.play_free_backing(between)
-    out = np.zeros((512, 2), np.int16)
-    player._fill(out, 512, None)
+    out = np.zeros((1024, 2), np.float32)
+    player._ring_fill(out, 0, time.perf_counter_ns(), 0.0)
     ok("between takes, mixed into the player's stream on its device",
-       player.free_backing is between and np.abs(out - np.trunc(data6[:512] * 32767)).max() <= 1)
+       player.free_backing is between and np.abs(out - data6[:1024]).max() <= 1e-6)
 
     elsewhere = FakeOutput(RATE)
     asio = TakeClick(120, "4/4", 1, voices, (0, 1), output=elsewhere, samplerate=RATE,
@@ -1005,9 +1006,9 @@ def main():
 
     def feed(rec, i):
         if rec.click.duplex:
-            rec._duplex_callback(block_in(i), np.zeros((1024, rec.click.width), np.float32), 1024, info(i), None)
+            fake_rtmixer.recorded_duplex(rec, block_in(i), np.zeros((1024, rec.click.width), np.float32), 1024, info(i), None)
         else:
-            rec._callback(block_in(i), 1024, info(i), None)
+            fake_rtmixer.recorded(rec, block_in(i), 1024, info(i), None)
 
     def stopped(rec, done, also=None, progress=None):
         """Stop, the card going on from block `done` on a thread of its own once

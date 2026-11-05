@@ -7,8 +7,9 @@ cd ui && npm test                    # the interface, what needs no browser
 cd ui && npm run build && npm run test:e2e   # the interface in a browser
 ```
 
-The seventeen Python suites cover audio, storage, platform behaviour, MIDI,
-the tempo counter, shared controls and sending takes to a band service.
+The nineteen Python suites cover audio, the sound process, storage, platform
+behaviour, MIDI, the tempo counter, shared controls and sending takes to a
+band service.
 Interface tests run as unit and browser suites.
 
 ## test_control_api.py: shared controls
@@ -317,6 +318,31 @@ Close anyway; disconnect; the cloud folder sending nothing new while the
 service is chosen; an old РЭХА told to update. The parts are 16 KiB here, so
 a short take has several. Needs `pip install openapi-core==0.23.1`; without
 it the suite stops at once and says so. Run with `python tests/test_sending.py`.
+
+## test_ring.py: sound through rtmixer's rings
+
+`audio/ring.py` on `tests/fake_rtmixer.py`, a stand-in for rtmixer checked
+against the real one, with a card called by hand a block at a time. A play
+ring keeps a second ahead of the card; a change is mixed again from two card
+calls ahead; a move is exact to the frame and made before it returns; a ring
+that ran dry plays again with 0.6 s in it; the frame heard comes from the
+ring when the card's clock is not believable. A record ring writes every
+frame the card captured, bit for bit, and frames lost when it filled come
+back as silence; a card that sends nothing for 3 s stops the take; the click
+on the recording card lands on the take's grid; Stop records on to the next
+quarter; the notes' clock is marked once a second from the reads. Run with
+`python tests/test_ring.py`.
+
+## test_sound.py: the sound process
+
+A real second process, spawned as the app spawns it, with the fake card
+running by itself in it. A stand-in's calls and answers, an error there
+raised here, the same stand-in for the same object; a recorder's levels,
+its clock's marks and its log lines reaching the main process; a rescan
+there reaching the device list here; the sound process killed mid-take
+(the take's raw file stays, it starts again once, a second death within a
+minute leaves it down) and the main process killed (the sound process ends
+within 2 s). Run with `python tests/test_sound.py`.
 
 ## The interface: in ui/, in TypeScript
 
