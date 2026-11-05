@@ -21,8 +21,9 @@ import { reportPageError } from "@/lib/bridgeErrors"
  * long enough to notice and reach for. `onGone` is the other end of the same
  * thing: it runs when the notice leaves without its action, timed out or
  * closed or replaced, and that is the moment the thing is let go for good.
- * ⌘Z (Ctrl+Z elsewhere) runs the newest notice's action, see
- * hooks/useUndoKey.ts.
+ * ⌘Z (Ctrl+Z elsewhere) runs the newest notice's Undo, see
+ * hooks/useUndoKey.ts. An action with nothing to take back, such as See on
+ * the songs the band changed, says `undo: false`: ⌘Z passes it by.
  *
  * `key` is the slot a notice takes: a new one with the same key replaces the
  * old, so a retry that works replaces the failure it retried. A screen uses
@@ -31,7 +32,12 @@ import { reportPageError } from "@/lib/bridgeErrors"
  */
 export type NoticeKind = "done" | "warning" | "error"
 
-export type NoticeAction = { label: string; run: () => void }
+export type NoticeAction = {
+  label: string
+  run: () => void
+  /** false: nothing to take back, so no ⌘Z beside it and none runs it. */
+  undo?: false
+}
 
 export type Notice = {
   id: number
@@ -161,10 +167,10 @@ export function runAction(id: number) {
   call("a notice's action", notice.action.run)
 }
 
-/** Runs the newest action there is, whatever came after it; false when no
+/** Runs the newest Undo there is, whatever came after it; false when no
  *  notice has one. */
 export function undoLatest(): boolean {
-  const newest = current.findLast((c) => c.action)
+  const newest = current.findLast((c) => c.action && c.action.undo !== false)
   if (!newest) return false
   runAction(newest.id)
   return true

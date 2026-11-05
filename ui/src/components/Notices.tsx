@@ -131,11 +131,13 @@ export function NoticeItem({
         <Button
           variant="outline"
           size="row"
-          aria-keyshortcuts={system === "mac" ? "Meta+Z" : "Control+Z"}
+          aria-keyshortcuts={
+            notice.action.undo === false ? undefined : system === "mac" ? "Meta+Z" : "Control+Z"
+          }
           onClick={() => runAction(notice.id)}
         >
           {notice.action.label}
-          <Kbd aria-hidden>{words(system).undoKey}</Kbd>
+          {notice.action.undo !== false && <Kbd aria-hidden>{words(system).undoKey}</Kbd>}
         </Button>
       )}
       <Button

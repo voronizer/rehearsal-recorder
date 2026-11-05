@@ -180,6 +180,38 @@ test.describe("the background work button, from any screen", () => {
     await activity(page, [entry()])
     await expect(workButton(page)).toBeVisible()
   })
+
+  test("says once what the band changed in songs, and See opens the lines", async ({ page }) => {
+    await openApp(page, { before: "window.__ACTIVITY__ = [];" })
+    await primed(page)
+    const line = (id: number, title: string, detail: string) =>
+      entry({ id, kind: "service", title, folder: null, take_number: null, state: "done", fraction: 1, step: null, detail })
+    await activity(page, [
+      line(1, "Pałyn: 132 bpm · 4/4", "Ivan changed the tempo in the band service"),
+      line(2, "Zorka", "New song from Ivan in the band service"),
+    ])
+    await setFake(page, "__NEWS__", { id: 1, text: "Ivan changed 2 songs in the band service" })
+    const notice = page.locator("[data-notice='done']", { hasText: "Ivan changed 2 songs in the band service" })
+    await expect(notice).toBeVisible()
+    // Nothing to take back: no Undo key beside See.
+    const see = notice.getByRole("button", { name: "See", exact: true })
+    await expect(see).not.toHaveAttribute("aria-keyshortcuts")
+    await expect(notice.locator("kbd")).toHaveCount(0)
+    await see.click()
+    const list = page.getByRole("dialog", { name: "Background work" })
+    await expect(list.getByText("Ivan changed the tempo in the band service")).toBeVisible()
+    await expect(list.getByText("New song from Ivan in the band service")).toBeVisible()
+    await expect(notice).toHaveCount(0)
+
+    // The same news asked for again is not said again.
+    await page.keyboard.press("Escape")
+    await expect(list).toHaveCount(0)
+    const polls = () =>
+      page.evaluate(() => (window as unknown as { __ACTIVITY_POLLS__: number }).__ACTIVITY_POLLS__)
+    const now = await polls()
+    await expect.poll(polls).toBeGreaterThanOrEqual(now + 2)
+    await expect(page.locator("[data-notice]")).toHaveCount(0)
+  })
 })
 
 test("the list's headings are written as they read (F7)", async ({ page }) => {

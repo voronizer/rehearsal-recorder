@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Progress } from "@/components/ui/progress"
 import { api, type ActivityEntry } from "@/lib/api"
-import { pollSoon, setListOpen, useActivity } from "@/lib/activity"
+import { onListAsked, pollSoon, setListOpen, useActivity } from "@/lib/activity"
 import { notify } from "@/lib/notices"
 import { cn } from "@/lib/utils"
 
@@ -24,7 +24,8 @@ function isActive(e: ActivityEntry) {
  * "Done", or "1 failed" in red. Looked at, just an icon until Clear. Pressed,
  * the list: what is running with a bar each, what finished with what it came
  * to, and Retry on a cloud copy that failed or a take the band service
- * turned down.
+ * turned down. The notice about the band's songs opens it
+ * too (lib/activity.ts, openList).
  *
  * Escape closes the list and nothing else: Radix gives its content
  * role="dialog", which useEscape (hooks/useSpacebar.ts) already leaves alone.
@@ -32,14 +33,22 @@ function isActive(e: ActivityEntry) {
 export function ActivityButton() {
   const { entries, recording } = useActivity()
   const [open, setOpen] = useState(false)
-  // A screen that goes takes its open list with it.
-  useEffect(() => () => setListOpen(false), [])
-  if (entries.length === 0) return null
-
   const show = (next: boolean) => {
     setOpen(next)
     setListOpen(next)
   }
+  // A screen that goes takes its open list with it.
+  useEffect(() => () => setListOpen(false), [])
+  // See, on the notice about the band's songs, opens the list.
+  useEffect(
+    () =>
+      onListAsked(() => {
+        setOpen(true)
+        setListOpen(true)
+      }),
+    []
+  )
+  if (entries.length === 0) return null
 
   const active = entries.filter(isActive)
   const finished = entries.filter((e) => !isActive(e))

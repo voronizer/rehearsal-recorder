@@ -1954,11 +1954,13 @@ window.__MAKE_API__ = () => ({
     return said || fakeDrift(tracks, meter);
   }),
 
-  // Long work, scripted by the test through window.__ACTIVITY__. Counted, so
-  // a test can wait for the screen to have looked again.
+  // Long work, scripted by the test through window.__ACTIVITY__, and the
+  // news of the band's songs through window.__NEWS__ ({id, text}). Counted,
+  // so a test can wait for the screen to have looked again.
   activity: async () => {
     window.__ACTIVITY_POLLS__ = (window.__ACTIVITY_POLLS__ || 0) + 1;
-    return {entries: JSON.parse(JSON.stringify(window.__ACTIVITY__ || [])), recording: false};
+    return {entries: JSON.parse(JSON.stringify(window.__ACTIVITY__ || [])), recording: false,
+            ...(window.__NEWS__ ? {news: {...window.__NEWS__}} : {})};
   },
   activity_seen: track('activity_seen', async () => {
     for (const e of (window.__ACTIVITY__ || []))

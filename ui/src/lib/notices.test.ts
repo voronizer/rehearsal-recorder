@@ -271,6 +271,18 @@ describe("undoLatest", () => {
     // The plain notice is untouched.
     expect(getNotices().map((n) => n.key)).toEqual(["b"])
   })
+
+  it("passes by an action with nothing to take back, to the Undo behind it", () => {
+    const undo = vi.fn()
+    const see = vi.fn()
+    notify({ key: "a", kind: "done", text: "one", action: { label: "Undo", run: undo } })
+    notify({ key: "b", kind: "done", text: "songs", action: { label: "See", run: see, undo: false } })
+    expect(undoLatest()).toBe(true)
+    expect(undo).toHaveBeenCalledTimes(1)
+    expect(see).not.toHaveBeenCalled()
+    expect(undoLatest()).toBe(false)
+    expect(getNotices().map((n) => n.key)).toEqual(["b"])
+  })
 })
 
 describe("lifetime", () => {
