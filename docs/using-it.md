@@ -904,8 +904,8 @@ tempo can be changed on either side, and the other side follows.
   song moves with ⋯ › **Move to song**, to one of the band's songs or to a
   **New song…**. Until РЭХА gives it a number in its new song, the take
   shows there without one. A jam that came in under a song goes to **Not
-  named**, the first line of the same list, and is called Take and its
-  number straight away.
+  named**, the first line of the same list, and gets the name Take 3 straight
+  away if it was the rehearsal's third take.
 
 РЭХА asks the service what the band changed when it starts, every hour, and
 when a rehearsal starts. It renames the takes and their folders as **Rename

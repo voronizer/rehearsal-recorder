@@ -538,5 +538,19 @@ test.describe("moving a take", () => {
     await expect(row).toHaveCount(0)
     await page.goto("/songs")
     await expect(named.locator('[data-take="Take 7"]')).toBeVisible()
+    // Its number is its own: no “number from РЭХА”.
+    await named.getByRole("button", { name: "Take 7", exact: true }).click()
+    await expect(panel.getByRole("heading", { level: 2 }).first()).toHaveText("Take 7")
+
+    // Not named is ticked, and picking it again sends nothing.
+    let sent = 0
+    page.on("request", (r) => void (r.method() === "PATCH" && sent++))
+    await panel.getByRole("button", { name: "What to do with Take 7", exact: true }).click()
+    await page.getByRole("menuitem", { name: "Move to song" }).click()
+    const none = page.getByRole("menuitemradio", { name: "Not named" })
+    await expect(none).toHaveAttribute("aria-checked", "true")
+    await none.click()
+    await expect(none).toBeHidden()
+    expect(sent).toBe(0)
   })
 })

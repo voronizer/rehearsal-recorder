@@ -162,8 +162,9 @@ class ServiceClient:
         "signature", whether it is "trashed", and who last renamed it, changed
         its tempo, made it or deleted it ("title_by", "meter_by", "made_by",
         "trashed_by": a name, or None for РЭХА); "moved": every take moved
-        to another song there and not numbered by РЭХА yet, {"uid",
-        "song_id", "by"}}. An answer not in that shape is refused, so a stray
+        to another song there and not numbered by РЭХА yet, or out of its
+        song (song_id None) and not renamed here yet, {"uid", "song_id",
+        "by"}}. An answer not in that shape is refused, so a stray
         page is never read as "the band deleted every song"."""
         answer = self._call("GET", "/api/reha/songs")
         songs = answer.get("songs") if isinstance(answer, dict) else None

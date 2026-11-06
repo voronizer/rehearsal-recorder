@@ -253,6 +253,12 @@ class ServiceSongs:
             self._take_change(r, s, done)
         self._new_songs(there, done)
         self._moves(listed["moved"], done)
+        # A song deleted there whose last take the band took out of it: empty
+        # here only now, so it goes in this check, not the next.
+        for r in self._lib.service_songs():
+            s = there.get(r["sid"])
+            if (s is None or s.get("trashed")) and not r["now"]["takes"]:
+                self._gone(r, s, done)
         if done:
             # The metronome's row follows a song renamed or given a tempo.
             self._api._follow_next()
@@ -371,7 +377,8 @@ class ServiceSongs:
         lib = self._lib
         titles = {r["sid"]: r["now"]["title"] for r in lib.service_songs()}
         for m in moved:
-            out = m.get("song_id") is None
+            # Not named: a song_id there and null. A line without one is no move.
+            out = "song_id" in m and m["song_id"] is None
             title = titles.get(m.get("song_id"))
             row = lib.service_row_by_uid(m["uid"])
             if (title is None and not out) or row is None or row["removed"]:

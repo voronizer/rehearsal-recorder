@@ -211,6 +211,8 @@ class FakeBandService:
         with self._lock:
             if title is None:
                 take = self.takes[uid]
+                if take.get("song_id") is None:
+                    return  # no song already: the service changes nothing
                 take.update(song_id=None, song=None, name=f"Take {take['number']}")
                 self.moved[uid] = {"song_id": None, "by": by}
                 return

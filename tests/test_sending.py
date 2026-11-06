@@ -1014,6 +1014,24 @@ def songs_both_ways(api, fake, service, drain, entries, keep, uid_of, take, fold
        and (f"{was} → Take {n_j}", "Ivan moved it in the band service") in lines())
     ok("and sent with no song, which ends the wait there",
        uid_j not in fake.moved and fake.takes[uid_j]["song_id"] is None and fake.takes[uid_j]["name"] == f"Take {n_j}")
+    ok("the notice counts the song it left",
+       (api.activity().get("news") or {}).get("text") == "Ivan changed 1 song in the band service")
+
+    # A line with no song_id at all is not read as Not named.
+    n_x = keep("Hušča", band=["Drums"])
+    drain()
+    named_x = take(n_x)["name"]
+    service().songs._moves([{"uid": uid_of(n_x), "by": "Ivan"}], [])
+    ok("a moved line with no song_id leaves the take where it is", take(n_x)["name"] == named_x)
+
+    # The band takes a song's last take out of it and deletes the song.
+    n_s = keep("Kalina", band=["Drums"])
+    drain()
+    fake.move_in_service(uid_of(n_s), None)
+    fake.delete_song_in_service("Kalina")
+    check()
+    ok("its last take taken out and the song deleted there: one check takes both here",
+       not take(n_s)["song"] and song("Kalina") is None)
 
     # Renamed here, not sent yet, when the band takes it out of its song.
     n_k = keep("Hušča", band=["Drums"])
