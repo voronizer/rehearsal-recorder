@@ -9,7 +9,7 @@ import { loadMarks, MarkView } from "../marks/view"
 import { rehearsal, song, star, take, user } from "../shared/schema"
 import { needMember } from "../signin/guards"
 import { Drift, Meter } from "./meta"
-import { bare, initial, shownName, takeRows, TakeRow, type Loaded } from "./rows"
+import { bare, initial, shownName, takeRows, TakeRow, waits, type Loaded } from "./rows"
 import { songBack, toTrash } from "./store"
 import { fillShapes } from "./shape"
 
@@ -171,7 +171,7 @@ export const takeRoutes = newApp()
           files,
           flac_coming: files.some((f) => f.mp3) && !flacUp,
           trashed_at: t.trashedAt,
-          moved: t.movedBy !== null,
+          moved: waits(t),
         },
         200
       )
@@ -182,14 +182,15 @@ export const takeRoutes = newApp()
       method: "patch",
       path: "/api/takes/{uid}",
       description:
-        "**Move to song**: the take moves to the song `song`, or to a new song titled `new_song`. Its name is the " +
-        "song's title until РЭХА gives it its number there, at its next check.",
+        "**Move to song**: the take moves to the song `song`, out of its song with `song` null, or to a new song " +
+        "titled `new_song`. In a song its name is the song's title until РЭХА gives it its number there, at its " +
+        "next check; out of one it is “Take” and its number at once, as РЭХА names a take with no song.",
       middleware: [needMember] as const,
       request: {
         params: Uid,
         body: body(
           z.union([
-            z.object({ song: z.int().min(1) }),
+            z.object({ song: z.int().min(1).nullable() }),
             z.object({ new_song: z.string().trim().min(1, { error: TITLE }).max(100, { error: TITLE }) }),
           ])
         ),
@@ -205,6 +206,12 @@ export const takeRoutes = newApp()
       const me = c.var.member.id
       let id: number
       if ("song" in to) {
+        if (to.song === null) {
+          // Out of its song: РЭХА's name for a take with no song; РЭХА learns of it at its check.
+          if (t.songId !== null)
+            await db.update(take).set({ songId: null, name: `Take ${t.number}`, movedBy: me, updatedAt: iso() }).where(eq(take.uid, uid))
+          return c.json({ ok: true as const }, 200)
+        }
         const [s] = await db
           .select({ id: song.id })
           .from(song)

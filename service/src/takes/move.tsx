@@ -17,13 +17,17 @@ import { usePanel } from "../shell/panel"
 
 /**
  * ⋯ › **Move to song** (Alex, 5 November: in the menu, a list of the songs
- * and a field for a new one). РЭХА renames the take at its next check.
+ * and a field for a new one; **Not named** first, to take it out of its
+ * song). РЭХА renames the take at its next check.
  */
 
 /** A take as the menu knows it: a row has its song's number, a page its song. */
 export type Movable = { uid: string; song_id?: number | null; song?: { id: number } | null }
 
 const songOf = (t: Movable) => t.song?.id ?? t.song_id ?? null
+
+/** The list's value for a take with no song. */
+const NONE = "none"
 
 /** The take whose line has the field for a new song open. */
 let naming: string | null = null
@@ -51,8 +55,9 @@ function useShown() {
 }
 
 /**
- * The band's songs with the take's own ticked, then **New song…**. From a
- * row, New song… opens the take's panel first: the field stands in its line.
+ * **Not named**, then the band's songs, with the take's place ticked, then
+ * **New song…**. From a row, New song… opens the take's panel first: the
+ * field stands in its line.
  */
 export function MoveSub({
   take,
@@ -73,11 +78,14 @@ export function MoveSub({
       <DropdownMenuSubTrigger>Move to song</DropdownMenuSubTrigger>
       <DropdownMenuSubContent className="max-h-80 w-56 overflow-y-auto">
         <DropdownMenuRadioGroup
-          value={own === null ? "" : String(own)}
+          value={own === null ? NONE : String(own)}
           onValueChange={(v) => {
-            if (Number(v) !== own) move.mutate({ uid: take.uid, song: Number(v) })
+            const to = v === NONE ? null : Number(v)
+            if (to !== own) move.mutate({ uid: take.uid, song: to })
           }}
         >
+          <DropdownMenuRadioItem value={NONE}>Not named</DropdownMenuRadioItem>
+          <DropdownMenuSeparator />
           {songs.map((s) => (
             <DropdownMenuRadioItem key={s.id} value={String(s.id)}>
               <span className="truncate">{s.title}</span>

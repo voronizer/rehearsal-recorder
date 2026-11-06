@@ -1002,6 +1002,61 @@ def songs_both_ways(api, fake, service, drain, entries, keep, uid_of, take, fold
     drain()
     ok("which goes and wins there", fake.takes[uid_r]["song"] == "Lipa" and uid_r not in fake.moved)
 
+    # A jam the band took out of its song there: Not named.
+    n_j = keep("Hušča", band=["Drums"])
+    drain()
+    uid_j = uid_of(n_j)
+    was = take(n_j)["name"]
+    fake.move_in_service(uid_j, None)
+    check()
+    ok("a take moved out of its song there is renamed Take N here, as Rename take does",
+       not take(n_j)["song"] and take(n_j)["name"] == f"Take {n_j}"
+       and (f"{was} → Take {n_j}", "Ivan moved it in the band service") in lines())
+    ok("and sent with no song, which ends the wait there",
+       uid_j not in fake.moved and fake.takes[uid_j]["song_id"] is None and fake.takes[uid_j]["name"] == f"Take {n_j}")
+    ok("the notice counts the song it left",
+       (api.activity().get("news") or {}).get("text") == "Ivan changed 1 song in the band service")
+
+    # A line with no song_id at all is not read as Not named.
+    n_x = keep("Hušča", band=["Drums"])
+    drain()
+    named_x = take(n_x)["name"]
+    service().songs._moves([{"uid": uid_of(n_x), "by": "Ivan"}], [])
+    ok("a moved line with no song_id leaves the take where it is", take(n_x)["name"] == named_x)
+
+    # The band takes a song's last take out of it and deletes the song.
+    n_s = keep("Kalina", band=["Drums"])
+    drain()
+    fake.move_in_service(uid_of(n_s), None)
+    fake.delete_song_in_service("Kalina")
+    check()
+    ok("its last take taken out and the song deleted there: one check takes both here",
+       not take(n_s)["song"] and song("Kalina") is None)
+
+    # Renamed here, not sent yet, when the band takes it out of its song.
+    n_k = keep("Hušča", band=["Drums"])
+    drain()
+    uid_k = uid_of(n_k)
+    fake.move_in_service(uid_k, None)
+    api.rename_take(folder(), n_k, "Lipa")
+    service()._next_check = 0
+    service().run_next()  # the check, before the take's new name goes
+    ok("a take renamed here before the band took it out of its song keeps REHA's name",
+       take(n_k)["song"] == "Lipa")
+    drain()
+    ok("which goes and wins there too", fake.takes[uid_k]["song"] == "Lipa" and uid_k not in fake.moved)
+
+    # No song here already: moved to a song there, then out of it, before the check.
+    n_n = keep("Hušča", band=["Drums"])
+    api.rename_take(folder(), n_n, f"Take {n_n}")
+    drain()
+    uid_n = uid_of(n_n)
+    fake.move_in_service(uid_n, "Hušča")
+    fake.move_in_service(uid_n, None)
+    check()
+    ok("a take with no song here, taken out of its song there, only goes again",
+       not take(n_n)["song"] and take(n_n)["name"] == f"Take {n_n}" and uid_n not in fake.moved)
+
     made = api.add_song("Kalyhanka")
     api.add_song("Kalychanka")
     drain()

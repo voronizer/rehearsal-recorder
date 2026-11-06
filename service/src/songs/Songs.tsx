@@ -115,7 +115,7 @@ export function Songs() {
           )
         })}
         {not_named.length > 0 && (
-          <Group title="Not named" hint="takes recorded in РЭХА without a song's title" fold="open">
+          <Group title="Not named" hint={String(not_named.length)} fold="open">
             <Rows>
               {not_named.map((t) => (
                 <TakeLine key={t.uid} take={t} />

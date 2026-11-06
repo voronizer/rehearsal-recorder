@@ -9,8 +9,8 @@ import { TakeLine } from "../takes/parts"
 
 /**
  * A rehearsal's page: its takes by song, in the order they were played,
- * each song a fold with **Notes and files** at its right. Takes nobody
- * named a song are under **Not named**, last. Each take has its marks
+ * each song a fold with **Notes and files** at its right. Takes with no
+ * song are under **Not named**, last. Each take has its marks
  * under it. A rehearsal with no takes left, its last one deleted, opens
  * **Rehearsals** in its place.
  */
@@ -49,7 +49,7 @@ export function Rehearsal() {
           <Group
             key={id ?? "none"}
             title={id === null ? "Not named" : (titles.get(id) ?? "")}
-            hint={id === null ? "recorded in РЭХА without a song's title" : count(ts.length, "take")}
+            hint={count(ts.length, "take")}
             fold="open"
             action={
               id !== null && (

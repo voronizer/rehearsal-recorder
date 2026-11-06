@@ -18,7 +18,7 @@ import {
 } from "./helpers"
 
 type Song = { id: number; title: string; tempo: number | null; signature: string | null; key: string | null; takes: number }
-type Songs = { songs: Song[]; not_named: { uid: string; name: string }[] }
+type Songs = { songs: Song[]; not_named: { uid: string; name: string; moved: boolean }[] }
 type Listed = {
   songs: {
     id: number
@@ -235,6 +235,41 @@ test("a take moves to another song here; a ★ from РЭХА leaves it there, Р
   expect(done.body).toMatchObject({ ok: true, song_id: palyn.id })
   expect(await takeOf(uid)).toEqual({ name: "Pałyn 8", song_id: palyn.id, moved_by: null })
   expect((await r.put(`/api/reha/takes/${uid}`, takeMeta({ number: 3, song: undefined, song_id: 9999 }))).status).toBe(409)
+})
+
+test("a take leaves its song here: Take N at once, listed for РЭХА with no song, the song stays", async () => {
+  const { alex, ivan, r } = await band()
+  const uid = await shownTake({ song: "Viasna", number: 3, name: "Viasna 13" })
+  const viasna = (await called(alex, "Viasna"))!
+
+  expect(await answer(patch(`/api/takes/${uid}`, { song: null }, ivan))).toEqual({ status: 200, body: { ok: true } })
+  expect(await takeOf(uid)).toMatchObject({ name: "Take 3", song_id: null })
+  // Its number is known: no “number from РЭХА”.
+  expect((await songs(alex)).not_named.find((t) => t.uid === uid)).toMatchObject({ name: "Take 3", moved: false })
+  expect(await called(alex, "Viasna")).toMatchObject({ id: viasna.id, takes: 0 })
+  expect(((await answer(r.get("/api/reha/songs"))).body as Listed).moved).toEqual([{ uid, song_id: null, by: "Ivan" }])
+
+  // РЭХА renames it and sends it with no song: the wait ends.
+  const done = await answer(r.put(`/api/reha/takes/${uid}`, takeMeta({ number: 3, song: null, name: "Take 3" })))
+  expect(done.body).toMatchObject({ ok: true, song_id: null })
+  expect(await takeOf(uid)).toEqual({ name: "Take 3", song_id: null, moved_by: null })
+
+  // Again, on a take with no song: nothing changes, nothing is listed.
+  expect((await patch(`/api/takes/${uid}`, { song: null }, ivan)).status).toBe(200)
+  expect(await takeOf(uid)).toEqual({ name: "Take 3", song_id: null, moved_by: null })
+  expect(((await answer(r.get("/api/reha/songs"))).body as Listed).moved).toEqual([])
+})
+
+test("moved to a song, then out of it before РЭХА's check: listed once, with no song", async () => {
+  const { alex, ivan, r } = await band()
+  const uid = await shownTake({ song: "Viasna", number: 5, name: "Viasna 5" })
+  await shownTake({ song: "Pałyn", number: 6, name: "Pałyn 2" })
+  const palyn = (await called(alex, "Pałyn"))!
+
+  expect((await patch(`/api/takes/${uid}`, { song: palyn.id }, ivan)).status).toBe(200)
+  expect((await patch(`/api/takes/${uid}`, { song: null }, ivan)).status).toBe(200)
+  expect(await takeOf(uid)).toMatchObject({ name: "Take 5", song_id: null })
+  expect(((await answer(r.get("/api/reha/songs"))).body as Listed).moved).toEqual([{ uid, song_id: null, by: "Ivan" }])
 })
 
 test("a take moves to a new song made here; a title the band has is turned down", async () => {
