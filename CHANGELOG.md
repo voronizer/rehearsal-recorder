@@ -24,6 +24,10 @@ opening.
   named** with ⋯ › **Move to song** › **Not named**, and gets the name Take 3
   if it was the rehearsal's third take. РЭХА does the same on the laptop the
   next time it asks what the band changed.
+- **A fader in the band service stays where you leave it.** On a slow
+  connection, a fader turned again straight away could jump back to where
+  the turn before had left it, and keep that level. It now stays where you
+  let go of it.
 
 ## 0.24.0
 

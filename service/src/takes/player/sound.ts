@@ -19,7 +19,7 @@ export type ServiceSound = PlayerSound & {
   tracks: TrackFile[]
   /** Forgets your levels for this take's tracks: they play at РЭХА's balance again. */
   backToReha(): Promise<void>
-  /** The repeat, M and S set while another take was in the player. */
+  /** The repeat, M and S set while another take was in the player, and the levels turned and not kept yet. */
   setup(): Setup
 }
 
@@ -232,7 +232,7 @@ export function serviceSound(take: TakePage, one: One): ServiceSound {
       await keepLevels(Object.fromEntries(names.map((n) => [n, null])))
     },
 
-    setup: () => ({ loop, muted, solo }),
+    setup: () => ({ loop, muted, solo, moved }),
 
     // The bar at the bottom plays on after the page is left, with no repeat:
     // it has no Repeat to stop one with.
