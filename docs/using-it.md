@@ -338,24 +338,24 @@ its marks and whether it goes to the cloud. See [Undo](#undo). If the take
 cannot be saved, a red notice says why and stays until you close it. The
 take is still here, so press **Save take** again.
 
-The take's name is at the top: the song and its number, “Viasna 2”. A long
-name takes a second line, and one longer than that is cut with its number
-kept; point at it to read it whole. The small line over it gives the take's
-place in the rehearsal and the rehearsal's name, “Take 5 · Thursday”; a long
-rehearsal name is cut, and shows whole when you point at it. A take nobody
-named says “Take 7”, in grey. How long the take ran is in the player,
-“0:00 / 2:31”.
+The take's name is at the top: the song and its number after a #,
+“Viasna #2”. A long name takes a second line, and one longer than that is
+cut with its number kept; point at it to read it whole. The small line over
+it gives the take's place in the rehearsal and the rehearsal's name,
+“Take 5 · Thursday”; a long rehearsal name is cut, and shows whole when you
+point at it. A take nobody named says “Take 7”, in grey. How long the take
+ran is in the player, “0:00 / 2:31”.
 
 At the right of the name are the song's takes tonight as columns, the last
 ten of them. Each is as tall as that take ran, with the take's number under
 it. This take's column is in the colour of the text, the starred takes (★)
 are pale green and the others grey. Point at the columns to read them as
-times: “Viasna 1: 2:31, Viasna 2: 2:41”. A song's first take tonight has no
+times: “Viasna #1: 2:31, Viasna #2: 2:41”. A song's first take tonight has no
 columns, and nor does a take nobody named. In a narrow window the columns go
 first, to leave the name its room; point at the name to read them then.
 
 Check the name before you save. It is filled in for you: after a take called
-“Pałyn”, the next one is “Pałyn 2”. The pencil right after the name opens
+“Pałyn”, the next one is “Pałyn #2”. The pencil right after the name opens
 **Rename take**. The songs you have played are listed under its field, this
 rehearsal's first, then the others, most recent first: click one, or type a
 name, and press Enter. The title and the columns follow. ✕ in the field puts
@@ -462,7 +462,7 @@ A few things about cropping:
   line at or before the start of your selection, and ends in time with the
   click, at most one click after the end of it (two in 6/8), so in a DAW
   the cropped take still starts on a bar. When the start moved back to a
-  bar line, the notice says where: *“Pałyn 2” is cropped. It now starts on
+  bar line, the notice says where: *“Pałyn #2” is cropped. It now starts on
   the bar at 0:01. The uncut take went to the Trash.*
 
 Press Esc to close the take. With the strip's columns open, the first Esc
@@ -514,17 +514,19 @@ playhead comes back into view.
 ## Names and songs
 
 Each take belongs to a song. You name it with the song's title, and the app
-counts the song's takes: the number beside the name, “Pałyn 1”, “Pałyn 2”,
-goes on from one rehearsal to the next, so “Pałyn 17” is one take wherever
+counts the song's takes: the number after the name, “Pałyn #1”, “Pałyn #2”,
+goes on from one rehearsal to the next, so “Pałyn #17” is one take wherever
 it was played. Deleting a take does not free its number. A new take is of
 the same song as the one before it, so you only name a take when the band
 moves on to another song.
 
-Type the title only; the number is the app's. Typing “Pałyn 5” names the
-take Pałyn, at whatever number is next. A song is spelled one way everywhere:
-typing “pałyn” gives “Pałyn” when that song is there. A title can end in a
-number, like “Opus 5”, as long as no song is called “Opus”. A take nobody
-named is called by its number, “Take 4”, and is not counted as a song. The
+Type the title only; the number is the app's. Typing “Pałyn 5” or
+“Pałyn #5” names the take Pałyn, at whatever number is next. A song is
+spelled one way everywhere: typing “pałyn” gives “Pałyn” when that song is
+there. A title can end in a number, like “Opus 5”, as long as no song is
+called “Opus”; its takes are “Opus 5 #1”, “Opus 5 #2”, and the # keeps the
+take's number apart from the title. A take nobody named is called by its
+number, “Take 4”, and is not counted as a song. The
 same goes for a recovered take you did not name (see [The app closed during
 a take](#the-app-closed-during-a-take)). On the rehearsal screen and in
 History, the songs are listed under such a take, so one click names it.
@@ -566,15 +568,15 @@ songs until you merge them. Rename song lists the other songs under the
 title: click one, or type its title, and **Rename** becomes **Merge…**. The
 app asks first, saying how many takes from how many rehearsals are renamed
 and what they become. They are numbered after the song's own, in the order
-they were played, so Palyn 1 and 2 become Pałyn 8 and 9; stars stay where
+they were played, so Palyn #1 and #2 become Pałyn #8 and #9; stars stay where
 they were. A merge is not undone in one step: to split a song again, rename
 its takes one by one.
 
 A title a song leaves behind, renamed or merged away, is remembered: typed
 again in any name field, with or without a number, it is that song. The
-field says “Palyn → Pałyn 12”, and under it, “Palyn is Pałyn now. Make
+field says “Palyn → Pałyn #12”, and under it, “Palyn is Pałyn now. Make
 Palyn a new song”. The link forgets the old name at once, with no
-**Undo**, and the take is a new song, Palyn 1.
+**Undo**, and the take is a new song, Palyn #1.
 
 A song's page lists its old names under the title, **Also typed as** Palyn,
 each with × to forget it. A notice then says *“Palyn” was forgotten.*, and
@@ -693,7 +695,7 @@ label. A heading says how many marks are under it, and opens its rehearsal
 in Rehearsals, or its song's page.
 
 Each mark is a row: its comment, or the label's name when it has none, then
-the take and the moment, *Pałyn 4 · 1:51*. Then the take's wave, drawn to
+the take and the moment, *Pałyn #4 · 1:51*. Then the take's wave, drawn to
 the longest take in the list, with the mark on it in the label's colour.
 
 - **▶** plays the take right there, from 5 seconds before the mark, so you
@@ -872,7 +874,7 @@ Takes are sent the same three ways as to the cloud folder:
   the take.
 
 On a take that is in the band service, the cloud button opens a dialog,
-*“Viasna 12” in the band service*. It lists each track with what of it is up,
+*“Viasna #12” in the band service*. It lists each track with what of it is up,
 “MP3 and FLAC” or “MP3, FLAC on its way”. **Remove from the band service**
 moves the take to the service's **Trash**, where the band can still play it
 and put it back for 30 days. The take on this computer stays as it is.
@@ -932,7 +934,7 @@ band service”, a green cloud with a tick once it is there, or “Not in the
 band service” if the service turned it down; pointing at it then says why.
 
 The background work button at the top right lists each take, such as
-*“Viasna 12” → band service*, with how far it got: “MP3s: 4 of 6”, then
+*“Viasna #12” → band service*, with how far it got: “MP3s: 4 of 6”, then
 “FLAC: 2 of 6”. A take the service turned down shows in red with the reason,
 and **Retry** sends it again. With no internet nothing fails: the line says
 “No internet: carries on when it is back”, and the sending goes on by itself
@@ -1348,7 +1350,7 @@ row still shows the band's tempo.
 
 ### Where the band drifted
 
-![Master's row under Pałyn 2, played without the click: a dashed line across the middle, a grey band around it, and the band's tempo as a line that turns amber where it ran ahead in a chorus, +6, and in the bridge, +7, and where it dragged at the end, −5. The pointer over the bridge says Bar 61 · 135 bpm (+7).](screenshots/drift-master.png)
+![Master's row under Pałyn #2, played without the click: a dashed line across the middle, a grey band around it, and the band's tempo as a line that turns amber where it ran ahead in a chorus, +6, and in the bridge, +7, and where it dragged at the end, −5. The pointer over the bridge says Bar 61 · 135 bpm (+7).](screenshots/drift-master.png)
 
 After a take, Master's row in the player shows how fast the band played,
 bar by bar. The dashed line across the middle is the tempo the take was
@@ -1661,7 +1663,7 @@ controller drops out during a take, the take keeps recording.
 
 Deleting a take or a rehearsal, clearing false starts, discarding a take
 and cropping one happen at once, without a question first. A notice in the
-corner says what went, for example *“Pałyn 5” went to the Trash.*, with an
+corner says what went, for example *“Pałyn #5” went to the Trash.*, with an
 **Undo** button. For 10 seconds, **Undo** or ⌘Z on a Mac (Ctrl+Z
 elsewhere) puts it back where it was: a take with its star, marks and cloud
 copy, a rehearsal with all its takes, a cropped take as it was before the

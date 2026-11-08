@@ -417,7 +417,7 @@ const PIECES: [string, RegExp][] = [
   ["Disk space in hours.", /^Interface connected, room for about/],
   ["Marks say what happened.", /^Four takes of the song Pałyn/],
   ["Where the band ran ahead.", /^The Master row in the player under Pałyn 2's tracks/],
-  ["Undo, for 10 seconds.", /^A notice that Pałyn 5 went to the (Trash|Recycle Bin), with Undo$/],
+  ["Undo, for 10 seconds.", /^A notice that Pałyn #5 went to the (Trash|Recycle Bin), with Undo$/],
   ["Send takes to the band.", /^Settings › Folders at the cloud folder/],
   ["The cloud copy keeps up.", /marked as the one to keep, in the cloud$/],
   ["The tempo inside the WAVs.", /Write the tempo into WAV files ticked$/],

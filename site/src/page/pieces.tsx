@@ -434,7 +434,7 @@ const STALLED =
   "unplugged, switched off or stopped answering. Everything captured up to that point has been saved."
 
 /** The take deleted in the undo's piece. */
-const GONE = "Pałyn 5"
+const GONE = "Pałyn #5"
 
 /**
  * The end of Settings › Click & backing track, as the tab lays it out:

@@ -376,8 +376,11 @@ the shared one when it is redone.
   ✕, one link, one size of icon button, a field with a button (InputGroup),
   screen header and side panel. A take's name is written by
   `components/TakeTitle.tsx` (`TakeTitle` in lists, `GoTitle` in headers and
-  pills); only the song tabs (`SongTab.tsx`) and the song ladder
-  (`SongLadder.tsx`) still draw the number themselves. A track that records is
+  pills): the song, then its number after a # in the muted colour,
+  "Pałyn #3", so a title that ends in a number of its own reads apart
+  ("Opus 5 #3"). Plain text takes the same form from `lib/takeText.ts`. Only
+  the song tabs (`SongTab.tsx`) and the song ladder (`SongLadder.tsx`) still
+  draw the number themselves, alone, as "#3". A track that records is
   one tile, `TrackTile` (`components/TrackTile.tsx`), where the MIDI tile was
   a copy of it: its levels, with a narrow column for its notes on Both, or
   with `kind="notes"` a MIDI track's notes alone. Its fill is `Meter` up, and
@@ -781,7 +784,7 @@ as the `cn` import.
   every removal gets answered without being read. Deleting a take or a
   rehearsal, clearing false starts, discarding a take (on Review and in
   Drafts) and cropping happen when clicked, and a notice says, for example,
-  "“Pałyn 5” went to the Trash." with **Undo**, also on ⌘Z or Ctrl+Z, for
+  "“Pałyn #5” went to the Trash." with **Undo**, also on ⌘Z or Ctrl+Z, for
   10 s. Undo brings it back whole: its name, star, marks, notes and cloud
   copy. `offerUndo()` in `lib/trash.ts` raises the notice. Python keeps what
   went in `<recordings>/_deleting/` (`src/rehearsal_recorder/holding.py`)
