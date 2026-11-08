@@ -8,7 +8,7 @@ import { cn } from "@/lib/utils"
 import { useFrame, useLabels, useMe, usePeople, useStar, type Label } from "../api"
 import { OPENS } from "../shell/parts"
 import { usePanel } from "../shell/panel"
-import { clock, quoted, songOfName, takeText, type TakeNaming } from "../shell/words"
+import { clock, quoted, songAndNumber, takeText, type TakeNaming } from "../shell/words"
 import { useLookOf, usePlayer, useTime } from "./player/one"
 import { TakeMenu } from "./TakeMenu"
 
@@ -55,20 +55,20 @@ export function TakeName({
   wrap?: boolean
   className?: string
 }) {
-  const song = songOfName(take)
-  const title = song ?? take.name
+  const parts = songAndNumber(take)
+  const title = parts?.song ?? take.name
   if (wrap)
     return (
       <span className={cn("[overflow-wrap:anywhere]", className)}>
         {title}
-        {song !== null && <span className="tnum text-muted-foreground">{"\u00a0"}#{take.number}</span>}
+        {parts && <span className="tnum text-muted-foreground">{"\u00a0"}#{parts.number}</span>}
         {take.moved && <span className="text-sm font-normal text-muted-foreground"> · number from РЭХА</span>}
       </span>
     )
   return (
     <span className={cn("inline-flex min-w-0 max-w-full items-baseline gap-1", className)}>
-      {!(short && song !== null) && <span className="min-w-0 truncate">{title}</span>}
-      {song !== null && <span className="tnum shrink-0 text-muted-foreground">#{take.number}</span>}
+      {!(short && parts) && <span className="min-w-0 truncate">{title}</span>}
+      {parts && <span className="tnum shrink-0 text-muted-foreground">#{parts.number}</span>}
     </span>
   )
 }

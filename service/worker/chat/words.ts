@@ -40,14 +40,15 @@ export function clock(seconds: number): string {
 
 /**
  * A take as the pages write it (src/shell/words.ts): “Viasna #12”, with a
- * no-break space before the #. Any other take by its name: one with no
- * song (“Take 4”), and one moved to another song here that РЭХА has not
+ * no-break space before the #. The number is the one at the end of the
+ * name, the take's number at its song; the take's `number` column is its
+ * number in its rehearsal. Any other take by its name: one with no song
+ * (“Take 4”), and one moved to another song here that РЭХА has not
  * numbered yet, whose name is the song's title.
  */
-export function takeText(t: { name: string; number: number; songId: number | null; movedBy: string | null }): string {
-  const end = ` ${t.number}`
-  if (t.songId === null || t.movedBy !== null || !t.name.endsWith(end)) return t.name
-  return `${t.name.slice(0, -end.length)}\u00a0#${t.number}`
+export function takeText(t: { name: string; songId: number | null; movedBy: string | null }): string {
+  const parts = t.songId === null || t.movedBy !== null ? null : /^(.+) (\d+)$/.exec(t.name)
+  return parts ? `${parts[1]}\u00a0#${parts[2]}` : t.name
 }
 
 /** Text for Telegram's HTML. */

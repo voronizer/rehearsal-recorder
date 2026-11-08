@@ -163,11 +163,12 @@ test("the next take within 3 hours is added to it", async () => {
 })
 
 test("a take is written as the pages write it: the title, # and its number", () => {
-  const row = { name: "Viasna 12", number: 12, songId: 3, movedBy: null }
+  // 33rd that evening, 12th of Viasna: the number in the name is the one written.
+  const row = { name: "Viasna 12", number: 33, songId: 3, movedBy: null }
   expect(takeText(row)).toBe(`Viasna${NB}#12`)
-  expect(takeText({ ...row, name: "Opus 5 3", number: 3 })).toBe(`Opus 5${NB}#3`)
+  expect(takeText({ ...row, name: "Opus 5 3" })).toBe(`Opus 5${NB}#3`)
   // No song: the word Take sets the number apart already.
-  expect(takeText({ ...row, name: "Take 4", number: 4, songId: null })).toBe("Take 4")
+  expect(takeText({ ...row, name: "Take 4", songId: null })).toBe("Take 4")
   // Moved to another song here and not numbered by REHA yet: the song's title alone.
   expect(takeText({ ...row, name: "Kupalle", movedBy: "ira" })).toBe("Kupalle")
 })

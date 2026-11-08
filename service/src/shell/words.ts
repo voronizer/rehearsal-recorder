@@ -50,22 +50,28 @@ export const quoted = (name: string) => `“${name}”`
  */
 export type TakeNaming = {
   name: string
-  number: number
   song_id?: number | null
   song?: { id: number } | null
   moved?: boolean
 }
 
 /**
- * The song's title in a take's name, “Viasna” of “Viasna 12”. Null where
- * the name is read as it is: a take with no song (“Take 4”, where the word
- * Take already sets the number apart), and a take moved here, whose name is
- * the song's title alone.
+ * РЭХА names a take of a song by the song's title and the take's number at
+ * that song, “Viasna 12”. The number РЭХА sends beside the name is the
+ * take's number in its rehearsal, a different one, so the song's number is
+ * read from the end of the name.
  */
-export function songOfName(t: TakeNaming): string | null {
-  const end = ` ${t.number}`
+const SONG_AND_NUMBER = /^(.+) (\d+)$/
+
+/**
+ * “Viasna” and 12 of “Viasna 12”. Null where the name is read as it is: a
+ * take with no song (“Take 4”, where the word Take already sets the number
+ * apart), and a take moved here, whose name is the song's title alone.
+ */
+export function songAndNumber(t: TakeNaming): { song: string; number: number } | null {
   const song = t.song?.id ?? t.song_id ?? null
-  return song === null || t.moved || !t.name.endsWith(end) ? null : t.name.slice(0, -end.length)
+  const parts = song === null || t.moved ? null : SONG_AND_NUMBER.exec(t.name)
+  return parts ? { song: parts[1], number: Number(parts[2]) } : null
 }
 
 /**
@@ -75,8 +81,8 @@ export function songOfName(t: TakeNaming): string | null {
  * so do the downloaded files.
  */
 export function takeText(t: TakeNaming): string {
-  const song = songOfName(t)
-  return song === null ? t.name : `${song}\u00a0#${t.number}`
+  const parts = songAndNumber(t)
+  return parts === null ? t.name : `${parts.song}\u00a0#${parts.number}`
 }
 
 /** A day without its weekday: "8 October", with the year if it is not this one. */
