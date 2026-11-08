@@ -131,7 +131,7 @@ test("Last time's ▶ plays a song's newest ★ go, and says which", async ({ pa
   const palyn = lastTime(page).locator("[data-song='Pałyn']")
   // The one star, an icon (C8), before the go and its day.
   const plays = palyn.locator("[data-plays]")
-  await expect(plays).toHaveText("Pałyn 1 · Thu 10 Sep")
+  await expect(plays).toHaveText("Pałyn #1 · Thu 10 Sep")
   await expect(plays.getByRole("img", { name: "Starred" })).toBeVisible()
   await palyn.getByRole("button", { name: "Play Pałyn 1, the starred take of Pałyn" }).click()
   expect((await calls(page, "player_open")).at(-1)?.args[0]).toEqual([

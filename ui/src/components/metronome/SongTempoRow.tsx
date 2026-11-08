@@ -20,6 +20,7 @@ import { api, type Signature, type SongGo } from "@/lib/api"
 import { formatDayIn, formatMMSS } from "@/lib/format"
 import { songLine, takesToCount } from "@/lib/metronome"
 import { dismiss } from "@/lib/notices"
+import { takeText } from "@/lib/takeText"
 
 /** The notice the row says a refusal in. */
 const SAID = "song-tempo"
@@ -168,7 +169,7 @@ export function SongTempoRow({
     }
   }
 
-  const line = songLine(song.title, tempo, count.shown ? count.shown.take.name : null)
+  const line = songLine(song.title, tempo, count.shown ? takeText(count.shown.take) : null)
 
   return (
     <section aria-label="Tempo" className="mt-2 flex flex-col gap-1.5">
@@ -270,7 +271,7 @@ function CountMenu({
             <span aria-hidden className="w-3 shrink-0 text-signal">
               {go.take.starred ? "★" : ""}
             </span>
-            <span className="min-w-0 flex-1 break-words">{go.take.name}</span>
+            <span className="min-w-0 flex-1 break-words">{takeText(go.take)}</span>
             <span className="tnum shrink-0 text-xs text-muted-foreground">
               {formatMMSS(go.take.duration_sec)} · {formatDayIn(go.created_at)}
             </span>

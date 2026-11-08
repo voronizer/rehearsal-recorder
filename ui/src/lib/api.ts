@@ -503,6 +503,8 @@ export type MarkHit = {
   take_number: number
   name: string
   song: string | null
+  /** Its go at the song; null with none. */
+  go?: number | null
   duration_sec: number
   at: number
   note: string
@@ -1065,7 +1067,13 @@ export type MetronomeState = {
   /** The row differs from the song: Save to song. */
   held: boolean
   /** The song's newest take, for "count it from the last take". */
-  last_take: { folder: string; take_number: number; name: string } | null
+  last_take: {
+    folder: string
+    take_number: number
+    name: string
+    song?: string | null
+    go?: number | null
+  } | null
   /** The clicks heard in the next 1.5 s: [milliseconds from now, index in
    *  the bar, counted from 0]. */
   upcoming: [number, number][]

@@ -1,5 +1,6 @@
 import type { Label, MarkHit, MarksGrouping } from "@/lib/api"
 import { formatClock, formatDate, formatDayIn, marksLabel, rehearsalsLabel } from "@/lib/format"
+import { GO_SPACE, goMark, takeText } from "@/lib/takeText"
 
 // History's Marks view: every mark with a label, from every rehearsal
 // (docs/superpowers/specs/2026-10-04-marks-across-the-library-design.md).
@@ -85,7 +86,7 @@ export function headLine(marks: MarkHit[], now: Date = new Date()): string {
 }
 
 /**
- * A row's second line: the take and the moment, "Pałyn 4 · 1:51". `song` is
+ * A row's second line: the take and the moment, "Pałyn #4 · 1:51". `song` is
  * the title to show as a link to its page, `rest` what follows it. By song
  * the heading has the song, so the line gives the take and the rehearsal
  * instead; in one list the rehearsal follows the take.
@@ -97,7 +98,9 @@ export function rowLine(
 ): { song: string | null; rest: string } {
   const where = grouping === "rehearsal" ? "" : ` · ${m.rehearsal}, ${formatDate(m.created_at, now)}`
   const moment = ` · ${formatClock(m.at)}${where}`
+  if (grouping !== "song" && m.song !== null && m.go != null)
+    return { song: m.song, rest: `${GO_SPACE}${goMark(m.go)}${moment}` }
   if (grouping === "song" || m.song === null || !m.name.startsWith(m.song))
-    return { song: null, rest: `${m.name}${moment}` }
+    return { song: null, rest: `${takeText(m)}${moment}` }
   return { song: m.song, rest: `${m.name.slice(m.song.length)}${moment}` }
 }

@@ -24,6 +24,7 @@ import {
   type StatusLine as Line,
 } from "@/lib/metronome"
 import { dismiss } from "@/lib/notices"
+import { takeText } from "@/lib/takeText"
 
 /** The notice the row says a refusal in. */
 const SAID = "metronome"
@@ -259,7 +260,7 @@ export function MetronomeRow({ name = "" }: { name?: string }) {
     backing: { ...asSent.backing, on: backingSwitched ?? asSent.backing.on },
   }
   const counted: Counting =
-    count.counting !== null ? "running" : count.shown ? { from: count.shown.take.name } : null
+    count.counting !== null ? "running" : count.shown ? { from: takeText(count.shown.take) } : null
 
   // The click run between takes stops with the screen, and so does the
   // backing track's ▶. Record has stopped both already, in Python, when the

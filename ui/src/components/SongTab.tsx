@@ -9,6 +9,7 @@ import { useKeysOn } from "@/lib/keys"
 import { labelOf, useLabels } from "@/lib/labels"
 import { formatMMSS } from "@/lib/format"
 import type { SendTo, Take } from "@/lib/api"
+import { goMark } from "@/lib/takeText"
 import { takeButtonLabel, takeCloudStatus } from "@/components/TakeStrip"
 
 /** One go in a tab: the take, and the rehearsal it is in when the tab's goes
@@ -82,7 +83,7 @@ function GoLine({
               toggle.expanded && "bg-selected hover:bg-selected dark:hover:bg-selected"
             )}
           >
-            {take.go}
+            {take.go != null && goMark(take.go)}
           </Button>
         </TooltipTrigger>
         {/* The button's name and its keys, which it says as its own: for
@@ -92,7 +93,7 @@ function GoLine({
         </TooltipContent>
       </Tooltip>
     ) : (
-      <span className={NUMBER}>{take.go}</span>
+      <span className={NUMBER}>{take.go != null && goMark(take.go)}</span>
     )
   ) : null
   return (
@@ -356,7 +357,7 @@ function Column({
         const inner = (
           <>
             <span className="tnum min-w-4 text-left font-semibold">
-              {go.take.song ? go.take.go : "—"}
+              {go.take.song && go.take.go != null ? goMark(go.take.go) : "—"}
             </span>
             <span className="tnum text-xs">{formatMMSS(go.take.duration_sec)}</span>
             {go.take.starred && (

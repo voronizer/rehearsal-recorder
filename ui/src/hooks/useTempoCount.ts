@@ -2,9 +2,17 @@ import { useEffect, useRef, useState } from "react"
 import { api, type Signature } from "@/lib/api"
 import { clampTempo } from "@/lib/metronome"
 import { dismiss } from "@/lib/notices"
+import { takeText } from "@/lib/takeText"
 
-/** A take a tempo can be counted from: where it is, and its name. */
-export type CountableTake = { folder: string; take_number: number; name: string }
+/** A take a tempo can be counted from: where it is, and its name, with its
+ *  song and go to say it as the screen does (takeText). */
+export type CountableTake = {
+  folder: string
+  take_number: number
+  name: string
+  song?: string | null
+  go?: number | null
+}
 
 /** What a count gave, for the song it was counted for: the take, and the
  *  number in the signature it was counted in. */
@@ -85,7 +93,8 @@ export function useTempoCount(opts: {
   ): Promise<CountEnd> => {
     if (forSong === null) return "dropped"
     const since = changes.current
-    setCounting({ song: forSong, take: take.name })
+    const said = takeText(take)
+    setCounting({ song: forSong, take: said })
     dismiss(opts.said)
     let res: { ok: boolean; error?: string; tempo?: number }
     try {
@@ -95,7 +104,7 @@ export function useTempoCount(opts: {
     }
     const now = latest.current.songNow ? await latest.current.songNow() : latest.current.song
     if (!alive.current) return "dropped"
-    setCounting((c) => (c?.song === forSong && c.take === take.name ? null : c))
+    setCounting((c) => (c?.song === forSong && c.take === said ? null : c))
     if (now !== forSong || changes.current !== since) {
       if (changes.current === since) setHeld(null)
       return "dropped"
@@ -134,7 +143,8 @@ export function useTempoCount(opts: {
   return {
     /** The count the screen shows, or null. */
     shown,
-    /** The take being counted from for the song shown, by name, or null. */
+    /** The take being counted from for the song shown, as the screen names
+     *  it ("Dym #5"), or null. */
     counting: counting && counting.song === opts.song ? counting.take : null,
     /** A recount's number in its new signature, shown while it runs. */
     held,

@@ -155,7 +155,7 @@ test("Clear false starts removes only them at once, and Undo puts them back", as
 test("Send starred says which take it could not send, and why", async ({ page }) => {
   const overview = await openEvening(page, "window.__UNSENDABLE__ = [2];")
   await overview.getByRole("button", { name: /Send starred/ }).click()
-  await expect(page.getByText("Could not send Pałyn 2: The take has no files left on disk")).toBeVisible()
+  await expect(page.getByText("Could not send Pałyn #2: The take has no files left on disk")).toBeVisible()
 })
 
 test("Clear false starts is off while it clears", async ({ page }) => {

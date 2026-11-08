@@ -10,6 +10,7 @@ import { formatDayIn } from "@/lib/format"
 import { labelOf, markText, useLabels } from "@/lib/labels"
 import { rise } from "@/lib/motion"
 import { playLook } from "@/lib/playLook"
+import { takeText } from "@/lib/takeText"
 import {
   fromLastTime,
   hereFor,
@@ -232,11 +233,11 @@ export function SongPage({
                 "Nothing to play: every take is on a drive that is not plugged in"
               ) : plays.take.starred ? (
                 <>
-                  ▶ plays <span className="text-signal">★</span> {plays.take.name} ·{" "}
+                  ▶ plays <span className="text-signal">★</span> {takeText(plays.take)} ·{" "}
                   {formatDayIn(plays.created_at)}
                 </>
               ) : (
-                `▶ plays the last take, ${plays.take.name} · ${formatDayIn(plays.created_at)}`
+                `▶ plays the last take, ${takeText(plays.take)} · ${formatDayIn(plays.created_at)}`
               )}
             </p>
             )}

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { goFor, nameWithGo, songFor, songNamed } from "./goes"
+import { goFor, nameWithGo, songFor, songNamed, withoutGo } from "./goes"
 
 const choices = {
   here: [{ song: "Polyn", go: 4, last_take: 3 }],
@@ -13,6 +13,11 @@ describe("goFor", () => {
   })
   it("reads a number typed after a title as that song", () => {
     expect(goFor("Polyn 7", choices)).toBe(4)
+  })
+  it("reads a number after a #, as the app writes a take, as that song too", () => {
+    expect(goFor("Polyn #7", choices)).toBe(4)
+    expect(goFor("polyn#7", choices)).toBe(4)
+    expect(goFor("Polyn #7", choices)).toBe(4)
   })
   it("is 1 for a title no song has, a number in it or not", () => {
     expect(goFor("Vesna", choices)).toBe(1)
@@ -29,10 +34,11 @@ describe("goFor", () => {
 })
 
 describe("nameWithGo", () => {
-  it("is the song as it is spelt, with the go it will be", () => {
-    expect(nameWithGo("polyn", choices)).toBe("Polyn 4")
-    expect(nameWithGo("Polyn 7", choices)).toBe("Polyn 4")
-    expect(nameWithGo("Vesna", choices)).toBe("Vesna 1")
+  it("is the song as it is spelt, with the go it will be after a #", () => {
+    expect(nameWithGo("polyn", choices)).toBe("Polyn #4")
+    expect(nameWithGo("Polyn 7", choices)).toBe("Polyn #4")
+    expect(nameWithGo("Polyn #7", choices)).toBe("Polyn #4")
+    expect(nameWithGo("Vesna", choices)).toBe("Vesna #1")
   })
   it("is the name alone for a take nobody named, or before the choices", () => {
     expect(nameWithGo("Take 4", choices)).toBe("Take 4")
@@ -74,9 +80,28 @@ describe("songNamed", () => {
 describe("songFor", () => {
   it("reads a number typed after an old name as the song too", () => {
     expect(songFor("Palyn 3", merged)).toEqual({ choice: merged.other[0], old: "Palyn" })
+    expect(songFor("Palyn #3", merged)).toEqual({ choice: merged.other[0], old: "Palyn" })
   })
   it("is nothing for a take nobody named", () => {
     expect(songFor("Take 4", merged)).toBeNull()
+  })
+  it("keeps a title's own number when the go comes after a #", () => {
+    const opus = { here: [{ song: "Opus 5", go: 4 }], other: [] }
+    expect(songFor("Opus 5 #3", opus)).toEqual({ choice: opus.here[0], old: null })
+  })
+})
+
+describe("withoutGo", () => {
+  it("takes off a number typed after the title, with a # or without", () => {
+    expect(withoutGo(" Palyn 3 ")).toBe("Palyn")
+    expect(withoutGo("Palyn #3")).toBe("Palyn")
+    expect(withoutGo("Palyn#3")).toBe("Palyn")
+    expect(withoutGo("Opus 5 #3")).toBe("Opus 5")
+  })
+  it("leaves a name with no number after it, and a number alone, as they are", () => {
+    expect(withoutGo("Palyn")).toBe("Palyn")
+    expect(withoutGo("1999")).toBe("1999")
+    expect(withoutGo("#3")).toBe("#3")
   })
 })
 

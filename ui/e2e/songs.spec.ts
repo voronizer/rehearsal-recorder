@@ -316,7 +316,7 @@ test.describe("Songs in History", () => {
   test("the play button on a song's head plays its newest starred go", async ({ page }) => {
     await openApp(page, { before: "window.__STARRED__ = ['/rec/older#1'];" })
     await openSongs(page)
-    await expect(head(page)).toContainText("▶ plays ★ Daroha 1 · Tue 25 Aug")
+    await expect(head(page)).toContainText("▶ plays ★ Daroha #1 · Tue 25 Aug")
     // Space is its key only once its take is the one in hand.
     const play = head(page).getByRole("button", { name: "Play Daroha 1" })
     await expect(play).not.toHaveAttribute("aria-keyshortcuts")
@@ -332,7 +332,7 @@ test.describe("Songs in History", () => {
   test("with no star, the play button plays the last go on disk", async ({ page }) => {
     await openApp(page)
     await openSongs(page)
-    await expect(head(page)).toContainText("▶ plays the last take, Daroha 2 · Tue 25 Aug")
+    await expect(head(page)).toContainText("▶ plays the last take, Daroha #2 · Tue 25 Aug")
   })
 
   test("Not named has no play button", async ({ page }) => {
@@ -467,7 +467,7 @@ test.describe("Songs in History", () => {
     await chooseSong(page, "Pałyn")
     const starred = page.getByRole("region", { name: "Starred" })
     await expect(starred.locator("[data-take]")).toHaveCount(1)
-    await expect(starred.locator("[data-take='2']")).toContainText("Pałyn 2")
+    await expect(starred.locator("[data-take='2']")).toContainText("Pałyn #2")
     await expect(starred.locator("[data-take='2']")).toContainText("Tuesday jam · Thu 10 Sep")
 
     const last = page.getByRole("region", { name: "From last time" })
@@ -520,7 +520,7 @@ test.describe("Songs in History", () => {
     await expect(head(page).getByRole("heading", { name: "Pałyn" })).toBeVisible()
     // Undo puts the go back, and the song with it.
     await notices(page)
-      .filter({ hasText: "“Opus 1” went to the Trash." })
+      .filter({ hasText: "“Opus #1” went to the Trash." })
       .getByRole("button", { name: "Undo" })
       .click()
     await expect(rows(page).and(page.locator("[data-song='Opus']"))).toHaveCount(1)
@@ -595,7 +595,7 @@ test.describe("Songs in History", () => {
     await expect(page.getByRole("heading", { name: "Tuesday jam" })).toBeVisible()
     await expect(
       page.locator("[data-tab='song:Pałyn'][aria-current='true'] [data-tab-line]")
-    ).toHaveText(/^2/)
+    ).toHaveText(/^#2/)
 
     await page.keyboard.press("Escape")
     await expect(head(page).getByRole("heading", { name: "Pałyn" })).toBeVisible()
@@ -744,7 +744,7 @@ test.describe("Songs in History", () => {
       {
         id: 1,
         kind: "cloud",
-        title: "“Daroha 1” → cloud",
+        title: "“Daroha\u00a0#1” → cloud",
         folder: "/rec/older",
         take_number: 1,
         state: "done",
@@ -832,7 +832,7 @@ test.describe("Songs in History", () => {
     await recordTake(page)
     await page.locator("[data-take-summary]").getByRole("button", { name: "Rename take" }).click()
     const pills = page.getByRole("group", { name: "Take name" }).locator("[data-song-choice]")
-    await pills.filter({ hasText: /^Ahoń 1$/ }).click()
+    await pills.filter({ hasText: /^Ahoń\s#1$/ }).click()
     await expect(page.locator("#take-name")).toHaveValue("Ahoń")
     expect(await calls(page, "list_songs")).toHaveLength(0)
   })
@@ -1068,7 +1068,7 @@ test("the song page is one group: Starred, From last time and Every take split b
     "font-size": "14px",
     "font-weight": "400",
   })
-  await expect(note).toContainText("Pałyn 2 · ")
+  await expect(note).toContainText("Pałyn #2 · ")
 
   // A song with no star and no marks: Every take alone, with no line above.
   await chooseSong(page, "Daroha")
@@ -1102,7 +1102,7 @@ test("a note under From last time cut at the end of its line is whole in the tip
   expect(await words.evaluate((el) => el.scrollWidth > el.clientWidth), "the note cut").toBe(true)
   await note.hover()
   await expect(page.locator("[data-whole][data-state$='open']")).toHaveText(
-    `Pałyn 2 · Keep this · ${LONG_NOTE}`
+    `Pałyn #2 · Keep this · ${LONG_NOTE}`
   )
 })
 

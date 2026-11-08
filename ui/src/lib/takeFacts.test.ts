@@ -32,6 +32,7 @@ describe("takeFacts", () => {
     expect(f).toMatchObject({ song: null, go: null, unnamed: true, shown: "Take 4" })
     expect(f.columns).toEqual([])
     expect(f.columnsText).toBe("")
+    expect(f.columnsSaid).toBe("")
   })
 
   it("gives a song's first take tonight its number and no columns", () => {
@@ -48,7 +49,9 @@ describe("takeFacts", () => {
       { key: 3, sec: 12, starred: false, lit: false, label: 2 },
       { key: 4, sec: 6, starred: false, lit: true, label: 3 },
     ])
-    expect(f.columnsText).toBe("Viasna 1: 0:18, Viasna 2: 0:12, Viasna 3: 0:06")
+    expect(f.columnsText).toBe("Viasna #1: 0:18, Viasna #2: 0:12, Viasna #3: 0:06")
+    // A screen reader has each by its plain name, as the aria-labels have it.
+    expect(f.columnsSaid).toBe("Viasna 1: 0:18, Viasna 2: 0:12, Viasna 3: 0:06")
   })
 
   it("keeps the last ten of thirty takes, this one the tenth", () => {
@@ -70,6 +73,7 @@ describe("takeFacts", () => {
     const f = facts("Viasna", tonight, null)
     expect(f).toMatchObject({ song: "Viasna", go: null })
     expect(f.columns.at(-1)).toMatchObject({ lit: true, label: null })
-    expect(f.columnsText).toBe("Viasna 1: 0:18, Viasna 2: 0:12, Viasna ?: 0:06")
+    expect(f.columnsText).toBe("Viasna #1: 0:18, Viasna #2: 0:12, Viasna #?: 0:06")
+    expect(f.columnsSaid).toBe("Viasna 1: 0:18, Viasna 2: 0:12, Viasna ?: 0:06")
   })
 })

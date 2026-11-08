@@ -256,7 +256,7 @@ test.describe("the row on the rehearsal screen", () => {
     // Counted from the last take, then saved to the song.
     await status(page).getByRole("button", { name: "count it from the last take" }).click()
     await expect(tempo(page)).toHaveValue("104")
-    await expect(status(page)).toHaveText(/^Counted from Dym \d+\. Pick the time signature, then save it to the song$/)
+    await expect(status(page)).toHaveText(/^Counted from Dym\s#\d+\. Pick the time signature, then save it to the song$/)
     expect(await calls(page, "count_tempo")).toHaveLength(1)
     await status(page).getByRole("button", { name: "save it to the song" }).click()
     await expect(status(page)).toHaveText("The song's tempo.")
@@ -273,7 +273,7 @@ test.describe("the row on the rehearsal screen", () => {
     await expect(tempo(page)).toHaveValue("208")
     expect((await calls(page, "count_tempo")).map((c) => c.args.at(-1))).toEqual(["4/4", "6/8"])
     expect((await sent(page)).at(-1)).toEqual([208, "6/8"])
-    await expect(status(page)).toHaveText(/^Counted from Dym \d+\. Pick the time signature, then save it to the song$/)
+    await expect(status(page)).toHaveText(/^Counted from Dym\s#\d+\. Pick the time signature, then save it to the song$/)
 
     // A number typed over the count is the band's: a signature keeps it.
     await tempo(page).fill("200")
@@ -1171,7 +1171,7 @@ test("song page counts a tempo and halves it", async ({ page }) => {
   await expect.poll(() => songTempos(page)).toEqual([[104, "4/4"]])
   await expect(row.getByRole("textbox", { name: "Tempo" })).toHaveValue("104")
   await expect(songLine(page)).toHaveText(
-    "Counted from Dym 5; pick the time signature. If the click runs twice too fast or too slow: halve or double."
+    "Counted from Dym #5; pick the time signature. If the click runs twice too fast or too slow: halve or double."
   )
   await songLine(page).getByRole("button", { name: "halve" }).click()
   await expect(row.getByRole("textbox", { name: "Tempo" })).toHaveValue("52")
@@ -1190,7 +1190,7 @@ test("song page counts a tempo and halves it", async ({ page }) => {
   await expect(row.getByRole("textbox", { name: "Tempo" })).toHaveValue("208")
   await expect.poll(async () => (await songTempos(page)).at(-1)).toEqual([208, "6/8"])
   await expect(row.locator("[data-tempo-unit] svg")).toHaveCount(1)
-  await expect(songLine(page)).toContainText("Counted from Dym 5")
+  await expect(songLine(page)).toContainText("Counted from Dym #5")
   // Away and back, the song has its tempo and the count is over.
   await songPage(page, "Pałyn")
   await songPage(page, "Dym")
@@ -1307,10 +1307,13 @@ const stripesAt = (page: Page) =>
     })
   )
 const clickSent = async (page: Page) => (await calls(page, "player_set_click")).map((c) => c.args)
-/** A notice that says exactly `text`. */
+/** A notice that says exactly `text`. A space in it stands for the no-break
+ *  one after a song's title too ("Pałyn #2"). */
 const said = (page: Page, text: string) =>
   notices(page).filter({
-    has: page.locator("p", { hasText: new RegExp(`^${text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`) }),
+    has: page.locator("p", {
+      hasText: new RegExp(`^${text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/ /g, "\\s")}$`),
+    }),
   })
 
 test("master click plays with the take", async ({ page }) => {
@@ -1435,7 +1438,7 @@ test("a cropped click take says where it starts", async ({ page }) => {
   await page.getByRole("button", { name: "Crop to the region" }).click()
   await expect.poll(() => callCount(page, "crop_take")).toBe(1)
   await expect(
-    said(page, "“Pałyn 2” is cropped. It now starts on the bar at 0:01. The uncut take went to the Trash.")
+    said(page, "“Pałyn #2” is cropped. It now starts on the bar at 0:01. The uncut take went to the Trash.")
   ).toHaveCount(1)
   // The same notice for a take still on the review screen.
   await page.keyboard.press("Escape")
@@ -1448,7 +1451,7 @@ test("a cropped click take says where it starts", async ({ page }) => {
   await page.getByRole("button", { name: "Crop to the region" }).click()
   await expect.poll(() => callCount(page, "crop_draft")).toBe(1)
   await expect(
-    said(page, "“Pałyn 5” is cropped. It now starts on the bar at 0:01. The uncut take went to the Trash.")
+    said(page, "“Pałyn #5” is cropped. It now starts on the bar at 0:01. The uncut take went to the Trash.")
   ).toHaveCount(1)
 })
 

@@ -2,6 +2,7 @@ import type { TakeColumn } from "@/components/ui/take-columns"
 import type { SongChoices, Take } from "@/lib/api"
 import { formatMMSS } from "@/lib/format"
 import { UNNAMED, goFor, songFor } from "@/lib/goes"
+import { GO_SPACE, goMark } from "@/lib/takeText"
 
 /** The most columns shown: the last takes, this one last, so a song played
  *  all evening still leaves its title the room. */
@@ -59,9 +60,15 @@ export function takeFacts({
     /** What the title says: the song, or the name as typed. */
     shown: song ?? name,
     columns,
-    /** The columns in words, each by the take's own name, for their tip and
-     *  for the title's once they have given way. */
+    /** The columns in words, each by the take's own name as the screen
+     *  writes it ("Viasna #1: 0:18"), for their tip and for the title's once
+     *  they have given way. */
     columnsText: columns
+      .map((c) => `${song}${GO_SPACE}${c.label != null ? goMark(c.label) : "#?"}: ${formatMMSS(c.sec)}`)
+      .join(", "),
+    /** The same for a screen reader, by the take's plain name ("Viasna 1:
+     *  0:18"), as its aria-labels name a take. */
+    columnsSaid: columns
       .map((c) => `${song} ${c.label ?? "?"}: ${formatMMSS(c.sec)}`)
       .join(", "),
   }

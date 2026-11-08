@@ -13,6 +13,7 @@ import { Spinner } from "@/components/ui/spinner"
 import { api, type ServiceFile, type Take } from "@/lib/api"
 import { trackUp } from "@/lib/sending"
 import { dismiss } from "@/lib/notices"
+import { takeText } from "@/lib/takeText"
 import { useAfter } from "@/hooks/useAfter"
 import { useErrorNotice } from "@/hooks/useErrorNotice"
 import { useHeld } from "@/lib/held"
@@ -85,7 +86,7 @@ export function ServiceDialog({
     <Dialog open={take !== null} onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>“{shown?.name ?? ""}” in the band service</DialogTitle>
+          <DialogTitle>“{shown ? takeText(shown) : ""}” in the band service</DialogTitle>
           <DialogDescription>
             The band hears each track as MP3 and downloads the FLAC, as recorded.
           </DialogDescription>

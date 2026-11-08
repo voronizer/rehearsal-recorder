@@ -16,6 +16,7 @@ import { api, type ShareWhat, type Take } from "@/lib/api"
 import { pollSoon } from "@/lib/activity"
 import { dismiss } from "@/lib/notices"
 import { SHARE_INTRO, SHARE_OPTIONS } from "@/lib/share"
+import { takeText } from "@/lib/takeText"
 import { reloadEveningSettings } from "@/hooks/useEveningSettings"
 import { useAfter } from "@/hooks/useAfter"
 import { useErrorNotice } from "@/hooks/useErrorNotice"
@@ -130,7 +131,7 @@ export function ShareDialog({
     <Dialog open={take !== null} onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Copy “{shown?.name ?? ""}” to the cloud</DialogTitle>
+          <DialogTitle>Copy “{shown ? takeText(shown) : ""}” to the cloud</DialogTitle>
           <DialogDescription>{SHARE_INTRO}</DialogDescription>
         </DialogHeader>
 
