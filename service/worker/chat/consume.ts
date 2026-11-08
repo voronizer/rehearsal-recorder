@@ -6,7 +6,7 @@ import { iso, now } from "../shared/time"
 import { reportFailure, tellOwner } from "./failures"
 import type { Telegram } from "./telegram"
 import type { ChatEvent } from "./tell"
-import { clock, escape, link, rehearsalDay } from "./words"
+import { clock, escape, link, rehearsalDay, takeText } from "./words"
 
 /** A message takes additions for 3 hours after it started. */
 const OPEN_FOR = 3 * 60 * 60 * 1000
@@ -62,7 +62,7 @@ async function takeShown(db: Database, uid: string, origin: string): Promise<Thr
     kind: "takes",
     about: row.rehearsal.uid,
     head: `New takes from ${rehearsalDay(row.rehearsal.date)}: `,
-    item: link(`${origin}/takes/${uid}`, row.take.name),
+    item: link(`${origin}/takes/${uid}`, takeText(row.take)),
   }
 }
 
@@ -90,7 +90,7 @@ async function marked(db: Database, id: number, origin: string): Promise<Thread 
   return {
     kind: "marks",
     about: `${row.member.id}:${row.take.uid}`,
-    head: `${escape(row.member.name || row.member.email)} on ${link(page, row.take.name)}: `,
+    head: `${escape(row.member.name || row.member.email)} on ${link(page, takeText(row.take))}: `,
     item: link(`${page}?at=${place(at)}&mark=${id}`, `${clock(at)} ${text ? `“${text}”` : (row.label ?? "")}`.trim()),
   }
 }
@@ -106,7 +106,7 @@ async function commented(db: Database, id: number, origin: string): Promise<Thre
   return {
     kind: "comments",
     about: `${row.member.id}:mark:${parent}`,
-    head: `${escape(row.member.name || row.member.email)} on ${link(page, row.take.name)} at ${clock(row.comment.at)}: `,
+    head: `${escape(row.member.name || row.member.email)} on ${link(page, takeText(row.take))} at ${clock(row.comment.at)}: `,
     item: link(`${page}?at=${place(row.comment.at)}&comment=${id}`, `“${row.comment.text}”`),
   }
 }

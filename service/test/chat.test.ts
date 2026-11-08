@@ -4,6 +4,7 @@ import { expect, test, vi } from "vitest"
 import { consumeChat } from "../worker/chat/consume"
 import { reportFailure } from "../worker/chat/failures"
 import type { ChatEvent } from "../worker/chat/tell"
+import { takeText } from "../worker/chat/words"
 import type { Bindings } from "../worker/shared/env"
 import { putTake, ready } from "../worker/takes/store"
 import { ORIGIN, REHEARSAL, takeMeta } from "./helpers"
@@ -11,6 +12,8 @@ import { ORIGIN, REHEARSAL, takeMeta } from "./helpers"
 const HOUR = 60 * 60 * 1000
 const CHAT_ID = "-1002003004005"
 const OWNER_ID = "42"
+/** Between a song's title and the # of its take's number. */
+const NB = "\u00a0"
 
 /** The Worker's settings with a bot, and a queue that keeps what is put on it. */
 function withBot(over: Partial<Bindings> = {}) {
@@ -134,7 +137,7 @@ test("the first take of a rehearsal starts a message", async () => {
   expect(fake.sent[0].chat).toBe(CHAT_ID)
   expect(fake.sent[0].text).toContain("New takes from Thursday, 30 October: ")
   const uid = (event as { take_uid: string }).take_uid
-  expect(fake.sent[0].text).toBe(`New takes from Thursday, 30 October: <a href="${ORIGIN}/takes/${uid}">Viasna 11</a>`)
+  expect(fake.sent[0].text).toBe(`New takes from Thursday, 30 October: <a href="${ORIGIN}/takes/${uid}">Viasna${NB}#11</a>`)
   const kept = await env.DB.prepare("SELECT kind, about, message_id FROM chat").first()
   expect(kept).toEqual({ kind: "takes", about: REHEARSAL.uid, message_id: fake.sent[0].id })
 })
@@ -155,8 +158,28 @@ test("the next take within 3 hours is added to it", async () => {
   expect(fake.edited.length).toBe(1)
   expect(fake.edited[0].id).toBe(fake.sent[0].id)
   expect(fake.edited[0].text).toBe(
-    `${fake.sent[0].text}, <a href="${ORIGIN}/takes/${(twelve as { take_uid: string }).take_uid}">Viasna 12</a>`
+    `${fake.sent[0].text}, <a href="${ORIGIN}/takes/${(twelve as { take_uid: string }).take_uid}">Viasna${NB}#12</a>`
   )
+})
+
+test("a take is written as the pages write it: the title, # and its number", () => {
+  const row = { name: "Viasna 12", number: 12, songId: 3, movedBy: null }
+  expect(takeText(row)).toBe(`Viasna${NB}#12`)
+  expect(takeText({ ...row, name: "Opus 5 3", number: 3 })).toBe(`Opus 5${NB}#3`)
+  // No song: the word Take sets the number apart already.
+  expect(takeText({ ...row, name: "Take 4", number: 4, songId: null })).toBe("Take 4")
+  // Moved to another song here and not numbered by REHA yet: the song's title alone.
+  expect(takeText({ ...row, name: "Kupalle", movedBy: "ira" })).toBe("Kupalle")
+})
+
+test("a take with no song goes in by its name", async () => {
+  const { chatEnv, queued } = withBot()
+  const fake = fakeTelegram()
+  const uid = crypto.randomUUID()
+  await putTake(chatEnv, uid, takeMeta({ number: 7, name: "Take 7", song: null }) as never)
+  await ready(chatEnv, uid, 1, "mp3", ORIGIN)
+  await deliver(chatEnv, fake, queued[queued.length - 1])
+  expect(fake.sent.map((s) => s.text)).toEqual([`New takes from Thursday, 30 October: <a href="${ORIGIN}/takes/${uid}">Take 7</a>`])
 })
 
 test("after 3 hours a new message starts", async () => {
@@ -176,8 +199,8 @@ test("after 3 hours a new message starts", async () => {
     `<a href="${ORIGIN}/takes/${(event as { take_uid: string }).take_uid}">${name}</a>`
   expect(fake.edited).toEqual([])
   expect(fake.sent.map((s) => s.text)).toEqual([
-    `New takes from Thursday, 30 October: ${link(eleven, "Viasna 11")}`,
-    `New takes from Thursday, 30 October: ${link(twelve, "Viasna 12")}`,
+    `New takes from Thursday, 30 October: ${link(eleven, `Viasna${NB}#11`)}`,
+    `New takes from Thursday, 30 October: ${link(twelve, `Viasna${NB}#12`)}`,
   ])
 })
 
@@ -195,7 +218,7 @@ test("a member's marks on a take go in one message", async () => {
   const id = (e: ChatEvent) => (e as { mark_id: number }).mark_id
 
   expect(fake.sent.map((s) => s.text)).toEqual([
-    `Ira on <a href="${page}">Viasna 12</a>: <a href="${page}?at=102&amp;mark=${id(first)}">1:42 “The bridge drags here”</a>`,
+    `Ira on <a href="${page}">Viasna${NB}#12</a>: <a href="${page}?at=102&amp;mark=${id(first)}">1:42 “The bridge drags here”</a>`,
     expect.stringMatching(/^Alex on .*1:00 “Bass &amp; drums &lt;together&gt;”<\/a>$/),
   ])
   // A mark with no note says its label.
@@ -217,7 +240,7 @@ test("comments under a mark go one message per person and mark", async () => {
   const id = (e: ChatEvent) => (e as { comment_id: number }).comment_id
 
   expect(fake.sent.map((s) => s.text)).toEqual([
-    `Ivan on <a href="${page}">Viasna 12</a> at 2:58: <a href="${page}?at=178&amp;comment=${id(keep)}">“Keep it. I'll start it two bars later.”</a>`,
+    `Ivan on <a href="${page}">Viasna${NB}#12</a> at 2:58: <a href="${page}?at=178&amp;comment=${id(keep)}">“Keep it. I'll start it two bars later.”</a>`,
   ])
   // The same words twice are two comments, both posted.
   expect(fake.edited.map((e) => e.text)).toEqual([
