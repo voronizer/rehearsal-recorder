@@ -350,8 +350,11 @@ def parent_dies_host_exits(folder):
     parent.wait(5)
     ok("it is gone within 2 s of the main process", pid is not None and until(lambda: not running(pid), 2))
     raws = list(out.glob("*.raw"))
-    ok("  and the take's raw file is on disk with the second recorded",
-       len(raws) == 1 and raws[0].stat().st_size > SR)
+    held = raws[0].stat().st_size if len(raws) == 1 else 0
+    ok("  and the take's raw file is on disk with the second recorded", held > SR)
+    if held <= SR:
+        # 16 bits, one channel: two bytes a frame.
+        print(f"         it holds {held / 2 / SR:.2f} s, in {len(raws)} raw file(s)")
 
 
 def main():
