@@ -134,6 +134,7 @@ class Transport(ControlAPI):
                 "take_name": self.recording_name, "take_go": self.recording_go,
                 "playback_take_number": selected["take_number"] if selected else 0,
                 "playback_take_name": (selected.get("song") or selected.get("name")) if selected else None,
+                "playback_take_go": selected.get("go") if selected else None,
                 "playback_open": owns_player,
                 "master_volume": player.get("master", self.api._config.get("master_volume", 1.0)),
                 "playback_muted": self.playback_muted,
