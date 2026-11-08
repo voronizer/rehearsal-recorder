@@ -135,6 +135,7 @@ test("a song made in РЭХА gets its number; a title the band has is that song
   // A long title from РЭХА, which has no limit of its own, is taken.
   expect((await r.post("/api/reha/songs", { title: "Doŭhaja ".repeat(20).trim(), tempo: null, signature: null })).status).toBe(200)
   expect((await r.post("/api/reha/songs", { title: "Take 4", tempo: null, signature: null })).status).toBe(400)
+  expect((await r.post("/api/reha/songs", { title: "Take #4", tempo: null, signature: null })).status).toBe(400)
   expect((await r.post("/api/reha/songs", { title: "Kupalle", tempo: 128, signature: null })).status).toBe(400)
   expect((await r.post("/api/reha/songs", { title: "Kupalle", tempo: 400, signature: "4/4" })).status).toBe(400)
 })
@@ -205,6 +206,15 @@ test("the band renames a song and sets its tempo where it stands, by РЭХА's 
     status: 400,
     body: { error: "Take 3 is what a take with no song is called." },
   })
+  // As the pages write it, too.
+  expect(await answer(patch(`/api/songs/${dym.id}`, { title: "Take #3" }, ivan))).toEqual({
+    status: 400,
+    body: { error: "Take #3 is what a take with no song is called." },
+  })
+  expect((await patch(`/api/songs/${dym.id}`, { title: "Take#3" }, ivan)).status).toBe(400)
+  // A title that only starts with the word is a song's.
+  expect((await patch(`/api/songs/${dym.id}`, { title: "Take Five" }, ivan)).status).toBe(200)
+  expect((await patch(`/api/songs/${dym.id}`, { title: "Dym nad vadoj" }, ivan)).status).toBe(200)
   expect(await answer(patch(`/api/songs/${dym.id}`, { tempo: 400, signature: "4/4" }, ivan))).toEqual({
     status: 400,
     body: { error: "A tempo in 4/4 is a whole number from 30 to 300" },
