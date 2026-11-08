@@ -54,11 +54,15 @@ let serviceAuto = Boolean(window.__SERVICE_AUTO__);
 let serviceQueue = {};
 const serviceAddress = () => serviceKey && serviceKey.slice(0, serviceKey.lastIndexOf(':'));
 // A take as Python words it in a line of background work (names.shown_name):
-// "Viasna #2", a no-break space before the #, or "Take 4" with no song.
-const shownName = (take) => take.song && take.go != null ? `${take.song}\u00a0#${take.go}` : take.name;
+// "Viasna #2", a no-break space before the #, or "Take #4" with no song.
+const shownName = (take) => take.go != null ? `${take.song || 'Take'}\u00a0#${take.go}` : take.name;
 // A go typed after a title, as names.split_go reads it: "Viasna 2", or
 // "Viasna #2" and "Viasna#2" as the interface writes a take.
 const TYPED_GO = /^(.*?)(?:\s*#\s*|\s+)(\d+)$/;
+// A take with no song, as Python names it ("Take 4"), as the interface
+// writes it ("Take #4"), or typed as "Take" alone: names.UNNAMED_TAKE.
+// Whatever the number, the go is the app's.
+const UNNAMED = /^Take(?:\s*#\s*\d+|\s+\d+)?$/;
 function toService(take) {
   take.service = {up:false, flac:false, error:null};
   serviceQueue = {...serviceQueue, [take.take_number]: 'queued'};
@@ -414,7 +418,7 @@ function goneTakes() {
   // names one take.
   return [take(1, 'Pałyn 8', 'Pałyn', 8, 240), take(2, 'Pałyn 9', 'Pałyn', 9, 250),
           take(3, 'Daroha 8', 'Daroha', 8, 230), take(4, 'Daroha 9', 'Daroha', 9, 240),
-          take(5, 'Take 5', null, null, 240)];
+          take(5, 'Take 8', null, 8, 240)];
 }
 function withExtraSongs(r) {
   const takes = [...r.takes];
@@ -774,10 +778,13 @@ function setSongs(songs) {
 // (Library._resolve), over the songs the mock knows: the takes it is given,
 // the repertoire and the old names. Python numbers goes across the whole
 // library; the mock counts them within the takes it is given, which is all
-// the interface's tests need — the interface shows what it is sent.
+// the interface's tests need — the interface shows what it is sent. Takes
+// with no song are counted the same way, as if "Take" were a song: so
+// tonight's first take with no song is "Take 1", whatever its place in the
+// evening.
 function songOf(text, takes) {
   const name = (text || '').trim();
-  if (!name || /^Take \d+$/.test(name)) return null;
+  if (!name || UNNAMED.test(name)) return null;
   const known = new Map();
   for (const t of takes) if (t.song) known.set(t.song.toLowerCase(), t.song);
   for (const s of repertoire) if (!known.has(s.toLowerCase())) known.set(s.toLowerCase(), s);
@@ -787,17 +794,20 @@ function songOf(text, takes) {
   const m = TYPED_GO.exec(name);
   return (m && m[1].trim() && find(m[1].trim())) || name;
 }
+// The go take n is at `song`, null for no song: its own when it is at it
+// already, else one past the last.
 function goAt(song, takes, n) {
+  const at = (t) => (t.song || null) === song;
   const own = takes.find(t => t.take_number === n);
-  if (own && own.song === song) return own.go;
-  return Math.max(0, ...takes.filter(t => t.song === song && t.take_number !== n).map(t => t.go)) + 1;
+  if (own && at(own) && own.go != null) return own.go;
+  return Math.max(0, ...takes.filter(t => at(t) && t.take_number !== n).map(t => t.go || 0)) + 1;
 }
-// A take's song, go and name, as Python returns them.
+// A take's song, go and name, as Python returns them: "Viasna 2", or
+// "Take 4" with no song, 4 being its go.
 function resolved(text, takes, n) {
   const song = songOf(text, takes);
-  if (!song) return {song: null, go: null, name: 'Take ' + n};
   const go = goAt(song, takes, n);
-  return {song, go, name: `${song} ${go}`};
+  return {song, go, name: `${song || 'Take'} ${go}`};
 }
 // The fixtures below are written as old names; this makes them what Python
 // sends.
@@ -1731,7 +1741,7 @@ window.__MAKE_API__ = () => ({
     songIds(await libraryNow());
     const t = String(title || '').trim();
     if (!t) return {ok:false, error:'A song needs a title'};
-    if (/^Take \d+$/.test(t)) return {ok:false, error:`${t} is what a take with no song is called`};
+    if (UNNAMED.test(t)) return {ok:false, error:`${t} is what a take with no song is called`};
     const lower = t.toLowerCase();
     const same = [...knownIds.keys(), ...repertoire].find(s => s.toLowerCase() === lower)
       ?? oldNames.get(lower)?.song;
@@ -2135,6 +2145,8 @@ window.__MAKE_API__ = () => ({
   }),
   // api.song_choices: the songs of the rehearsal (the live one with no
   // folder), each as the next go at it, and the rest of the repertoire.
+  // unnamed_go is the go with no song: take n's own when it has no song
+  // already, else the next.
   song_choices: track('song_choices', async (folder, n) => {
     await held('song_choices');
     const takes = !folder || (session && folder === session.folder)
@@ -2145,7 +2157,7 @@ window.__MAKE_API__ = () => ({
     const seen = new Set(here.map(c => c.song.toLowerCase()));
     const other = repertoire.filter(song => !seen.has(song.toLowerCase()))
       .map(song => ({song, go:1, also:alsoOf(song), ...tempoOf(song)}));
-    return {here, other};
+    return {here, other, unnamed_go:goAt(null, takes, n)};
   }),
   // One input pinned at the top and one silent, unless a test plays its own.
   // Counted, so a test can wait for the page to have asked again.
@@ -2712,7 +2724,7 @@ window.__MAKE_API__ = () => ({
     const refuse = (error, into = null) => ({ok:false, error, into});
     if (from === undefined) return refuse('Song not found');
     if (!t) return refuse('A song needs a title');
-    if (/^Take \d+$/.test(t)) return refuse(`${t} is what a take with no song is called`);
+    if (UNNAMED.test(t)) return refuse(`${t} is what a take with no song is called`);
     const other = [...knownIds.keys()].find(s => s !== from && s.toLowerCase() === t.toLowerCase());
     if (other) return refuse(`There is already a song called ${other}`, {id:knownIds.get(other), title:other});
     const old = oldNames.get(t.toLowerCase());
@@ -2809,7 +2821,7 @@ window.__MAKE_API__ = () => ({
     const marks = (await marksNow()).filter(x => x.m.label_id === labelId).map(({r, t, m}) => {
       if (t.tracks[0]) fileDurations[t.tracks[0].file] = t.duration_sec;
       return {folder:r.folder, rehearsal:r.name, created_at:r.created_at, missing:Boolean(r.missing),
-              take_number:t.take_number, name:t.name, song:t.song ?? null, go:t.song ? t.go : null,
+              take_number:t.take_number, name:t.name, song:t.song ?? null, go:t.go ?? null,
               duration_sec:t.duration_sec, at:m.at, note:m.note || ''};
     });
     await held('list_marks');
