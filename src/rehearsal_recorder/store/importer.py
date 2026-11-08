@@ -96,7 +96,9 @@ def _marker(value):
 def _take(folder, take):
     return {
         "take_number": int(take.get("take_number", 0)),
-        "name": take.get("name") or f"Take {take.get('take_number', 0)}",
+        # No name is no song: the library counts it with the other takes
+        # with no song (Library.import_rehearsal).
+        "name": take.get("name") or "",
         "duration_sec": float(take.get("duration_sec") or 0.0),
         "tracks": [
             {"name": t.get("name", ""), "file": _track_file(folder, t["file"])}
