@@ -48,7 +48,7 @@ _TRAILING_NUMBER = re.compile(r"^(.*?)\s+(\d+)$")
 _TYPED_GO = re.compile(r"^(.*?)(?:\s*#\s*|\s+)(\d+)$")
 # Between a title and its go as a person reads it: a no-break space, so the
 # go never starts a line of its own.
-_NO_BREAK = " "
+_NO_BREAK = "\u00a0"
 
 
 def take_name(title, go, take_number):
