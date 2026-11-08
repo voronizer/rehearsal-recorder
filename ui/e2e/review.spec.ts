@@ -282,7 +282,10 @@ test("a long rehearsal name is cut before the columns, never making them give wa
   page,
 }) => {
   // Zorka 9, a short title with nine columns, under the stress rehearsal's
-  // long name: at 150 % the name is wider than the room the columns leave.
+  // long name: at 150 % in the small window the name is far wider than the
+  // room the columns leave, whatever the font. In the large window a narrow
+  // font fits it whole.
+  await page.setViewportSize({ width: 960, height: 680 })
   await openApp(page, { stress: "recording", before: scaled(1.5) })
   await page.getByRole("button", { name: /^Stop/ }).click()
   await expect(summary(page)).toBeVisible()
