@@ -40,7 +40,6 @@ type Scene =
   | { step: "rehearsal"; session: SessionState }
   | {
       step: "record"
-      takeNumber: number
       takeName: string
       takeGo: number | null
       tracks: PlacedTrack[]
@@ -108,7 +107,6 @@ export function Story() {
     case "record":
       return (
         <Recording
-          takeNumber={now.takeNumber}
           takeName={now.takeName}
           takeGo={now.takeGo}
           tracks={now.tracks}
@@ -204,7 +202,6 @@ const FORWARD: Record<(typeof STORY)[number], (tell: Telling) => Promise<void>> 
     if (!started.ok || started.take_number == null) throw new Error("demo: the take did not start")
     show({
       step: "record",
-      takeNumber: started.take_number,
       takeName: session.next_take_name,
       takeGo: session.next_take_go ?? null,
       tracks: session.tracks,

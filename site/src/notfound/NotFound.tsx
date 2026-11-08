@@ -20,7 +20,8 @@ const TAKE: Take = {
   take_number: 404,
   name: "Take 404",
   song: null,
-  go: null,
+  // A take with no song reads by its own number, “Take #404”.
+  go: 404,
   duration_sec: SILENT_SECONDS,
   tracks: TRACKS,
 }

@@ -106,7 +106,7 @@ test("the page ends with the downloads again, after the questions", async ({ pag
   const end = page.locator(".get-it")
   await expect(end.getByRole("heading", { level: 2 })).toHaveText("Record the next rehearsal.")
   await expect(end.locator(".lede")).toHaveText("Free, for macOS and Windows. Plug in the interface, press Record, play.")
-  await expect(end.locator(".lede strong, .lede b")).toHaveText("Record take")
+  await expect(end.locator(".lede strong, .lede b")).toHaveText("Record")
   const at = await page.evaluate(() => ({
     faq: document.querySelector("#faq")!.getBoundingClientRect().bottom,
     end: document.querySelector(".get-it")!.getBoundingClientRect(),
@@ -350,7 +350,7 @@ test("a card brings the window near what it is about, and says more under it", a
   await expect(about.locator("h4")).toHaveText("While you record.")
   await item(page, "A count-in in big digits.").click()
   await expect(about.locator("h4")).toHaveText("A count-in in big digits.")
-  await expect(about.locator("p")).toContainText("With the click on, Record take counts the band in")
+  await expect(about.locator("p")).toContainText("With the click on, Record counts the band in")
   await expect.poll(() => story(page, "moment"), { timeout: 60_000 }).toBe("1.0")
   // The frame is drawn 1.7 times nearer than the whole screen in the window.
   await expect

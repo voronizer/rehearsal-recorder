@@ -17,7 +17,7 @@ test("the 404 page says nothing was recorded here, and goes back", async ({ page
 test("its take is Take 404, four minutes and four seconds of nothing", async ({ page }) => {
   await page.goto(MISSING)
   const take = page.getByRole("img", { name: /^Take 404/ })
-  await expect(take.getByText("Take 404")).toBeVisible()
+  await expect(take.getByText(/Take\s#404/).first()).toBeVisible()
   await expect(take.getByText("0:00 / 4:04")).toBeVisible()
   for (const name of ["Drums", "Bass", "Guitar", "Vocals"]) await expect(take.getByText(name, { exact: true })).toBeVisible()
 })
