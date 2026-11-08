@@ -1011,13 +1011,18 @@ def songs_both_ways(api, fake, service, drain, entries, keep, uid_of, take, fold
     uid_j = uid_of(n_j)
     # As the list writes it: "Hušča #3".
     was = f"{take(n_j)['song']}\u00a0#{take(n_j)['go']}"
+    go_j = lib.next_unnamed_go()
     fake.move_in_service(uid_j, None)
     check()
-    ok("a take moved out of its song there is renamed Take N here, as Rename take does",
-       not take(n_j)["song"] and take(n_j)["name"] == f"Take {n_j}"
-       and (f"{was} → Take {n_j}", "Ivan moved it in the band service") in lines())
-    ok("and sent with no song, which ends the wait there",
-       uid_j not in fake.moved and fake.takes[uid_j]["song_id"] is None and fake.takes[uid_j]["name"] == f"Take {n_j}")
+    ok("a take moved out of its song there is no song here, at the next go of the takes "
+       "with no song, not its place in the rehearsal",
+       not take(n_j)["song"] and go_j != n_j
+       and (take(n_j)["name"], take(n_j)["go"]) == (f"Take {go_j}", go_j)
+       and (f"{was} → Take\u00a0#{go_j}", "Ivan moved it in the band service") in lines())
+    ok("and sent with no song and that name, which ends the wait there",
+       uid_j not in fake.moved and fake.takes[uid_j]["song_id"] is None
+       and fake.takes[uid_j]["name"] == f"Take {go_j}")
+    ok("its go is used up", lib.next_unnamed_go() == go_j + 1)
     ok("the notice counts the song it left",
        (api.activity().get("news") or {}).get("text") == "Ivan changed 1 song in the band service")
 
@@ -1052,14 +1057,16 @@ def songs_both_ways(api, fake, service, drain, entries, keep, uid_of, take, fold
 
     # No song here already: moved to a song there, then out of it, before the check.
     n_n = keep("Hušča", band=["Drums"])
-    api.rename_take(folder(), n_n, f"Take {n_n}")
+    api.rename_take(folder(), n_n, "Take")
     drain()
     uid_n = uid_of(n_n)
+    named_n = take(n_n)["name"]
     fake.move_in_service(uid_n, "Hušča")
     fake.move_in_service(uid_n, None)
     check()
-    ok("a take with no song here, taken out of its song there, only goes again",
-       not take(n_n)["song"] and take(n_n)["name"] == f"Take {n_n}" and uid_n not in fake.moved)
+    ok("a take with no song here, taken out of its song there, only goes again, its go kept",
+       not take(n_n)["song"] and named_n.startswith("Take ") and take(n_n)["name"] == named_n
+       and uid_n not in fake.moved and fake.takes[uid_n]["name"] == named_n)
 
     made = api.add_song("Kalyhanka")
     api.add_song("Kalychanka")

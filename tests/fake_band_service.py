@@ -207,13 +207,14 @@ class FakeBandService:
     def move_in_service(self, uid, title, by="Ivan"):
         """⋯ › Move to song on a take: named by the song's title until
         РЭХА gives it its number. A title of None is Not named: the take
-        is Take and its number at once."""
+        is named Take until РЭХА gives it its number among the takes with
+        no song."""
         with self._lock:
             if title is None:
                 take = self.takes[uid]
                 if take.get("song_id") is None:
                     return  # no song already: the service changes nothing
-                take.update(song_id=None, song=None, name=f"Take {take['number']}")
+                take.update(song_id=None, song=None, name="Take")
                 self.moved[uid] = {"song_id": None, "by": by}
                 return
             song = self._find_song(title)
