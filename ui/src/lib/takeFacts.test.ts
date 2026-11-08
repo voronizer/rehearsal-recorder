@@ -36,6 +36,12 @@ describe("takeFacts", () => {
     expect(f.columnsSaid).toBe("")
   })
 
+  it("gives no song typed the go Python has for it, whatever the number", () => {
+    const told = { ...choices, unnamed_go: 48 }
+    expect(facts("Take", tonight, told)).toMatchObject({ song: null, go: 48, unnamed: true, shown: "Take" })
+    expect(facts("Take #5", tonight, told)).toMatchObject({ song: null, go: 48, shown: "Take" })
+  })
+
   it("gives a song's first take tonight its number and no columns", () => {
     const f = facts("Ahoń", tonight)
     expect(f).toMatchObject({ song: "Ahoń", go: 1, unnamed: false, shown: "Ahoń" })

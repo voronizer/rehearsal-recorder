@@ -1,7 +1,7 @@
 import type { TakeColumn } from "@/components/ui/take-columns"
 import type { SongChoices, Take } from "@/lib/api"
 import { formatMMSS } from "@/lib/format"
-import { goFor, songFor, unnamedGo } from "@/lib/goes"
+import { goFor, isNoSong, songFor, unnamedGo } from "@/lib/goes"
 import { GO_SPACE, NO_SONG, goMark } from "@/lib/takeText"
 
 /** The most columns shown: the last takes, this one last, so a song played
@@ -30,14 +30,14 @@ export function takeFacts({
   takes: Take[]
   choices: SongChoices | null
 }) {
-  // A title no song has yet is a new song, at its first take; "Take 47" is a
-  // take nobody named, its go the number in it.
+  // A title no song has yet is a new song, at its first take. "Take",
+  // "Take 47" or "Take #47" is no song, at the go Python has for it
+  // (unnamed_go); until that is in, the number in the name Python gave.
   const typed = name.trim()
-  const unnamedAt = unnamedGo(typed)
-  const unnamed = typed === "" || unnamedAt !== null
-  const song = unnamed ? null : (songFor(typed, choices)?.choice.song ?? typed)
+  const noSong = isNoSong(typed)
+  const song = typed === "" || noSong ? null : (songFor(typed, choices)?.choice.song ?? typed)
   // Until the songs are in, the number is not guessed.
-  const go = song ? goFor(typed, choices) : unnamedAt
+  const go = song ? goFor(typed, choices) : noSong ? (choices?.unnamed_go ?? unnamedGo(typed)) : null
   const before = song
     ? takes.filter((t) => t.song === song && t.take_number !== takeNumber)
     : []
@@ -60,7 +60,7 @@ export function takeFacts({
     unnamed: !song,
     /** What the title says before the go: the song, "Take" for a take
      *  nobody named, or the name as typed when it is empty. */
-    shown: song ?? (unnamedAt !== null ? NO_SONG : name),
+    shown: song ?? (noSong ? NO_SONG : name),
     columns,
     /** The columns in words, each by the take's own name as the screen
      *  writes it ("Viasna #1: 0:18"), for their tip and for the title's once

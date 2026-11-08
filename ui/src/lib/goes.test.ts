@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { goFor, nameWithGo, songFor, songNamed, unnamedGo, withoutGo } from "./goes"
+import { goFor, isNoSong, nameWithGo, songFor, songNamed, unnamedGo, withoutGo } from "./goes"
 
 const choices = {
   here: [{ song: "Polyn", go: 4, last_take: 3 }],
@@ -27,10 +27,19 @@ describe("goFor", () => {
     expect(goFor("Polyn", null)).toBeNull()
     expect(goFor("Vesna", null)).toBeNull()
   })
-  it("is nothing for a take nobody named", () => {
+  it("is the go Python has for no song, whatever number was typed", () => {
+    const told = { ...choices, unnamed_go: 47 }
+    expect(goFor("Take", told)).toBe(47)
+    expect(goFor("Take 4", told)).toBe(47)
+    expect(goFor("Take #4", told)).toBe(47)
+  })
+  it("is nothing for no song when Python has not said, and for an empty field", () => {
     expect(goFor("Take 4", choices)).toBeNull()
-    expect(goFor("Take #4", choices)).toBeNull()
-    expect(goFor("  ", choices)).toBeNull()
+    expect(goFor("Take", choices)).toBeNull()
+    expect(goFor("  ", { ...choices, unnamed_go: 47 })).toBeNull()
+  })
+  it("reads take in small letters as a song's title, as Python does", () => {
+    expect(goFor("take", { ...choices, unnamed_go: 47 })).toBe(1)
   })
 })
 
@@ -44,6 +53,11 @@ describe("nameWithGo", () => {
   it("is Take and the go in its name for a take nobody named, choices or not", () => {
     expect(nameWithGo("Take 47", choices)).toBe("Take #47")
     expect(nameWithGo("Take #47", null)).toBe("Take #47")
+  })
+  it("is Take and the go Python has for no song, once it has said", () => {
+    expect(nameWithGo("Take 5", { ...choices, unnamed_go: 47 })).toBe("Take #47")
+    expect(nameWithGo("Take", { ...choices, unnamed_go: 47 })).toBe("Take #47")
+    expect(nameWithGo("Take", null)).toBe("Take")
   })
   it("is the name alone before the choices", () => {
     expect(nameWithGo("Polyn", null)).toBe("Polyn")
@@ -60,6 +74,20 @@ describe("unnamedGo", () => {
     expect(unnamedGo("Polyn 3")).toBeNull()
     expect(unnamedGo("Take")).toBeNull()
     expect(unnamedGo("Takes 3")).toBeNull()
+  })
+})
+
+describe("isNoSong", () => {
+  it("is the word alone, or with a number either way, as Python reads it", () => {
+    expect(isNoSong("Take")).toBe(true)
+    expect(isNoSong(" Take 47 ")).toBe(true)
+    expect(isNoSong("Take #47")).toBe(true)
+  })
+  it("is not a song's title, an empty field, or take in small letters", () => {
+    expect(isNoSong("Polyn 3")).toBe(false)
+    expect(isNoSong("")).toBe(false)
+    expect(isNoSong("take")).toBe(false)
+    expect(isNoSong("Takes")).toBe(false)
   })
 })
 

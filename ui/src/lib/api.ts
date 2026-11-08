@@ -471,8 +471,11 @@ export type SongChoice = {
 }
 
 /** The songs a take can be named after (api.song_choices): what its own
- *  rehearsal played, in order, and every other, the most recent first. */
-export type SongChoices = { here: SongChoice[]; other: SongChoice[] }
+ *  rehearsal played, in order, and every other, the most recent first.
+ *  `unnamed_go` is the go the take would have with no song: its own when it
+ *  has no song already, otherwise the next one, so the field reads "Take
+ *  #47". Left out of choices made here rather than by Python. */
+export type SongChoices = { here: SongChoice[]; other: SongChoice[]; unnamed_go?: number | null }
 
 /** What a song's ▶ plays (api.last_time): its newest ★ go, from whichever
  *  rehearsal it was played at, or with none its last go last time. */

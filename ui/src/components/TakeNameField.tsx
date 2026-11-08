@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button"
 import { Popover, PopoverAnchor, PopoverContent } from "@/components/ui/popover"
 import { Whole } from "@/components/ui/whole"
 import type { SongChoices } from "@/lib/api"
-import { goFor, nameWithGo, songFor, songNamed, unnamedGo, withoutGo } from "@/lib/goes"
+import { goFor, isNoSong, nameWithGo, songFor, songNamed, unnamedGo, withoutGo } from "@/lib/goes"
 import { forgetSongName } from "@/lib/songNames"
 import { GO_SPACE, NO_SONG, goMark } from "@/lib/takeText"
 import { cn } from "@/lib/utils"
@@ -19,7 +19,7 @@ function without(choices: SongChoices | null, name: string): SongChoices | null 
     ...c,
     also: c.also?.filter((a) => a.toLocaleLowerCase() !== key),
   })
-  return { here: choices.here.map(strip), other: choices.other.map(strip) }
+  return { ...choices, here: choices.here.map(strip), other: choices.other.map(strip) }
 }
 
 /** A line break, with the spaces round it: one space in a name. */
@@ -153,23 +153,32 @@ export function TakeNameField({
   // is taken out of them until Python's fresh list replaces them.
   const [forgot, setForgot] = useState<{ name: string; from: SongChoices | null } | null>(null)
   const known = forgot && forgot.from === choices ? without(choices, forgot.name) : choices
-  // A take nobody named is "Take 49" to Python and "Take #49" on screen: the
-  // field holds "Take", and 49 is drawn after it as a song's go is. "Take"
-  // left as it is stays that name; typed anywhere else it is a song's title.
-  const unnamed = goes ? unnamedGo(value) : null
-  const atRest = (name: string) => (goes && unnamedGo(name) !== null ? NO_SONG : name)
-  const isUnnamed = (text: string) =>
-    unnamed !== null && text.trim().toLocaleLowerCase() === NO_SONG.toLocaleLowerCase()
-  // A name as ✕ says it: "Take #49" for one nobody named.
+  // A take with no song is "Take 49" to Python and "Take #49" on screen: the
+  // field holds "Take", and 49 is drawn after it as a song's go is. "Take",
+  // "Take 5" or "Take #5" typed is no song too, and Python gives it the go
+  // whatever the number: the one it has for the name settled on (knownGo),
+  // else its answer for this take (unnamed_go), else the number in the name
+  // it gave. Python reads "take" in small letters as a song's title, so the
+  // field does too.
+  const isUnnamed = (text: string) => goes && isNoSong(text)
+  const atRest = (name: string) => (isUnnamed(name) ? NO_SONG : name)
+  const noSongGo =
+    (draft === null && knownGo != null ? knownGo : null) ?? known?.unnamed_go ?? unnamedGo(value)
+  // A name as ✕ says it: "Take #49" for one with no song.
   const said = (name: string) => (goes ? nameWithGo(name, null) : name)
   const shown = draft ?? atRest(value)
+  // An emptied field puts back `fallback`. When that has no song, its go is
+  // drawn beside the empty field.
+  const empty = shown.trim() === "" && isUnnamed(fallback)
   const go = !goes
     ? null
-    : isUnnamed(shown)
-      ? unnamed
-      : known === null && draft === null && knownGo !== undefined
-        ? knownGo
-        : goFor(shown, known)
+    : empty
+      ? (unnamedGo(fallback) ?? noSongGo)
+      : isUnnamed(shown)
+        ? noSongGo
+        : known === null && draft === null && knownGo !== undefined
+          ? knownGo
+          : goFor(shown, known)
   // The song an old name in the field is now. A title is taken whole: in
   // Rename song, "Palyn 5" is a title of its own, not Palyn.
   const via = goes ? songFor(shown, known) : songNamed(shown, known)
@@ -181,7 +190,9 @@ export function TakeNameField({
   const named = (text: string) => {
     const name = text.trim()
     if (!name) return fallback
-    return isUnnamed(name) ? value : name
+    // No song for a take that has none already: its own name, so it keeps
+    // its go.
+    return isUnnamed(name) && isUnnamed(value) ? value : name
   }
   const edit = (text: string | null) => {
     typed.current = text
@@ -356,7 +367,7 @@ export function TakeNameField({
             {old
               ? `${old.song}${go !== null ? `${GO_SPACE}${goMark(go)}` : ""}`
               : go !== null
-                ? `${via?.choice.song ?? shown.trim()}${GO_SPACE}${goMark(go)}`
+                ? `${isUnnamed(shown) || empty ? NO_SONG : (via?.choice.song ?? shown.trim())}${GO_SPACE}${goMark(go)}`
                 : ""}
           </span>
           {size === "big" ? (

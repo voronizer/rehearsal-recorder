@@ -16,7 +16,8 @@ import { UNNAMED } from "@/lib/goes"
  * New song, from the button over History's song list (spec Part 6): a song
  * with no takes yet, so its tempo and backing track can be set before its
  * first take. It asks only for the title. A song's title, or one of its old
- * names, is that song already, and a take's own name ("Take 3") is no song's:
+ * names, is that song already, and the name of a take with no song ("Take",
+ * "Take 3") is no song's:
  * the line under the field says so and Create waits. The line keeps its
  * height, so the buttons do not move as it changes.
  *
