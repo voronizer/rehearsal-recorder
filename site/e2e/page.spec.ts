@@ -105,7 +105,7 @@ test("the page ends with the downloads again, after the questions", async ({ pag
   await page.goto("/")
   const end = page.locator(".get-it")
   await expect(end.getByRole("heading", { level: 2 })).toHaveText("Record the next rehearsal.")
-  await expect(end.locator(".lede")).toHaveText("Free, for macOS and Windows. Plug in the interface, press Record take, play.")
+  await expect(end.locator(".lede")).toHaveText("Free, for macOS and Windows. Plug in the interface, press Record, play.")
   await expect(end.locator(".lede strong, .lede b")).toHaveText("Record take")
   const at = await page.evaluate(() => ({
     faq: document.querySelector("#faq")!.getBoundingClientRect().bottom,

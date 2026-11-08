@@ -99,7 +99,7 @@ In **Settings**, under **Audio**, you choose the mixer (on Windows, with the **A
 
 The start screen has a track for each of us, with a name and an input. The drums are a **Stereo** track on **Both**, so they get the kit's sound and its MIDI. It's all filled in for you next time.
 
-Before each song you press **Record take**. Every track goes to its own WAV file as you play, everything is safely on the disk every 30 seconds, and the laptop doesn't fall asleep halfway through the bridge.
+Before each song you press **Record**. Every track goes to its own WAV file as you play, everything is safely on the disk every 30 seconds, and the laptop doesn't fall asleep halfway through the bridge.
 
 Press **Stop** and you can listen straight away: just the drums, the chorus on repeat, or the bar where the bass came in late.
 

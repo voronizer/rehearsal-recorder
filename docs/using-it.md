@@ -175,7 +175,7 @@ so, or ⌘Z on a Mac (Ctrl+Z elsewhere), puts it back where it was.
 ![A rehearsal played by the set Gig on the 25th: five takes grouped by song, a false start among them, and Send starred and Clear false starts over them; on the right the next take's name, the set and the other songs](screenshots/rehearsal.png)
 
 Press **Start rehearsal**, or Space. The rehearsal screen shows the takes
-recorded so far, grouped by song. Each take is a row: its number and name,
+recorded so far, grouped by song. Each take is a row: its name, “Pałyn #3”,
 then its wave, drawn to its length, with its marks on it and listed under
 it, so a take that ran long or stopped short stands out before you read
 anything. The wave is the take's sound: loud parts tall, quiet parts low.
@@ -221,7 +221,7 @@ counted by label, each in its colour: “2 Keep this”, “1 Went wrong”. Eac
 button shows how many takes it would act on. With none it is greyed, and
 pointing at it says why.
 
-Press **Record take**, or Space, to start recording. **Finish** ends the
+Press **Record**, or Space, to start recording. **Finish** ends the
 rehearsal and goes back to the start screen, where Last time shows the
 rehearsal just finished. Closing the app instead loses nothing: every take
 you saved is kept. The row at the bottom left, beside **Finish**, is the
@@ -282,10 +282,8 @@ the name you picked.
 The recording screen is big enough to read from where you play.
 
 - The take's name is over the clock, half its size, so you can see from
-  where you stand what you are recording. If it says “Take 3”, nobody named
-  the take: name it after **Stop**. A take you named has its place in the
-  rehearsal, “Take 6”, at the bottom beside **Stop**, after the red
-  *Recording*.
+  where you stand what you are recording. If it says “Take #3”, nobody named
+  the take: name it after **Stop**.
 - The clock shows how long the take has been running. A take recorded to
   the metronome's click counts the band in first, in big digits in the
   clock's place, and the clock starts when the count-in ends (see
@@ -341,9 +339,8 @@ take is still here, so press **Save take** again.
 The take's name is at the top: the song and its number after a #,
 “Viasna #2”. A long name takes a second line, and one longer than that is
 cut with its number kept; point at it to read it whole. The small line over
-it gives the take's place in the rehearsal and the rehearsal's name,
-“Take 5 · Thursday”; a long rehearsal name is cut, and shows whole when you
-point at it. A take nobody named says “Take 7”, in grey. How long the take
+it gives the rehearsal's name, “Thursday”; a long one is cut, and shows whole
+when you point at it. A take nobody named says “Take #7”. How long the take
 ran is in the player, “0:00 / 2:31”.
 
 At the right of the name are the song's takes tonight as columns, the last
@@ -525,9 +522,10 @@ Type the title only; the number is the app's. Typing “Pałyn 5” or
 spelled one way everywhere: typing “pałyn” gives “Pałyn” when that song is
 there. A title can end in a number, like “Opus 5”, as long as no song is
 called “Opus”; its takes are “Opus 5 #1”, “Opus 5 #2”, and the # keeps the
-take's number apart from the title. A take nobody named is called by its
-number, “Take 4”, and is not counted as a song. The
-same goes for a recovered take you did not name (see [The app closed during
+take's number apart from the title. A take nobody named is called “Take”
+with a number of its own, “Take #4”, counted across every rehearsal the way
+a song's takes are. It is not listed as a song. The same goes for a
+recovered take you did not name (see [The app closed during
 a take](#the-app-closed-during-a-take)). On the rehearsal screen and in
 History, the songs are listed under such a take, so one click names it.
 
@@ -560,8 +558,9 @@ background says so (see [Following the copies](#following-the-copies)).
 Takes in the band service get the new name too, and so does the song there
 (see [Songs on both sides](#songs-on-both-sides)). A title that differs only in
 capitals respells the song. Here a number at the
-end is part of the title: “Opus 5” is the whole of it. “Take 4” cannot be a
-song's title, since it is what a take with no song is called.
+end is part of the title: “Opus 5” is the whole of it. “Take 4” and
+“Take #4” cannot be a song's title, since that is what a take with no song
+is called.
 
 The same song typed two ways, “Palyn” one night and “Pałyn” the next, is two
 songs until you merge them. Rename song lists the other songs under the
@@ -906,8 +905,8 @@ tempo can be changed on either side, and the other side follows.
   song moves with ⋯ › **Move to song**, to one of the band's songs or to a
   **New song…**. Until РЭХА gives it a number in its new song, the take
   shows there without one. A jam that came in under a song goes to **Not
-  named**, the first line of the same list, and gets the name Take 3 straight
-  away if it was the rehearsal's third take.
+  named**, the first line of the same list, and is called “Take” there until
+  РЭХА gives it its number.
 
 РЭХА asks the service what the band changed when it starts, every hour, and
 when a rehearsal starts. It renames the takes and their folders as **Rename
@@ -1137,7 +1136,7 @@ rehearsal.
 
 ## The metronome
 
-![The metronome's row at the bottom left of the rehearsal screen, beside Finish and Record take: the switch, 128 bpm with − and +, 4/4, Tap, ▶, the beat's dots and the gear; under it the backing track's row, and the line “The song's tempo. The backing track comes in on bar 1, after the count-in.”](screenshots/metronome-row.png)
+![The metronome's row at the bottom left of the rehearsal screen, beside Finish and Record: the switch, 128 bpm with − and +, 4/4, Tap, ▶, the beat's dots and the gear; under it the backing track's row, and the line “The song's tempo. The backing track comes in on bar 1, after the count-in.”](screenshots/metronome-row.png)
 
 The metronome clicks on every beat, higher on the first beat of a bar, so
 you hear where each bar starts. How fast it clicks is the tempo, counted in
@@ -1146,7 +1145,7 @@ bpm, beats a minute. How many beats make a bar is the time signature: 4/4,
 
 To record a take to the click, pick the song under **Next take** and check
 the tempo in the metronome's row. If the row is empty, type or tap a tempo
-first. Then press **Record take**. The take starts with the count-in, a bar
+first. Then press **Record**. The take starts with the count-in, a bar
 of clicks before the band plays, so that everyone comes in together.
 
 In 6/8 the click comes on every eighth note, six to a bar, and the tempo
@@ -1158,7 +1157,7 @@ two halves.
 ### The row
 
 The metronome is one row at the bottom left of the rehearsal screen, beside
-**Finish** and **Record take**. From left to right:
+**Finish** and **Record**. From left to right:
 
 - The switch, the metronome's icon, turns the click in takes on or off.
   Pointing at it says “Click in takes”. It is grey when on.
@@ -1170,7 +1169,7 @@ The metronome is one row at the bottom left of the rehearsal screen, beside
   at 128 becomes 6/8 at 128, and you then set the number you want.
 - **Tap**, to tap the tempo in (see [Tap](#tap)).
 - ▶ plays the click between takes, to try a tempo or to warm up, and ■
-  stops it. It also stops when you press **Record take**, since the take
+  stops it. It also stops when you press **Record**, since the take
   starts its own click, and when you leave the screen.
 - A dot for each click of a bar, lit in time while ▶ plays. The first is
   bigger, and in 6/8 the fourth too, with the six in two groups of three.
@@ -1178,7 +1177,7 @@ The metronome is one row at the bottom left of the rehearsal screen, beside
   settings](#the-clicks-settings)).
 
 In a small window, or at a large **Scale**, the row gives up room so that
-**Finish** and **Record take** keep theirs: first the beat's dots and the
+**Finish** and **Record** keep theirs: first the beat's dots and the
 key letters on the buttons, then **Tap** and − +, then ▶. What has gone is
 under the gear, and its keys still work.
 
@@ -1266,7 +1265,7 @@ records the click.
 
 If the click's output is not connected, the line under the row says so,
 with an amber icon: “The click's output, X18/XR18, is not connected. The
-beat will only flash.” **Record take** still records, and the take keeps
+beat will only flash.” **Record** still records, and the take keeps
 its tempo.
 
 On Windows, while you record through ASIO, a second ASIO interface cannot
@@ -1297,7 +1296,7 @@ none of these three.
 
 ### Recording to the click
 
-Press **Record take**, or Space, with the switch on and a tempo in the row.
+Press **Record**, or Space, with the switch on and a tempo in the row.
 The count-in comes first, counted in big digits where the clock will be: 1
 to 4 in 4/4, the first one in blue, and 1 to 6 in 6/8, the first and fourth
 in blue. With **2 bars** it counts twice. With **None** there is no
@@ -1368,7 +1367,7 @@ The words in the row's corner say what the take is measured against:
 
 - “Click 128 bpm · 4/4”: the click it was recorded to.
 - “No click · 128 bpm · 4/4”: the tempo in the metronome's row when
-  **Record take** was pressed with the switch off.
+  **Record** was pressed with the switch off.
 - “Pałyn 128 bpm”: the song's tempo, for a take with no tempo of its own,
   such as one from before the app had a metronome.
 - “No tempo set · about 126 bpm”: the take's own middle, for a take of no
@@ -1428,7 +1427,7 @@ included. FLAC and MP3 copies do not.
 A backing track is an audio file the band plays along with: pads, keys or a
 choir the band does not have, or a whole arrangement without the part
 someone is learning. Each song can keep one. The app plays it from
-**Record take**: it comes in on bar 1, right after the count-in, through an
+**Record**: it comes in on bar 1, right after the count-in, through an
 output of its own, and the take keeps it as a track.
 
 To use one, open the song's page in History and press **Add backing
@@ -1495,7 +1494,7 @@ From left to right:
 - The volume: how loud the band hears it, one level for every song. The
   take records the file whatever the level.
 - ▶ plays the file from its start, on its own, so you can hear it and set
-  the volume, and ■ stops it. It also stops when you press **Record take**,
+  the volume, and ■ stops it. It also stops when you press **Record**,
   pick another song or leave the screen.
 
 For a song with no backing track, the row says so and where to add one. A
@@ -1644,7 +1643,7 @@ From the controller:
   it. The laptop's **Stop** is different: it opens the screen where you save
   or discard the take.
 - With the metronome's click on, **Record/Stop** counts the band in as
-  **Record take** does on the laptop, at the tempo in the metronome's row
+  **Record** does on the laptop, at the tempo in the metronome's row
   (see [Recording to the click](#recording-to-the-click)). The controller's
   display shows 00:00 until the count-in ends, then counts the take's time
   from there, as the clock on the laptop's screen does.
@@ -1788,7 +1787,7 @@ own **Recover** too. If one fails, **Recover all** stops there and a notice
 says why. The takes before it are in their rehearsals. The one that failed
 and the ones after it stay in the list. Takes are recovered one at a time,
 so while one is being recovered, every **Recover** is greyed. That keeps
-each take's number in its rehearsal right.
+the takes of a rehearsal in the order they were played.
 
 **Discard** moves a take to the Trash at once (**Undo** brings it back).
 **Decide later** keeps the takes for next time. If a take is being recovered
@@ -1810,12 +1809,17 @@ RehearsalRecordings/
   library.sqlite                     the history: rehearsals, takes, marks
   Tuesday jam - 2026-09-18 19-00/
     _drafts/
-      take 3/                        the take being recorded right now
+      take 4/                        the take being recorded right now
         Drums.wav
         Vocals.wav
-    01 - Verse riff/                 saved take 1
-    02 - Verse riff 2/               saved take 2
+    01 - Verse riff 1/               the evening's first take
+    02 - Verse riff 2/               the second
+    03 - Take 12/                    the third, which nobody named
 ```
+
+The number at the start of a take's folder is its place in the rehearsal, so
+the folders sort in the order you played. The app shows this number nowhere
+else.
 
 While a take records, it is written to `_drafts`. **Save take** moves it into
 its own folder, and **Discard** moves it to the Trash.
