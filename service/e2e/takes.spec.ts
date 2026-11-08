@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test"
+import { expect, test, type Page } from "@playwright/test"
 import { as, band, HEADERS } from "./band"
 
 test.describe("as Alex", () => {
@@ -340,7 +340,7 @@ test.describe("as Ira", () => {
 
   test("M and S in a take panel work before the take plays, and stay when it does", async ({ page }) => {
     await page.goto(`/?panel=take:${band().takes["Pałyn 3"]}`)
-    const panel = page.getByLabel("Panel")
+    const panel = page.getByLabel("Panel", { exact: true })
     await panel.getByRole("button", { name: /^Tracks/ }).click()
     const solo = panel.getByRole("button", { name: "Solo Bass" })
     await expect(solo).toBeEnabled()
@@ -383,7 +383,7 @@ test.describe("as Dzima", () => {
     const bar = page.getByLabel("Player")
     await expect(bar.getByTestId("bar-time")).toHaveText("0:05")
     await bar.getByRole("button", { name: "Mark" }).click()
-    const panel = page.getByLabel("Panel")
+    const panel = page.getByLabel("Panel", { exact: true })
     await expect(panel).toContainText("A mark at 0:05")
     await panel.getByLabel("Note").fill("Bass comes in late")
     await panel.getByRole("button", { name: "Add mark" }).click()
@@ -393,8 +393,8 @@ test.describe("as Dzima", () => {
     // On the take's page it is a chip in the player; pressed, its talk is in the panel.
     await page.goto(`/takes/${band().takes["Pałyn 9"]}`)
     await page.locator("[data-take-player]").getByRole("button", { name: "Bass comes in late" }).click()
-    await expect(page.getByLabel("Panel")).toContainText("Mark at 0:05")
-    const kept = page.getByLabel("Panel").locator("[data-mark]").filter({ hasText: "Bass comes in late" })
+    await expect(page.getByLabel("Panel", { exact: true })).toContainText("Mark at 0:05")
+    const kept = page.getByLabel("Panel", { exact: true }).locator("[data-mark]").filter({ hasText: "Bass comes in late" })
     await expect(kept).toContainText("0:05")
     // The box for a comment is open; Send comes with the words.
     await expect(kept.getByRole("button", { name: "Send" })).toHaveCount(0)
@@ -415,7 +415,7 @@ test.describe("as Dzima", () => {
     const transport = page.getByRole("toolbar", { name: "Transport" })
     await expect(transport.getByText(/^\d:\d\d \/ /)).toHaveText(/^0:08 /)
     await transport.getByRole("button", { name: "Add mark" }).click()
-    const panel = page.getByLabel("Panel")
+    const panel = page.getByLabel("Panel", { exact: true })
     await expect(panel).toContainText("New mark at 0:08")
     await panel.getByLabel("Note").fill("Guitar too loud")
     await panel.getByRole("button", { name: "Add mark" }).click()
@@ -427,13 +427,13 @@ test.describe("as Dzima", () => {
   test("closing a mark with words not sent asks first", async ({ page }) => {
     await page.goto(`/takes/${band().takes["Kupalle 2"]}`)
     await page.locator("[data-take-player]").getByRole("button", { name: "Count it in" }).click()
-    const panel = page.getByLabel("Panel")
+    const panel = page.getByLabel("Panel", { exact: true })
     await panel.getByRole("textbox", { name: "Your comment" }).fill("Half a thou")
-    await panel.getByRole("button", { name: "Close", exact: true }).click()
+    await panel.getByRole("button", { name: "Fold the panel" }).click()
     const ask = page.getByRole("dialog", { name: "Discard what you wrote?" })
     await ask.getByRole("button", { name: "Keep writing" }).click()
     await expect(panel.getByRole("textbox", { name: "Your comment" })).toHaveValue("Half a thou")
-    await panel.getByRole("button", { name: "Close", exact: true }).click()
+    await panel.getByRole("button", { name: "Fold the panel" }).click()
     await ask.getByRole("button", { name: "Discard" }).click()
     await expect(panel).toHaveCount(0)
   })
@@ -441,7 +441,7 @@ test.describe("as Dzima", () => {
   test("a mark chip opens its talk: a comment, closed and opened again", async ({ page }) => {
     await page.goto(`/takes/${band().takes["Kupalle 2"]}`)
     const player = page.locator("[data-take-player]")
-    const panel = page.getByLabel("Panel")
+    const panel = page.getByLabel("Panel", { exact: true })
     // A mark from РЭХА follows РЭХА: no ⋯ with Edit or Delete. A chip has no ✕.
     await player.getByRole("button", { name: "Count it in" }).click()
     await expect(panel.locator("[data-mark]")).toContainText("Set in РЭХА")
@@ -459,7 +459,7 @@ test.describe("as Dzima", () => {
     await expect(quiet).toHaveAttribute("data-closed", "false")
     // The panel is in the page's address: a reload keeps it open.
     await page.reload()
-    await expect(page.getByLabel("Panel").locator("[data-mark]").getByText("Turn the vocal up")).toBeVisible()
+    await expect(page.getByLabel("Panel", { exact: true }).locator("[data-mark]").getByText("Turn the vocal up")).toBeVisible()
   })
 })
 
@@ -476,7 +476,7 @@ test.describe("deleting a take, as Alex", () => {
   test("deleting the open take closes its panel", async ({ page }) => {
     const uid = band().takes["Pałyn 3"]
     await page.goto(`/?panel=take:${uid}`)
-    const panel = page.getByLabel("Panel")
+    const panel = page.getByLabel("Panel", { exact: true })
     await deleteTake(page, panel, "Pałyn 3")
     await expect(panel).toHaveCount(0)
     await expect(page.getByText("This screen could not open.")).toHaveCount(0)
@@ -507,7 +507,7 @@ test.describe("moving a take", () => {
     await expect(page.getByRole("menuitemradio", { name: "Not named" })).toHaveAttribute("aria-checked", "true")
     await page.getByRole("menuitem", { name: "New song…" }).click()
     // From a list the take's panel opens, the field in its line.
-    const panel = page.getByLabel("Panel")
+    const panel = page.getByLabel("Panel", { exact: true })
     const field = panel.getByRole("textbox", { name: "New song" })
     await expect(field).toBeFocused()
     await field.fill("pałyn")
@@ -552,5 +552,84 @@ test.describe("moving a take", () => {
     await none.click()
     await expect(none).toBeHidden()
     expect(sent).toBe(0)
+  })
+})
+
+test.describe("the drawer on a take's page, as Alex", () => {
+  test.use({ storageState: as("alex") })
+  const marksOf = async (page: Page, take: string) =>
+    ((await (await page.request.get(`/api/takes/${band().takes[take]}`)).json()) as { marks: { id: number; note: string }[] }).marks
+
+  test("a take's page opens folded; its strip counts the marks and opens the drawer; it folds", async ({ page }) => {
+    const n = (await marksOf(page, "Kupalle 2")).length
+    await page.goto(`/takes/${band().takes["Kupalle 2"]}`)
+    const strip = page.getByLabel("Strip")
+    const panel = page.getByLabel("Panel", { exact: true })
+    await expect(strip.getByRole("button", { name: `Marks: ${n}` })).toBeVisible()
+    await expect(panel).toHaveCount(0)
+    await strip.getByRole("button", { name: `Marks: ${n}` }).click()
+    await expect(panel.getByRole("heading", { name: "Marks", exact: true })).toBeVisible()
+    await expect(panel.locator("[data-mark]")).toHaveCount(n)
+    await expect(page).toHaveURL(/panel=marks(%3A|:)/)
+    await panel.getByRole("button", { name: "Fold the panel" }).click()
+    await expect(panel).toHaveCount(0)
+    await expect(strip).toBeVisible()
+    // The sign at the top opens it too; Esc and Back fold it.
+    await strip.getByRole("button", { name: "Open the panel" }).click()
+    await expect(panel).toBeVisible()
+    await page.keyboard.press("Escape")
+    await expect(panel).toHaveCount(0)
+    await strip.getByRole("button", { name: "Open the panel" }).click()
+    await expect(panel).toBeVisible()
+    await page.goBack()
+    await expect(panel).toHaveCount(0)
+    await expect(page).toHaveURL(new RegExp(`/takes/${band().takes["Kupalle 2"]}$`))
+  })
+
+  test("a mark's chip opens the drawer on it; from the list, Back returns to the list", async ({ page }) => {
+    await page.goto(`/takes/${band().takes["Kupalle 2"]}`)
+    const panel = page.getByLabel("Panel", { exact: true })
+    const chip = page.locator("[data-take-player]").getByRole("button", { name: "Too quiet here" })
+    await chip.click()
+    await expect(panel).toContainText("Mark at 0:03")
+    await expect(panel.getByRole("button", { name: "Back" })).toHaveCount(0)
+    await panel.getByRole("button", { name: "Fold the panel" }).click()
+    await expect(panel).toHaveCount(0)
+    await page.getByLabel("Strip").getByRole("button", { name: /^Marks: / }).click()
+    await chip.click()
+    await expect(panel).toContainText("Mark at 0:03")
+    await panel.getByRole("button", { name: "Back" }).click()
+    await expect(panel.getByRole("heading", { name: "Marks", exact: true })).toBeVisible()
+  })
+
+  test("a chat link with a mark opens the take's page with the drawer on that mark", async ({ page }) => {
+    const quiet = (await marksOf(page, "Kupalle 2")).find((m) => m.note === "Too quiet here")!
+    await page.goto(`/takes/${band().takes["Kupalle 2"]}?at=3&mark=${quiet.id}`)
+    const panel = page.getByLabel("Panel", { exact: true })
+    await expect(panel).toContainText("Mark at 0:03")
+    await expect(panel).toHaveCount(1)
+    await expect(page.getByLabel("Strip")).toBeVisible()
+  })
+
+  test("the take's name in a mark on its own page opens the drawer's list, not the take's panel", async ({ page }) => {
+    await page.goto(`/takes/${band().takes["Kupalle 2"]}`)
+    await page.locator("[data-take-player]").getByRole("button", { name: "Too quiet here" }).click()
+    const panel = page.getByLabel("Panel", { exact: true })
+    await panel.getByRole("button", { name: "Kupalle 2", exact: true }).click()
+    await expect(panel.getByRole("heading", { name: "Marks", exact: true })).toBeVisible()
+    // The take's own panel would draw its player a second time.
+    await expect(panel.getByRole("heading", { level: 2, name: /Kupalle/ })).toHaveCount(0)
+  })
+
+  test("Esc in a list in the drawer closes the list, not the drawer", async ({ page }) => {
+    await page.goto(`/takes/${band().takes["Kupalle 2"]}`)
+    await page.getByLabel("Strip").getByRole("button", { name: "Open the panel" }).click()
+    const panel = page.getByLabel("Panel", { exact: true })
+    await panel.getByRole("button", { name: /^Add a mark at / }).click()
+    await panel.getByRole("combobox", { name: "Label" }).click()
+    await expect(page.getByRole("listbox")).toBeVisible()
+    await page.keyboard.press("Escape")
+    await expect(page.getByRole("listbox")).toHaveCount(0)
+    await expect(panel).toBeVisible()
   })
 })

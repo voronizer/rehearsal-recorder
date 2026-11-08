@@ -1,12 +1,10 @@
 import type { ReactNode } from "react"
 import { Link } from "@tanstack/react-router"
-import { X } from "lucide-react"
-import { Button } from "@/components/ui/button"
 import { Toggle } from "@/components/ui/toggle"
 import { cn } from "@/lib/utils"
 import { usePeaks, useTake, type TakePage } from "../api"
 import { TakeMarks } from "../marks/MarkItem"
-import { Group, Groups, OPENS, Trouble, Waiting } from "../shell/parts"
+import { Group, Groups, OPENS, PanelClose, Trouble, Waiting } from "../shell/parts"
 import { usePanel } from "../shell/panel"
 import { clock, longDay } from "../shell/words"
 import { usePlayer, useTime } from "./player/one"
@@ -99,9 +97,7 @@ export function TakePanel({ uid, markAt }: { uid: string; markAt?: number }) {
           </Link>
         </h2>
         {!t.trashed_at && <TakeMenu take={t} onGone={close} />}
-        <Button variant="ghost" size="icon-row" aria-label="Close" onClick={close}>
-          <X />
-        </Button>
+        <PanelClose />
       </div>
       {/* Where the take comes from: its rehearsal's page, its song's page. */}
       <p className="-mt-4 flex flex-wrap items-baseline gap-x-1.5 text-xs text-muted-foreground">

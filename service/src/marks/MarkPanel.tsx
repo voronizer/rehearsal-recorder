@@ -1,11 +1,9 @@
-import { X } from "lucide-react"
-import { Button } from "@/components/ui/button"
 import { useAddMark, useTake } from "../api"
 import { usePanel } from "../shell/panel"
-import { Note, Rows, Trouble, Waiting } from "../shell/parts"
+import { Note, PanelClose, Rows, Trouble, Waiting } from "../shell/parts"
 import { clock, longDay } from "../shell/words"
 import { TakeLink } from "../takes/parts"
-import { MarkForm, MarkItem } from "./MarkItem"
+import { MarkForm, MarkItem, TakeMarks } from "./MarkItem"
 
 /**
  * One mark of a take in the panel, opened from its chip in the take's
@@ -29,9 +27,7 @@ export function MarkPanel({ uid, id, at }: { uid: string; id?: number; at?: numb
         <h2 className="flex-1 text-lg font-semibold">
           {mark ? "Mark" : "New mark"} at <span className="tnum">{clock(moment)}</span>
         </h2>
-        <Button variant="ghost" size="icon-row" aria-label="Close" onClick={close}>
-          <X />
-        </Button>
+        <PanelClose />
       </div>
       {/* Whose mark it is, since the panel may cover the take: its take opens in the panel. */}
       <p className="-mt-4 flex flex-wrap items-baseline gap-x-1.5 text-xs text-muted-foreground">
@@ -60,6 +56,25 @@ export function MarkPanel({ uid, id, at }: { uid: string; id?: number; at?: numb
           }
         />
       )}
+    </div>
+  )
+}
+
+/**
+ * A take's marks alone, as its panel lists them: what the drawer on the
+ * take's page holds, there in place of the take's own panel, which would
+ * draw the page a second time. `markAt` opens with a new mark there.
+ */
+export function TakeMarksPanel({ uid, markAt }: { uid: string; markAt?: number }) {
+  const take = useTake(uid)
+  if (take.error) return <Trouble error={take.error} retry={() => void take.refetch()} />
+  if (!take.data) return <Waiting />
+  return (
+    <div className="flex flex-col gap-3">
+      <div className="-mt-1 flex justify-end">
+        <PanelClose />
+      </div>
+      <TakeMarks take={take.data} markAt={markAt} />
     </div>
   )
 }
