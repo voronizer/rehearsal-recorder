@@ -61,7 +61,9 @@ const TAKES: Seeded[] = [
   // The keys recorded only their notes: a chord a bar.
   { name: "Pałyn 9", song: "Pałyn", number: 9, rehearsal: "second", tracks: 2,
     notes: [{ name: "Keys", icon: "keys", notes: [0, 2, 4, 6, 8].flatMap((at) => [60, 64, 67].map((n): Note => [at, 1.8, n])) }] },
-  { name: "Viasna 11", song: "Viasna", number: 11, rehearsal: "second", tracks: 2 },
+  // РЭХА sends a take's number in its rehearsal, not at its song: the 10th
+  // take that evening, and Viasna's 11th. The pages write “Viasna #11”.
+  { name: "Viasna 11", song: "Viasna", number: 10, rehearsal: "second", tracks: 2 },
   // The kit sent its notes as well as its sound: kick, snare and hi-hat on
   // channel 10. To the click at 120, 4/4, a bar every 2 s; the band rushed
   // from the third bar on.
