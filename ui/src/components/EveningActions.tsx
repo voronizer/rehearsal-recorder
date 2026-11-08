@@ -6,6 +6,7 @@ import { api, type SendTo, type Take } from "@/lib/api"
 import { falseStarts, starredToSend } from "@/lib/evening"
 import { wentTo } from "@/lib/deletion"
 import { notify } from "@/lib/notices"
+import { takeText } from "@/lib/takeText"
 import { endedByPython, offerUndo } from "@/lib/trash"
 import { pollSoon } from "@/lib/activity"
 
@@ -97,7 +98,7 @@ export function EveningActions({
           kind: "error",
           text:
             failed.length === 1
-              ? `Could not send ${first?.name ?? "a take"}: ${failed[0].error}`
+              ? `Could not send ${first ? takeText(first) : "a take"}: ${failed[0].error}`
               : `Could not send ${failed.length} of them: ${failed[0].error}`,
         })
       }
@@ -141,7 +142,7 @@ export function EveningActions({
             kind: "error",
             text:
               failed.length === 1
-                ? `Could not move ${first?.name ?? "a take"}: ${failed[0].error}`
+                ? `Could not move ${first ? takeText(first) : "a take"}: ${failed[0].error}`
                 : `Could not move ${failed.length} of them: ${failed[0].error}`,
           })
         }

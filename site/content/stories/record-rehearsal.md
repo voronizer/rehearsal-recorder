@@ -39,7 +39,7 @@ Before a song, pick its name under **Next take** and press Space, which is **Rec
 
 **At a rehearsal you need one key, and it's the biggest one on the laptop.**
 
-Space again is **Stop**, and the take opens straight away. Press play to hear it, then Space keeps it (**Save take**) and Esc throws it away (**Discard**). The next Space starts the next take. The take is called after its song and number, “Viasna 2”, so a month later you can still tell which take of which song it was. A take under 30 seconds with no star and no marks counts as a false start, and **Clear false starts** sweeps them all away at once.
+Space again is **Stop**, and the take opens straight away. Press play to hear it, then Space keeps it (**Save take**) and Esc throws it away (**Discard**). The next Space starts the next take. The take is called after its song and number, “Viasna #2”, so a month later you can still tell which take of which song it was. A take under 30 seconds with no star and no marks counts as a false start, and **Clear false starts** sweeps them all away at once.
 
 The good take gets a star (★). At the end of the evening, **Send starred** copies every starred take to the cloud folder, a folder Google Drive or Dropbox already syncs. In **Settings › Folders**, under **What gets sent**, choose **The mix**, one stereo file for listening, or **The original tracks** for anyone who wants their part on its own. The band has the takes before we've packed the cables.
 

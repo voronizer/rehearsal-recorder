@@ -129,7 +129,7 @@ test("a second go at a song is measured against the first, under the take's name
   await secondGo(page)
   // The name, big over the clock, half its size and centred over it, so it
   // reads from as far away. The number goes beside Recording, by Stop.
-  await expect(takeName(page)).toHaveText("Viasna 2")
+  await expect(takeName(page)).toHaveText("Viasna #2")
   await expect(topLine(page)).toHaveText(/^Recording\s*Take 2$/)
   const shape = await page.evaluate(() => {
     const name = document.querySelector("h1")!
@@ -178,7 +178,7 @@ test("the screen is the take and the tiles, with the status beside Stop", async 
   await expect(page.locator("header")).toHaveCount(0)
   const take = page.locator("main [data-take]")
   const tiles = page.locator("main [data-tiles]")
-  await expect(take.getByRole("heading", { level: 1 })).toHaveText("Viasna 2")
+  await expect(take.getByRole("heading", { level: 1 })).toHaveText("Viasna #2")
   await expect(take.getByRole("timer")).toHaveCount(1)
   await expect(take.getByRole("progressbar", { name: "Against the last take" })).toHaveCount(1)
   await expect(tiles.getByRole("group")).toHaveCount(4)
@@ -276,12 +276,12 @@ test("a long take name wraps to two lines and is cut after that with its number"
   await settled(page)
   const name = takeName(page)
   // Read whole, whatever is drawn.
-  await expect(name).toHaveAccessibleName(`${whole} 2`)
+  await expect(name).toHaveAccessibleName(`${whole} #2`)
   const title = name.locator("[data-go-title]")
   await expect(title).toHaveAttribute("data-lines", "2")
   await expect(title).toHaveAttribute("data-cut")
   // Cut after the second line, and the go after the "…" stays whole.
-  await expect(title).toHaveText(/…\s2$/)
+  await expect(title).toHaveText(/…\s#2$/)
   const drawn = await title.evaluate((el) => {
     const size = parseFloat(getComputedStyle(el).fontSize)
     const box = el.getBoundingClientRect()
@@ -387,9 +387,9 @@ test("a take name has its words before the screen is first drawn", async ({ page
   await openApp(page, { stress: "recording" })
   await settled(page)
   const { last, late } = await drawnLate(page)
-  // The 2 after a no-break space, so it never starts a line of its own.
+  // The #2 after a no-break space, so it never starts a line of its own.
   expect(last, "the name, whole").toBe(
-    "Kalychanka (slow version for the wedding, with the long intro the bride asked for)\u00a02"
+    "Kalychanka (slow version for the wedding, with the long intro the bride asked for)\u00a0#2"
   )
   expect(late, "words that came after a frame was drawn").toEqual([])
 })

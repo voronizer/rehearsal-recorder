@@ -104,8 +104,8 @@ test("the header's title is the take with its number and pencil, under Take N an
   await page.locator("#rehearsal-name").fill("Tuesday jam")
   await startRehearsal(page, 7)
   await record(page, "Pałyn", 7)
-  await expect(title(page)).toHaveText("Pałyn 4")
-  await expect(title(page).locator("[data-go]")).toHaveText("4")
+  await expect(title(page)).toHaveText("Pałyn #4")
+  await expect(title(page).locator("[data-go]")).toHaveText("#4")
   await expect(title(page).getByRole("button", { name: "Rename take" })).toBeVisible()
   await expect(subtitle(page)).toHaveText("Take 7 · Tuesday jam")
   await expect(page.getByText(/recorded/)).toHaveCount(0)
@@ -119,7 +119,7 @@ test("the take's length is said once, by the transport, not in the header", asyn
   await openApp(page, { before: TONIGHT })
   await startRehearsal(page, 4)
   await recordTake(page, 4)
-  await expect(title(page)).toHaveText("Viasna 3")
+  await expect(title(page)).toHaveText("Viasna #3")
   await expect(page.locator("[data-take-line]")).toHaveCount(0)
   await expect(page.locator("header")).not.toContainText("0:06")
   await expect(page.locator("header")).not.toContainText("shorter than")
@@ -131,7 +131,8 @@ test("a second take shows columns for the takes tonight, said in words", async (
   await startRehearsal(page, 4)
   await recordTake(page, 4)
   await expect(columns(page)).toHaveText(["1", "2", "3"])
-  // Each column by the take's own name, so its number is not an evening's "Take 3".
+  // Each column by the take's own name, so its number is not an evening's
+  // "Take 3": the plain name for a screen reader, as its aria-labels have it.
   const said = "Viasna 1: 0:18, Viasna 2: 0:12, Viasna 3: 0:06"
   await expect(figures(page).getByRole("img")).toHaveAccessibleName(`Takes of Viasna tonight: ${said}`)
   await expect(columns(page).nth(0)).toHaveAttribute("data-starred")
@@ -146,10 +147,10 @@ test("a second take shows columns for the takes tonight, said in words", async (
       .evaluate((el) => el.getBoundingClientRect().height)
   expect(await height(0)).toBeGreaterThan(await height(1))
   expect(await height(1)).toBeGreaterThan(await height(2))
-  // Hovering them says them.
+  // Hovering them says them, each go after a #.
   await settled(page)
   await figures(page).getByRole("img").hover()
-  await expect(page.getByRole("tooltip")).toHaveText(said)
+  await expect(page.getByRole("tooltip")).toHaveText("Viasna #1: 0:18, Viasna #2: 0:12, Viasna #3: 0:06")
 })
 
 test("a window narrowed and widened across where the columns give way settles each time", async ({
@@ -189,7 +190,7 @@ test("thirty takes tonight show the last ten as columns and the title stays whol
   await openApp(page, { before: `window.__TONIGHT__ = [${takes.join(",")}];` })
   await startRehearsal(page, 31)
   await recordTake(page, 31)
-  await expect(title(page)).toHaveText("Viasna 31")
+  await expect(title(page)).toHaveText("Viasna #31")
   await expect(columns(page)).toHaveCount(10)
   await expect(columns(page).first()).toHaveText("22")
   await expect(columns(page).last()).toHaveAttribute("data-lit")
@@ -234,7 +235,7 @@ test("a long title takes two lines, then is cut with its number, whole in the to
   await expect(drawn(page)).toHaveAttribute("data-cut")
   await expect(drawn(page)).toHaveAttribute("data-lines", "2")
   await expect(drawn(page)).toContainText("…")
-  await expect(title(page).locator("[data-go]")).toHaveText("1")
+  await expect(title(page).locator("[data-go]")).toHaveText("#1")
   await expect(pencil(page)).toBeVisible()
   expect(await sideways(page)).toBe(false)
   // The cloud line beside the buttons keeps to one line too.
@@ -268,8 +269,8 @@ for (const scale of [1, 1.5]) {
     await expect(figures(page)).toContainText(/^Takes of Kalychanka .* tonight: Kalychanka /)
     await settled(page)
     await drawn(page).hover()
-    await expect(tip(page)).toContainText(`${KALYCHANKA} 1: `)
-    await expect(tip(page)).toContainText(`${KALYCHANKA} 2: 2:31`)
+    await expect(tip(page)).toContainText(`${KALYCHANKA} #1: `)
+    await expect(tip(page)).toContainText(`${KALYCHANKA} #2: 2:31`)
     // Whether the rehearsal's name is cut here depends on the font: the
     // next test cuts it whatever the font, and hovers it.
   })
@@ -284,7 +285,7 @@ test("a long rehearsal name is cut before the columns, never making them give wa
   await page.getByRole("button", { name: /^Stop/ }).click()
   await expect(summary(page)).toBeVisible()
   await nameTake(page, "Zorka")
-  await expect(title(page)).toHaveText("Zorka 9")
+  await expect(title(page)).toHaveText("Zorka #9")
   await expect(figures(page)).not.toHaveAttribute("data-columns-gone")
   await expect(columns(page)).toHaveCount(9)
   expect(await sideways(page)).toBe(false)
@@ -418,12 +419,12 @@ test("the pencil renames the take and the title and columns follow", async ({ pa
   await dialog(page).locator("#take-name").fill("Dym")
   await page.keyboard.press("Enter")
   await expect(dialog(page)).toHaveCount(0)
-  await expect(title(page)).toHaveText("Dym 2")
+  await expect(title(page)).toHaveText("Dym #2")
   await expect(columns(page)).toHaveText(["1", "2"])
 
   // A song's first take tonight has no columns.
   await nameTake(page, "Ahoń")
-  await expect(title(page)).toHaveText("Ahoń 1")
+  await expect(title(page)).toHaveText("Ahoń #1")
   await expect(figures(page)).toHaveCount(0)
   await page.getByRole("button", { name: /Save take/ }).click()
   await expect.poll(async () => (await calls(page, "keep_take")).at(-1)?.args[2]).toBe("Ahoń")
@@ -478,12 +479,12 @@ test("a take renamed and then cropped keeps its new name and columns", async ({ 
   await startRehearsal(page, 4)
   await recordTake(page, 4)
   await nameTake(page, "Dym")
-  await expect(title(page)).toHaveText("Dym 2")
+  await expect(title(page)).toHaveText("Dym #2")
   await dragRegion(page, 0.25, 0.75)
   await page.getByRole("button", { name: "Crop to the region" }).click()
   await expect(page.getByRole("toolbar", { name: "Transport" })).toContainText("0:03")
   await expect(subtitle(page)).toHaveText(/^Take 4 · /)
-  await expect(title(page)).toHaveText("Dym 2")
+  await expect(title(page)).toHaveText("Dym #2")
   await expect(columns(page)).toHaveText(["1", "2"])
   await page.getByRole("button", { name: /Save take/ }).click()
   expect((await calls(page, "keep_take")).at(-1)?.args).toContain("Dym")
@@ -518,10 +519,10 @@ test("outside the dialog Esc discards at once, Undo brings it back, and Space sa
   await expect(summary(page)).toHaveCount(0)
   expect(await callCount(page, "discard_take")).toBe(1)
   await notices(page)
-    .filter({ hasText: "“Sonca 1” went to the Trash." })
+    .filter({ hasText: "“Sonca #1” went to the Trash." })
     .getByRole("button", { name: "Undo" })
     .click()
-  await expect(title(page)).toHaveText("Sonca 1")
+  await expect(title(page)).toHaveText("Sonca #1")
   await page.keyboard.press("Space")
   await expect.poll(async () => (await calls(page, "keep_take")).at(-1)?.args[2]).toBe("Sonca")
 })

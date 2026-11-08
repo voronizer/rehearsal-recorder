@@ -143,8 +143,8 @@ test("renaming a take on the rehearsal screen offers the songs, ✕ puts its nam
   const dialog = page.getByRole("dialog")
   const field = dialog.getByRole("textbox", { name: "Take name" })
   // The take being renamed is not a go of its own: Pałyn is still Pałyn 2.
-  await expect(dialog.locator("[data-song-choice]").first()).toHaveText("Pałyn 2")
-  await dialog.locator("[data-song-choice]").filter({ hasText: /^Viasna 1$/ }).click()
+  await expect(dialog.locator("[data-song-choice]").first()).toHaveText("Pałyn #2")
+  await dialog.locator("[data-song-choice]").filter({ hasText: /^Viasna\s#1$/ }).click()
   await expect(field).toHaveValue("Viasna")
   await expect(field).toBeFocused()
   await dialog.getByRole("button", { name: "Put back “Pałyn”" }).click()
@@ -193,8 +193,8 @@ test("renaming a take in history offers what that rehearsal played, as the next 
   await page.hover("[data-take='3']")
   await page.getByRole("button", { name: "Rename take Take 3" }).click()
   const dialog = page.getByRole("dialog")
-  await expect(dialog.locator("[data-song-choice]").nth(0)).toHaveText("Pałyn 3")
-  await expect(dialog.locator("[data-song-choice]").nth(1)).toHaveText("Viasna 2")
+  await expect(dialog.locator("[data-song-choice]").nth(0)).toHaveText("Pałyn #3")
+  await expect(dialog.locator("[data-song-choice]").nth(1)).toHaveText("Viasna #2")
   expect((await calls(page, "song_choices")).at(-1)?.args).toEqual(["/rec/old", 3])
 
   const field = dialog.getByRole("textbox", { name: "Take name" })
@@ -202,7 +202,7 @@ test("renaming a take in history offers what that rehearsal played, as the next 
   await dialog.getByRole("button", { name: "Put back “Take 3”" }).click()
   await expect(field).toHaveValue("Take 3")
 
-  await dialog.locator("[data-song-choice]").filter({ hasText: "Pałyn 3" }).click()
+  await dialog.locator("[data-song-choice]").filter({ hasText: "Pałyn #3" }).click()
   await dialog.getByRole("button", { name: "Rename" }).click()
   expect((await calls(page, "rename_take")).at(-1)?.args).toEqual(["/rec/old", 3, "Pałyn"])
 })
@@ -278,19 +278,19 @@ test.describe("the next take", () => {
     await page.keyboard.press("Space")
     await expect(page.getByRole("heading", { level: 1, name: "Viasna" })).toBeVisible()
     await page.getByRole("button", { name: /^Stop/ }).click()
-    await expect(reviewTitle(page)).toHaveText("Viasna 1")
+    await expect(reviewTitle(page)).toHaveText("Viasna #1")
 
     // Thrown away, it is played again under the same name.
     await page.getByRole("button", { name: /^Discard/ }).click()
     await expect(field(page)).toHaveValue("Viasna")
     await recordTake(page, 2)
-    await expect(reviewTitle(page)).toHaveText("Viasna 1")
+    await expect(reviewTitle(page)).toHaveText("Viasna #1")
     await page.getByRole("button", { name: /Save take/ }).click()
     // Kept, it is used up, and the next one follows on from it.
     await expect(field(page)).toHaveValue("Viasna")
     await expect(
       page.getByRole("group", { name: "Next take" }).locator("[data-take-go]")
-    ).toHaveText("2")
+    ).toHaveText("#2")
   })
 
   test("a name typed is the one recorded, however the field is left", async ({ page }) => {
@@ -475,7 +475,7 @@ test.describe("after Stop", () => {
     await page.keyboard.press("Enter")
     await page.getByRole("button", { name: /Record take 1/ }).click()
     await page.getByRole("button", { name: /^Stop/ }).click()
-    await expect(reviewTitle(page)).toHaveText("Viasna 1")
+    await expect(reviewTitle(page)).toHaveText("Viasna #1")
     // The header's title, and no line in the footer between it and the buttons.
     await expect(page.locator("header [data-take-summary]")).toHaveCount(1)
     await expect(page.locator("footer [data-footer-rule]")).toHaveCount(0)
@@ -496,11 +496,11 @@ test.describe("after Stop", () => {
     await recordTake(page)
     await renameReview(page)
     await nameField(page).fill("Ah")
-    await pills(page).filter({ hasText: /^Ahoń 1$/ }).click()
+    await pills(page).filter({ hasText: /^Ahoń\s#1$/ }).click()
     await expect(nameField(page)).toHaveValue("Ahoń")
     await page.keyboard.press("Enter")
     await expect(page.getByRole("dialog")).toHaveCount(0)
-    await expect(reviewTitle(page)).toHaveText("Ahoń 1")
+    await expect(reviewTitle(page)).toHaveText("Ahoń #1")
     await page.keyboard.press("Space")
     await expect.poll(async () => (await calls(page, "keep_take")).at(-1)?.args[2]).toBe("Ahoń")
   })
@@ -538,7 +538,7 @@ test("All songs… draws a song lit or in focus inside its own box, so none of i
     return false
   }
   const lit = panel.locator("[aria-current=true]")
-  await expect(lit).toHaveText("Ahoń 1")
+  await expect(lit).toHaveText("Ahoń #1")
   expect(await lit.evaluate(drawnOutside)).toBe(false)
 
   // In focus from the keyboard.
@@ -561,9 +561,9 @@ test("the field holds the song's title, and the go beside it follows what is typ
   const next = page.locator("#next-take-name")
   const go = page.getByRole("group", { name: "Next take" }).locator("[data-take-go]")
   await expect(next).toHaveValue("Pałyn")
-  await expect(go).toHaveText("2")
+  await expect(go).toHaveText("#2")
   await next.fill("Viasna")
-  await expect(go).toHaveText("1")
+  await expect(go).toHaveText("#1")
   await next.fill("Take 7")
   await expect(go).toHaveCount(0)
 })
@@ -575,7 +575,7 @@ test("a pill puts only the song's title in the field", async ({ page }) => {
   await saveAs(page, "Pałyn")
   await recordTake(page, 2)
   await renameReview(page)
-  await expect(pills(page).first()).toHaveText("Pałyn 2")
+  await expect(pills(page).first()).toHaveText("Pałyn #2")
   await pills(page).filter({ hasText: /^Viasna/ }).click()
   await expect(nameField(page)).toHaveValue("Viasna")
   await page.getByRole("dialog").getByRole("button", { name: "Rename", exact: true }).click()
@@ -591,9 +591,9 @@ test("a take is shown as its song with the go beside it, from 1", async ({ page 
   await startRehearsal(page)
   await recordTake(page)
   await saveAs(page, "Pałyn")
-  await expect(overview(page).getByRole("button", { name: /^Take 1 Pałyn 1/ })).toContainText("Pałyn 1")
+  await expect(overview(page).getByRole("button", { name: /^Take 1 Pałyn 1/ })).toContainText("Pałyn #1")
   await page.keyboard.press("Space")
-  await expect(page.getByRole("heading", { name: "Pałyn 2" })).toBeVisible()
+  await expect(page.getByRole("heading", { name: "Pałyn #2" })).toBeVisible()
 })
 
 test("until the songs are in, the go beside the field is Python's, never a guess of 1", async ({
@@ -620,9 +620,9 @@ test("until the songs are in, the go beside the field is Python's, never a guess
   await expect(next).toHaveValue("Pałyn")
   const go = page.getByRole("group", { name: "Next take" }).locator("[data-take-go]")
   // Pałyn has been gone at twice: this is the third.
-  await expect(go).toHaveText("3")
+  await expect(go).toHaveText("#3")
   await page.keyboard.press("Space")
-  await expect(page.getByRole("heading", { level: 1, name: "Pałyn 3" })).toBeVisible()
+  await expect(page.getByRole("heading", { level: 1, name: "Pałyn #3" })).toBeVisible()
   await page.evaluate(() => (window as unknown as { __RELEASE_song_choices: () => void }).__RELEASE_song_choices())
 })
 
@@ -633,7 +633,7 @@ test("the go sits apart from the title, not run into it", async ({ page }) => {
   await saveAs(page, "Pałyn")
   const take = overview(page).getByRole("button", { name: /^Take 1 Pałyn 1/ })
   const title = await take.locator("[data-go-title]").boundingBox()
-  // The go's box starts with its space, so measure where its digit is drawn.
+  // The go's box starts with its space, so measure where its # is drawn.
   const digitX = await take.locator("[data-go]").evaluate((el) => {
     const text = el.lastChild as Text
     const range = document.createRange()
@@ -657,9 +657,9 @@ test.describe("a song's old name", () => {
     await openApp(page, { before: OLD })
     await startRehearsal(page)
     await field(page).fill("Palyn")
-    await expect(group(page).locator("[data-take-go]")).toHaveText("→ Pałyn 1")
+    await expect(group(page).locator("[data-take-go]")).toHaveText("→ Pałyn #1")
     // A screen reader hears the take's name, not an evening's "Take 1".
-    await expect(field(page)).toHaveAccessibleDescription("Pałyn 1")
+    await expect(field(page)).toHaveAccessibleDescription("Pałyn #1")
     await expect(songRows(page)).toHaveCount(1)
     await expect(songRow(page, "Pałyn")).toHaveAttribute("aria-current", "true")
     await expect(line(page)).toHaveText("Palyn is Pałyn now. Make Palyn a new song")
@@ -669,7 +669,7 @@ test.describe("a song's old name", () => {
     await openApp(page, { before: OLD })
     await startRehearsal(page)
     await field(page).fill("palyn 4")
-    await expect(group(page).locator("[data-take-go]")).toHaveText("→ Pałyn 1")
+    await expect(group(page).locator("[data-take-go]")).toHaveText("→ Pałyn #1")
     await expect(songRows(page)).toHaveCount(1)
     await expect(songRow(page, "Pałyn")).toHaveAttribute("aria-current", "true")
   })
@@ -686,7 +686,7 @@ test.describe("a song's old name", () => {
     await line(page).getByRole("button", { name: "Make Palyn a new song" }).click()
     await expect(notices(page, "error").filter({ hasText: "Could not forget Palyn" })).toBeVisible()
     await expect(field(page)).toHaveValue("Palyn")
-    await expect(group(page).locator("[data-take-go]")).toHaveText("→ Pałyn 1")
+    await expect(group(page).locator("[data-take-go]")).toHaveText("→ Pałyn #1")
     expect(await callCount(page, "set_next_take_name")).toBe(0)
     expectedError(pageErrors, /forget_song_name failed/)
   })
@@ -699,8 +699,8 @@ test.describe("a song's old name", () => {
     expect((await calls(page, "set_next_take_name")).at(-1)?.args).toEqual(["Palyn"])
     await expect(field(page)).toHaveValue("Pałyn")
     await expect(line(page)).toHaveCount(0)
-    await expect(group(page).locator("[data-take-go]")).toHaveText("1")
-    await expect(field(page)).toHaveAccessibleDescription("Pałyn 1")
+    await expect(group(page).locator("[data-take-go]")).toHaveText("#1")
+    await expect(field(page)).toHaveAccessibleDescription("Pałyn #1")
   })
 
   test("typed for the song already next, it settles to the song's title", async ({ page }) => {
@@ -714,7 +714,7 @@ test.describe("a song's old name", () => {
     await expect(field(page)).toHaveValue("Pałyn")
     await expect(line(page)).toHaveCount(0)
     await page.keyboard.press("Space")
-    await expect(page.getByRole("heading", { level: 1, name: "Pałyn 2" })).toBeVisible()
+    await expect(page.getByRole("heading", { level: 1, name: "Pałyn #2" })).toBeVisible()
   })
 
   test("Make Palyn a new song forgets the old name, then names the take Palyn", async ({
@@ -725,7 +725,7 @@ test.describe("a song's old name", () => {
     await field(page).fill("Palyn")
     await line(page).getByRole("button", { name: "Make Palyn a new song" }).click()
     await expect(field(page)).toHaveValue("Palyn")
-    await expect(group(page).locator("[data-take-go]")).toHaveText("1")
+    await expect(group(page).locator("[data-take-go]")).toHaveText("#1")
     await expect(line(page)).toHaveCount(0)
     const order = (await page.evaluate(() =>
       (window as unknown as { __CALLS__: { name: string; args: unknown[] }[] }).__CALLS__
@@ -804,7 +804,7 @@ test.describe("a song's old name", () => {
     await take.fill("Palyn")
     await dialog.getByText("Take name", { exact: true }).click()
     await expect(take).toHaveValue("Palyn")
-    await expect(dialog.locator("[data-take-go]")).toHaveText("→ Pałyn 1")
+    await expect(dialog.locator("[data-take-go]")).toHaveText("→ Pałyn #1")
     await expect(dialog.locator("[data-old-name]")).toHaveText(
       "Palyn is Pałyn now. Make Palyn a new song"
     )

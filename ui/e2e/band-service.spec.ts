@@ -45,7 +45,7 @@ type Entry = Record<string, unknown>
 const entry = (over: Entry = {}): Entry => ({
   id: 1,
   kind: "service",
-  title: "“Pałyn 1” → band service",
+  title: "“Pałyn\u00a0#1” → band service",
   folder: "/rec/X",
   take_number: 1,
   state: "running",
@@ -174,7 +174,7 @@ test("a take in the service opens its dialog with Remove", async ({ page }) => {
   ])
   await overview.getByRole("button", { name: "“Pałyn 1” in the band service" }).click()
   const dialog = page.getByRole("dialog")
-  await expect(dialog.getByRole("heading")).toHaveText("“Pałyn 1” in the band service")
+  await expect(dialog.getByRole("heading")).toHaveText("“Pałyn #1” in the band service")
   await expect(dialog.locator("[data-service-tracks] li")).toHaveText(["GuitarMP3, FLAC on its way"])
   await dialog.getByRole("button", { name: "Remove from the band service" }).click()
   await expect.poll(async () => (await calls(page, "unshare_take")).at(-1)?.args[1]).toBe(1)
@@ -221,14 +221,14 @@ test("the background list shows MP3s and FLAC counts", async ({ page }) => {
   await openApp(page, {
     before: `window.__ACTIVITY__ = ${JSON.stringify([
       entry(),
-      entry({ id: 2, take_number: 2, title: "“Viasna 1” → band service", step: "FLAC: 2 of 6", fraction: 0.8 }),
+      entry({ id: 2, take_number: 2, title: "“Viasna\u00a0#1” → band service", step: "FLAC: 2 of 6", fraction: 0.8 }),
     ])};`,
   })
   await workButton(page).click()
   const list = page.getByRole("dialog")
   await expect(list.getByText("MP3s: 4 of 6")).toBeVisible()
   await expect(list.getByText("FLAC: 2 of 6")).toBeVisible()
-  await expect(list.getByText("“Pałyn 1” → band service")).toBeVisible()
+  await expect(list.getByText("“Pałyn #1” → band service")).toBeVisible()
 })
 
 test("no internet is said, not failed", async ({ page }) => {
@@ -254,7 +254,7 @@ test("a failed send has Retry", async ({ page }) => {
         error: "The band service does not know this key any more",
         retry: "service",
       }),
-      entry({ id: 8, title: "“Viasna 1” → band service trash", state: "failed", step: null, error: "No such take" }),
+      entry({ id: 8, title: "“Viasna\u00a0#1” → band service trash", state: "failed", step: null, error: "No such take" }),
     ])};`,
   })
   await workButton(page).click()

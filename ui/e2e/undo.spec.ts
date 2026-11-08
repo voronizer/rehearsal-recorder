@@ -31,12 +31,13 @@ const waiting = (page: Page) =>
 
 const row = (overview: Locator, n: number) => overview.locator(`[data-take="${n}"]`)
 
-/** The notice whose words are exactly `text`. */
+/** The notice whose words are exactly `text`. A space in it stands for
+ *  the no-break one after a song's title too ("Pałyn #2"). */
 const said = (page: Page, text: string) =>
   notices(page).filter({ has: page.locator("p", { hasText: new RegExp(`^${escape(text)}$`) }) })
 
 function escape(text: string) {
-  return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+  return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/ /g, "\\s")
 }
 
 /** History on Tuesday jam, four takes long, with Pałyn 2 starred. */
@@ -123,7 +124,7 @@ test("deleting a take in History asks nothing, and Undo brings it back with its 
   await expect(page.getByRole("dialog")).toHaveCount(0)
   expect((await calls(page, "delete_take")).map((c) => c.args)).toEqual([["/rec/old", 2]])
 
-  const notice = said(page, "“Pałyn 2” went to the Trash.")
+  const notice = said(page, "“Pałyn #2” went to the Trash.")
   await expect(notice).toHaveCount(1)
   await notice.getByRole("button", { name: "Undo" }).click()
   await expect(overview.getByRole("button", { name: /^Take 2 Pałyn 2/ })).toBeVisible()
@@ -149,7 +150,7 @@ test("on a Mac Cmd+Z brings it back, and Ctrl+Z does not", async ({ page }) => {
   await deleteTake(overview, 2, "Pałyn 2")
   await expect(row(overview, 2)).toHaveCount(0)
   // The key on the button is the Mac's.
-  await expect(said(page, "“Pałyn 2” went to the Trash.").locator("kbd")).toHaveText("⌘Z")
+  await expect(said(page, "“Pałyn #2” went to the Trash.").locator("kbd")).toHaveText("⌘Z")
   await page.keyboard.press("Control+z")
   await page.waitForTimeout(200)
   expect(await callCount(page, "undo_trash")).toBe(0)
@@ -161,7 +162,7 @@ test("Ctrl+Z in the take name field is the field's own", async ({ page }) => {
   const overview = await tonight(page, TWO)
   await deleteTake(overview, 1, "Pałyn 1")
   await expect(row(overview, 1)).toHaveCount(0)
-  await expect(said(page, "“Pałyn 1” went to the Trash.")).toHaveCount(1)
+  await expect(said(page, "“Pałyn #1” went to the Trash.")).toHaveCount(1)
   await page.locator("#next-take-name").click()
   await page.keyboard.press("Control+z")
   await page.waitForTimeout(200)
@@ -185,7 +186,7 @@ test("two deletions: Ctrl+Z brings back the second, and the first still offers U
   await page.keyboard.press("Control+z")
   await expect(row(overview, 3)).toBeVisible()
   await expect(row(overview, 1)).toHaveCount(0)
-  const first = said(page, "“Pałyn 1” went to the Trash.")
+  const first = said(page, "“Pałyn #1” went to the Trash.")
   await expect(first.getByRole("button", { name: "Undo" })).toBeVisible()
   await expect(said(page, "“Take 3” went to the Trash.")).toHaveCount(0)
   await page.keyboard.press("Control+z")
@@ -197,7 +198,7 @@ test.describe("ten seconds", () => {
     await page.clock.install()
     const overview = await tuesday(page)
     await deleteTake(overview, 2, "Pałyn 2")
-    const notice = said(page, "“Pałyn 2” went to the Trash.")
+    const notice = said(page, "“Pałyn #2” went to the Trash.")
     await expect(notice).toHaveCount(1)
     await page.mouse.move(10, 10)
     const tokens = await waiting(page)
@@ -219,7 +220,7 @@ test.describe("ten seconds", () => {
     await page.clock.install()
     const overview = await tuesday(page)
     await deleteTake(overview, 2, "Pałyn 2")
-    const notice = said(page, "“Pałyn 2” went to the Trash.")
+    const notice = said(page, "“Pałyn #2” went to the Trash.")
     await page.mouse.move(10, 10)
     await page.clock.fastForward(9000)
     await notice.hover()
@@ -270,7 +271,7 @@ test.describe("on the screen after a take", () => {
     await startRehearsal(page)
     await recordTake(page)
     await nameTake(page, "Sonca")
-    await expect(title(page)).toHaveText("Sonca 1")
+    await expect(title(page)).toHaveText("Sonca #1")
     await page.getByRole("button", { name: "Add mark" }).click()
     await page.getByRole("dialog").getByRole("button", { name: "Cancel" }).click()
     await expect(page.getByRole("button", { name: /^Remove mark at/ })).toHaveCount(1)
@@ -279,9 +280,9 @@ test.describe("on the screen after a take", () => {
     await expect(title(page)).toHaveCount(0)
     await expect(page.getByRole("button", { name: /Record take 2/ })).toBeVisible()
     expect(await callCount(page, "discard_take")).toBe(1)
-    await said(page, "“Sonca 1” went to the Trash.").getByRole("button", { name: "Undo" }).click()
+    await said(page, "“Sonca #1” went to the Trash.").getByRole("button", { name: "Undo" }).click()
 
-    await expect(title(page)).toHaveText("Sonca 1")
+    await expect(title(page)).toHaveText("Sonca #1")
     await expect(page.getByRole("button", { name: /^Remove mark at/ })).toHaveCount(1)
     await page.getByRole("button", { name: /Save take/ }).click()
     await expect.poll(() => callCount(page, "keep_take")).toBe(1)
@@ -307,8 +308,8 @@ test.describe("on the screen after a take", () => {
     await dialog.getByRole("button", { name: "Rename" }).click()
     await expect(dialog).toHaveCount(0)
 
-    await said(page, "“Sonca 1” went to the Trash.").getByRole("button", { name: "Undo" }).click()
-    await expect(title(page)).toHaveText("Sonca 1")
+    await said(page, "“Sonca #1” went to the Trash.").getByRole("button", { name: "Undo" }).click()
+    await expect(title(page)).toHaveText("Sonca #1")
     // Its tracks are read from where they are now, and play.
     const play = page.getByRole("button", { name: "Play", exact: true })
     await expect(play).toBeEnabled()
@@ -490,11 +491,11 @@ test.describe("on the screen after a take", () => {
     await nameTake(page, "Sonca")
     await holdSession(page)
     await page.keyboard.press("Escape")
-    await said(page, "“Sonca 1” went to the Trash.").getByRole("button", { name: "Undo" }).click()
+    await said(page, "“Sonca #1” went to the Trash.").getByRole("button", { name: "Undo" }).click()
     await releaseSession(page)
-    await expect(title(page)).toHaveText("Sonca 1")
+    await expect(title(page)).toHaveText("Sonca #1")
     await page.waitForTimeout(200)
-    await expect(title(page)).toHaveText("Sonca 1")
+    await expect(title(page)).toHaveText("Sonca #1")
     // And it is the screen again, not one left busy: Space saves it.
     await page.keyboard.press("Space")
     await expect.poll(() => callCount(page, "keep_take")).toBe(1)
@@ -513,7 +514,7 @@ test("a crop asks nothing, and Undo gives back the take's old length", async ({ 
   await page.getByRole("button", { name: "Crop to the region" }).click()
   await expect(page.getByRole("dialog")).toHaveCount(0)
   await expect(page.locator("span", { hasText: "/ 0:03" }).first()).toBeVisible()
-  const notice = said(page, "“Pałyn 1” is cropped. The uncut take went to the Trash.")
+  const notice = said(page, "“Pałyn #1” is cropped. The uncut take went to the Trash.")
   await notice.getByRole("button", { name: "Undo" }).click()
   await expect(page.locator("span", { hasText: "/ 0:06" }).first()).toBeVisible()
   await expect(notice).toHaveCount(0)
@@ -536,7 +537,7 @@ test("a second crop of a take ends the first one's offer", async ({ page }) => {
   await expect(page.locator("span", { hasText: "/ 0:02" }).first()).toBeVisible()
   // One notice, the second crop's: Python sent the first one's uncut take
   // on, and its Undo would only say so.
-  await expect(said(page, "“Pałyn 1” is cropped. The uncut take went to the Trash.")).toHaveCount(1)
+  await expect(said(page, "“Pałyn #1” is cropped. The uncut take went to the Trash.")).toHaveCount(1)
   expect(await waiting(page)).not.toContain(first)
   await expect
     .poll(async () => (await calls(page, "end_trash")).filter((c) => c.args[0] === first).length)
@@ -557,7 +558,7 @@ test("a crop in History asks nothing, and Undo gives back the take's old length"
   await expect(page.getByRole("dialog")).toHaveCount(0)
   await expect(page.locator("span", { hasText: "/ 0:10" }).first()).toBeVisible()
   expect((await calls(page, "crop_take")).at(-1)?.args.slice(0, 2)).toEqual(["/rec/old", 1])
-  const notice = said(page, "“Pałyn 1” is cropped. The uncut take went to the Trash.")
+  const notice = said(page, "“Pałyn #1” is cropped. The uncut take went to the Trash.")
   await notice.getByRole("button", { name: "Undo" }).click()
   await expect(page.locator("span", { hasText: "/ 0:20" }).first()).toBeVisible()
   await expect(notice).toHaveCount(0)
@@ -566,7 +567,7 @@ test("a crop in History asks nothing, and Undo gives back the take's old length"
 test("deleting a rehearsal ends the offers of its takes", async ({ page }) => {
   const overview = await tuesday(page)
   await deleteTake(overview, 2, "Pałyn 2")
-  const take = said(page, "“Pałyn 2” went to the Trash.")
+  const take = said(page, "“Pałyn #2” went to the Trash.")
   await expect(take).toHaveCount(1)
   const [token] = await waiting(page)
   await page.getByRole("button", { name: "Delete rehearsal Tuesday jam" }).click()
@@ -578,7 +579,7 @@ test("deleting a rehearsal ends the offers of its takes", async ({ page }) => {
 test("deleting a rehearsal renamed since ends the offers of its takes", async ({ page }) => {
   const overview = await tuesday(page)
   await deleteTake(overview, 2, "Pałyn 2")
-  const take = said(page, "“Pałyn 2” went to the Trash.")
+  const take = said(page, "“Pałyn #2” went to the Trash.")
   await expect(take).toHaveCount(1)
   const [token] = await waiting(page)
   // The rename moves the rehearsal's folder; Python knows it, and what of
@@ -612,7 +613,7 @@ test("Undo of a take deleted in History, its rehearsal renamed since, shows it b
     ).pywebview.api.get_rehearsal("/rec/old")
   )
   expect(stale).toEqual({ ok: false, error: "Rehearsal not found" })
-  await said(page, "“Pałyn 2” went to the Trash.").getByRole("button", { name: "Undo" }).click()
+  await said(page, "“Pałyn #2” went to the Trash.").getByRole("button", { name: "Undo" }).click()
   // Read again where Python said the rehearsal is now.
   await expect(overview.getByRole("button", { name: /^Take 2 Pałyn 2/ })).toBeVisible()
   expect((await calls(page, "get_rehearsal")).at(-1)?.args).toEqual(["/rec/Tuesday blues"])
@@ -632,7 +633,7 @@ test("Undo of a crop in History, its rehearsal renamed since, gives back the old
   await renameTuesday(page, "Tuesday blues")
   const overview = page.locator("[aria-label='Rehearsal overview']")
   await expect(row(overview, 1)).toContainText("0:10")
-  const notice = said(page, "“Pałyn 1” is cropped. The uncut take went to the Trash.")
+  const notice = said(page, "“Pałyn #1” is cropped. The uncut take went to the Trash.")
   await notice.getByRole("button", { name: "Undo" }).click()
   // Read again where Python said the rehearsal is now.
   await expect(row(overview, 1)).toContainText("0:20")
@@ -642,7 +643,7 @@ test("Undo of a crop in History, its rehearsal renamed since, gives back the old
 test("switching the recordings folder ends every offer", async ({ page }) => {
   const overview = await tuesday(page)
   await deleteTake(overview, 2, "Pałyn 2")
-  const take = said(page, "“Pałyn 2” went to the Trash.")
+  const take = said(page, "“Pałyn #2” went to the Trash.")
   await expect(take).toHaveCount(1)
   await page.getByRole("button", { name: "Back", exact: true }).click()
   await page.getByRole("button", { name: "Settings" }).click()
@@ -656,7 +657,7 @@ test("switching the recordings folder ends every offer", async ({ page }) => {
 test("choosing the folder in use again keeps every offer", async ({ page }) => {
   const overview = await tuesday(page)
   await deleteTake(overview, 2, "Pałyn 2")
-  const take = said(page, "“Pałyn 2” went to the Trash.")
+  const take = said(page, "“Pałyn #2” went to the Trash.")
   await expect(take).toHaveCount(1)
   await page.getByRole("button", { name: "Back", exact: true }).click()
   await page.getByRole("button", { name: "Settings" }).click()
@@ -674,8 +675,8 @@ test("choosing the folder in use again keeps every offer", async ({ page }) => {
 test("on Windows it went to the Recycle Bin", async ({ page }) => {
   const overview = await tuesday(page, WINDOWS)
   await deleteTake(overview, 2, "Pałyn 2")
-  await expect(said(page, "“Pałyn 2” went to the Recycle Bin.")).toHaveCount(1)
-  await expect(said(page, "“Pałyn 2” went to the Recycle Bin.").locator("kbd")).toHaveText(
+  await expect(said(page, "“Pałyn #2” went to the Recycle Bin.")).toHaveCount(1)
+  await expect(said(page, "“Pałyn #2” went to the Recycle Bin.").locator("kbd")).toHaveText(
     "Ctrl+Z"
   )
 })
@@ -683,13 +684,13 @@ test("on Windows it went to the Recycle Bin", async ({ page }) => {
 test("with no Trash on the machine it moved to the _deleted folder", async ({ page }) => {
   const overview = await tuesday(page, `${WINDOWS} window.__TRASH_KIND__ = 'folder';`)
   await deleteTake(overview, 2, "Pałyn 2")
-  await expect(said(page, "“Pałyn 2” moved to the _deleted folder.")).toHaveCount(1)
+  await expect(said(page, "“Pałyn #2” moved to the _deleted folder.")).toHaveCount(1)
 })
 
 test("on Windows an Undo too late says the Recycle Bin", async ({ page }) => {
   const overview = await tuesday(page, WINDOWS)
   await deleteTake(overview, 2, "Pałyn 2")
-  const offer = said(page, "“Pałyn 2” went to the Recycle Bin.")
+  const offer = said(page, "“Pałyn #2” went to the Recycle Bin.")
   await expect(offer).toHaveCount(1)
   // Python sent it on meanwhile and has not said so yet: its Undo finds it gone.
   await page.evaluate(() => {
@@ -744,7 +745,7 @@ test("during a take Ctrl+Z brings nothing back", async ({ page }) => {
   await page.keyboard.press("Control+z")
   await page.waitForTimeout(200)
   expect(await callCount(page, "undo_trash")).toBe(0)
-  await expect(said(page, "“Pałyn 1” went to the Trash.")).toHaveCount(1)
+  await expect(said(page, "“Pałyn #1” went to the Trash.")).toHaveCount(1)
 })
 
 test("discarding the last unsaved take leaves the list, and Undo opens it again", async ({
@@ -849,7 +850,7 @@ test("an Undo that fails in the page itself is said on the bar and sent to the c
   // saw, so it is not in crash.log unless the page sends it there.
   const overview = await tuesday(page)
   await deleteTake(overview, 2, "Pałyn 2")
-  const notice = said(page, "“Pałyn 2” went to the Trash.")
+  const notice = said(page, "“Pałyn #2” went to the Trash.")
   await expect(notice).toHaveCount(1)
   await page.evaluate(() => {
     const bridge = (window as unknown as { pywebview: { api: Record<string, unknown> } })

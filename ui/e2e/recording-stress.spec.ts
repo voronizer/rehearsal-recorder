@@ -26,7 +26,7 @@ test("the recording stress data opens on take 33 with eight tiles", async ({ pag
   // The second take of the longest song name, take 33 of the evening,
   // recording. Read whole: drawn, it is cut after two lines.
   await expect(page.getByRole("heading", { level: 1 })).toHaveAccessibleName(
-    "Kalychanka (slow version for the wedding, with the long intro the bride asked for) 2"
+    "Kalychanka (slow version for the wedding, with the long intro the bride asked for) #2"
   )
   await expect(page.getByText("Take 33", { exact: true })).toBeVisible()
   await expect(page.getByText("Recording", { exact: true })).toBeVisible()
@@ -287,7 +287,7 @@ test("the band's names are whole at 960x680", async ({ page }) => {
   await startRehearsal(page, 6)
   await page.locator("#next-take-name").fill("Viasna")
   await page.getByRole("button", { name: /Record take 6/ }).click()
-  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Viasna 2")
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Viasna #2")
   await fitted(page, { width: 960, height: 680 })
   const seen = await tileNames(page)
   expect(seen.map((n) => n.name)).toEqual(["Drums", "Bass", "Guitar", "Vocals"])

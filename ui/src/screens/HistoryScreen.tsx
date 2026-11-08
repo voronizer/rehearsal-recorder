@@ -57,6 +57,7 @@ import {
 import { wentTo } from "@/lib/deletion"
 import { rise } from "@/lib/motion"
 import { useKeysOn } from "@/lib/keys"
+import { takeText } from "@/lib/takeText"
 import { endedByPython, offerCropUndo, offerUndo } from "@/lib/trash"
 import {
   useActivity,
@@ -743,7 +744,7 @@ export function HistoryScreen({
     forget(take)
     if (res.undo) {
       offerUndo({
-        text: wentTo(`“${take.name}”`),
+        text: wentTo(`“${takeText(take)}”`),
         token: res.undo,
         // Read again where Python put it back: a rename since moved the
         // rehearsal's folder.
@@ -859,7 +860,7 @@ export function HistoryScreen({
       return
     }
     if (res.take) reselect(placed(take.folder, res.take))
-    offerCropUndo(take.name, res, (r) => uncropped(take, r.folder ?? take.folder), SAID, from)
+    offerCropUndo(takeText(take), res, (r) => uncropped(take, r.folder ?? take.folder), SAID, from)
     await changed(take.folder)
   }
 

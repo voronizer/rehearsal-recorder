@@ -13,7 +13,7 @@ test("home has the last rehearsal as played, then the songs with their best take
   // The last rehearsal on top, its takes in the order they were played.
   const last = page.getByRole("region", { name: "The last rehearsal" })
   await expect(last).toContainText("the last rehearsal · 5 takes")
-  await expect(last.locator("[data-take]")).toHaveText([/Kupalle\s*2/, /Take\s*7/, /Pałyn\s*9/, /Viasna\s*11/, /Viasna\s*12/])
+  await expect(last.locator("[data-take]")).toHaveText([/Kupalle\s*#2/, /Take 7/, /Pałyn\s*#9/, /Viasna\s*#11/, /Viasna\s*#12/])
 
   // The song played last first; each with its best take.
   const songs = page.getByRole("region", { name: "Songs" }).locator("[data-song]")
@@ -32,7 +32,7 @@ test("home has the last rehearsal as played, then the songs with their best take
   await expect(marks.nth(2)).toContainText("The bridge drags here")
   await expect(marks.nth(2)).toContainText("Alex: It's us waiting for the vocal.")
 
-  await expect(page.getByRole("region", { name: "The band's favourites" }).locator("[data-take]")).toHaveText(/Viasna\s*11/)
+  await expect(page.getByRole("region", { name: "The band's favourites" }).locator("[data-take]")).toHaveText(/Viasna\s*#11/)
   await expect(page.getByLabel("Player")).toContainText(NOTHING)
 })
 
@@ -57,7 +57,7 @@ test("a take's name opens its panel and does not play it", async ({ page }) => {
   await page.goto("/")
   await page.getByRole("region", { name: "The last rehearsal" }).getByRole("button", { name: "Viasna 11", exact: true }).click()
   const panel = page.getByLabel("Panel")
-  await expect(panel.getByRole("heading", { level: 2 }).first()).toHaveText(/Viasna\s*11/)
+  await expect(panel.getByRole("heading", { level: 2 }).first()).toHaveText(/Viasna\s*#11/)
   await expect(page.getByLabel("Player")).toContainText(NOTHING)
 })
 

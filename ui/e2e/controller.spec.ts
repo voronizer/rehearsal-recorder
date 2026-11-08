@@ -13,7 +13,7 @@ test("external recording and stop/save navigate the recorder screens", async ({ 
     await win.pywebview.api.control_command("start")
   })
   await expect(page.getByRole("button", { name:/^Stop/ })).toBeVisible()
-  await expect(page.getByRole("heading", {level:1})).toHaveText("Remote song 1")
+  await expect(page.getByRole("heading", {level:1})).toHaveText("Remote song #1")
   await page.evaluate(async () => {
     const win = window as unknown as { pywebview: { api: { control_command(a: string): Promise<unknown> } } }
     await win.pywebview.api.control_command("stop_keep")

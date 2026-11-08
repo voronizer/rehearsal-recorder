@@ -41,6 +41,7 @@ import { useWide } from "@/lib/wide"
 import { useRunning, watching } from "@/lib/activity"
 import { dismiss } from "@/lib/notices"
 import { wentTo } from "@/lib/deletion"
+import { takeText } from "@/lib/takeText"
 import { endedByPython, offerCropUndo, offerUndo } from "@/lib/trash"
 
 /** The notice a button's failure is said in. Its own slot: "rehearsal" holds
@@ -338,7 +339,7 @@ export function Rehearsal({
     onChanged()
     if (res.undo) {
       offerUndo({
-        text: wentTo(`“${take.name}”`),
+        text: wentTo(`“${takeText(take)}”`),
         token: res.undo,
         onUndone: () => onChanged(),
       })
@@ -380,7 +381,7 @@ export function Rehearsal({
     }
     if (res.take) reselect(res.take)
     onChanged()
-    offerCropUndo(take.name, res, () => uncropped(take), "rehearsal", from)
+    offerCropUndo(takeText(take), res, () => uncropped(take), "rehearsal", from)
   }
 
   // A crop's Undo: the uncut take is under the same paths again, and only a

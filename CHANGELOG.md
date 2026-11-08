@@ -7,6 +7,12 @@ opening.
 
 ## Unreleased
 
+- **A take's number stands apart from the song's title.** A take now reads
+  “Viasna #12” in РЭХА, in the band service and in its messages to the
+  band, so take 3 of a song called “Opus 5” is “Opus 5 #3”, not “Opus 5 3”.
+  Where the song is already written beside it, the number shows alone,
+  “#12”. Typing “Viasna #3” in a name field is the same as “Viasna 3”. File
+  and folder names stay as they were.
 - **The band service's panel covers less of the page.** A song's name opens
   the song's page, and **New song**, **Statuses** and **Labels** open at the
   top of **Songs** and **Marks**. On a take's page its marks sit in a strip

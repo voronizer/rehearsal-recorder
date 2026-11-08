@@ -5,6 +5,7 @@ import { pollSoon } from "@/lib/activity"
 import { api, type SendTo, type Take } from "@/lib/api"
 import { dismiss, notify } from "@/lib/notices"
 import { isIn } from "@/lib/sending"
+import { takeText } from "@/lib/takeText"
 
 /**
  * What a take's cloud button does, by where takes go. To the cloud folder:
@@ -29,7 +30,7 @@ export function useTakeSending<T extends Take>(
       notify({
         key: slot,
         kind: "error",
-        text: `Could not send ${take.name}: ${res.error ?? "it was refused"}`,
+        text: `Could not send ${takeText(take)}: ${res.error ?? "it was refused"}`,
       })
       return
     }

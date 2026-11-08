@@ -10,6 +10,7 @@ import { formatDayIn, takesLabel } from "@/lib/format"
 import { labelOf, useLabels } from "@/lib/labels"
 import { motionOff } from "@/lib/motion"
 import { drawnLength, TAKE_FILLS } from "@/lib/takeScale"
+import { goMark } from "@/lib/takeText"
 import { hereFor, placed, type PlacedPlayback, type PlacedTake, type Rung } from "@/lib/songs"
 import { TakeRow } from "@/components/RehearsalOverview"
 
@@ -235,7 +236,8 @@ function RungRow({
 }
 
 /** A take as a bar on its rung: as long as it ran against the song's
- *  longest take, with its marks as ticks and its number. Never under 6 px:
+ *  longest take, with its marks as ticks and its number, "#3" for a go at
+ *  the song and the take's own for one nobody named. Never under 6 px:
  *  its least, 0.375rem, is 6 px at 100 % but 5.4 px at 90 %. */
 function Bar({
   take,
@@ -273,7 +275,7 @@ function Bar({
       {/* On the bar's own fill from its left edge (TAKE_FILLS), so a mark at
           the very start is not drawn against the number as a "|2". */}
       <span className="tnum relative flex items-center self-stretch pr-1 pl-1.5 text-xs text-muted-foreground [background:inherit]">
-        {unnamed ? take.take_number : (take.go ?? take.take_number)}
+        {unnamed || take.go == null ? take.take_number : goMark(take.go)}
       </span>
     </span>
   )

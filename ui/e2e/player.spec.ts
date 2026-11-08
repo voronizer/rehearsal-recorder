@@ -186,7 +186,7 @@ test.describe("the review screen", () => {
     await review(page)
     await nameTake(page, "Pałyn")
     expect(await callCount(page, "discard_take")).toBe(0)
-    await expect(page.locator("[data-take-summary]")).toHaveText("Pałyn 1")
+    await expect(page.locator("[data-take-summary]")).toHaveText("Pałyn #1")
     await page.keyboard.press("Space")
     await expect.poll(() => callCount(page, "keep_take")).toBe(1)
     // A saved take says it is on its way to the cloud, and stops saying so
@@ -197,8 +197,8 @@ test.describe("the review screen", () => {
 
   test("the next take takes the last one's name, numbered", async ({ page }) => {
     await secondTake(page)
-    await expect(page.locator("[data-take-summary]")).toHaveText("Pałyn 2")
-    await expect(page.locator("[data-take-summary] [data-go]")).toHaveText("2")
+    await expect(page.locator("[data-take-summary]")).toHaveText("Pałyn #2")
+    await expect(page.locator("[data-take-summary] [data-go]")).toHaveText("#2")
   })
 
   test("Escape throws a take away at once, and Undo brings it back", async ({ page }) => {
@@ -210,10 +210,10 @@ test.describe("the review screen", () => {
     await expect(page.locator("[data-take-summary]")).toHaveCount(0)
     expect(await callCount(page, "discard_take")).toBe(1)
     await notices(page)
-      .filter({ hasText: "“Pałyn 2” went to the Trash." })
+      .filter({ hasText: "“Pałyn #2” went to the Trash." })
       .getByRole("button", { name: "Undo" })
       .click()
-    await expect(page.locator("[data-take-summary]")).toHaveText("Pałyn 2")
+    await expect(page.locator("[data-take-summary]")).toHaveText("Pałyn #2")
   })
 
   test("a mark made before saving goes with the take when it is saved", async ({ page }) => {
@@ -264,7 +264,7 @@ test.describe("a saved take", () => {
     const strip = page.getByRole("group", { name: "Take strip" })
     await expect(
       strip.locator("[data-tab='song:Pałyn'][aria-current='true'] [data-tab-line]")
-    ).toContainText("2")
+    ).toContainText("#2")
     // Same take, same marker, one player.
     await expect(page.getByText("this one is the take")).toHaveCount(1)
     // Space plays here, and says so; Record and Finish give their keys up.
@@ -1026,7 +1026,7 @@ test.describe("cropping a saved take", () => {
     await expect(page.locator("span", { hasText: "/ 0:03" }).first()).toBeVisible()
     await expect(page.getByRole("button", { name: "Clear the loop region" })).toHaveCount(0)
     await expect(
-      notices(page).filter({ hasText: "“Pałyn 2” is cropped. The uncut take went to the Trash." })
+      notices(page).filter({ hasText: "“Pałyn #2” is cropped. The uncut take went to the Trash." })
     ).toHaveCount(1)
   })
 

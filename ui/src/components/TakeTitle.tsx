@@ -2,6 +2,7 @@ import { useCallback, useLayoutEffect, useRef, useState, type ReactNode } from "
 import { flushSync } from "react-dom"
 import { WholeTip } from "@/components/ui/whole"
 import type { Take } from "@/lib/api"
+import { GO_SPACE, goMark } from "@/lib/takeText"
 import { cn } from "@/lib/utils"
 
 /**
@@ -43,8 +44,8 @@ function TwoLines({
   const box = useRef<HTMLSpanElement>(null)
   const button = useRef<HTMLSpanElement>(null)
   const room = useRef<HTMLSpanElement>(null)
-  // A no-break space: the go never starts a line of its own.
-  const suffix = go != null ? `\u00a0${go}` : ""
+  // After a no-break space, so the go never starts a line of its own.
+  const suffix = go != null ? `${GO_SPACE}${goMark(go)}` : ""
   const [fit, setFit] = useState({ text: title, cut: false, lines: 1, room: 0 })
   const measure = useCallback(() => {
     const el = probe.current
@@ -200,9 +201,10 @@ function TwoLines({
 
 /**
  * A song's title with a go beside it, in the muted colour the song pills
- * have always given the number: "Polyn 3". The go is a number of its own,
- * never typed (songs in the store, D2–D3), so it is drawn apart from the
- * title rather than as part of it.
+ * have always given the number, after a #: "Polyn #3", so that a title that
+ * ends in a number reads apart from it. The go is a number of its own, never
+ * typed (songs in the store, D2–D3), so it is drawn apart from the title
+ * rather than as part of it.
  *
  * With `cut`, the title alone is cut short when the room runs out and the
  * go stays whole: it is what tells goes at a song apart. The wrapper is a
@@ -235,8 +237,8 @@ export function GoTitle({
   const number =
     go != null ? (
       <span data-go className={cn("tnum text-muted-foreground", cut && "shrink-0 whitespace-pre")}>
-        {" "}
-        {go}
+        {GO_SPACE}
+        {goMark(go)}
       </span>
     ) : null
   if (!cut)
@@ -257,8 +259,9 @@ export function GoTitle({
 }
 
 /** A take as it is shown: its song and go, or "Take 3" for a take nobody
- *  named. Plain text — a dialog's title, a label — uses take.name. With
- *  `cut`, see GoTitle; a name with no song is cut as a whole. */
+ *  named. Plain text, such as a dialog's title or a notice, says the same
+ *  through takeText; an aria-label keeps take.name. With `cut`, see GoTitle;
+ *  a name with no song is cut as a whole. */
 export function TakeTitle({
   take,
   cut = false,

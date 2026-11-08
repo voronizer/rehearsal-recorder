@@ -107,7 +107,7 @@ test("a take is copied to the cloud from its row, and taken back out again", asy
   await expect(page.getByRole("dialog")).toHaveCount(0)
   await expect(page.getByRole("button", { name: "Cloud copies of Pałyn 1" })).toHaveCount(0)
   await notices(page)
-    .filter({ hasText: "“Pałyn 1” went to the Trash." })
+    .filter({ hasText: "“Pałyn #1” went to the Trash." })
     .getByRole("button", { name: "Undo" })
     .click()
   await expect(page.getByRole("button", { name: "Cloud copies of Pałyn 1" })).toHaveCount(1)

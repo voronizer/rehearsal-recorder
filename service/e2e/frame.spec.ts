@@ -14,7 +14,7 @@ test("the frame has its sections, and a panel closes with its X, Esc and another
   const favourite = page.getByRole("region", { name: "The band's favourites" }).getByRole("button", { name: "Viasna 11", exact: true })
   const panel = page.getByLabel("Panel")
   await favourite.click()
-  await expect(panel.getByRole("heading", { level: 2 }).first()).toHaveText(/Viasna\s*11/)
+  await expect(panel.getByRole("heading", { level: 2 }).first()).toHaveText(/Viasna\s*#11/)
   await panel.getByRole("button", { name: "Close", exact: true }).click()
   await expect(panel).toHaveCount(0)
 

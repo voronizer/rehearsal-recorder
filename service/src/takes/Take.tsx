@@ -15,7 +15,7 @@ import { TakeMarks } from "../marks/MarkItem"
 import { usePanel } from "../shell/panel"
 import { Back, Group, Groups, OPENS, Page, Tile, Trouble, useTitle } from "../shell/parts"
 import { useSize } from "../shell/size"
-import { clock, count, longDay } from "../shell/words"
+import { clock, count, longDay, takeText } from "../shell/words"
 import { chipsOf } from "./chips"
 import { Desk } from "./Desk"
 import { Download } from "./Download"
@@ -41,7 +41,7 @@ export function Take() {
   const { uid } = useParams({ from: "/band/takes/$uid" })
   const { at, mark, comment } = useSearch({ from: "/band/takes/$uid" })
   const take = useTake(uid)
-  useTitle(take.data?.name)
+  useTitle(take.data && takeText(take.data))
   const p = usePlayer()
   const size = useSize()
   const { open } = usePanel()

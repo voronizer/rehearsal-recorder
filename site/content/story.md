@@ -206,7 +206,7 @@ around it is on tempo, within 2% either way. Point at a bar to read it:
 Deleting, discarding and cropping happen at once. For 10 seconds, Undo puts
 it back. After that it goes to the Trash.
 
-A notice in the corner says what went, such as *“Pałyn 5” went to the
+A notice in the corner says what went, such as *“Pałyn #5” went to the
 Trash.*, with Undo. Undo, or ⌘Z on a Mac (Ctrl+Z elsewhere), puts a take
 back with its star, its marks and its copy in the cloud.
 
@@ -264,7 +264,7 @@ player at the mark.
 
 ### One number for each take. {#numbers}
 
-A song's take numbers go on from one rehearsal to the next: Pałyn 17 is one
+A song's take numbers go on from one rehearsal to the next: Pałyn #17 is one
 take, wherever you played it.
 
 The number counts the song's takes across every rehearsal, and deleting a

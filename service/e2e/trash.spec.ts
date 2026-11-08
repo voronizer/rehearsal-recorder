@@ -23,7 +23,7 @@ test("trash lists takes and restores them", async ({ page }) => {
   const row = page.locator('[data-take="Viasna 4"]')
   await expect(row).toContainText(/Thu 23 Oct( 2025)? · removed in РЭХА .+ · deleted for good in 30 days/)
   await row.getByRole("button", { name: "Restore" }).click()
-  await expect(page.getByRole("status")).toHaveText(/^“Viasna 4” is back with the takes of Thursday, 23 October( 2025)?\.$/)
+  await expect(page.getByRole("status")).toHaveText(/^“Viasna\s#4” is back with the takes of Thursday, 23 October( 2025)?\.$/)
   await expect(page.getByText("The trash is empty.")).toBeVisible()
 
   await page.goto(`/songs/${band().songs["Viasna"]}`)
@@ -39,7 +39,7 @@ test("a take deleted from its line waits in the trash and comes back", async ({ 
   await line.getByRole("button", { name: "What to do with Viasna 5", exact: true }).click()
   await page.getByRole("menuitem", { name: "Delete take" }).click()
   const ask = page.getByRole("dialog")
-  await expect(ask.getByRole("heading")).toHaveText("Delete “Viasna 5”?")
+  await expect(ask.getByRole("heading")).toHaveText("Delete “Viasna #5”?")
   await expect(ask).toContainText("It goes to the Trash, where anyone in the band can put it back for 30 days. In РЭХА it stays as it is.")
   await ask.getByRole("button", { name: "Delete take" }).click()
   await expect(line).toHaveCount(0)
@@ -48,7 +48,7 @@ test("a take deleted from its line waits in the trash and comes back", async ({ 
   const row = page.locator('[data-take="Viasna 5"]')
   await expect(row).toContainText(/deleted by Alex .+ · deleted for good in 30 days/)
   await row.getByRole("button", { name: "Restore" }).click()
-  await expect(page.getByRole("status")).toHaveText(/^“Viasna 5” is back with the takes of Thursday, 23 October( 2025)?\.$/)
+  await expect(page.getByRole("status")).toHaveText(/^“Viasna\s#5” is back with the takes of Thursday, 23 October( 2025)?\.$/)
 })
 
 test("a song deleted with its takes is one line in the trash", async ({ page }) => {

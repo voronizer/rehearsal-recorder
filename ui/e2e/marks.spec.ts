@@ -74,7 +74,7 @@ const MANY_MARKS = `
         const length = 20 + ((r * 37 + i * 61) % 400);
         marks.push({folder: '/rec/many' + r, rehearsal, created_at: day, missing: r === 3,
           take_number: i + 1, name: song ? song + ' ' + (i + 1) : 'Take ' + (i + 1), song,
-          duration_sec: length, at: Math.round((length * (i + 1)) / 7), note: notes[(r + i) % 4]});
+          go: song ? i + 1 : null, duration_sec: length, at: Math.round((length * (i + 1)) / 7), note: notes[(r + i) % 4]});
       }
     }
     return {ok: true, marks};
@@ -213,7 +213,7 @@ test.describe("Marks in History", () => {
     const viasna = row(page, VIASNA)
     await expect(viasna.locator("[data-line='comment']")).toHaveText("guitar drifts here")
     await expect(viasna.locator("[data-line='comment']")).not.toHaveAttribute("title")
-    await expect(viasna.locator("[data-line='take']")).toHaveText("Viasna 1 · 0:40")
+    await expect(viasna.locator("[data-line='take']")).toHaveText("Viasna #1 · 0:40")
     await expect(viasna.getByRole("button", { name: "Open the song Viasna", exact: true })).toBeVisible()
     await expect(viasna).toContainText("4:10")
   })
@@ -313,7 +313,7 @@ test.describe("Marks in History", () => {
       "Pałyn · 1 mark",
     ])
     await expect(row(page, VIASNA).locator("[data-line='take']")).toHaveText(
-      "Viasna 1 · 0:40 · Tuesday jam, 10 Sep"
+      "Viasna #1 · 0:40 · Tuesday jam, 10 Sep"
     )
     await chooseLabel(page, 1, "Note")
     await expect(pane(page, "Note").locator("[data-group-title]")).toHaveText(["Not named · 3 marks"])
@@ -1068,7 +1068,7 @@ test.describe("Marks in History", () => {
         const rest = el.lastElementChild as HTMLElement
         return { text: rest.textContent, cut: rest.scrollWidth > rest.clientWidth }
       })
-    ).toEqual({ text: " 1 · 0:03", cut: false })
+    ).toEqual({ text: "\u00a0#1 · 0:03", cut: false })
 
     // A comment cut at the end of its room is whole in its tip, which the
     // keys reach too.

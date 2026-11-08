@@ -29,6 +29,7 @@ from rehearsal_recorder.audio.encode import (
     normalize_format,
 )
 from rehearsal_recorder.sending import false_start
+from rehearsal_recorder.store.names import shown_name
 
 
 def source_of(take, what, volumes, fmt, target):
@@ -442,7 +443,7 @@ class CloudFolder:
         with self._lock:
             if key not in self.entries:
                 take = take or self._take_in(folder, take_number) or {}
-                name = take.get("name") or f"Take {take_number}"
+                name = shown_name(take.get("song"), take.get("go"), take_number)
                 self.entries[key] = self.api._journal.begin(
                     "cloud", f"“{name}” → cloud", str(folder), int(take_number),
                     waiting=True)
@@ -509,7 +510,7 @@ class CloudFolder:
         api = self.api
         take = api._lib.take(folder, take_number)
         if entry is None:
-            name = (take or {}).get("name") or f"Take {take_number}"
+            name = shown_name((take or {}).get("song"), (take or {}).get("go"), take_number)
             entry = api._journal.begin(
                 "cloud", f"“{name}” → cloud", str(folder), int(take_number))
         if what is None:

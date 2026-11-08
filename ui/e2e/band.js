@@ -123,11 +123,12 @@ const KIND = {};
 // Tonight's takes have a folder of their own, as each past rehearsal has
 // (PAST, below): a file is one take's, and plays as long as that take.
 const TONIGHT = '/rec/tonight';
-// What a take is a go at, from its name, as the library would say: "Pałyn 2"
-// is the second go at Pałyn, "Take 11" a go at nothing.
+// What a take is a go at, from its name, as the library would say: "Pałyn 2",
+// or "Pałyn #2" as the interface writes it, is the second go at Pałyn,
+// "Take 11" a go at nothing.
 function goOfName(name) {
   if (/^Take \d+$/.test(name)) return {song: null, go: null};
-  const m = /^(.*?)(?: (\d+))?$/.exec(name);
+  const m = /^(.*?)(?:(?:\s*#\s*|\s+)(\d+))?$/.exec(name);
   return {song: m[1], go: m[2] ? Number(m[2]) : 1};
 }
 // The goes someone marked as the one to keep are starred.

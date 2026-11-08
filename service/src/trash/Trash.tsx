@@ -3,7 +3,7 @@ import { Music } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { useRestore, useRestoreSong, useTrash, type Trashed, type TrashedSong } from "../api"
 import { Group, Page, Rows, Tile, Trouble, useTitle } from "../shell/parts"
-import { count, day, localDay, longDay, quoted } from "../shell/words"
+import { count, day, localDay, longDay, quoted, takeText } from "../shell/words"
 import { Play, TakeLink } from "../takes/parts"
 
 /** A take or a song waits this many days in the trash. */
@@ -94,7 +94,8 @@ export function Trash() {
                       size="row"
                       disabled={busy}
                       onClick={() => {
-                        const { uid, name, date } = line.take
+                        const { uid, date } = line.take
+                        const name = takeText(line.take)
                         restore.mutate(uid, { onSuccess: () => setBack(`${quoted(name)} is back with the takes of ${longDay(date)}.`) })
                       }}
                     >

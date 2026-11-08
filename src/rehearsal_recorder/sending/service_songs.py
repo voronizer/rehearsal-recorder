@@ -24,6 +24,7 @@ import threading
 
 from rehearsal_recorder.sending.service_client import Refused
 from rehearsal_recorder.store.library import SongRefused
+from rehearsal_recorder.store.names import shown_name
 
 # The lines' kind in the list: the band service's.
 KIND = "service"
@@ -408,7 +409,10 @@ class ServiceSongs:
             if not got.get("ok"):
                 print(f"Band service: {take['name']} could not move to {name}: {got.get('error')}", file=sys.stderr)
                 continue
-            self._line(f"{take['name']} → {got['take']['name']}", _by(m.get("by"), "moved it", "Moved"))
+            now = got["take"]
+            self._line(f"{shown_name(take.get('song'), take.get('go'), take['take_number'])} → "
+                       f"{shown_name(now.get('song'), now.get('go'), now['take_number'])}",
+                       _by(m.get("by"), "moved it", "Moved"))
             # The song it left, for one out of its song: that is the song changed.
             done.append((m.get("by"), ("song", self.number_of(take.get("song")) if out else m.get("song_id"))))
 

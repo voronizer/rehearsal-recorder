@@ -130,7 +130,7 @@ export function TakeFigures({
     },
     [onGone, onRoom]
   )
-  const said = `Takes of ${facts.song} tonight: ${facts.columnsText}`
+  const said = `Takes of ${facts.song} tonight: ${facts.columnsSaid}`
   return (
     <div
       ref={box}

@@ -40,7 +40,7 @@ from rehearsal_recorder.sending.service_client import (
     NOT_A_KEY, Gone, Offline, Refused, ServiceClient, address_of, parse_key,
 )
 from rehearsal_recorder.sending.service_songs import ServiceSongs
-from rehearsal_recorder.store.names import take_name
+from rehearsal_recorder.store.names import shown_from_name, shown_name, take_name
 
 # The service's part size (R2 wants every part but the last the same size).
 PART_BYTES = 10 * 1024 * 1024
@@ -554,7 +554,7 @@ class BandService:
                 return entry
             if take is None:
                 take = self._lib.take(folder, take_number) or {}
-            name = take.get("name") or f"Take {take_number}"
+            name = shown_name(take.get("song"), take.get("go"), take_number)
             entry = self.api._journal.begin(
                 self.id, f"“{name}” → band service", str(folder), int(take_number),
                 waiting=True)
@@ -567,8 +567,9 @@ class BandService:
             entry = self._entries.get(key)
             if entry is not None and entry.snapshot()["state"] in ("waiting", "running"):
                 return entry
+            # The name kept for the line is the stored one (take_name).
             entry = self.api._journal.begin(
-                self.id, f"“{name}” → band service trash", waiting=True)
+                self.id, f"“{shown_from_name(name)}” → band service trash", waiting=True)
             self._entries[key] = entry
             return entry
 

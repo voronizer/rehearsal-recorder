@@ -134,13 +134,13 @@ test.describe("as Alex", () => {
   test("Download gives the tracks ticked in a list, each a file of its own; FLAC waits for the originals", async ({ page }) => {
     await page.goto(`/takes/${band().takes["Pałyn 9"]}`)
     await page.getByRole("button", { name: "Download", exact: true }).click()
-    const window = page.getByRole("dialog", { name: "Download “Pałyn 9”" })
+    const window = page.getByRole("dialog", { name: "Download “Pałyn #9”" })
     await expect(window.getByRole("button", { name: "The mix" })).toBeEnabled()
     await expect(window.getByRole("button", { name: "Tracks in FLAC" })).toBeDisabled()
     await expect(window).toContainText("The originals are still coming from РЭХА.")
 
     await window.getByRole("button", { name: "Tracks in MP3" }).click()
-    const list = page.getByRole("dialog", { name: "Tracks of “Pałyn 9” in MP3" })
+    const list = page.getByRole("dialog", { name: "Tracks of “Pałyn #9” in MP3" })
     // The keys recorded notes alone: their .mid is a line of its own, after the tracks of sound.
     await expect(list.locator("[data-file]")).toHaveText(["Drums", "Bass", "Keys, notes (MIDI)"])
     await expect(list.getByRole("button", { name: "Download 3 files" })).toBeEnabled()
@@ -220,7 +220,7 @@ test.describe("as Alex on a phone", () => {
     const download = main.getByRole("button", { name: "Download", exact: true })
     await expect(download).toHaveText("")
     await download.click()
-    await expect(page.getByRole("dialog", { name: "Download “Kupalle 2”" })).toBeVisible()
+    await expect(page.getByRole("dialog", { name: "Download “Kupalle #2”" })).toBeVisible()
     await page.getByRole("button", { name: "Close" }).click()
     // The dot beside the label's name: it has a size.
     const dot = marks.locator("[data-mark]").first().locator("[data-label] > *").first()

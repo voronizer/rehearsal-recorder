@@ -5,8 +5,9 @@ import { Button } from "@/components/ui/button"
 import { Popover, PopoverAnchor, PopoverContent } from "@/components/ui/popover"
 import { Whole } from "@/components/ui/whole"
 import type { SongChoices } from "@/lib/api"
-import { goFor, songFor, songNamed } from "@/lib/goes"
+import { goFor, songFor, songNamed, withoutGo } from "@/lib/goes"
 import { forgetSongName } from "@/lib/songNames"
+import { GO_SPACE, goMark } from "@/lib/takeText"
 import { cn } from "@/lib/utils"
 
 /** The choices with one old name taken out of them: forgotten, until
@@ -58,7 +59,7 @@ export type TakeNameFieldHandle = { put: (name: string) => void }
  *
  * A song's old name in it (SongChoice.also), with or without a number, is
  * that song (rename-and-merge-songs spec, D6 and D8): the field says
- * "Palyn → Pałyn 12", and under the songs, "Palyn is Pałyn now. Make Palyn
+ * "Palyn → Pałyn #12", and under the songs, "Palyn is Pałyn now. Make Palyn
  * a new song", which forgets the old name and puts it in the field. Not only
  * while typing: Rename take keeps what was typed until Rename is pressed.
  *
@@ -218,9 +219,7 @@ export function TakeNameField({
           onMouseDown={(e) => e.preventDefault()}
           onClick={async () => {
             // What was typed, less a number after it: the go is the app's.
-            const text = songNamed(shown, known)
-              ? shown.trim()
-              : shown.trim().replace(/\s+\d+$/, "")
+            const text = songNamed(shown, known) ? shown.trim() : withoutGo(shown)
             const from = choices
             if (!(await forgetSongName(old.name))) return
             setForgot({ name: old.name, from })
@@ -325,22 +324,24 @@ export function TakeNameField({
               <span data-take-go className="tnum text-muted-foreground">
                 {" → "}
                 {old.song}
-                {go !== null && ` ${go}`}
+                {go !== null && `${GO_SPACE}${goMark(go)}`}
               </span>
             ) : (
               go !== null && (
+                // After a space that can break, as the typed text's own can:
+                // the copy wraps where the field does.
                 <span data-take-go className="tnum text-muted-foreground">
                   {" "}
-                  {go}
+                  {goMark(go)}
                 </span>
               )
             )}
           </div>
           <span id={`${id}-go`} className="sr-only">
             {old
-              ? `${old.song}${go !== null ? ` ${go}` : ""}`
+              ? `${old.song}${go !== null ? `${GO_SPACE}${goMark(go)}` : ""}`
               : go !== null
-                ? `${via?.choice.song ?? shown.trim()} ${go}`
+                ? `${via?.choice.song ?? shown.trim()}${GO_SPACE}${goMark(go)}`
                 : ""}
           </span>
           {size === "big" ? (

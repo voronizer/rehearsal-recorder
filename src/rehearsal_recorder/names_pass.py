@@ -27,6 +27,8 @@ import sys
 import threading
 from collections import deque
 
+from rehearsal_recorder.store.names import shown_from_name
+
 TITLE = "Putting names right"
 
 
@@ -77,14 +79,14 @@ class NamesPass:
                     entry.discard()
                     entry = None
                     return renamed
-                entry.progress(i / len(todo), f"“{name}”")
+                entry.progress(i / len(todo), f"“{shown_from_name(name)}”")
                 try:
                     result = self._fix(folder, take_number)
                 except Exception as e:
                     # One take's trouble is that take's: the rest go on.
                     result = {"renamed": False, "error": str(e) or type(e).__name__}
                 if result.get("error"):
-                    failed.append(f"“{name}”: {result['error']}")
+                    failed.append(f"“{shown_from_name(name)}”: {result['error']}")
                 elif result.get("renamed"):
                     renamed += 1
             if failed:

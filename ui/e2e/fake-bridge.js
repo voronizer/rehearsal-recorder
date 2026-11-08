@@ -53,11 +53,17 @@ let sendTo = serviceKey ? 'service' : 'cloud';
 let serviceAuto = Boolean(window.__SERVICE_AUTO__);
 let serviceQueue = {};
 const serviceAddress = () => serviceKey && serviceKey.slice(0, serviceKey.lastIndexOf(':'));
+// A take as Python words it in a line of background work (names.shown_name):
+// "Viasna #2", a no-break space before the #, or "Take 4" with no song.
+const shownName = (take) => take.song && take.go != null ? `${take.song}\u00a0#${take.go}` : take.name;
+// A go typed after a title, as names.split_go reads it: "Viasna 2", or
+// "Viasna #2" and "Viasna#2" as the interface writes a take.
+const TYPED_GO = /^(.*?)(?:\s*#\s*|\s+)(\d+)$/;
 function toService(take) {
   take.service = {up:false, flac:false, error:null};
   serviceQueue = {...serviceQueue, [take.take_number]: 'queued'};
   window.__ACTIVITY__ = [...(window.__ACTIVITY__ || []), {
-    id: 800 + take.take_number, kind:'service', title:`“${take.name}” → band service`,
+    id: 800 + take.take_number, kind:'service', title:`“${shownName(take)}” → band service`,
     folder: session ? session.folder : null, take_number:take.take_number, state:'waiting',
     fraction:0, step:null, error:null, detail:null, retry:null, seen:false}];
 }
@@ -719,7 +725,7 @@ async function setTitles() {
     if (!known.has(title.toLowerCase())) known.set(title.toLowerCase(), title);
   const find = (text) => known.get(text.toLowerCase()) ?? oldNames.get(text.toLowerCase())?.song;
   return (text) => {
-    const m = /^(.*?)\s+(\d+)$/.exec(text.trim());
+    const m = TYPED_GO.exec(text.trim());
     const title = find(text) ?? (m && m[1].trim() ? find(m[1].trim()) : undefined);
     return title ? {title, new:false} : {title:text, new:true};
   };
@@ -778,8 +784,8 @@ function songOf(text, takes) {
   const find = (x) => known.get(x.toLowerCase()) ?? oldNames.get(x.toLowerCase())?.song;
   const whole = find(name);
   if (whole) return whole;
-  const m = /^(.*?)\s+(\d+)$/.exec(name);
-  return (m && find(m[1].trim())) || name;
+  const m = TYPED_GO.exec(name);
+  return (m && m[1].trim() && find(m[1].trim())) || name;
 }
 function goAt(song, takes, n) {
   const own = takes.find(t => t.take_number === n);
@@ -1010,7 +1016,7 @@ async function lastTakeOf(title) {
                       ...(await libraryNow()).filter(r => !r.missing)];
   for (const r of rehearsals) {
     const t = [...r.takes].reverse().find(x => x.song === title);
-    if (t) return {folder:r.folder, take_number:t.take_number, name:t.name};
+    if (t) return {folder:r.folder, take_number:t.take_number, name:t.name, song:t.song, go:t.go};
   }
   return null;
 }
@@ -2803,7 +2809,7 @@ window.__MAKE_API__ = () => ({
     const marks = (await marksNow()).filter(x => x.m.label_id === labelId).map(({r, t, m}) => {
       if (t.tracks[0]) fileDurations[t.tracks[0].file] = t.duration_sec;
       return {folder:r.folder, rehearsal:r.name, created_at:r.created_at, missing:Boolean(r.missing),
-              take_number:t.take_number, name:t.name, song:t.song ?? null,
+              take_number:t.take_number, name:t.name, song:t.song ?? null, go:t.song ? t.go : null,
               duration_sec:t.duration_sec, at:m.at, note:m.note || ''};
     });
     await held('list_marks');
@@ -2877,7 +2883,7 @@ window.__MAKE_API__ = () => ({
       if (live) t.cloud = cloudShare(autoPublish.what);
       else {
         window.__ACTIVITY__ = [...(window.__ACTIVITY__ || []), {
-          id: 900 + t.take_number, kind:'cloud', title:t.name, folder, take_number:t.take_number,
+          id: 900 + t.take_number, kind:'cloud', title:`“${shownName(t)}” → cloud`, folder, take_number:t.take_number,
           state:'waiting', fraction:0, step:null, error:null, detail:null, retry:null, seen:false}];
       }
       queued.push(t.take_number);

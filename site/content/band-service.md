@@ -33,13 +33,13 @@ Each of you has a track of your own in every take. Play yours alone to hear what
 
 The levels are yours as well. Turn a track up or down once, and it plays that way for you in every take with a track of that name, on the phone and on the computer. Only you hear it that way; for the others nothing changes. **РЭХА's levels** brings back the mix the take came with.
 
-![Viasna 12 on Ivan's phone: a row for each track with its level, M and S, the guitar turned all the way up, and under Master the button for РЭХА's levels](lanes)
+![Viasna #12 on Ivan's phone: a row for each track with its level, M and S, the guitar turned all the way up, and under Master the button for РЭХА's levels](lanes)
 
 ## Point at the second
 
 Instead of “the bit after the second chorus” in the chat, you put a mark at 1:42, and everyone hears the same moment. The band talks under the mark, and the talk stays with the take instead of getting lost among the memes.
 
-![Viasna 12's marks: the one at 1:42, and the band's talk under it, each with who wrote it. Tap ▶ 1:42 to play from there](mark)
+![Viasna #12's marks: the one at 1:42, and the band's talk under it, each with who wrote it. Tap ▶ 1:42 to play from there](mark)
 
 ## Green to keep, red to fix
 
@@ -59,7 +59,7 @@ Every take the band sends is there, by song, including the Viasna from three wee
 
 A Kupalle saved as Viasna moves to its own song with ⋯ › **Move to song**, and a song's title and tempo change right where they stand. РЭХА learns of it by the next rehearsal at the latest, renames the takes on the laptop and says who changed what.
 
-![Viasna 3, from three weeks before, with the band's green mark on its bridge](three-weeks-ago)
+![Viasna #3, from three weeks before, with the band's green mark on its bridge](three-weeks-ago)
 
 ## Take your track home
 
