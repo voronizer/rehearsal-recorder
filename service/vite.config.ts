@@ -45,4 +45,15 @@ export default defineConfig({
     // The interface's components are outside service/.
     fs: { allow: [".."] },
   },
+  build: {
+    rolldownOptions: {
+      // The build drops the "use client" line at the top of TanStack's,
+      // Radix's and Lucide's files and warns about it once for each file.
+      // The line only means something to React running on a server; these
+      // pages run in the browser, so nothing is lost. The interface and the
+      // site have the React plugin, which hides these warnings; the service
+      // does without that plugin, so it turns the check off here.
+      checks: { moduleLevelDirective: false },
+    },
+  },
 })
