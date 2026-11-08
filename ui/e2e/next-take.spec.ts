@@ -97,7 +97,9 @@ test.describe("the Next take panel", () => {
     await settled(page)
     const before = (await setCard(page).boundingBox())!.y
 
-    await field(page).fill("Dancing barefoot on the roof of the old brewery")
+    // A new song, two lines long with room for its " #1" on the second: the
+    // stress song's name fills its second line, and its "#3" goes to a third.
+    await field(page).fill("Dancing barefoot on the roof of the brewery")
     const line = parseFloat((await style(field(page), "line-height"))["line-height"])
     const at = (await field(page).boundingBox())!
     expect(at.height).toBeGreaterThanOrEqual(2 * line)
