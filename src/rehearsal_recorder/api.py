@@ -123,6 +123,7 @@ from rehearsal_recorder.store.library import (
     as_tempo, paths_overlap,
 )
 from rehearsal_recorder.store.db import DB_NAME
+from rehearsal_recorder.store.names import shown_name
 from rehearsal_recorder.transport import Transport, serialised
 from rehearsal_recorder.control import ControlAPI
 from rehearsal_recorder import diagnostics
@@ -3169,7 +3170,11 @@ class Api:
 
         try:
             field = self.suggest_take_name(take_number)
-            plain_name = self._next_take(take_number)["name"]
+            coming = self._next_take(take_number)
+            # As a person reads it, for the line in the list of background
+            # work; a title the library could not resolve, as it was typed.
+            plain_name = (coming["name"] if coming["song"] is None
+                          else shown_name(coming["song"], coming["go"], take_number))
         except Exception:
             # The name comes from the library. A take is not left recording,
             # holding the card, because the library could not answer.
@@ -4754,7 +4759,7 @@ class Api:
         self.player_close()
 
         done = self._journaled(
-            "crop", f"Cropping “{take.get('name') or f'Take {take_number}'}”",
+            "crop", f"Cropping “{shown_name(take.get('song'), take.get('go'), take_number)}”",
             folder, take_number,
             lambda progress: self._crop_tracks(
                 tracks, span["start"], span["end"], progress=progress, notes=notes),

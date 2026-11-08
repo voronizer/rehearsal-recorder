@@ -570,8 +570,8 @@ class Library:
         """
         What the metronome follows when the next take's name field holds
         `name` (metronome spec, Part 2): {"song": {"id", "title", "tempo",
-        "signature"} or None, "last_take": {"folder", "take_number", "name"} or
-        None}. The song is the one the name leads to by the rule add_take
+        "signature"} or None, "last_take": {"folder", "take_number", "name",
+        "song", "go"} or None}. The song is the one the name leads to by the rule add_take
         follows (_resolve, as resolve_name has it), tempo and signature None
         when it has none; None for an empty name, "Take N" and a title no song
         has. Nothing is written, not even the song a new title would make.
@@ -592,7 +592,8 @@ class Library:
             ).first()
             last = None if found is None else {
                 "folder": str(self._folder(found[1])), "take_number": found[0].take_number,
-                "name": take_name(song.title, found[0].go, found[0].take_number)}
+                "name": take_name(song.title, found[0].go, found[0].take_number),
+                "song": song.title, "go": found[0].go}
             return {"song": {"id": song.id, "title": song.title,
                              "tempo": song.tempo, "signature": song.signature},
                     "last_take": last}
@@ -1045,7 +1046,7 @@ class Library:
         """
         Every mark with the label, from every rehearsal, for History's Marks
         view: [{"folder", "rehearsal", "created_at", "missing", "take_number",
-        "name", "song", "duration_sec", "at", "note"}], the newest rehearsal
+        "name", "song", "go", "duration_sec", "at", "note"}], the newest rehearsal
         first, then the order played, then the moment. None for an id no
         label has.
 
@@ -1076,6 +1077,7 @@ class Library:
             out.append({"folder": folder, "rehearsal": rehearsal, "created_at": created_at,
                         "missing": missing, "take_number": number,
                         "name": take_name(title, go, number), "song": title,
+                        "go": go if title is not None else None,
                         "duration_sec": duration, "at": at, "note": note})
         return out
 

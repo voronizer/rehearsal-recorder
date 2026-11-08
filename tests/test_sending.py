@@ -232,7 +232,7 @@ def run(tmp, fake):
     service_files.encode = counting
     _, api2 = fresh_api(tmp)
     ok("waiting takes are back in the list when the app opens",
-       [e["title"] for e in entries(api2, "waiting")] == ["“Viasna 2” → band service"])
+       [e["title"] for e in entries(api2, "waiting")] == ["“Viasna\u00a0#2” → band service"])
     api2._session = {**api._session}
     drain(api2)
     service_files.encode = real_encode
@@ -502,8 +502,11 @@ def run(tmp, fake):
     drain()
     ok("undo keeps it",
        back["ok"] and fake.count(f"delete {uid9}") == 0 and uid_of(n9) == uid9)
+    go9 = take(n9)["go"]
     gone = api.delete_take(folder(), n9)
     api.end_trash(gone["undo"])
+    ok("its line in the list names the take as the app shows it",
+       f"“Palyn #{go9}” → band service trash" in [e["title"] for e in entries()])
     drain()
     ok("a deletion whose undo time passed reaches the trash",
        fake.count(f"delete {uid9}") == 1 and fake.takes[uid9]["trashed"])
@@ -967,7 +970,7 @@ def songs_both_ways(api, fake, service, drain, entries, keep, uid_of, take, fold
     check()
     ok("a take moved there is renamed here as Rename take does",
        take(n_m)["name"] == "Rečka 1"
-       and ("Hušča 2 → Rečka 1", "Ivan moved it in the band service") in lines())
+       and ("Hušča\u00a0#2 → Rečka\u00a0#1", "Ivan moved it in the band service") in lines())
     ok("and sent with its new song and name, which ends the wait there",
        uid_m not in fake.moved and fake.takes[uid_m]["name"] == "Rečka 1"
        and fake.takes[uid_m]["song_id"] == number("Rečka"))

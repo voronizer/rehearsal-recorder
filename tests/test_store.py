@@ -47,7 +47,9 @@ from rehearsal_recorder.store.library import (  # noqa: E402
     LabelRefused, Library, SetRefused, SongRefused,
 )
 from rehearsal_recorder.store.models import Base  # noqa: E402
-from rehearsal_recorder.store.names import legacy_song, split_go, take_name  # noqa: E402
+from rehearsal_recorder.store.names import (  # noqa: E402
+    legacy_song, shown_from_name, shown_name, split_go, take_name,
+)
 
 # The newest migration the app ships. The test-only migrations below sit on
 # top of it, so they keep working as real ones are added.
@@ -422,6 +424,19 @@ def main():
     ok("a trailing number is split off", split_go(" Polyn 3 ") == ("Polyn", 3))
     ok("a name without one has none", split_go("Polyn") == ("Polyn", None))
     ok("a bare number is a name, not a go", split_go("1999") == ("1999", None))
+    ok("a go after a # is split off too, as the app writes it",
+       split_go("Polyn #3") == ("Polyn", 3) and split_go("Polyn#3") == ("Polyn", 3)
+       and split_go("Polyn\u00a0#3") == ("Polyn", 3))
+    ok("after a #, a title's own number stays in it", split_go("Opus 5 #3") == ("Opus 5", 3))
+    ok("a # and a number alone are a name", split_go("#3") == ("#3", None))
+    ok("a take is shown with a # before its go, kept to its title",
+       shown_name("Polyn", 3, 4) == "Polyn\u00a0#3" and shown_name("Opus 5", 1, 4) == "Opus 5\u00a0#1")
+    ok("a take with no song is shown by its own number", shown_name(None, None, 7) == "Take 7")
+    ok("a name as stored is shown with its #",
+       shown_from_name("Polyn 3") == "Polyn\u00a0#3" and shown_from_name("Song 2 2") == "Song 2\u00a0#2")
+    ok("a take nobody named, or a name with no go, is shown as it is",
+       shown_from_name("Take 7") == "Take 7" and shown_from_name("Polyn") == "Polyn"
+       and shown_from_name("") == "")
     ok("old names: a trailing number was the go, the rest the song",
        legacy_song("Polyn 3") == "Polyn" and legacy_song("Polyn") == "Polyn"
        and legacy_song("Полынь 2") == "Полынь")
@@ -430,6 +445,7 @@ def main():
        and legacy_song("  ") is None and legacy_song(None) is None)
     ok("old names: what the rule cannot know stays as it reads",
        legacy_song("Опус 5") == "Опус")
+    ok("old names: a # was part of the title", legacy_song("Polyn #3") == "Polyn #3")
 
     print("\n[9] Old names become songs (migration 0002)")
     rec9 = tmp / "Songs"
@@ -563,6 +579,11 @@ def main():
        lib.resolve_name(jam, "Vesna", 10) == {"song": "Vesna", "go": 1, "name": "Vesna 1"}
        and lib.resolve_name(jam, "polyn", 10) == {"song": "Polyn", "go": 4, "name": "Polyn 4"}
        and lib.resolve_name(jam, "", 10) == {"song": None, "go": None, "name": "Take 10"}
+       and song_titles() == before)
+    ok("a take's name as the app shows it, with its #, names the song",
+       lib.resolve_name(jam, "Polyn #3", 10)["song"] == "Polyn"
+       and lib.resolve_name(jam, "polyn#2", 10)["song"] == "Polyn"
+       and lib.resolve_name(jam, "Song 2 #1", 10)["song"] == "Song 2"
        and song_titles() == before)
 
     other = rec10 / "Other"
@@ -1967,7 +1988,8 @@ def main():
        found18["song"] == {"id": lib.song_id("Pałyn"), "title": "Pałyn", "tempo": 128, "signature": "4/4"})
     ok("and the song's newest take: the newest rehearsal's, the highest number in it",
        found18["last_take"] == {"folder": str(night18), "take_number": 7,
-                                "name": lib.take(night18, 7)["name"]})
+                                "name": lib.take(night18, 7)["name"], "song": "Pałyn",
+                                "go": lib.take(night18, 7)["go"]})
     ok("a title typed in another case is found as well",
        lib.tempo_for("pałyn")["song"]["title"] == "Pałyn")
     ok("Take N and an empty name are no song", lib.tempo_for("Take 4") == {"song": None, "last_take": None}

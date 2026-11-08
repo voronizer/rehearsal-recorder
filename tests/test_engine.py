@@ -5094,7 +5094,7 @@ def main():
     entry43 = a43.activity()["entries"][0]
     ok("and is in the journal, waiting",
        entry43["kind"] == "cloud" and entry43["state"] == "waiting"
-       and "Polyn" in entry43["title"])
+       and "“Polyn\u00a0#" in entry43["title"])
     fractions = []
     real_step = a43._copy_to_cloud
 
@@ -5919,7 +5919,7 @@ def main():
     ok("one entry for the whole pass, saying which take was left and why",
        entry53["kind"] == "names" and entry53["title"] == "Putting names right"
        and entry53["state"] == "failed"
-       and "“Vesna 1”: it is open elsewhere" in entry53["error"])
+       and "“Vesna\u00a0#1”: it is open elsewhere" in entry53["error"])
     boom_journal53 = Journal()
     boomed53 = []
 
@@ -5935,7 +5935,7 @@ def main():
     boom_entry53 = boom_journal53.snapshot()[0]
     ok("a take that raises is that take's failure: the pass carries on and ends failed",
        boom_count53 == 1 and boomed53 == [1, 2] and boom_entry53["state"] == "failed"
-       and "“Polyn 1”: the database is locked" in boom_entry53["error"])
+       and "“Polyn\u00a0#1”: the database is locked" in boom_entry53["error"])
     quiet53 = Journal()
     ok("with nothing to put right it shows nothing",
        NamesPass(find=lambda: [], fix=fix53, busy=lambda: False, journal=quiet53).run() == 0
@@ -6017,7 +6017,7 @@ def main():
        and sorted(p.name for p in (cloud53 / jam53.name).iterdir()) == ["02 - Polyn 2.wav"])
     names_entry53 = next(e for e in p53.activity()["entries"] if e["kind"] == "names")
     ok("a take that could not be renamed is left, and the background work says which and why",
-       names_entry53["state"] == "failed" and "“Polyn 3”" in names_entry53["error"]
+       names_entry53["state"] == "failed" and "“Polyn\u00a0#3”" in names_entry53["error"]
        and "open in another program" in names_entry53["error"])
     ok("the next pass picks it up",
        p53._names_pass.run() == 1 and "04 - Polyn 3" in dirs53())
@@ -6651,10 +6651,11 @@ def main():
     ok("each says what its row shows: the take, its rehearsal and the mark",
        went60["marks"][0] == {
            "folder": last60, "rehearsal": "Tuesday", "created_at": "2026-09-22T19:00:00",
-           "missing": False, "take_number": 1, "name": "Polyn 2", "song": "Polyn",
+           "missing": False, "take_number": 1, "name": "Polyn 2", "song": "Polyn", "go": 2,
            "duration_sec": 100, "at": 20, "note": "count"})
     ok("a take with no song is listed too",
-       went60["marks"][2]["name"] == "Take 2" and went60["marks"][2]["song"] is None)
+       went60["marks"][2]["name"] == "Take 2" and went60["marks"][2]["song"] is None
+       and went60["marks"][2]["go"] is None)
     ok("another label's marks are its own",
        where60(1) == [(mid60, 1, 5), (first60, 2, 10)])
     ok("a label that is not there is not found",
