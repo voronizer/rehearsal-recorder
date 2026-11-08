@@ -307,6 +307,101 @@ test.describe("as Ira", () => {
     await expect(page.locator("[data-take-player]").getByRole("slider", { name: "Guitar volume" })).toHaveAttribute("aria-valuetext", "100%")
   })
 
+  test("an answer to an earlier level comes late: the fader stays where the keys or the hand put it", async ({ page }) => {
+    // Each level sent is answered only when the test lets it through, as on a slow connection.
+    const waiting: (() => void)[] = []
+    await page.route("**/api/me/levels", async (route) => {
+      if (route.request().method() !== "PUT") return route.fallback()
+      await new Promise<void>((go) => waiting.push(go))
+      await route.fallback()
+    })
+    const answerOne = async () => {
+      await expect.poll(() => waiting.length).toBeGreaterThan(0)
+      const answered = page.waitForResponse((r) => r.request().method() === "PUT" && r.url().endsWith("/api/me/levels"))
+      waiting.shift()!()
+      await answered
+      // The player is read every 120 ms: a fader put back would show by now.
+      await page.waitForTimeout(500)
+    }
+    await page.goto(`/takes/${band().takes["Viasna 12"]}`)
+    const player = page.locator("[data-take-player]")
+    const guitar = player.getByRole("slider", { name: "Guitar volume" })
+    await expect(guitar).toHaveAttribute("aria-valuetext", "100%")
+    await guitar.focus()
+    for (let i = 0; i < 3; i++) await page.keyboard.press("ArrowLeft")
+    await expect(guitar).toHaveAttribute("aria-valuetext", "97%")
+    // The answer to 99% comes while 98% and 97% still wait to be sent.
+    await answerOne()
+    await expect(guitar).toHaveAttribute("aria-valuetext", "97%")
+    await answerOne()
+    await expect(guitar).toHaveAttribute("aria-valuetext", "97%")
+
+    // Let go, take it again at once, and hold it while the answer to the first comes.
+    const box = (await guitar.boundingBox())!
+    const y = box.y + box.height / 2
+    await page.mouse.move(box.x + box.width * 0.96, y)
+    await page.mouse.down()
+    await page.mouse.move(box.x + box.width * 0.6, y, { steps: 5 })
+    await page.mouse.up()
+    const letGo = await guitar.getAttribute("aria-valuetext")
+    await page.mouse.down()
+    await page.mouse.move(box.x + box.width * 0.3, y, { steps: 5 })
+    const hand = (await guitar.getAttribute("aria-valuetext"))!
+    expect(hand).not.toBe(letGo)
+    await answerOne()
+    await expect(guitar).toHaveAttribute("aria-valuetext", hand)
+    // What the hand let go of is what is kept.
+    const sent = page.waitForRequest((r) => r.method() === "PUT" && r.url().endsWith("/api/me/levels"))
+    await page.mouse.up()
+    expect(`${Math.round((await sent).postDataJSON().levels.Guitar * 100)}%`).toBe(hand)
+    await answerOne()
+    await page.unroute("**/api/me/levels")
+    await page.reload()
+    await expect(player.getByRole("slider", { name: "Guitar volume" })).toHaveAttribute("aria-valuetext", hand)
+
+    // The take's balance back, for the tests after this one.
+    await player.getByRole("button", { name: "РЭХА's levels" }).click()
+    await expect(player.getByRole("button", { name: "РЭХА's levels" })).toBeDisabled()
+    await page.reload()
+    await expect(player.getByRole("slider", { name: "Guitar volume" })).toHaveAttribute("aria-valuetext", "100%")
+  })
+
+  test("a level turned while another take plays is the one heard when Play is pressed, before it is kept", async ({ page }) => {
+    await page.goto(`/?panel=take:${band().takes["Viasna 12"]}`)
+    await page.getByRole("button", { name: "Play “Viasna 11”" }).first().click()
+    await expect(page.getByRole("button", { name: "Pause “Viasna 11”" }).first()).toBeVisible()
+    // To the take's page while Viasna 11 plays on in the bar: Viasna 12 is not in the player yet.
+    await page.getByLabel("Panel", { exact: true }).getByRole("link", { name: /^Viasna/ }).first().click()
+    await expect(page).toHaveURL(/\/takes\//)
+    const waiting: (() => void)[] = []
+    await page.route("**/api/me/levels", async (route) => {
+      if (route.request().method() !== "PUT") return route.fallback()
+      await new Promise<void>((go) => waiting.push(go))
+      await route.fallback()
+    })
+    const player = page.locator("[data-take-player]")
+    const guitar = player.getByRole("slider", { name: "Guitar volume" })
+    await expect(guitar).toHaveAttribute("aria-valuetext", "100%")
+    await guitar.focus()
+    for (let i = 0; i < 3; i++) await page.keyboard.press("ArrowLeft")
+    await expect(guitar).toHaveAttribute("aria-valuetext", "97%")
+    await page.getByRole("toolbar", { name: "Transport" }).getByRole("button", { name: "Play", exact: true }).click()
+    await expect(page.getByRole("toolbar", { name: "Transport" }).getByRole("button", { name: "Pause", exact: true })).toBeVisible()
+    // The player is read every 120 ms: a fader the new player put back would show by now.
+    await page.waitForTimeout(500)
+    await expect(guitar).toHaveAttribute("aria-valuetext", "97%")
+    await page.unroute("**/api/me/levels")
+    while (waiting.length) waiting.shift()!()
+    await page.getByRole("toolbar", { name: "Transport" }).getByRole("button", { name: "Pause", exact: true }).click()
+
+    // The take's balance back, for the tests after this one.
+    await expect(player.getByRole("button", { name: "РЭХА's levels" })).toBeEnabled()
+    await player.getByRole("button", { name: "РЭХА's levels" }).click()
+    await expect(player.getByRole("button", { name: "РЭХА's levels" })).toBeDisabled()
+    await page.reload()
+    await expect(player.getByRole("slider", { name: "Guitar volume" })).toHaveAttribute("aria-valuetext", "100%")
+  })
+
   test("a level that could not be kept says so beside the way back", async ({ page }) => {
     await page.route("**/api/me/levels", (route) =>
       route.request().method() === "PUT"

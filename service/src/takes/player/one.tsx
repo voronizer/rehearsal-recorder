@@ -71,8 +71,16 @@ const NO_DESK: Desk = { muted: [], solo: null }
 const PlayerCtx = createContext<PlayerApi | null>(null)
 export const usePlayer = () => useContext(PlayerCtx)!
 
-/** What a take's page set on its player before the take was in the one player. */
-export type Setup = { loop: { a: number; b: number } | null; muted: number[]; solo: number | null }
+/**
+ * What a take's page set on its player: the repeat, M and S set before the
+ * take was in the one player, and the levels turned there and not kept yet.
+ */
+export type Setup = {
+  loop: { a: number; b: number } | null
+  muted: number[]
+  solo: number | null
+  moved: Record<string, number>
+}
 
 /**
  * The one player as the take page's РЭХА player reaches it (sound.ts). Each
@@ -137,15 +145,16 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const t = take.data
     if (!t || !supported) return
-    const p = new Player(t.tracks.map((k) => ({ url: k.mp3, gain: levelOf(yoursNow.current, t, k.name) })))
+    // As the take's page left it: its repeat, M and S, and the levels turned
+    // there and not kept yet; else the M and S pressed in its panel.
+    const setup: Setup = setups.current.get(t.uid)?.() ?? { loop: null, ...(desksNow.current[t.uid] ?? NO_DESK), moved: {} }
+    const p = new Player(t.tracks.map((k) => ({ url: k.mp3, gain: setup.moved[k.name] ?? levelOf(yoursNow.current, t, k.name) })))
     p.setMaster(master.current)
     p.onChange = () => {
       tick(t.uid, p.time())
       redraw((n) => n + 1)
     }
     p.onEnd = () => redraw((n) => n + 1)
-    // As the take's page left it: its repeat, M and S; else the M and S pressed in its panel.
-    const setup: Setup = setups.current.get(t.uid)?.() ?? { loop: null, ...(desksNow.current[t.uid] ?? NO_DESK) }
     if (setup.loop) p.setLoop(setup.loop.a, setup.loop.b)
     for (const i of setup.muted) p.setMute(i, true)
     if (setup.solo !== null) p.setSolo(setup.solo, true)
@@ -173,12 +182,17 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [key, supported])
 
-  // Your levels, as they come or change, on the take in the player.
+  // Your levels, as they come or change, on the take in the player. A level
+  // turned on the take's page and not kept yet stays as the hand left it:
+  // the answer to an earlier turn, come late, would put the fader back (#117).
   useEffect(() => {
     const now = player.current
     const t = take.data
     if (!now || !t || held.current?.uid !== t.uid) return
-    t.tracks.forEach((k, i) => now.setGain(i, levelOf(yours, t, k.name)))
+    const inHand = setups.current.get(t.uid)?.().moved ?? {}
+    t.tracks.forEach((k, i) => {
+      if (!(k.name in inHand)) now.setGain(i, levelOf(yours, t, k.name))
+    })
   }, [yours, key, take.data])
 
   // The playhead moves on screen while the take plays.

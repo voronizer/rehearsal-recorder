@@ -174,6 +174,37 @@ test("only the tracks that were turned are kept as yours", async () => {
   expect(api.keepLevels).toHaveBeenCalledWith({ Guitar: 0.5 })
 })
 
+test("a level turned is the hand's until it is kept, so the player leaves it alone", async () => {
+  const sound = serviceSound(take, one(player()))
+  await sound.setVolume("Guitar", 0.5)
+  expect(sound.setup().moved).toEqual({ Guitar: 0.5 })
+  await sound.keepLevels({ Bass: 1, Guitar: 0.5 })
+  expect(sound.setup().moved).toEqual({})
+})
+
+test("a track turned back to its balance while the turn before is on its way is kept", async () => {
+  const sound = serviceSound(take, one(player()))
+  let answer = () => {}
+  api.keepLevels.mockImplementationOnce(() => new Promise((done) => (answer = () => done({ levels: {} }))))
+  await sound.setVolume("Guitar", 0.5)
+  const first = sound.keepLevels({ Bass: 1, Guitar: 0.5 })
+  await sound.setVolume("Guitar", 0.8)
+  await sound.keepLevels({ Bass: 1, Guitar: 0.8 })
+  expect(api.keepLevels).toHaveBeenLastCalledWith({ Guitar: 0.8 })
+  answer()
+  await first
+  expect(sound.setup().moved).toEqual({})
+})
+
+test("a track turned away and back in one go is left at its balance", async () => {
+  const sound = serviceSound(take, one(player()))
+  await sound.setVolume("Guitar", 0.5)
+  await sound.setVolume("Guitar", 0.8)
+  await sound.keepLevels({ Bass: 1, Guitar: 0.8 })
+  expect(api.keepLevels).not.toHaveBeenCalled()
+  expect(sound.setup().moved).toEqual({})
+})
+
 test("REHA's levels forgets yours for this take's tracks", async () => {
   api.yours = { Bass: 0.4, Vocals: 0.9 }
   await serviceSound(take, one(player())).backToReha()
@@ -185,7 +216,7 @@ test("repeat, M and S set while another take plays go with the take when it play
   await sound.setLoop(2, 5)
   await sound.setMuted("Bass", true)
   await sound.setSolo("Guitar")
-  expect(sound.setup()).toEqual({ loop: { a: 2, b: 5 }, muted: [0], solo: 1 })
+  expect(sound.setup()).toEqual({ loop: { a: 2, b: 5 }, muted: [0], solo: 1, moved: {} })
   expect(await sound.state()).toMatchObject({ position: 2, loop: { a: 2, b: 5 }, muted: ["Bass"], soloed: "Guitar" })
 })
 

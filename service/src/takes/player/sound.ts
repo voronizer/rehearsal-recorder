@@ -19,7 +19,7 @@ export type ServiceSound = PlayerSound & {
   tracks: TrackFile[]
   /** Forgets your levels for this take's tracks: they play at РЭХА's balance again. */
   backToReha(): Promise<void>
-  /** The repeat, M and S set while another take was in the player. */
+  /** The repeat, M and S set while another take was in the player, and the levels turned and not kept yet. */
   setup(): Setup
 }
 
@@ -41,6 +41,8 @@ export function serviceSound(take: TakePage, one: One): ServiceSound {
   let solo: number | null = null
   /** Levels turned and not kept yet. */
   let moved: Record<string, number> = {}
+  /** Levels sent to be kept, not answered yet: yours once they are. */
+  let sent: Record<string, number> = {}
   /** The zoom whose wave is being decoded: a newer one stops it. */
   let zoom: AbortController | null = null
 
@@ -213,26 +215,34 @@ export function serviceSound(take: TakePage, one: One): ServiceSound {
 
     async keepLevels(volumes) {
       // Only what was turned: a track left alone plays at each take's own balance.
+      // A level on its way counts as kept, so a turn back from it is sent too.
       const yours = yoursNow()
-      const turned = Object.fromEntries(
-        Object.entries(volumes).filter(([n, v]) => names.includes(n) && Math.abs(v - levelOf(yours, take, n)) > 1e-4)
-      )
+      const turned: Record<string, number> = {}
+      for (const [n, v] of Object.entries(volumes)) {
+        if (!names.includes(n)) continue
+        if (Math.abs(v - (sent[n] ?? levelOf(yours, take, n))) > 1e-4) turned[n] = v
+        else if (!(n in sent)) delete moved[n]
+      }
       if (!Object.keys(turned).length) return { ok: true }
+      Object.assign(sent, turned)
       try {
         await keepLevels(turned)
         for (const n of Object.keys(turned)) if (moved[n] === turned[n]) delete moved[n]
         return { ok: true }
       } catch (e) {
         return { ok: false, error: e instanceof Error ? e.message : String(e) }
+      } finally {
+        for (const n of Object.keys(turned)) if (sent[n] === turned[n]) delete sent[n]
       }
     },
 
     async backToReha() {
       moved = {}
+      sent = {}
       await keepLevels(Object.fromEntries(names.map((n) => [n, null])))
     },
 
-    setup: () => ({ loop, muted, solo }),
+    setup: () => ({ loop, muted, solo, moved }),
 
     // The bar at the bottom plays on after the page is left, with no repeat:
     // it has no Repeat to stop one with.

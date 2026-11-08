@@ -554,7 +554,12 @@ def fake_sounddevice():
 
 def run_card(frames=1024, rate=48000):
     """The card on a thread of its own, a call of `frames` each time that
-    many frames go by, its inputs hearing a quiet 440 Hz tone."""
+    many frames go by, its inputs hearing a quiet 440 Hz tone.
+
+    A call the thread wakes too late for is made at once, never left out: a
+    card's clock does not wait for the computer. On the Mac runner, busy
+    with every suite at once, the thread wakes up to 0.13 s late, and a card
+    that let that time go played 0.34 s of a 1.1 s take."""
     import threading
 
     def run():
@@ -577,8 +582,6 @@ def run_card(frames=1024, rate=48000):
             wait = due - time.perf_counter()
             if wait > 0:
                 time.sleep(wait)
-            else:
-                due = time.perf_counter()
 
     threading.Thread(target=run, name="fake-card", daemon=True).start()
 
