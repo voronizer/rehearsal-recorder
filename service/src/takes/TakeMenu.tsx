@@ -4,7 +4,7 @@ import { ConfirmDialog } from "@/components/ConfirmDialog"
 import { Button } from "@/components/ui/button"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { useDeleteTake, useMoveTake } from "../api"
-import { quoted } from "../shell/words"
+import { quoted, takeText, type TakeNaming } from "../shell/words"
 import { MoveSub, type Movable } from "./move"
 
 /**
@@ -13,7 +13,7 @@ import { MoveSub, type Movable } from "./move"
  * accent, not red. `onGone` takes the panel or page away from the take
  * before it goes. `row`: the menu of a take in a list.
  */
-export function TakeMenu({ take, onGone, row }: { take: Movable & { name: string }; onGone?: () => void; row?: boolean }) {
+export function TakeMenu({ take, onGone, row }: { take: Movable & TakeNaming; onGone?: () => void; row?: boolean }) {
   const remove = useDeleteTake()
   const move = useMoveTake()
   const [asking, setAsking] = useState(false)
@@ -47,7 +47,7 @@ export function TakeMenu({ take, onGone, row }: { take: Movable & { name: string
       <ConfirmDialog
         open={asking}
         onOpenChange={setAsking}
-        title={asking ? `Delete ${quoted(take.name)}?` : null}
+        title={asking ? `Delete ${quoted(takeText(take))}?` : null}
         description={asking ? "It goes to the Trash, where anyone in the band can put it back for 30 days. In РЭХА it stays as it is." : null}
         actionLabel="Delete take"
         destructive={false}

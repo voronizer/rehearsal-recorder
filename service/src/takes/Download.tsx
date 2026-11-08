@@ -10,7 +10,7 @@ import { useAfter } from "@/hooks/useAfter"
 import { SPINNER_AFTER_MS } from "@/lib/playLook"
 import { cn } from "@/lib/utils"
 import type { TakePage } from "../api"
-import { count, quoted } from "../shell/words"
+import { count, quoted, takeText } from "../shell/words"
 import { gainsOf, makeMix, mixName, type Heard } from "./player/mix"
 import type { ServiceSound } from "./player/sound"
 
@@ -153,7 +153,7 @@ function Choices({
   return (
     <>
       <DialogHeader>
-        <DialogTitle>Download {quoted(take.name)}</DialogTitle>
+        <DialogTitle>Download {quoted(takeText(take))}</DialogTitle>
         <DialogDescription>Pick what you need. It goes to your Downloads folder.</DialogDescription>
       </DialogHeader>
       <div className="flex flex-col gap-2">
@@ -254,7 +254,7 @@ function TrackList({ take, kind, onBack, onDone }: { take: TakePage; kind: Kind;
     <>
       <DialogHeader>
         <DialogTitle>
-          Tracks of {quoted(take.name)} in {kind.toUpperCase()}
+          Tracks of {quoted(takeText(take))} in {kind.toUpperCase()}
         </DialogTitle>
         <DialogDescription>Each one is a file of its own.</DialogDescription>
       </DialogHeader>

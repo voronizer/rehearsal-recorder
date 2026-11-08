@@ -1,3 +1,4 @@
+import { fileURLToPath } from "node:url"
 import { cloudflareTest, readD1Migrations } from "@cloudflare/vitest-plugin"
 import { defineConfig } from "vitest/config"
 
@@ -26,7 +27,11 @@ export default defineConfig(async () => {
             testTimeout: 15_000,
           },
         },
-        { test: { name: "pages", include: ["src/**/*.test.ts"], environment: "node" } },
+        {
+          // The interface's code by its `@/`, as the pages import it (vite.config.ts).
+          resolve: { alias: { "@": fileURLToPath(new URL("../ui/src", import.meta.url)) } },
+          test: { name: "pages", include: ["src/**/*.test.ts"], environment: "node" },
+        },
       ],
     },
   }

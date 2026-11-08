@@ -8,7 +8,7 @@ import { cn } from "@/lib/utils"
 import { useFrame, useLabels, useMe, usePeople, useStar, type Label } from "../api"
 import { OPENS } from "../shell/parts"
 import { usePanel } from "../shell/panel"
-import { clock, quoted } from "../shell/words"
+import { clock, quoted, songOfName, takeText, type TakeNaming } from "../shell/words"
 import { useLookOf, usePlayer, useTime } from "./player/one"
 import { TakeMenu } from "./TakeMenu"
 
@@ -22,6 +22,7 @@ export type TakeLike = {
   stars: { member_id: string; initial: string; name: string }[]
   marks: { id: number; at: number; label_id: number; note: string; closed: boolean }[]
   song_id?: number | null
+  song?: { id: number } | null
   moved?: boolean
 }
 
@@ -35,12 +36,13 @@ export function useLabelOf() {
 export const colourCss = (l: Label) => `var(${labelLook(l.colour).cssVar})`
 
 /**
- * “Viasna 12” as РЭХА writes a take: the song's title, then the number a
- * shade lighter. `short`: the number alone. A long title gives way and the
- * number stays, so two takes of one song never read the same. `wrap`: a
- * heading's, the whole name over as many lines as it takes. A take moved to
- * another song here is the song's title alone until РЭХА numbers it, and a
- * heading says so.
+ * “Viasna #12”: the song's title, then # and the take's number a shade
+ * lighter. `short`, where the song is written beside it: “#12” alone.
+ * A long title gives way and the number stays, so two takes of one song
+ * never read the same. `wrap`: a heading's, the whole name over as many
+ * lines as it takes. A take with no song is its name, “Take 4”. A take moved
+ * to another song here is the song's title alone until РЭХА numbers it, and
+ * a heading says so.
  */
 export function TakeName({
   take,
@@ -48,26 +50,25 @@ export function TakeName({
   wrap,
   className,
 }: {
-  take: { name: string; number: number; moved?: boolean }
+  take: TakeNaming
   short?: boolean
   wrap?: boolean
   className?: string
 }) {
-  const end = ` ${take.number}`
-  const title = !take.moved && take.name.endsWith(end) ? take.name.slice(0, -end.length) : take.name
-  const split = title !== take.name
+  const song = songOfName(take)
+  const title = song ?? take.name
   if (wrap)
     return (
       <span className={cn("[overflow-wrap:anywhere]", className)}>
         {title}
-        {split && <span className="tnum text-muted-foreground"> {take.number}</span>}
+        {song !== null && <span className="tnum text-muted-foreground">{"\u00a0"}#{take.number}</span>}
         {take.moved && <span className="text-sm font-normal text-muted-foreground"> · number from РЭХА</span>}
       </span>
     )
   return (
     <span className={cn("inline-flex min-w-0 max-w-full items-baseline gap-1", className)}>
-      {!(short && split) && <span className="min-w-0 truncate">{title}</span>}
-      {split && <span className="tnum shrink-0 text-muted-foreground">{take.number}</span>}
+      {!(short && song !== null) && <span className="min-w-0 truncate">{title}</span>}
+      {song !== null && <span className="tnum shrink-0 text-muted-foreground">#{take.number}</span>}
     </span>
   )
 }
@@ -78,7 +79,7 @@ export function TakeLink({ take, short, className }: { take: TakeLike; short?: b
   return (
     <button
       type="button"
-      title={take.name}
+      title={takeText(take)}
       aria-label={take.name}
       onClick={() => open({ kind: "take", uid: take.uid })}
       className={cn("inline-flex min-w-0 max-w-full items-center gap-1.5", OPENS, className)}
