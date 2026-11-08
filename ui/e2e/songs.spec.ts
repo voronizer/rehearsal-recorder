@@ -827,6 +827,18 @@ test.describe("Songs in History", () => {
     await expect(head(page)).toContainText("Takes nobody named. Rename one to give it a song.")
   })
 
+  test("a bar on Not named shows the take's number, not its place in the evening", async ({
+    page,
+  }) => {
+    await openApp(page, { before: "window.__FULL_EVENING__ = true;" })
+    await openSongs(page)
+    await rows(page).and(page.locator("[data-song='Not named']")).click()
+    // Tuesday jam's third take is its first with no song.
+    const tuesday = rung(page, "/rec/old")
+    await expect(tuesday.getByText("#1", { exact: true })).toBeVisible()
+    await expect(tuesday.getByText("3", { exact: true })).toHaveCount(0)
+  })
+
   test("the name field's songs still only name the take", async ({ page }) => {
     await openApp(page)
     await startRehearsal(page)

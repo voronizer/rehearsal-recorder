@@ -1669,7 +1669,7 @@ def main():
     except ValueError as e:
         refused17 = str(e)
     ok("a place another take has now is refused, saying so with no number",
-       refused17 == "A newer take has its place now.")
+       refused17 == "A take recorded since has taken its place.")
     ok("and the take that has it is left as it is", lib.take(night17, 4)["name"] == "Sonca 1")
 
     record17 = lib.take_record(night17, 1)
@@ -1720,7 +1720,7 @@ def main():
     except ValueError as e:
         refused17 = str(e)
     ok("takes put back together go all or none: one whose place is taken keeps the others out",
-       refused17 == "A newer take has its place now."
+       refused17 == "A take recorded since has taken its place."
        and lib.take(night17, 2) is None and lib.take(night17, 3)["name"].startswith("Sonca"))
     lib.delete_take(night17, 3)
     lib.restore_takes([round_trip(record2), round_trip(record3)])
@@ -2390,6 +2390,10 @@ def main():
                 "INSERT INTO service_copy (take_id, uid, gen, pending_cut, due, removed, error, by_hand) "
                 "VALUES (:t, :u, 1, 0.0, 0, :rm, :e, 0)"),
                 {"t": ids22[key22], "u": uid22, "rm": removed22, "e": error22})
+        # On its way to the service's trash, under the name it had then.
+        for uid22, name22 in (("d1", "Take 7"), ("d2", "Polyn 3"), ("d3", "Take Five 2")):
+            c.execute(text("INSERT INTO service_delete (uid, name) VALUES (:u, :n)"),
+                      {"u": uid22, "n": name22})
     engine.dispose()
 
     engine = db.open_engine(rec22)
@@ -2412,6 +2416,9 @@ def main():
        due22["u1"] == 1)
     ok("but not one taken out of the service by hand, one it turned down, or a song's take",
        due22["u2"] == 0 and due22["u3"] == 0 and due22["u4"] == 0)
+    ok("a take on its way to the service's trash loses its place in the rehearsal from its name",
+       dict(rows19(rec22, "SELECT uid, name FROM service_delete"))
+       == {"d1": "Take", "d2": "Polyn 3", "d3": "Take Five 2"})
 
     lib = Library(rec22)
     early22_dir, late22_dir, now22 = rec22 / "Early", rec22 / "Late", rec22 / "Now"

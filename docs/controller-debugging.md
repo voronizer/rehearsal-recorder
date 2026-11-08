@@ -72,8 +72,10 @@ TAKE never borrows another song's take; SONG changes the selected song.
 ## Local preview and release selection
 
 New controllers negotiate remote capability8 and receive CC110=1 plus a bounded
-song/take catalog. Actual names/numbers are previewed locally; only release sends
-one generation-bound absolute Select Take/Select Song request. Existing relative
+song/take catalog. Actual names/numbers are previewed locally; a take's number is
+its number at its song (#3), never its place in the rehearsal, which stays the
+selection key behind the index. Only release sends one generation-bound absolute
+Select Take/Select Song request. Existing relative
 navigation remains supported for old peers/diagnostics. The worker rejects stale
 catalog identities before opening playback/changing the next song. Back/cancel
 never sends a selection. tests/test_controller_browse.py covers this protocol

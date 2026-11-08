@@ -43,6 +43,7 @@ class Controller:
         self._browse_identity = None
         self._browse_tag = 0
         self._browse_values = None
+        self._browse_shown = ()
         self._overflow = threading.Event()
         self._events = queue.Queue(maxsize=128)
         self._actions = queue.Queue(maxsize=1)
@@ -148,11 +149,14 @@ class Controller:
             if selected in items and selected not in window:
                 window[-1] = selected
             return tuple(window)
+        shown = dict(zip(takes, catalog["shown"]))
         songs = bounded(songs, catalog["selected_song"], MAX_SONGS)
         takes = bounded(takes, catalog["selected_take"], MAX_TAKES)
         song_index = songs.index(catalog["selected_song"]) if catalog["selected_song"] in songs else NONE
         take_index = takes.index(catalog["selected_take"]) if catalog["selected_take"] in takes else NONE
-        return {"identity": catalog["identity"], "values": (songs, takes, song_index, take_index)}
+        # A choice comes back as an index into values; the device shows shown.
+        return {"identity": catalog["identity"], "values": (songs, takes, song_index, take_index),
+                "shown": tuple(shown[t] for t in takes)}
 
     def snapshot(self, status_token=None):
         if self.handshake and self.output:
@@ -201,7 +205,8 @@ class Controller:
                     self._selection_serial=(self._selection_serial+1)&0xffffffff or 1
                     self._browse_tag=self._selection_serial
                     self._browse_values=catalog["values"] if catalog else ((),(),16383,16383)
-                    self._browse_frames=deque(catalog_frames(self._browse_tag,self._browse_values))
+                    self._browse_shown=catalog["shown"] if catalog else ()
+                    self._browse_frames=deque(catalog_frames(self._browse_tag,self._browse_values,self._browse_shown))
 
     def ack(self, token, result):
         trace("ack",token=token,result=result)

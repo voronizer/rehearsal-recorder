@@ -210,12 +210,15 @@ class Transport(ControlAPI):
         song = api._next_take()["song"]
         takes = [t for t in api._session_takes() if t.get("song") == song]
         numbers = tuple(t["take_number"] for t in takes)
+        # What the controller shows for each: the take's number at its song
+        # (or among the takes nobody named), never its place in the rehearsal.
+        shown = tuple(t.get("go") or 0 for t in takes)
         selected = self._selected_take()
         selected_number = selected["take_number"] if selected else None
         identity = self._identity((str(api._session["folder"]), song, songs,
                     tuple((t["take_number"], tuple(x["file"] for x in t["tracks"])) for t in takes),
                     selected_number))
-        return {"identity": identity, "songs": songs, "takes": numbers,
+        return {"identity": identity, "songs": songs, "takes": numbers, "shown": shown,
                 "selected_song": song, "selected_take": selected_number}
 
     def _select(self, action, target):

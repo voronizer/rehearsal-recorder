@@ -271,7 +271,9 @@ export type ControlState = Omit<TransportState, "state"> & {
   selection_reference: string | null
   playback_open: boolean
 }
-export type ControlCatalog = { identity: string; songs: string[]; takes: number[]; selected_song: string | null; selected_take: number | null }
+/** takes: each take's place in the rehearsal, to choose by; shown: its
+ *  number at its song, which the controller draws. */
+export type ControlCatalog = { identity: string; songs: string[]; takes: number[]; shown: number[]; selected_song: string | null; selected_take: number | null }
 
 export type TransportResult = Ok<{
   take_number?: number

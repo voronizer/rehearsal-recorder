@@ -42,6 +42,8 @@ def main():
                                  "take_name":"A long song"})[0].startswith("#2 A long")
             assert display_rows({"state":"recording", "take_number":4, "take_go":47,
                                  "take_name":"Take 47"})[0] == "#47 Take"
+            # The next take, before it is recorded, reads the same.
+            assert display_rows({"state":"ready", "next_take_name":"Take 47"})[0] == "#47 Take"
             frames = row_frames(0, "REC")
             assert frames[-1] == (103, (3+82+69+67)&127)
             assert api.start_rehearsal("MIDI remote", 0, SR, [{"name":"Guitar", "channel":1}])["ok"]

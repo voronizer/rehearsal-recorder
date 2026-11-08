@@ -212,6 +212,11 @@ test("the band renames a song and sets its tempo where it stands, by РЭХА's 
     body: { error: "Take #3 is what a take with no song is called." },
   })
   expect((await patch(`/api/songs/${dym.id}`, { title: "Take#3" }, ivan)).status).toBe(400)
+  // And the word alone, as a take moved out of its song is called.
+  expect(await answer(patch(`/api/songs/${dym.id}`, { title: "Take" }, ivan))).toEqual({
+    status: 400,
+    body: { error: "Take is what a take with no song is called." },
+  })
   // A title that only starts with the word is a song's.
   expect((await patch(`/api/songs/${dym.id}`, { title: "Take Five" }, ivan)).status).toBe(200)
   expect((await patch(`/api/songs/${dym.id}`, { title: "Dym nad vadoj" }, ivan)).status).toBe(200)

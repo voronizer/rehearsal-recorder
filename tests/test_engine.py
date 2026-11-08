@@ -10669,7 +10669,7 @@ def main():
     files_o = bytes71(dir_o)
     refused72 = q72.undo_trash(waiting_h)
     ok("one whose place another take has now says so, with no number, and leaves both as they are",
-       refused72 == {"ok": False, "error": "A newer take has its place now."}
+       refused72 == {"ok": False, "error": "A take recorded since has taken its place."}
        and waiting_h in entries71(rec72) and bytes71(dir_o) == files_o
        and q72._lib.take(thu72, 1)["name"].startswith("Ogon"))
     waiting_v = q72.delete_take(str(thu72), 2).get("undo")

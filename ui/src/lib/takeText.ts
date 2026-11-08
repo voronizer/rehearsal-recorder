@@ -14,7 +14,7 @@ import type { Take } from "@/lib/api"
 
 /** Between a title and its go: a no-break space, so the go never starts a
  *  line of its own. */
-export const GO_SPACE = " "
+export const GO_SPACE = "\u00a0"
 
 /** The title of a take with no song, drawn with its go as a song's is. */
 export const NO_SONG = "Take"

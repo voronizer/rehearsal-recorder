@@ -388,9 +388,13 @@ class ServiceSongs:
             if take is None:
                 continue
             sent = row["sent"] or {}
-            if (take.get("song") or None, take["name"]) != (sent.get("song"), sent.get("name")):
-                # Renamed here since it last went: РЭХА's change goes and
-                # wins, as with a song's title.
+            here = (take.get("song") or None, take["name"])
+            there = (sent.get("song"), sent.get("name"))
+            # Renamed here since it last went: РЭХА's change goes and wins, as
+            # with a song's title. A take with no song on both sides has only
+            # its number changed, which is no rename: migration 0015 numbered
+            # them afresh, and the band's move must not wait on that.
+            if here != there and (here[0], there[0]) != (None, None):
                 continue
             if out and not take.get("song"):
                 # No song here already: its name goes again, so the service

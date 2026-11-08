@@ -37,7 +37,7 @@ LABEL_NAME_MAX = 40
 REHEARSAL_GONE = "Its rehearsal is gone."
 TAKE_GONE = "Its take is gone."
 # A take's place in its rehearsal is held by a take recorded since.
-PLACE_TAKEN = "A newer take has its place now."
+PLACE_TAKEN = "A take recorded since has taken its place."
 
 # The tempo a song or a take may have, by time signature: whole clicks a minute,
 # quarters in x/4 and eighths in 6/8 (the metronome spec, "Words"), 30 to 300 and

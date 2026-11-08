@@ -510,6 +510,14 @@ def run(tmp, fake):
     drain()
     ok("a deletion whose undo time passed reaches the trash",
        fake.count(f"delete {uid9}") == 1 and fake.takes[uid9]["trashed"])
+    # Deleted before the upgrade gave takes with no song a go, its Undo passed after.
+    before = "00000000-0000-4000-8000-000000000015"
+    service().deleted([{"service_copy": {"uid": before, "removed": False},
+                        "take": {"id": None, "go": None, "take_number": 7}, "song": None}])
+    ok("one with no song and no go yet is “Take” in its line, not its place in the rehearsal",
+       "“Take” → band service trash" in [e["title"] for e in entries()])
+    drain()
+    ok("and goes to the trash all the same", fake.count(f"delete {before}") == 1)
 
     res = api.unshare_take(folder(), n1)
     drain()
@@ -1067,6 +1075,19 @@ def songs_both_ways(api, fake, service, drain, entries, keep, uid_of, take, fold
     ok("a take with no song here, taken out of its song there, only goes again, its go kept",
        not take(n_n)["song"] and named_n.startswith("Take ") and take(n_n)["name"] == named_n
        and uid_n not in fake.moved and fake.takes[uid_n]["name"] == named_n)
+
+    # Numbered afresh by migration 0015 before the check: what went last is
+    # its old name, its place in the rehearsal, and the band moved it.
+    n_o = keep("Take", band=["Drums"])
+    drain()
+    uid_o = uid_of(n_o)
+    row_o = lib.service_row_by_uid(uid_o)
+    old_name = f"Take {take(n_o)['go'] + 100}"
+    lib.change_service_row(row_o["take_id"], lambda c: {"sent": {**c["sent"], "name": old_name}})
+    fake.move_in_service(uid_o, "Rečka")
+    check()
+    ok("a take with no song whose number changed only by the upgrade takes the band's move",
+       take(n_o)["song"] == "Rečka" and uid_o not in fake.moved)
 
     made = api.add_song("Kalyhanka")
     api.add_song("Kalychanka")

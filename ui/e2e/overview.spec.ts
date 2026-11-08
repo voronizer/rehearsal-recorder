@@ -359,4 +359,12 @@ test.describe("the wave of a take", () => {
     await bar(overview, 3).click()
     await expect(row(overview, 3)).toHaveCount(0)
   })
+
+  test("a row's name is its song and number, with no place in the evening before it", async ({
+    page,
+  }) => {
+    const overview = await openEvening(page)
+    // Take 3 of the evening is Viasna's first.
+    await expect(bar(overview, 3)).toHaveText(/^Viasna\s#1$/)
+  })
 })

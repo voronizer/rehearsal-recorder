@@ -34,15 +34,15 @@ UI_DIST = PROJECT / "ui" / "dist"
 # The faked Python side the interface's tests run against, which the band
 # below is laid over.
 MOCK = (PROJECT / "ui" / "e2e" / "fake-bridge.js").read_text(encoding="utf-8")
+# The pictures show Windows, paths and all, whatever machine takes them: on a
+# Mac the interface would write ⌘ for Ctrl, and zoom only with ⌘ held.
+MOCK = "Object.defineProperty(Navigator.prototype, 'platform', {get: () => 'Win32'});\n" + MOCK
 
 
 def take_button(label):
     """A take's button by its name as the screen writes it, "Pałyn #2", starred
     or with a status after it, but never "Pałyn #20"."""
     return f"button[aria-label='{label}'], button[aria-label^='{label},']"
-# The pictures show Windows, paths and all, whatever machine takes them: on a
-# Mac the interface would write ⌘ for Ctrl, and zoom only with ⌘ held.
-MOCK = "Object.defineProperty(Navigator.prototype, 'platform', {get: () => 'Win32'});\n" + MOCK
 
 
 def drag_region(page, from_ratio, to_ratio):

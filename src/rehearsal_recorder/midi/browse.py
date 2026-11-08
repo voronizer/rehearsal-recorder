@@ -6,11 +6,12 @@ def number(value): return [(value >> (7*i)) & 127 for i in range(5)]
 def index(value): return [value & 127, (value >> 7) & 127]
 def frame(kind, data):
     return [(90,kind),(91,len(data)),*[(92,x) for x in data],(93,(kind+len(data)+sum(data))&127)]
-def catalog_frames(tag, catalog):
+def catalog_frames(tag, catalog, shown):
+    # shown: the number the device draws for each take, its number at its song.
     songs,takes,si,ti=catalog
     yield from frame(0,number(tag)+index(len(songs))+index(len(takes))+index(si)+index(ti))
     for i,title in enumerate(songs):yield from frame(1,number(tag)+index(i)+list(ascii_row(title).encode('ascii')))
-    for i,take in enumerate(takes):yield from frame(2,number(tag)+index(i)+number(take))
+    for i,take in enumerate(shown):yield from frame(2,number(tag)+index(i)+number(take))
     yield from frame(3,number(tag))
 
 class Frame:

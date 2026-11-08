@@ -21,10 +21,18 @@ service are marked due, so their new names go there when the app opens; a
 take taken out of the service by hand, or one it turned down, is left as
 it is, as a rename leaves it (BandService.edited).
 
+A take on its way to the service's trash keeps the name it had for its
+line in the list of background work. "Take 7" there was its place in the
+rehearsal, so it becomes plain "Take".
+
+A song already titled "Take" or "Take 3", which the rule before allowed, is
+left as it is; typed again, such a title now means no song.
+
 Going back drops the table. An app from before reads a take with no song by
 its take number again and does not look at its go. Coming back up numbers
 the takes with no song afresh, in the same order.
 """
+import re
 from typing import Sequence, Union
 
 import sqlalchemy as sa
@@ -62,6 +70,11 @@ def upgrade() -> None:
         ))
     bind.execute(sa.text("INSERT INTO counter (id, last_unnamed_go) VALUES (1, :last)"),
                  {"last": len(takes)})
+    old_names = [uid for uid, name in bind.execute(sa.text("SELECT uid, name FROM service_delete"))
+                 if re.fullmatch(r"Take \d+", name or "")]
+    if old_names:
+        bind.execute(sa.text("UPDATE service_delete SET name = 'Take' WHERE uid = :uid"),
+                     [{"uid": uid} for uid in old_names])
 
 
 def downgrade() -> None:

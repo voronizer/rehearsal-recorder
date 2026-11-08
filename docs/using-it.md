@@ -340,8 +340,8 @@ The take's name is at the top: the song and its number after a #,
 “Viasna #2”. A long name takes a second line, and one longer than that is
 cut with its number kept; point at it to read it whole. The small line over
 it gives the rehearsal's name, “Thursday”; a long one is cut, and shows whole
-when you point at it. A take nobody named says “Take #7”. How long the take
-ran is in the player, “0:00 / 2:31”.
+when you point at it. A take nobody named says “Take #7”, in grey. How long
+the take ran is in the player, “0:00 / 2:31”.
 
 At the right of the name are the song's takes tonight as columns, the last
 ten of them. Each is as tall as that take ran, with the take's number under
@@ -524,7 +524,9 @@ there. A title can end in a number, like “Opus 5”, as long as no song is
 called “Opus”; its takes are “Opus 5 #1”, “Opus 5 #2”, and the # keeps the
 take's number apart from the title. A take nobody named is called “Take”
 with a number of its own, “Take #4”, counted across every rehearsal the way
-a song's takes are. It is not listed as a song. The same goes for a
+a song's takes are. It is not listed as a song. Typing “Take”, “Take 3” or
+“Take #3” leaves a take with no song, and the number is the app's here too.
+The same goes for a
 recovered take you did not name (see [The app closed during
 a take](#the-app-closed-during-a-take)). On the rehearsal screen and in
 History, the songs are listed under such a take, so one click names it.
@@ -558,9 +560,9 @@ background says so (see [Following the copies](#following-the-copies)).
 Takes in the band service get the new name too, and so does the song there
 (see [Songs on both sides](#songs-on-both-sides)). A title that differs only in
 capitals respells the song. Here a number at the
-end is part of the title: “Opus 5” is the whole of it. “Take 4” and
-“Take #4” cannot be a song's title, since that is what a take with no song
-is called.
+end is part of the title: “Opus 5” is the whole of it. “Take”, “Take 4”
+and “Take #4” cannot be a song's title, since that is what a take with no
+song is called.
 
 The same song typed two ways, “Palyn” one night and “Pałyn” the next, is two
 songs until you merge them. Rename song lists the other songs under the
@@ -770,8 +772,7 @@ background: “1 working · 64%” while a copy is made, then “Done”, or
 that failed. The same list shows takes being cropped, saved or recovered.
 
 Sending a take again replaces its earlier copy. It never replaces another
-take's: where a copy would land on one (two takes nobody named, in two
-rehearsals whose folders have the same name), it gets “ (2)” after its name.
+take's: where a copy would land on one, it gets “ (2)” after its name.
 **Remove from the cloud**, in the dialog the cloud button opens, deletes the
 copies but not the recording.
 

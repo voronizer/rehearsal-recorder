@@ -16,10 +16,11 @@ opening.
 - **A take has one number.** The rehearsal screen no longer shows a take's
   place in the evening, and the button is just **Record**. A take nobody
   named is counted the way a song's takes are, across every rehearsal:
-  “Take #47”, in РЭХА, in the band service and in its messages. Folders on
-  disk still start with the take's place in the rehearsal, “03 - Pałyn 3”,
-  so they sort in the order you played; the folders of takes nobody named
-  get their new names.
+  “Take #47”, in РЭХА, in the band service and in its messages. The
+  controller's display shows a take by this number too. Folders on disk
+  still start with the take's place in the rehearsal, “03 - Pałyn 3”, so
+  they sort in the order you played; the folders of takes nobody named get
+  their new names.
 - **The band service's panel covers less of the page.** A song's name opens
   the song's page, and **New song**, **Statuses** and **Labels** open at the
   top of **Songs** and **Marks**. On a take's page its marks sit in a strip

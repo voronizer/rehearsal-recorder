@@ -268,8 +268,8 @@ A song's take numbers go on from one rehearsal to the next: Pałyn #17 is one
 take, wherever you played it.
 
 The number counts the song's takes across every rehearsal, and deleting a
-take does not free its number. A take nobody named is counted the same way,
-across every rehearsal: “Take #4”.
+take does not free its number. A take nobody named is counted the same way:
+“Take #4”.
 
 ### The cloud copy keeps up. {#cloud-follows}
 

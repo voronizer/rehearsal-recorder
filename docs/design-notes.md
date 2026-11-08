@@ -299,13 +299,13 @@ out again.
 word at first ("4 goes", "Every go at Pałyn"), but a musician calls an attempt
 at a song a take, so the interface now says take everywhere: "4 takes",
 "Every take of Pałyn", the number beside the title as before. The code and
-the database keep `go` for that number, so nothing was migrated. A take with
-no song was called by its number in the evening, "Take 7", until migration
-0015 counted those takes the way a song's are, across the library: "Take 47",
-read "Take #47". The evening number is not shown anywhere now; it orders a
-rehearsal's takes and starts their folder names. So a song's
-take is always said with the song: "Pałyn 3", or "Pałyn, take 3" where a
-screen reader names a tab in the strip, never a bare "take 3".
+the database keep `go` for that number, so nothing was migrated. A song's
+take is always said with the song, "Pałyn #3", screen readers included,
+never a bare "take 3". A take with no song was called by its number in the
+evening, "Take 7", until migration 0015 counted those takes the way a song's
+are, across the library: "Take 47", read "Take #47". The evening number is
+not shown anywhere now; it orders a rehearsal's takes and starts their
+folder names.
 
 **Names are put right in the background.** A take's folder and cloud copy
 are named after it, so when its name changes without them (as when
