@@ -132,13 +132,15 @@ export type MissingNotes = {
 
 /** A take already saved to disk. */
 export type Take = {
+  /** Its place in the rehearsal, in the order played: the key the app finds
+   *  it by, never shown to a person. */
   take_number: number
   name: string
   /** The song this take is a go at, or null for a take nobody named. Its
-   *  name ("Polyn 3") follows from the two. */
+   *  name ("Polyn 3", or "Take 47" with no song) follows from the two. */
   song?: string | null
-  /** Which go at the song this is, counted across the library; null with no
-   *  song. */
+  /** Which go at the song this is, counted across the library. Takes with
+   *  no song are counted the same way, as if "Take" were a song. */
   go?: number | null
   /** ★: somebody starred this take as one worth coming back to. A song can
    *  have several, and a take with no song can have one. */
@@ -347,7 +349,8 @@ export type SessionState =
       songs: Song[]
       next_take_number: number
       next_take_name: string
-      /** The go beside the name field's title; null with no song. */
+      /** The go beside the name field's title: a song's, or the next go of
+       *  a take with no song. */
       next_take_go?: number | null
       /** What the next take would be called without a name picked for it. */
       next_take_default?: string

@@ -16,8 +16,9 @@ import { cn } from "@/lib/utils"
  * Its songs wrap under it by the room they have, and buttons of different
  * widths gave the songs different room: a list that took two rows on one
  * screen fitted in one on the next, and the field dropped a row. 26rem
- * holds Record take 100 in the tests' browser. (The rehearsal screen has
- * its Next take field in a panel of its own since issue #12 step 6.)
+ * held the rehearsal screen's buttons in the tests' browser, Record still
+ * saying the take's number then, up to 100. (That screen has its Next take
+ * field in a panel of its own since issue #12 step 6.)
  *
  * Short of room, the row stays one row and gives things up, least needed
  * first (owner's pick B, 2026-11-02): in the smallest window at 115 % the

@@ -26,6 +26,8 @@ import {
 } from "@/lib/api"
 import { takeSentence } from "@/lib/backing"
 import { formatClock, formatDate, formatMMSS } from "@/lib/format"
+import { unnamedGo } from "@/lib/goes"
+import { NO_SONG } from "@/lib/takeText"
 import { fallBack, isSilent, watchStep, type TrackWatch } from "@/lib/levels"
 import { accentOf } from "@/lib/metronome"
 import { recordsAudio, recordsNotes } from "@/lib/midi"
@@ -109,8 +111,8 @@ const ofTheTake = (s: MetronomeState | null): s is MetronomeState =>
  * header (Q1, «Статус у Stop»): the take, what is being recorded, big, over a
  * big clock, and how far into the song the band is against the last go at
  * it; then a tile per track that lights up with its level and turns red if
- * it clips. Recording, the take's number and the disk line are in the
- * footer, just left of Stop, and the metronome's row at its far left, as on
+ * it clips. Recording and the disk line are in the footer, just left of
+ * Stop, and the metronome's row at its far left, as on
  * the rehearsal screen (q14, «Слева, как было»). Running out of disk is said
  * where the free space always is.
  *
@@ -122,7 +124,6 @@ const ofTheTake = (s: MetronomeState | null): s is MetronomeState =>
  * alone a tile of its own. Their notes are polled with the levels.
  */
 export function Recording({
-  takeNumber,
   takeName,
   takeGo,
   tracks,
@@ -130,7 +131,7 @@ export function Recording({
   onStopped,
   onSaveFailed,
 }: {
-  takeNumber: number
+  /** What the name field held at Record: a song's title, or "Take 49". */
   takeName: string
   takeGo: number | null
   tracks: PlacedTrack[]
@@ -294,9 +295,11 @@ export function Recording({
 
   useSpacebar(stop, !stopping)
 
-  // A take nobody named is "Take 3" big, the sign that a name was forgotten,
-  // and the number by Stop would only say it again.
-  const named = takeName !== `Take ${takeNumber}`
+  // A take nobody named is "Take #49" big, the sign that a name was
+  // forgotten: Python calls it "Take 49", its go the number in that name.
+  const unnamed = unnamedGo(takeName)
+  const title = unnamed !== null ? NO_SONG : takeName
+  const go = takeGo ?? unnamed
 
   // Watch that the interface is still there and the disk is not filling up.
   useEffect(() => {
@@ -455,7 +458,6 @@ export function Recording({
           corner draws the eye from across the room. */}
       <span className="flex size-2.5 shrink-0 rounded-full bg-destructive" />
       <span className="font-semibold text-destructive">Recording</span>
-      {named && <span className="text-muted-foreground">Take {takeNumber}</span>}
     </div>
   )
 
@@ -554,7 +556,7 @@ export function Recording({
               // design-ok(px-text): half the clock's size, so it follows the window's height too
               style={{ fontSize: `calc(${CLOCK} / 2)` }}
             >
-              <GoTitle title={takeName} go={takeGo} cut lines={oneLine ? 1 : 2} />
+              <GoTitle title={title} go={go} cut lines={oneLine ? 1 : 2} />
             </h1>
             {/* The clock grows to the left. Its box is as wide as "0:00",
                 centred under the name, and the figures stand at its right

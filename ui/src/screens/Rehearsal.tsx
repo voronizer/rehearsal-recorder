@@ -61,7 +61,7 @@ export function Rehearsal({
   onChanged,
 }: {
   session: Extract<SessionState, { active: true }>
-  onStartTake: (takeNumber: number, takeName: string, takeGo: number | null) => void
+  onStartTake: (takeName: string, takeGo: number | null) => void
   controlState?: ControlState | null
   onFinished: () => void
   /** Reads the session again, and answers it as it now is. */
@@ -263,7 +263,7 @@ export function Rehearsal({
     }
     const name = res.take_name ?? nextNameRef.current
     const known = res.take_go ?? knownGoRef.current
-    onStartTake(res.take_number, name, known !== undefined ? known : goFor(name, nextChoices))
+    onStartTake(name, known !== undefined ? known : goFor(name, nextChoices))
   }
 
   // With a take in hand, Space plays it back rather than starting a new one;
@@ -577,22 +577,13 @@ export function Rehearsal({
               onClick={startTake}
               disabled={busy}
               aria-keyshortcuts={spaceKeys && !inHand ? "Space" : undefined}
+              // The take's place in the rehearsal is not for a person to
+              // read: the Next take field says what the take will be. The
+              // tests wait on it here for the take they mean to record.
+              data-next-take={session.next_take_number}
             >
               <Circle className="fill-current" />
-              <span>
-                Record take{" "}
-                {/* Two digits wide whatever the number, so that take 10 moves
-                    nothing (B4): a hidden 00 holds the room, in the same
-                    figures. 2ch would be short of it, as a zero in the text's
-                    own figures is narrower than a tabular one. The button
-                    grows once, at 100. */}
-                <span className="tnum inline-grid">
-                  <span className="col-start-1 row-start-1">{session.next_take_number}</span>
-                  <span aria-hidden className="invisible col-start-1 row-start-1">
-                    00
-                  </span>
-                </span>
-              </span>
+              Record
               {/* With a take in hand Space plays it, and the key is on Play;
                   the chip keeps its room. */}
               {spaceKeys && (
@@ -623,7 +614,7 @@ export function Rehearsal({
           onStar={starTake}
           cloudStates={sendStates}
           sendTo={sendTo}
-          emptyHint={`Press Record take${spaceKeys ? " or Space" : ""}. Each take shows up here, ready to play.`}
+          emptyHint={`Press Record${spaceKeys ? " or Space" : ""}. Each take shows up here, ready to play.`}
         />
         )}
 

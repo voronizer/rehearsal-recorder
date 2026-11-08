@@ -2,7 +2,7 @@ import { useCallback, useLayoutEffect, useRef, useState, type ReactNode } from "
 import { flushSync } from "react-dom"
 import { WholeTip } from "@/components/ui/whole"
 import type { Take } from "@/lib/api"
-import { GO_SPACE, goMark } from "@/lib/takeText"
+import { GO_SPACE, goMark, takeTitle } from "@/lib/takeText"
 import { cn } from "@/lib/utils"
 
 /**
@@ -258,10 +258,11 @@ export function GoTitle({
   )
 }
 
-/** A take as it is shown: its song and go, or "Take 3" for a take nobody
- *  named. Plain text, such as a dialog's title or a notice, says the same
- *  through takeText; an aria-label keeps take.name. With `cut`, see GoTitle;
- *  a name with no song is cut as a whole. */
+/** A take as it is shown: its song and go, or "Take" and its go for a take
+ *  nobody named, "Take #47". Plain text, such as a dialog's title, a notice
+ *  or a button's label, says the same through takeText. With `cut`, see
+ *  GoTitle; a take with no song and no go known is its name, cut as a
+ *  whole. */
 export function TakeTitle({
   take,
   cut = false,
@@ -269,6 +270,6 @@ export function TakeTitle({
   take: Pick<Take, "name" | "song" | "go">
   cut?: boolean
 }) {
-  if (take.song) return <GoTitle title={take.song} go={take.go} cut={cut} />
+  if (take.song || take.go != null) return <GoTitle title={takeTitle(take)} go={take.go} cut={cut} />
   return cut ? <span className="block truncate">{take.name}</span> : <>{take.name}</>
 }

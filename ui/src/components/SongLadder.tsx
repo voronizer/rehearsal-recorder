@@ -188,7 +188,6 @@ function RungRow({
                     take={take}
                     missing={rung.missing}
                     longest={longest}
-                    unnamed={unnamed}
                     labels={labels}
                   />
                 ))}
@@ -236,20 +235,18 @@ function RungRow({
 }
 
 /** A take as a bar on its rung: as long as it ran against the song's
- *  longest take, with its marks as ticks and its number, "#3" for a go at
- *  the song and the take's own for one nobody named. Never under 6 px:
- *  its least, 0.375rem, is 6 px at 100 % but 5.4 px at 90 %. */
+ *  longest take, with its marks as ticks and its go, "#3", which a take
+ *  nobody named has as a song's take does. Never under 6 px: its least,
+ *  0.375rem, is 6 px at 100 % but 5.4 px at 90 %. */
 function Bar({
   take,
   missing,
   longest,
-  unnamed,
   labels,
 }: {
   take: Take
   missing: boolean
   longest: number
-  unnamed: boolean
   labels: Label[]
 }) {
   const length = take.duration_sec || 0
@@ -275,7 +272,7 @@ function Bar({
       {/* On the bar's own fill from its left edge (TAKE_FILLS), so a mark at
           the very start is not drawn against the number as a "|2". */}
       <span className="tnum relative flex items-center self-stretch pr-1 pl-1.5 text-xs text-muted-foreground [background:inherit]">
-        {unnamed || take.go == null ? take.take_number : goMark(take.go)}
+        {take.go != null && goMark(take.go)}
       </span>
     </span>
   )

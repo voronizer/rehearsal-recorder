@@ -434,9 +434,6 @@ export function TakeRow({
               data-starred={starred || undefined}
               className="h-auto max-w-full shrink-0 basis-full justify-start gap-2 rounded-sm p-0 text-left font-normal whitespace-nowrap hover:bg-transparent disabled:opacity-100 dark:hover:bg-transparent"
             >
-              <span className="tnum text-xs text-muted-foreground">
-                {String(take.take_number).padStart(2, "0")}
-              </span>
               <span
                 className={cn(
                   "flex min-w-0 text-sm",

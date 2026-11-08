@@ -24,6 +24,7 @@ import {
 } from "@/lib/api"
 import { nameWithGo } from "@/lib/goes"
 import { takeFacts } from "@/lib/takeFacts"
+import { NO_SONG } from "@/lib/takeText"
 import { dismiss } from "@/lib/notices"
 import { useKeysOn } from "@/lib/keys"
 import { endedByPython, offerCropUndo } from "@/lib/trash"
@@ -84,7 +85,7 @@ export function Review({
 }) {
   // A new take is usually another go at the same song, so the name carries
   // over from the previous one with the counter bumped.
-  const firstName = take.suggested_name ?? `Take ${take.take_number}`
+  const firstName = take.suggested_name ?? take.default_name ?? NO_SONG
   const [name, setName] = useState(kept?.name ?? firstName)
   // And when the band has moved on, the song they moved to is a click, in
   // Rename take.
@@ -168,7 +169,7 @@ export function Review({
   const [spare, setSpare] = useState(0)
 
   // The take as the screen calls it, with its go, for what a notice says.
-  const title = nameWithGo(name, songChoices) || take.default_name || `Take ${take.take_number}`
+  const title = nameWithGo(name, songChoices) || nameWithGo(take.default_name ?? "", null) || NO_SONG
 
   const addMarker = (at: number) => {
     const rounded = Math.round(at * 100) / 100
@@ -357,16 +358,17 @@ export function Review({
       // The other screens' air: 32 round the screen.
       air
       className="px-8 [--screen-pad-y:2rem]"
-      // The subtitle never sizes the title's box, so only the title makes
-      // the columns give way: contained, it asks for no width of its own.
-      // It is as wide as the title, and runs on into the room the columns
-      // leave (TakeFigures' onRoom); a long rehearsal name is cut where that
-      // ends, and whole on hover.
+      // The subtitle is the rehearsal's name: the take's place in it is not
+      // for a person to read. It never sizes the title's box, so only the
+      // title makes the columns give way: contained, it asks for no width of
+      // its own. It is as wide as the title, and runs on into the room the
+      // columns leave (TakeFigures' onRoom); a long rehearsal name is cut
+      // where that ends, and whole on hover.
       subtitle={
         <span className="block [contain:inline-size]">
           <Whole
             data-subtitle
-            text={`Take ${take.take_number} · ${rehearsalName}`}
+            text={rehearsalName}
             className="truncate"
             style={{ width: `calc(100% + ${spare}px)` }}
           />
@@ -380,7 +382,7 @@ export function Review({
         <TakeName
           facts={facts}
           name={name}
-          fallback={take.default_name ?? `Take ${take.take_number}`}
+          fallback={take.default_name ?? firstName}
           choices={songChoices}
           onRename={setName}
           figures={columnsGone && facts.columns.length > 0 ? facts.columnsText : undefined}

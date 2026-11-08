@@ -1,12 +1,22 @@
 import type { SongChoice, SongChoices } from "@/lib/api"
-import { takeText } from "@/lib/takeText"
+import { NO_SONG, takeText } from "@/lib/takeText"
 
-/** A take nobody named, as Python names it: never a song's title. */
-export const UNNAMED = /^Take \d+$/
+/** A take nobody named, as Python names it ("Take 47") or as the app writes
+ *  it ("Take #47"): never a song's title. Python reads it the same way
+ *  (names.UNNAMED_TAKE). */
+export const UNNAMED = /^Take(?:\s*#\s*|\s+)(\d+)$/
 /** A number typed after a title, out of habit or as the app writes a take:
  *  "Polyn 3", "Polyn #3", "Polyn#3". Python reads it the same way
  *  (names.split_go). */
 const TYPED_GO = /^(.*?)(?:\s*#\s*|\s+)(\d+)$/
+
+/** The go in the name of a take nobody named: 47 for "Take 47" or "Take
+ *  #47", null for any other name. Python names such a take by its go, so
+ *  the number in a name it gave is that go. */
+export function unnamedGo(text: string): number | null {
+  const m = UNNAMED.exec(text.trim())
+  return m ? Number(m[1]) : null
+}
 
 /** What was typed, less a number after it ("Polyn #3" is "Polyn"), trimmed. */
 export function withoutGo(text: string): string {
@@ -70,12 +80,15 @@ export function goFor(text: string, choices: SongChoices | null): number | null 
 /**
  * A take as the screen after it calls it while its name field holds
  * `text`: its song and the go it will be, "Pałyn #3", as a notice names a
- * take once it is kept (takeText); the text alone for a take nobody named,
- * or while the choices have not arrived. The header's title there
- * (TakeName, in components/TakeSummary) draws the same two parts.
+ * take once it is kept (takeText); "Take #48" for a take nobody named, by
+ * the number in the name Python gave it (unnamedGo); the text alone while
+ * the choices have not arrived. The header's title there (TakeName, in
+ * components/TakeSummary) draws the same two parts.
  */
 export function nameWithGo(text: string, choices: SongChoices | null): string {
   const typed = text.trim()
+  const unnamed = unnamedGo(typed)
+  if (unnamed !== null) return takeText({ name: typed, song: NO_SONG, go: unnamed })
   const go = goFor(typed, choices)
   if (go === null) return typed
   return takeText({ name: typed, song: songFor(typed, choices)?.choice.song ?? typed, go })

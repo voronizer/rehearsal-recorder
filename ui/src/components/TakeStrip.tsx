@@ -21,6 +21,7 @@ import { useKey } from "@/hooks/useSpacebar"
 import { useRowEdges } from "@/hooks/useRowEdges"
 import { lastPlayed, neighbour, songTabs, type SongTab as Tab } from "@/lib/songTabs"
 import { isUp, sendButton, sendStatus, type SendState } from "@/lib/sending"
+import { takeText } from "@/lib/takeText"
 import type { SendTo, SongGo, Take } from "@/lib/api"
 
 /**
@@ -51,11 +52,11 @@ export function takeCloudStatus(
   return sendStatus(take, cloudState, place)
 }
 
-/** "Take 2 Polyn 2", ", starred" when it is, then the status if there is one.
- *  The status has to come after the "Take N name" the tests and screen
- *  readers both key off, not replace it. */
+/** The take as the screen writes it, "Polyn #2" or "Take #47", ", starred"
+ *  when it is, then the status if there is one. The status comes after the
+ *  name the tests and screen readers both key off, never in its place. */
 export function takeButtonLabel(take: Take, status: string | null): string {
-  const base = `Take ${take.take_number} ${take.name}${take.starred ? ", starred" : ""}`
+  const base = `${takeText(take)}${take.starred ? ", starred" : ""}`
   return status ? `${base}, ${status.charAt(0).toLowerCase()}${status.slice(1)}` : base
 }
 

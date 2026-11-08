@@ -33,7 +33,7 @@ export const OnAButton: Story = {
         <Kbd aria-hidden>Space</Kbd>
       </Button>
       <Button size="footer" variant="destructive" aria-keyshortcuts="Space">
-        Record take
+        Record
         <Kbd aria-hidden>Space</Kbd>
       </Button>
       <Button size="footer-aside" aria-keyshortcuts="Space">

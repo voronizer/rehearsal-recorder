@@ -5,9 +5,9 @@ import { Button } from "@/components/ui/button"
 import { Popover, PopoverAnchor, PopoverContent } from "@/components/ui/popover"
 import { Whole } from "@/components/ui/whole"
 import type { SongChoices } from "@/lib/api"
-import { goFor, songFor, songNamed, withoutGo } from "@/lib/goes"
+import { goFor, nameWithGo, songFor, songNamed, unnamedGo, withoutGo } from "@/lib/goes"
 import { forgetSongName } from "@/lib/songNames"
-import { GO_SPACE, goMark } from "@/lib/takeText"
+import { GO_SPACE, NO_SONG, goMark } from "@/lib/takeText"
 import { cn } from "@/lib/utils"
 
 /** The choices with one old name taken out of them: forgotten, until
@@ -153,12 +153,23 @@ export function TakeNameField({
   // is taken out of them until Python's fresh list replaces them.
   const [forgot, setForgot] = useState<{ name: string; from: SongChoices | null } | null>(null)
   const known = forgot && forgot.from === choices ? without(choices, forgot.name) : choices
-  const shown = draft ?? value
+  // A take nobody named is "Take 49" to Python and "Take #49" on screen: the
+  // field holds "Take", and 49 is drawn after it as a song's go is. "Take"
+  // left as it is stays that name; typed anywhere else it is a song's title.
+  const unnamed = goes ? unnamedGo(value) : null
+  const atRest = (name: string) => (goes && unnamedGo(name) !== null ? NO_SONG : name)
+  const isUnnamed = (text: string) =>
+    unnamed !== null && text.trim().toLocaleLowerCase() === NO_SONG.toLocaleLowerCase()
+  // A name as ✕ says it: "Take #49" for one nobody named.
+  const said = (name: string) => (goes ? nameWithGo(name, null) : name)
+  const shown = draft ?? atRest(value)
   const go = !goes
     ? null
-    : known === null && draft === null && knownGo !== undefined
-      ? knownGo
-      : goFor(shown, known)
+    : isUnnamed(shown)
+      ? unnamed
+      : known === null && draft === null && knownGo !== undefined
+        ? knownGo
+        : goFor(shown, known)
   // The song an old name in the field is now. A title is taken whole: in
   // Rename song, "Palyn 5" is a title of its own, not Palyn.
   const via = goes ? songFor(shown, known) : songNamed(shown, known)
@@ -167,7 +178,11 @@ export function TakeNameField({
   // one and has its line under them: filling again on leaving would move
   // what is under the area, or the buttons beside it, under the pointer.
   const holding = startedAs !== null || old !== null
-  const named = (text: string) => text.trim() || fallback
+  const named = (text: string) => {
+    const name = text.trim()
+    if (!name) return fallback
+    return isUnnamed(name) ? value : name
+  }
   const edit = (text: string | null) => {
     typed.current = text
     setDraft(text)
@@ -181,15 +196,15 @@ export function TakeNameField({
   // or saves rather than typing a space. What was typed is dropped first, so
   // onBlur, which runs inside blur(), finds nothing of it to send. Given
   // `onEnter`, the name goes into the field and stays there to type on;
-  // `startedAs` moves with it, so a fallback that is not itself a song (e.g.
-  // "Take 4") does not narrow the pills by its own text until the field is
-  // left and refocused.
+  // `startedAs` moves with it, so a fallback that is not itself a song (the
+  // "Take" of a take nobody named) does not narrow the pills by its own text
+  // until the field is left and refocused.
   const put = (name: string) => {
     if (typed.current === null) {
       commit(name)
     } else if (onEnter) {
-      edit(name)
-      setStartedAs(name)
+      edit(atRest(name))
+      setStartedAs(atRest(name))
       commit(name)
     } else {
       typed.current = null
@@ -252,8 +267,8 @@ export function TakeNameField({
       wholeOnClick.current = false
     },
     onFocus: () => {
-      edit(value)
-      setStartedAs(value)
+      edit(atRest(value))
+      setStartedAs(atRest(value))
       setHeld(songsArea.current?.offsetHeight ?? null)
     },
     onBlur: () => {
@@ -372,7 +387,7 @@ export function TakeNameField({
             type="button"
             variant="ghost"
             size="icon-row"
-            aria-label={`Put back “${fallback}”`}
+            aria-label={`Put back “${said(fallback)}”`}
             // Takes no focus of its own, as the songs take none: `put` says
             // whether the field keeps it.
             onMouseDown={(e) => e.preventDefault()}

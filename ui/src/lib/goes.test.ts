@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { goFor, nameWithGo, songFor, songNamed, withoutGo } from "./goes"
+import { goFor, nameWithGo, songFor, songNamed, unnamedGo, withoutGo } from "./goes"
 
 const choices = {
   here: [{ song: "Polyn", go: 4, last_take: 3 }],
@@ -29,6 +29,7 @@ describe("goFor", () => {
   })
   it("is nothing for a take nobody named", () => {
     expect(goFor("Take 4", choices)).toBeNull()
+    expect(goFor("Take #4", choices)).toBeNull()
     expect(goFor("  ", choices)).toBeNull()
   })
 })
@@ -40,9 +41,25 @@ describe("nameWithGo", () => {
     expect(nameWithGo("Polyn #7", choices)).toBe("Polyn #4")
     expect(nameWithGo("Vesna", choices)).toBe("Vesna #1")
   })
-  it("is the name alone for a take nobody named, or before the choices", () => {
-    expect(nameWithGo("Take 4", choices)).toBe("Take 4")
+  it("is Take and the go in its name for a take nobody named, choices or not", () => {
+    expect(nameWithGo("Take 47", choices)).toBe("Take #47")
+    expect(nameWithGo("Take #47", null)).toBe("Take #47")
+  })
+  it("is the name alone before the choices", () => {
     expect(nameWithGo("Polyn", null)).toBe("Polyn")
+  })
+})
+
+describe("unnamedGo", () => {
+  it("is the number in the name of a take nobody named, written either way", () => {
+    expect(unnamedGo("Take 47")).toBe(47)
+    expect(unnamedGo("Take #47")).toBe(47)
+    expect(unnamedGo(" Take#47 ")).toBe(47)
+  })
+  it("is nothing for a song's name or the word alone", () => {
+    expect(unnamedGo("Polyn 3")).toBeNull()
+    expect(unnamedGo("Take")).toBeNull()
+    expect(unnamedGo("Takes 3")).toBeNull()
   })
 })
 
