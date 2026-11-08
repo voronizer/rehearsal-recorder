@@ -41,14 +41,17 @@ test("the marks switch counts to do, done and all", async ({ page }) => {
 test("a label renamed shows on its marks", async ({ page }) => {
   await page.goto("/marks")
   await page.getByRole("button", { name: "Labels" }).click()
-  const panel = page.getByLabel("Panel")
+  // At the top of Marks, not in the panel.
+  await expect(page).toHaveURL(/\/marks\?edit=labels$/)
+  await expect(page.getByLabel("Panel")).toHaveCount(0)
+  const main = page.getByRole("main")
   // РЭХА's four, then the two its marks brought.
-  const names = panel.getByRole("textbox", { name: "Name" })
+  const names = main.getByRole("textbox", { name: "Name" })
   await expect(names).toHaveCount(6)
   await expect(names.nth(5)).toHaveValue("Good")
   await names.nth(5).fill("Great")
   await names.nth(5).press("Enter")
-  await expect(panel.getByRole("button", { name: "Delete “Great”" })).toBeVisible()
+  await expect(main.getByRole("button", { name: "Delete “Great”" })).toBeVisible()
 
   // The mark from РЭХА with no note shows its label's name, on its chip in РЭХА's player too.
   await page.goto(`/takes/${band().takes["Viasna 12"]}`)
@@ -58,16 +61,17 @@ test("a label renamed shows on its marks", async ({ page }) => {
 test("a label dragged by its grip to the top is the first", async ({ page }) => {
   await page.goto("/marks")
   await page.getByRole("button", { name: "Labels" }).click()
-  const panel = page.getByLabel("Panel")
-  const names = panel.getByRole("textbox", { name: "Name" })
+  const main = page.getByRole("main")
+  const names = main.getByRole("textbox", { name: "Name" })
   await expect(names.first()).toHaveValue("Note")
   const target = (await names.first().boundingBox())!
-  await panel.getByRole("button", { name: "Move Do again" }).hover()
+  await main.getByRole("button", { name: "Move Do again" }).hover()
   await page.mouse.down()
   await page.mouse.move(target.x + 20, target.y + 2, { steps: 12 })
   await page.mouse.up()
   await expect.poll(() => names.evaluateAll((els) => els.slice(0, 2).map((e) => (e as HTMLInputElement).value))).toEqual(["Do again", "Note"])
-  // The panel is in the page's address: a reload keeps it open.
+  // The editor is in the page's address: a reload keeps it open.
   await page.reload()
+  await expect(page).toHaveURL(/\?edit=labels$/)
   await expect(names.first()).toHaveValue("Do again")
 })

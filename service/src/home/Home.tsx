@@ -5,20 +5,18 @@ import { cn } from "@/lib/utils"
 import { useFrame, useHome, type Home as HomeData, type HomeSong } from "../api"
 import { MarkItem } from "../marks/MarkItem"
 import { Columns, Group, Groups, OPENS, Page, Rows, Trouble, useTitle } from "../shell/parts"
-import { usePanel } from "../shell/panel"
 import { clock, count, day, longDay } from "../shell/words"
 import { TakeLine } from "../takes/parts"
 import { FirstDay } from "./FirstDay"
 
 /** A song on Home, as a song in РЭХА's list: its title, a grey line about it, then its best take as a row. */
 function SongRow({ song }: { song: HomeSong }) {
-  const { open } = usePanel()
   return (
     <div className="flex flex-col gap-2" data-song={song.title}>
       <div className="flex min-w-0 flex-wrap items-baseline gap-x-2">
-        <button type="button" title={song.title} className={cn("min-w-0 max-w-full truncate font-medium", OPENS)} onClick={() => open({ kind: "song", id: song.id })}>
+        <Link to="/songs/$id" params={{ id: String(song.id) }} title={song.title} className={cn("min-w-0 max-w-full truncate font-medium", OPENS)}>
           {song.title}
-        </button>
+        </Link>
         <span className="min-w-0 text-xs text-muted-foreground">
           {count(song.takes, "take")} · last {day(song.last_date)}
         </span>

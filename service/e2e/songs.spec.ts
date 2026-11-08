@@ -4,54 +4,107 @@ import { as, band } from "./band"
 
 test.use({ storageState: as("alex") })
 
-test("a song's panel sets its status, key and notes, and takes a file", async ({ page }) => {
+test("a song's page sets its status, key and notes, and takes a file", async ({ page }) => {
   await page.goto("/songs")
-  await page.getByRole("region", { name: "Learning" }).getByRole("button", { name: "Viasna", exact: true }).click()
-  const panel = page.getByLabel("Panel")
-  await expect(panel.getByRole("heading", { level: 2 }).first()).toHaveText("Viasna")
+  // A press on the row past the title opens the song's page too.
+  await page.getByRole("region", { name: "Learning" }).locator('[data-song="Viasna"]').click({ position: { x: 120, y: 10 } })
+  await expect(page).toHaveURL(`/songs/${band().songs["Viasna"]}`)
+  await expect(page.getByLabel("Panel")).toHaveCount(0)
+  const main = page.getByRole("main")
+  await expect(main.getByRole("heading", { level: 1 })).toContainText("Viasna")
 
-  await panel.getByRole("button", { name: "Status: Learning" }).click()
+  await main.getByRole("button", { name: "Status: Learning" }).click()
   await page.getByRole("menuitemradio", { name: "Ready" }).click()
-  await expect(panel.getByRole("button", { name: "Status: Ready" })).toBeVisible()
+  await expect(main.getByRole("button", { name: "Status: Ready" })).toBeVisible()
 
-  await panel.getByRole("combobox", { name: "Key" }).click()
+  await main.getByRole("combobox", { name: "Key" }).click()
   await page.getByRole("option", { name: "A minor" }).click()
-  await expect(panel.getByRole("combobox", { name: "Key" })).toHaveText("A minor")
+  await expect(main.getByRole("combobox", { name: "Key" })).toHaveText("A minor")
 
   // Notes save themselves, with no button to press.
-  await panel.getByRole("textbox", { name: "Notes" }).fill("Ira starts, then the bass")
-  await expect(panel.getByRole("status").filter({ hasText: "Saved" })).toBeVisible()
+  await main.getByRole("textbox", { name: "Notes" }).fill("Ira starts, then the bass")
+  await expect(main.getByRole("status").filter({ hasText: "Saved" })).toBeVisible()
   await page.reload()
-  await expect(page.getByLabel("Panel").getByRole("textbox", { name: "Notes" })).toHaveValue("Ira starts, then the bass")
+  await expect(main.getByRole("textbox", { name: "Notes" })).toHaveValue("Ira starts, then the bass")
 
-  await panel.locator('input[type="file"]').setInputFiles({
+  await main.getByLabel("A file for the song").setInputFiles({
     name: "Viasna chart.pdf",
     mimeType: "application/pdf",
     buffer: Buffer.from("%PDF-1.4 made up"),
   })
-  await expect(panel.getByRole("link", { name: /Viasna chart\.pdf/ })).toHaveAttribute("target", "_blank")
+  await expect(main.getByRole("link", { name: /Viasna chart\.pdf/ })).toHaveAttribute("target", "_blank")
 
-  // The title is the way to the song's page.
-  await panel.getByRole("heading", { level: 2 }).getByRole("link", { name: "Viasna" }).click()
-  await expect(page).toHaveURL(`/songs/${band().songs["Viasna"]}`)
-  await expect(page.getByRole("heading", { level: 1 })).toContainText("Viasna")
-  await expect(page.getByRole("main")).toContainText("Ira starts, then the bass")
-  await expect(page.getByRole("main")).toContainText("Viasna chart.pdf")
   await page.getByRole("link", { name: "Songs" }).first().click()
-  await expect(page.getByRole("region", { name: "Ready" }).getByRole("button", { name: "Viasna", exact: true })).toBeVisible()
+  await expect(page.getByRole("region", { name: "Ready" }).getByRole("link", { name: "Viasna", exact: true })).toBeVisible()
 })
 
 test("a new song is refused for a title the band has in another case", async ({ page }) => {
   await page.goto("/songs")
   await page.getByRole("button", { name: "New song" }).click()
-  const panel = page.getByLabel("Panel")
-  await panel.getByLabel("Title").fill("pałyn")
-  await panel.getByRole("button", { name: "Add song" }).click()
-  await expect(panel.getByRole("alert")).toHaveText("There is already a song called “Pałyn”.")
-  await panel.getByLabel("Title").fill("Zorka")
-  await panel.getByRole("button", { name: "Add song" }).click()
-  await expect(panel.getByRole("heading", { level: 2 }).first()).toHaveText("Zorka")
+  const main = page.getByRole("main")
+  await main.getByLabel("Title").fill("pałyn")
+  await main.getByRole("button", { name: "Add song" }).click()
+  await expect(main.getByRole("alert")).toHaveText("There is already a song called “Pałyn”.")
+  await main.getByLabel("Title").fill("Zorka")
+  await main.getByRole("button", { name: "Add song" }).click()
+  // The new song's page opens; Back from it is Songs, not the empty New song again.
+  await expect(page).toHaveURL(/\/songs\/\d+$/)
+  await expect(main.getByRole("heading", { level: 1 })).toContainText("Zorka")
+  await page.goBack()
+  await expect(page).toHaveURL(/\/songs$/)
+  await expect(main.getByLabel("Title")).toHaveCount(0)
   await expect(page.getByRole("region", { name: "Learning" }).locator('[data-song="Zorka"]')).toContainText("No takes yet")
+})
+
+test("Statuses and New song open at the top of Songs, one in place of the other, and Back closes them", async ({ page }) => {
+  // An address from before, with an editor in the panel, opens the page alone.
+  await page.goto("/songs?panel=statuses")
+  await expect(page.getByRole("heading", { level: 1 })).toContainText("Songs")
+  await expect(page.getByLabel("Panel")).toHaveCount(0)
+  await expect(page.getByRole("heading", { name: "Statuses", exact: true })).toHaveCount(0)
+
+  await page.goto("/songs")
+  const main = page.getByRole("main")
+  const statuses = main.getByRole("heading", { name: "Statuses", exact: true })
+  const newSong = main.getByRole("heading", { name: "New song", exact: true })
+  await page.getByRole("button", { name: "Statuses", exact: true }).click()
+  await expect(page).toHaveURL(/\?edit=statuses$/)
+  await expect(statuses).toBeVisible()
+  await expect(page.getByRole("button", { name: "Statuses", exact: true })).toHaveAttribute("aria-pressed", "true")
+  await expect(page.getByLabel("Panel")).toHaveCount(0)
+  // The editor is in the page's address: a reload keeps it open.
+  await page.reload()
+  await expect(statuses).toBeVisible()
+
+  await page.getByRole("button", { name: "New song", exact: true }).click()
+  await expect(newSong).toBeVisible()
+  await expect(statuses).toHaveCount(0)
+  await page.goBack()
+  await expect(page).toHaveURL(/\/songs$/)
+  await expect(newSong).toHaveCount(0)
+  await expect(statuses).toHaveCount(0)
+
+  // The button pressed again, the card's ✕ or Cancel closes it.
+  await page.getByRole("button", { name: "Statuses", exact: true }).click()
+  await expect(statuses).toBeVisible()
+  await page.getByRole("button", { name: "Statuses", exact: true }).click()
+  await expect(statuses).toHaveCount(0)
+  await page.getByRole("button", { name: "Statuses", exact: true }).click()
+  await main.getByRole("button", { name: "Close" }).click()
+  await expect(statuses).toHaveCount(0)
+  await page.getByRole("button", { name: "New song", exact: true }).click()
+  await main.getByRole("button", { name: "Cancel" }).click()
+  await expect(newSong).toHaveCount(0)
+  await expect(page).toHaveURL(/\/songs$/)
+})
+
+test("Edit statuses on a song's page opens Statuses on Songs", async ({ page }) => {
+  await page.goto(`/songs/${band().songs["Pałyn"]}`)
+  await page.getByRole("main").getByRole("button", { name: /^Status: / }).click()
+  await page.getByRole("menuitem", { name: "Edit statuses" }).click()
+  await expect(page).toHaveURL(/\/songs\?edit=statuses$/)
+  await expect(page.getByRole("main").getByRole("heading", { name: "Statuses", exact: true })).toBeVisible()
+  await expect(page.getByLabel("Panel")).toHaveCount(0)
 })
 
 test("a song's title changes where it stands, its takes with it", async ({ page }) => {
@@ -85,20 +138,22 @@ test("a song's title changes where it stands, its takes with it", async ({ page 
   await expect(main.locator('[data-take="Pałyn 9"]').first()).toBeVisible()
 })
 
-test("a song's tempo and signature are set in its panel and kept", async ({ page }) => {
-  await page.goto(`/songs?panel=song:${band().songs["Pałyn"]}`)
-  const panel = page.getByLabel("Panel")
-  const tempo = panel.getByRole("textbox", { name: "Tempo" })
+test("a song's tempo and signature are set on its page and kept", async ({ page }) => {
+  await page.goto(`/songs/${band().songs["Pałyn"]}`)
+  const main = page.getByRole("main")
+  const tempo = main.getByRole("textbox", { name: "Tempo" })
   await expect(tempo).toHaveValue("")
   await tempo.fill("96")
   await tempo.press("Enter")
-  await panel.getByRole("combobox", { name: "Time signature" }).click()
+  await main.getByRole("combobox", { name: "Time signature" }).click()
   await page.getByRole("option", { name: "6/8" }).click()
-  await expect(panel.getByRole("combobox", { name: "Time signature" })).toHaveText("6/8")
+  await expect(main.getByRole("combobox", { name: "Time signature" })).toHaveText("6/8")
   await page.reload()
   await expect(tempo).toHaveValue("96")
-  await expect(panel.getByRole("combobox", { name: "Time signature" })).toHaveText("6/8")
+  await expect(main.getByRole("combobox", { name: "Time signature" })).toHaveText("6/8")
+  await page.getByRole("link", { name: "Songs" }).first().click()
   await expect(page.getByRole("region", { name: "Learning" }).locator('[data-song="Pałyn"]')).toContainText("96")
+  await page.goBack()
   // Empty, the song has no tempo again.
   await tempo.fill("")
   await tempo.press("Enter")
@@ -140,28 +195,28 @@ test("the star at rehearsal shows apart", async ({ page }) => {
 test("a file and a song with no takes go only after asking", async ({ page }) => {
   await page.goto("/songs")
   await page.getByRole("button", { name: "New song" }).click()
-  const panel = page.getByLabel("Panel")
-  await panel.getByLabel("Title").fill("Kalyhanka")
-  await panel.getByRole("button", { name: "Add song" }).click()
-  await expect(panel.getByRole("heading", { level: 2 }).first()).toHaveText("Kalyhanka")
-  await panel.locator('input[type="file"]').setInputFiles({ name: "words.txt", mimeType: "text/plain", buffer: Buffer.from("la la") })
-  await expect(panel.getByRole("link", { name: /words\.txt/ })).toBeVisible()
+  const main = page.getByRole("main")
+  await main.getByLabel("Title").fill("Kalyhanka")
+  await main.getByRole("button", { name: "Add song" }).click()
+  await expect(main.getByRole("heading", { level: 1 })).toContainText("Kalyhanka")
+  await main.getByLabel("A file for the song").setInputFiles({ name: "words.txt", mimeType: "text/plain", buffer: Buffer.from("la la") })
+  await expect(main.getByRole("link", { name: /words\.txt/ })).toBeVisible()
 
-  await panel.getByRole("button", { name: "Remove words.txt" }).click()
+  await main.getByRole("button", { name: "Remove words.txt" }).click()
   const ask = page.getByRole("dialog")
   await expect(ask).toContainText("Remove “words.txt”?")
   await ask.getByRole("button", { name: "Cancel" }).click()
-  await expect(panel.getByRole("link", { name: /words\.txt/ })).toBeVisible()
-  await panel.getByRole("button", { name: "Remove words.txt" }).click()
+  await expect(main.getByRole("link", { name: /words\.txt/ })).toBeVisible()
+  await main.getByRole("button", { name: "Remove words.txt" }).click()
   await ask.getByRole("button", { name: "Remove file" }).click()
-  await expect(panel.getByRole("link", { name: /words\.txt/ })).toHaveCount(0)
+  await expect(main.getByRole("link", { name: /words\.txt/ })).toHaveCount(0)
 
-  await panel.getByRole("button", { name: "What to do with Kalyhanka" }).click()
+  await main.getByRole("button", { name: "What to do with Kalyhanka" }).click()
   await page.getByRole("menuitem", { name: "Delete song" }).click()
   await expect(ask).toContainText("Delete “Kalyhanka”?")
   await ask.getByRole("button", { name: "Delete song" }).click()
-  await expect(panel).toHaveCount(0)
-  await expect(page.getByRole("main").getByRole("button", { name: "Kalyhanka", exact: true })).toHaveCount(0)
+  await expect(page).toHaveURL(/\/songs$/)
+  await expect(main.getByRole("link", { name: "Kalyhanka", exact: true })).toHaveCount(0)
   // It waits in the Trash, so РЭХА can learn of it; put back for the tests after.
   await page.getByRole("navigation", { name: "Sections" }).getByRole("link", { name: "Trash" }).click()
   const kept = page.locator('[data-song="Kalyhanka"]')
@@ -170,21 +225,21 @@ test("a file and a song with no takes go only after asking", async ({ page }) =>
   await expect(page.getByRole("status")).toHaveText("“Kalyhanka” is back.")
   await page.getByRole("navigation", { name: "Sections" }).getByRole("link", { name: "Songs" }).click()
 
-  // A song with takes has the menu too, to send it to the Trash with them. Its row opens by keyboard.
-  await page.getByRole("region", { name: "Learning" }).getByRole("button", { name: "Pałyn", exact: true }).focus()
+  // A song with takes has the menu too, to send it to the Trash with them. Its title opens by keyboard.
+  await page.getByRole("region", { name: "Learning" }).getByRole("link", { name: "Pałyn", exact: true }).focus()
   await page.keyboard.press("Enter")
-  await expect(panel.getByRole("heading", { level: 2 }).first()).toHaveText("Pałyn")
-  await expect(panel.getByRole("button", { name: "What to do with Pałyn", exact: true })).toBeVisible()
+  await expect(main.getByRole("heading", { level: 1 })).toContainText("Pałyn")
+  await expect(main.getByRole("button", { name: "What to do with Pałyn", exact: true })).toBeVisible()
 })
 
 test("a status dragged by its grip moves its group on Songs", async ({ page }) => {
   await page.goto("/songs")
-  await page.getByRole("button", { name: "Statuses" }).click()
-  const panel = page.getByLabel("Panel")
-  const names = panel.getByRole("textbox", { name: "Name" })
+  await page.getByRole("button", { name: "Statuses", exact: true }).click()
+  const main = page.getByRole("main")
+  const names = main.getByRole("textbox", { name: "Name" })
   await expect(names.first()).toHaveValue("Learning")
   const target = (await names.first().boundingBox())!
-  await panel.getByRole("button", { name: "Move Archive" }).hover()
+  await main.getByRole("button", { name: "Move Archive" }).hover()
   await page.mouse.down()
   await page.mouse.move(target.x + 20, target.y + 2, { steps: 12 })
   await page.mouse.up()
@@ -192,7 +247,7 @@ test("a status dragged by its grip moves its group on Songs", async ({ page }) =
   // Put back, for the tests after.
   const learning = (await names.nth(1).boundingBox())!
   const archive = (await names.first().boundingBox())!
-  await panel.getByRole("button", { name: "Move Archive" }).hover()
+  await main.getByRole("button", { name: "Move Archive" }).hover()
   await page.mouse.down()
   await page.mouse.move(archive.x + 20, learning.y + learning.height * 3, { steps: 12 })
   await page.mouse.up()
@@ -203,11 +258,11 @@ test("a file over 50 MB is refused before it is sent", async ({ page }, info) =>
   const big = info.outputPath("big.pdf")
   writeFileSync(big, Buffer.alloc(50 * 1024 * 1024 + 1))
   await page.goto("/songs")
-  await page.getByRole("region", { name: "Learning" }).getByRole("button", { name: "Pałyn", exact: true }).click()
-  const panel = page.getByLabel("Panel")
+  await page.getByRole("region", { name: "Learning" }).getByRole("link", { name: "Pałyn", exact: true }).click()
+  const main = page.getByRole("main")
   const sent: string[] = []
   page.on("request", (r) => r.method() === "POST" && r.url().includes("/files") && sent.push(r.url()))
-  await panel.locator('input[type="file"]').setInputFiles(big)
-  await expect(panel.getByRole("alert")).toHaveText("A file is up to 50 MB")
+  await main.getByLabel("A file for the song").setInputFiles(big)
+  await expect(main.getByRole("alert")).toHaveText("A file is up to 50 MB")
   expect(sent).toEqual([])
 })

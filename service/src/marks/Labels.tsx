@@ -13,8 +13,8 @@ import { colourCss, Diamond } from "../takes/parts"
 
 const diamond = (l: Label) => <Diamond colour={colourCss(l)} />
 
-/** The band's labels for marks, as РЭХА's Settings › Marks: any member changes them. */
-export function LabelsPanel() {
+/** **Labels**, at the top of Marks: the band's labels for marks, as РЭХА's Settings › Marks; any member changes them. */
+export function LabelsEditor({ onClose }: { onClose: () => void }) {
   const labels = useLabels().data ?? []
   const add = useAddLabel()
   const change = useChangeLabel()
@@ -35,7 +35,7 @@ export function LabelsPanel() {
   const said = (id: number) => ({ onError: (e: Error) => setFailed({ id, error: e.message }), onSuccess: () => setFailed(null) })
   return (
     <div className="flex flex-col gap-6">
-      <PanelHead title="Labels" />
+      <PanelHead title="Labels" onClose={onClose} />
       <p className="text-muted-foreground">
         What a moment in a take can be marked with. The whole band has the same labels. Renaming or recolouring one changes every mark
         that has it. A mark from РЭХА with a label the band has not got yet adds that label here. A label renamed here still gets the
@@ -56,7 +56,7 @@ export function LabelsPanel() {
                 swatches={LABEL_COLOURS.map((c) => ({
                   value: c,
                   name: colourName(c),
-                  className: cn(labelLook(c).swatch, c === l.colour && "ring-2 ring-ring ring-offset-2 ring-offset-panel"),
+                  className: cn(labelLook(c).swatch, c === l.colour && "ring-2 ring-ring ring-offset-2 ring-offset-card"),
                 }))}
                 onColour={(colour) => change.mutate({ id: l.id, colour: colour as Label["colour"] }, said(l.id))}
                 onName={(name) => change.mutate({ id: l.id, name }, said(l.id))}

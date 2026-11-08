@@ -52,16 +52,15 @@ test("a take deleted from its line waits in the trash and comes back", async ({ 
 })
 
 test("a song deleted with its takes is one line in the trash", async ({ page }) => {
-  await page.goto(`/songs?panel=song:${band().songs["Kupalle"]}`)
-  const panel = page.getByLabel("Panel")
-  await panel.getByRole("button", { name: "What to do with Kupalle", exact: true }).click()
+  await page.goto(`/songs/${band().songs["Kupalle"]}`)
+  await page.getByRole("main").getByRole("button", { name: "What to do with Kupalle", exact: true }).click()
   await page.getByRole("menuitem", { name: "Delete song" }).click()
   const ask = page.getByRole("dialog")
   await expect(ask.getByRole("heading")).toHaveText("Delete “Kupalle”?")
   await expect(ask).toContainText(/^Delete “Kupalle”\?It goes to the Trash with its 1 take, notes and files, where anyone in the band/)
   await ask.getByRole("button", { name: "Delete song" }).click()
-  await expect(panel).toHaveCount(0)
-  await expect(page.getByRole("main").getByRole("button", { name: "Kupalle", exact: true })).toHaveCount(0)
+  await expect(page).toHaveURL(/\/songs$/)
+  await expect(page.getByRole("main").getByRole("link", { name: "Kupalle", exact: true })).toHaveCount(0)
 
   await trashLink(page).click()
   const row = page.locator('[data-song="Kupalle"]')

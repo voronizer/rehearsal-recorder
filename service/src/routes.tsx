@@ -45,9 +45,14 @@ const shell = createRoute({
 const home = createRoute({ getParentRoute: () => shell, path: "/", component: Home })
 const rehearsals = createRoute({ getParentRoute: () => shell, path: "/rehearsals", component: Rehearsals })
 const rehearsal = createRoute({ getParentRoute: () => shell, path: "/rehearsals/$uid", component: Rehearsal })
-const songs = createRoute({ getParentRoute: () => shell, path: "/songs", component: Songs })
+/** ?edit= is the editor open at the top of the page (shell/editor.ts). */
+const editOf =
+  <K extends string>(...kinds: K[]) =>
+  (search: Record<string, unknown>): { edit?: K } =>
+    kinds.includes(search.edit as K) ? { edit: search.edit as K } : {}
+const songs = createRoute({ getParentRoute: () => shell, path: "/songs", validateSearch: editOf("statuses", "new-song"), component: Songs })
 const song = createRoute({ getParentRoute: () => shell, path: "/songs/$id", component: Song })
-const marks = createRoute({ getParentRoute: () => shell, path: "/marks", component: Marks })
+const marks = createRoute({ getParentRoute: () => shell, path: "/marks", validateSearch: editOf("labels"), component: Marks })
 const members = createRoute({ getParentRoute: () => shell, path: "/members", component: Members })
 const trash = createRoute({ getParentRoute: () => shell, path: "/trash", component: Trash })
 const take = createRoute({

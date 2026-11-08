@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react"
-import { Link } from "@tanstack/react-router"
+import { useNavigate } from "@tanstack/react-router"
 import { ChevronDown, Download, Ellipsis, ExternalLink, X } from "lucide-react"
 import { ConfirmDialog } from "@/components/ConfirmDialog"
 import { Button } from "@/components/ui/button"
@@ -16,12 +16,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { cn } from "@/lib/utils"
 import { KEYS } from "../../worker/shared/keys"
 import { MAX_FILE, TOO_BIG } from "../../worker/songs/limits"
-import { useAddFile, useChangeSong, useDeleteFile, useDeleteSong, useSong, useSongs, type SongFile, type SongPage } from "../api"
-import { Group, Groups, OPENS, Props, Rows, TEXTAREA, Tile, Trouble, useFlash, Waiting } from "../shell/parts"
-import { usePanel } from "../shell/panel"
-import { clock, count, quoted } from "../shell/words"
-import { TakeLine, TakeName } from "../takes/parts"
-import { InPlaceTitle, TempoControls } from "./edit"
+import { useAddFile, useChangeSong, useDeleteFile, useDeleteSong, useSongs, type SongFile, type SongPage } from "../api"
+import { OPENS, Rows, TEXTAREA, Tile, useFlash } from "../shell/parts"
+import { count, quoted } from "../shell/words"
+import { TakeLine } from "../takes/parts"
 
 type Song = SongPage["song"]
 
@@ -32,7 +30,7 @@ export const why = (s: Song) => (s.best_why === "latest" ? "latest, no stars yet
 export function StatusMenu({ song }: { song: Song }) {
   const statuses = useSongs().data?.statuses ?? []
   const change = useChangeSong()
-  const { open } = usePanel()
+  const navigate = useNavigate()
   const name = statuses.find((s) => s.id === song.status_id)?.name ?? ""
   return (
     <DropdownMenu>
@@ -51,7 +49,7 @@ export function StatusMenu({ song }: { song: Song }) {
           ))}
         </DropdownMenuRadioGroup>
         <DropdownMenuSeparator />
-        <DropdownMenuItem onSelect={() => open({ kind: "statuses" })}>Edit statuses</DropdownMenuItem>
+        <DropdownMenuItem onSelect={() => void navigate({ to: "/songs", search: { edit: "statuses" } })}>Edit statuses</DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
   )
@@ -121,7 +119,7 @@ function NotesBox({ song }: { song: Song }) {
   }, [text])
   const latest = useRef(text)
   latest.current = text
-  // Closed with Esc or ✕, or another song opened: what is written goes too.
+  // Another page or another song opened: what is written goes too.
   useEffect(() => () => save.current(latest.current), [])
   return (
     <Tile>
@@ -285,71 +283,12 @@ export function SongMenu({ song, onGone }: { song: Song; onGone: () => void }) {
         description={asking ? said : null}
         actionLabel="Delete song"
         destructive={false}
-        // Away from the song first, so its panel or page does not ask for it once it is gone.
+        // Away from the song first, so its page does not ask for it once it is gone.
         onConfirm={() => {
           onGone()
           remove.mutate(song.id)
         }}
       />
     </>
-  )
-}
-
-/** The song's panel: status, key, tempo and length, its best take, notes, files. */
-export function SongPanel({ id }: { id: number }) {
-  const { close } = usePanel()
-  const page = useSong(id)
-  if (page.error) return <Trouble error={page.error} retry={() => void page.refetch()} />
-  if (!page.data) return <Waiting />
-  const { song, files } = page.data
-  return (
-    <div className="flex flex-col gap-6" aria-label={song.title}>
-      {/* The title opens the song's page and wraps when long (Alex's pick D, 2026-11-04). */}
-      <div className="flex items-start gap-2">
-        <InPlaceTitle song={song} size="panel">
-          <h2 className="min-w-0 py-0.5 text-lg font-semibold [overflow-wrap:anywhere]">
-            <Link to="/songs/$id" params={{ id: String(id) }} className={OPENS}>
-              {song.title}
-            </Link>
-          </h2>
-        </InPlaceTitle>
-        <SongMenu song={song} onGone={close} />
-        <Button variant="ghost" size="icon-row" aria-label="Close" onClick={close}>
-          <X />
-        </Button>
-      </div>
-      <Groups>
-        <Group>
-          <Props
-            rows={[
-              ["Status", <StatusMenu song={song} />],
-              ["Key", <KeySelect song={song} />],
-              ["Tempo", <TempoControls song={song} />],
-              [
-                "Length",
-                song.best ? (
-                  <span className="flex items-center gap-1.5">
-                    <span className="tnum">{clock(song.best.duration_sec)}</span>
-                    <span className="text-xs text-muted-foreground">of</span>
-                    <TakeName take={song.best} className="text-xs text-muted-foreground" />
-                  </span>
-                ) : (
-                  <span className="text-muted-foreground">—</span>
-                ),
-              ],
-            ]}
-          />
-        </Group>
-        <Group title="Best take" hint={why(song)}>
-          <BestTake song={song} />
-        </Group>
-        <Group title="Notes">
-          <Notes song={song} />
-        </Group>
-        <Group title="Files" action={<AddFile song={song} />}>
-          <Files song={song} files={files} />
-        </Group>
-      </Groups>
-    </div>
   )
 }

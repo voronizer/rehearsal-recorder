@@ -59,14 +59,14 @@ test.describe("on a phone", () => {
   })
 })
 
-test("Esc in a list inside a panel closes the list, not the panel", async ({ page }) => {
-  await page.goto("/songs")
-  await page.getByRole("region", { name: "Learning" }).getByRole("button", { name: "Pałyn", exact: true }).click()
+test("Esc in a menu inside a panel closes the menu, not the panel", async ({ page }) => {
+  await page.goto("/")
+  await page.getByRole("region", { name: "The band's favourites" }).getByRole("button", { name: "Viasna 11", exact: true }).click()
   const panel = page.getByLabel("Panel")
-  await panel.getByRole("combobox", { name: "Key" }).click()
-  await expect(page.getByRole("listbox")).toBeVisible()
+  await panel.getByRole("button", { name: "What to do with Viasna 11" }).click()
+  await expect(page.getByRole("menu")).toBeVisible()
   await page.keyboard.press("Escape")
-  await expect(page.getByRole("listbox")).toHaveCount(0)
+  await expect(page.getByRole("menu")).toHaveCount(0)
   await expect(panel).toBeVisible()
   await page.keyboard.press("Escape")
   await expect(panel).toHaveCount(0)

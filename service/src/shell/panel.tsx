@@ -3,16 +3,13 @@ import { useNavigate, useRouter, useRouterState } from "@tanstack/react-router"
 
 /**
  * What the panel from the right holds: a take (with a new mark at
- * `markAt`), one mark of a take (`id`) or a new one at `at`, a song, or one
- * of the band's lists.
+ * `markAt`), one mark of a take (`id`) or a new one at `at`, or a take's
+ * marks alone, as the drawer on the take's page has them (shell/drawer.tsx).
  */
 export type Panel =
   | { kind: "take"; uid: string; markAt?: number }
   | { kind: "mark"; uid: string; id?: number; at?: number }
-  | { kind: "song"; id: number }
-  | { kind: "labels" }
-  | { kind: "statuses" }
-  | { kind: "new-song" }
+  | { kind: "marks"; uid: string }
   | null
 
 const moment = (at: number) => String(Math.round(at * 100) / 100)
@@ -28,22 +25,23 @@ export function panelText(p: Exclude<Panel, null>): string {
       return `take:${p.uid}${p.markAt === undefined ? "" : `@${moment(p.markAt)}`}`
     case "mark":
       return p.id === undefined ? `mark:${p.uid}@${moment(p.at ?? 0)}` : `mark:${p.uid}:${p.id}`
-    case "song":
-      return `song:${p.id}`
-    default:
-      return p.kind
+    case "marks":
+      return `marks:${p.uid}`
   }
 }
 
-/** The panel an address names; anything else is no panel. */
+/**
+ * The panel an address names; anything else is no panel. An older address
+ * with a song or one of the band's lists in the panel (`song:3`, `labels`)
+ * opens the page alone: those are on their own pages now.
+ */
 export function panelOf(text: unknown): Panel {
   if (typeof text !== "string") return null
-  if (text === "labels" || text === "statuses" || text === "new-song") return { kind: text }
   const [kind, rest = ""] = [text.slice(0, text.indexOf(":")), text.slice(text.indexOf(":") + 1)]
   const [head, at] = rest.split("@")
   const n = (v: string | undefined) => (v !== undefined && v !== "" && Number.isFinite(Number(v)) && Number(v) >= 0 ? Number(v) : undefined)
-  if (kind === "song") return n(rest) === undefined ? null : { kind: "song", id: n(rest)! }
   if (!head) return null
+  if (kind === "marks") return at === undefined ? { kind: "marks", uid: head } : null
   if (kind === "take") return n(at) === undefined ? { kind: "take", uid: head } : { kind: "take", uid: head, markAt: n(at) }
   if (kind === "mark") {
     const [uid, id] = head.split(":")

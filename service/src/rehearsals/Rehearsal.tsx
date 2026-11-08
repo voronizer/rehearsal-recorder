@@ -1,9 +1,8 @@
 import { useEffect } from "react"
-import { useNavigate, useParams } from "@tanstack/react-router"
+import { Link, useNavigate, useParams } from "@tanstack/react-router"
 import { Button } from "@/components/ui/button"
 import { Refused, useRehearsal, useSongs, type TakeRow } from "../api"
 import { Back, Group, Groups, Page, Rows, Trouble, useTitle } from "../shell/parts"
-import { usePanel } from "../shell/panel"
 import { clock, count, day, longDay } from "../shell/words"
 import { TakeLine } from "../takes/parts"
 
@@ -19,7 +18,6 @@ export function Rehearsal() {
   const page = useRehearsal(uid)
   useTitle(page.data ? day(page.data.rehearsal.date) : undefined)
   const songs = useSongs()
-  const { open } = usePanel()
   const navigate = useNavigate()
   const empty = page.error instanceof Refused && page.error.status === 404
   useEffect(() => {
@@ -53,9 +51,11 @@ export function Rehearsal() {
             fold="open"
             action={
               id !== null && (
-                // Says what it opens: the song's panel, with what a rehearsal needs from it.
-                <Button variant="ghost" size="row" onClick={() => open({ kind: "song", id })}>
-                  Notes and files
+                // Says what it opens: the song's page, with what a rehearsal needs from it.
+                <Button asChild variant="ghost" size="row">
+                  <Link to="/songs/$id" params={{ id: String(id) }}>
+                    Notes and files
+                  </Link>
                 </Button>
               )
             }

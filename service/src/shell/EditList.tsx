@@ -3,17 +3,25 @@ import { Check, GripVertical, Trash2, X } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { cn } from "@/lib/utils"
-import { usePanel } from "./panel"
+import { InCard } from "./parts"
 
-/** A panel's heading with ✕. */
-export function PanelHead({ title }: { title: string }) {
-  const { close } = usePanel()
+/** An editor's heading with ✕. */
+export function PanelHead({ title, onClose }: { title: string; onClose: () => void }) {
   return (
     <div className="flex items-center gap-2">
       <h2 className="flex-1 text-lg font-semibold">{title}</h2>
-      <Button variant="ghost" size="icon-row" aria-label="Close" onClick={close}>
+      <Button variant="ghost" size="icon-row" aria-label="Close" onClick={onClose}>
         <X />
       </Button>
+    </div>
+  )
+}
+
+/** An editor at the top of its page, above the list it changes, in a card of its own (Alex's pick A, 2026-11-08). */
+export function EditCard({ children }: { children: ReactNode }) {
+  return (
+    <div className="rounded-xl border bg-card p-5 shadow-xs">
+      <InCard>{children}</InCard>
     </div>
   )
 }

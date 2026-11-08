@@ -16,6 +16,8 @@ import { useSize } from "./size"
 type Surface = "page" | "card" | "panel"
 const SurfaceCtx = createContext<Surface>("page")
 export const InPanel = ({ children }: { children: ReactNode }) => <SurfaceCtx.Provider value="panel">{children}</SurfaceCtx.Provider>
+/** In a card of its own on a page, such as an editor at its top: its groups are parts of that card. */
+export const InCard = ({ children }: { children: ReactNode }) => <SurfaceCtx.Provider value="card">{children}</SurfaceCtx.Provider>
 /** Whether this is drawn in the panel, not on the page. */
 export const useInPanel = () => useContext(SurfaceCtx) === "panel"
 
@@ -200,10 +202,11 @@ export function TitleWith({ title, children }: { title: string; children: ReactN
   )
 }
 
-/** A section with nothing in it yet: what will come, and how. */
-export function Empty({ title, text }: { title: ReactNode; text: string }) {
+/** A section with nothing in it yet: what will come, and how; `top`, an editor open over it. */
+export function Empty({ title, text, top }: { title: ReactNode; text: string; top?: ReactNode }) {
   return (
     <Page title={title}>
+      {top}
       <Tile>
         <p className="text-muted-foreground">{text}</p>
       </Tile>

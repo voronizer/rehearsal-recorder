@@ -8,8 +8,8 @@ import { EditRow, PanelHead, placed } from "../shell/EditList"
 import { Group, Groups } from "../shell/parts"
 import { count } from "../shell/words"
 
-/** Where a song stands with the band: the band's own list, changed by anyone in it. */
-export function StatusesPanel() {
+/** **Statuses**, at the top of Songs: where a song stands with the band, the band's own list, changed by anyone in it. */
+export function StatusesEditor({ onClose }: { onClose: () => void }) {
   const statuses = useSongs().data?.statuses ?? []
   const add = useAddStatus()
   const change = useChangeStatus()
@@ -30,7 +30,7 @@ export function StatusesPanel() {
   const said = (id: number) => ({ onError: (e: Error) => setFailed({ id, error: e.message }), onSuccess: () => setFailed(null) })
   return (
     <div className="flex flex-col gap-6">
-      <PanelHead title="Statuses" />
+      <PanelHead title="Statuses" onClose={onClose} />
       <p className="text-muted-foreground">
         Where a song stands with the band. Everyone in the band sees the same statuses. The Songs page groups songs by them, in this
         order. Statuses live only here: РЭХА has none.

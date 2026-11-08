@@ -1,19 +1,19 @@
 import { useState } from "react"
+import { useNavigate } from "@tanstack/react-router"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { useAddSong } from "../api"
 import { PanelHead } from "../shell/EditList"
-import { usePanel } from "../shell/panel"
 
-/** **New song**: a song before its first take, so its notes and files can go here now. */
-export function NewSongPanel() {
-  const { open, close } = usePanel()
+/** **New song**, at the top of Songs: a song before its first take, so its notes and files can go here now. */
+export function NewSongEditor({ onClose }: { onClose: () => void }) {
+  const navigate = useNavigate()
   const add = useAddSong()
   const [title, setTitle] = useState("")
   return (
     <div className="flex flex-col gap-6">
-      <PanelHead title="New song" />
+      <PanelHead title="New song" onClose={onClose} />
       <p className="text-muted-foreground">
         For a song before its first take: its notes and files can go here now. Takes come to it from РЭХА when a take has the same title.
       </p>
@@ -22,7 +22,10 @@ export function NewSongPanel() {
         onSubmit={(e) => {
           e.preventDefault()
           if (!title.trim()) return
-          add.mutate(title.trim(), { onSuccess: (made) => open({ kind: "song", id: (made as { id: number }).id }, { replace: true }) })
+          // The song's page in the editor's place, so Back from it is Songs.
+          add.mutate(title.trim(), {
+            onSuccess: (made) => void navigate({ to: "/songs/$id", params: { id: String((made as { id: number }).id) }, replace: true }),
+          })
         }}
       >
         <Label htmlFor="new-title">Title</Label>
@@ -36,7 +39,7 @@ export function NewSongPanel() {
           <Button type="submit" disabled={add.isPending}>
             Add song
           </Button>
-          <Button type="button" variant="ghost" onClick={close}>
+          <Button type="button" variant="ghost" onClick={onClose}>
             Cancel
           </Button>
         </div>
