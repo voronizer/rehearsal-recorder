@@ -1,29 +1,34 @@
 import { formatMeter } from "@/lib/format"
+import { Link, useNavigate } from "@tanstack/react-router"
 import { Plus } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import { useSongs, type SongItem } from "../api"
+import { EditCard } from "../shell/EditList"
+import { useEditor } from "../shell/editor"
 import { Empty, Group, Groups, OPENS, Page, Rows, TitleWith, Trouble, useTitle } from "../shell/parts"
-import { usePanel } from "../shell/panel"
 import { useSize } from "../shell/size"
 import { clock, count, day } from "../shell/words"
 import { Play, TakeLine, TakeLink } from "../takes/parts"
+import { NewSongEditor } from "./NewSong"
+import { StatusesEditor } from "./Statuses"
 
 const COLS = "grid-cols-[minmax(0,1fr)_6rem_4rem_4rem_4rem_6rem_minmax(8rem,1fr)]"
 
 function SongLine({ song }: { song: SongItem }) {
   const size = useSize()
-  const { open } = usePanel()
-  // The title is the song's button, for the keyboard too; a press anywhere
-  // else on the row opens it as well.
+  const navigate = useNavigate()
+  const to = { to: "/songs/$id", params: { id: String(song.id) } } as const
+  // The title is the link to the song's page, for the keyboard too; a press
+  // anywhere else on the row opens it as well.
   const name = (
     <span className="flex min-w-0 items-center gap-2">
-      <button type="button" className={cn("truncate", OPENS)} onClick={() => open({ kind: "song", id: song.id })}>
+      <Link {...to} className={cn("truncate", OPENS)}>
         {song.title}
-      </button>
+      </Link>
     </span>
   )
-  const row = (e: { target: EventTarget }) => (e.target as HTMLElement).closest("button, a") || open({ kind: "song", id: song.id })
+  const row = (e: { target: EventTarget }) => (e.target as HTMLElement).closest("button, a") || void navigate(to)
   const best = song.best && (
     <span className="flex items-center gap-2">
       <Play take={song.best} />
@@ -60,26 +65,28 @@ export function Songs() {
   useTitle("Songs")
   const songs = useSongs()
   const size = useSize()
-  const { open } = usePanel()
+  const { edit, toggle, close } = useEditor<"statuses" | "new-song">()
   const head = (
     <TitleWith title="Songs">
-      <Button variant="outline" size="row" onClick={() => open({ kind: "statuses" })}>
+      <Button variant="outline" size="row" aria-pressed={edit === "statuses"} onClick={() => toggle("statuses")}>
         Statuses
       </Button>
-      <Button variant="outline" size="row" onClick={() => open({ kind: "new-song" })}>
+      <Button variant="outline" size="row" aria-pressed={edit === "new-song"} onClick={() => toggle("new-song")}>
         <Plus />
         New song
       </Button>
     </TitleWith>
   )
+  const top = edit && <EditCard>{edit === "statuses" ? <StatusesEditor onClose={close} /> : <NewSongEditor onClose={close} />}</EditCard>
   if (songs.error) return <Trouble error={songs.error} retry={() => void songs.refetch()} />
   if (!songs.data) return null
   const { statuses, songs: all, not_named } = songs.data
   if (!all.length && !not_named.length)
-    return <Empty title={head} text="No songs yet. A song made in РЭХА appears here, or press New song to start one here." />
+    return <Empty title={head} top={top} text="No songs yet. A song made in РЭХА appears here, or press New song to start one here." />
   const takes = all.reduce((n, s) => n + s.takes, 0) + not_named.length
   return (
     <Page title={head} sub={`${count(all.length, "song")} · ${count(takes, "take")}`}>
+      {top}
       {size === "wide" && (
         <div className={cn("-mb-4 grid gap-3 px-6 text-xs text-muted-foreground", COLS)}>
           <span>Song</span>

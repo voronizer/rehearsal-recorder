@@ -72,11 +72,11 @@ const useLine = (id: number) =>
 
 /**
  * The title, renamed where it stands: ✎ turns it into a field with ✓ and ✕.
- * Enter or ✓ renames, Esc or ✕ leaves it. A line says what only it can: why
- * a title is turned down, or that the takes are renamed with it; on the page
- * in the facts' place, in the panel under the field.
+ * Enter or ✓ renames, Esc or ✕ leaves it. A line in the page's facts' place
+ * says what only it can: why a title is turned down, or that the takes are
+ * renamed with it.
  */
-export function InPlaceTitle({ song, size, children }: { song: Song; size: "page" | "panel"; children: ReactNode }) {
+export function InPlaceTitle({ song, children }: { song: Song; children: ReactNode }) {
   const [editing, setEditing] = useState(false)
   const [title, setTitle] = useState(song.title)
   const titles = useSongs().data?.songs ?? []
@@ -94,12 +94,12 @@ export function InPlaceTitle({ song, size, children }: { song: Song; size: "page
     if (now.kind === "rename") change.mutate({ id: song.id, title: title.trim() }, { onSuccess: stop })
   }
   useEffect(() => {
-    if (size === "page" && editing) say({ id: song.id, text, bad })
-  }, [size, editing, text, bad, song.id])
+    if (editing) say({ id: song.id, text, bad })
+  }, [editing, text, bad, song.id])
   useEffect(() => () => say(null), [])
   if (!editing)
     return (
-      <span className={cn("flex min-w-0 gap-1", size === "panel" ? "flex-1 items-start" : "items-center")}>
+      <span className="flex min-w-0 items-center gap-1">
         {children}
         <Tooltip>
           <TooltipTrigger asChild>
@@ -136,13 +136,13 @@ export function InPlaceTitle({ song, size, children }: { song: Song; size: "page
             e.preventDefault()
             go()
           } else if (e.key === "Escape") {
-            // The panel closes on Esc too; here it only leaves the title.
+            // Esc closes a panel too; here it only leaves the title.
             e.preventDefault()
             e.stopPropagation()
             stop()
           }
         }}
-        className={cn("min-w-0 px-2 font-semibold", size === "page" ? "h-9 w-72 text-xl" : "h-8 w-full text-lg")}
+        className="h-9 w-72 min-w-0 px-2 text-xl font-semibold"
       />
       <Button variant="ghost" size="icon-row" aria-label="Rename" disabled={now.kind === "refused" || change.isPending} onClick={go}>
         <Check />
@@ -152,13 +152,7 @@ export function InPlaceTitle({ song, size, children }: { song: Song; size: "page
       </Button>
     </span>
   )
-  if (size === "page") return field
-  return (
-    <span className="flex min-w-0 flex-1 flex-col gap-1">
-      {field}
-      {text && <span className={cn("text-xs font-normal", bad ? "text-destructive" : "text-muted-foreground")}>{text}</span>}
-    </span>
-  )
+  return field
 }
 
 /** A song page's facts, or while its title is a field, what renaming it does. */

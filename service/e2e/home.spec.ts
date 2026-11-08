@@ -61,6 +61,14 @@ test("a take's name opens its panel and does not play it", async ({ page }) => {
   await expect(page.getByLabel("Player")).toContainText(NOTHING)
 })
 
+test("a song's name on Home opens its page", async ({ page }) => {
+  await page.goto("/")
+  await page.getByRole("region", { name: "Songs" }).getByRole("link", { name: "Pałyn", exact: true }).click()
+  await expect(page).toHaveURL(`/songs/${band().songs["Pałyn"]}`)
+  await expect(page.getByRole("heading", { level: 1 })).toContainText("Pałyn")
+  await expect(page.getByLabel("Panel")).toHaveCount(0)
+})
+
 test("home says so when the service cannot answer", async ({ page }) => {
   await page.route("**/api/frame", (r) => r.fulfill({ status: 500, contentType: "application/json", body: JSON.stringify({ error: "Something went wrong in the band service" }) }))
   await page.goto("/")

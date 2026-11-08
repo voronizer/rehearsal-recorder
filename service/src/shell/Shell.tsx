@@ -4,24 +4,34 @@ import { ChevronLeft, Menu } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import { useFrame, useMe } from "../api"
-import { LabelsPanel } from "../marks/LabelsPanel"
-import { MarkPanel } from "../marks/MarkPanel"
-import { NewSongPanel } from "../songs/NewSongPanel"
-import { SongPanel } from "../songs/parts"
-import { StatusesPanel } from "../songs/StatusesPanel"
+import { MarkPanel, TakeMarksPanel } from "../marks/MarkPanel"
 import { PlayerProvider } from "../takes/player/one"
 import { TakePanel } from "../takes/TakePanel"
+import { Drawer } from "./drawer"
 import { PanelProvider, usePanel } from "./panel"
-import { InPanel } from "./parts"
+import { InDrawer, InPanel } from "./parts"
 import { PhoneBar, PlayerBar } from "./PlayerBar"
 import { BandName, Side } from "./Side"
 import { useSize } from "./size"
 
-/** The panel from the right, as the app's Sheet: 28 rem, over the page, no veil, so the page stays live. */
-function PanelView() {
+/**
+ * The panel from the right, as the app's Sheet: 28 rem, over the page, no
+ * veil, so the page stays live. On a take's page (`page`, its uid) it is
+ * the drawer that folds into its strip, and the take's own panel there is
+ * its marks alone, so the page is not drawn twice.
+ */
+function PanelView({ page }: { page?: string }) {
   const { panel, back } = usePanel()
   const size = useSize()
   if (!panel) return null
+  const marks = panel.kind === "marks" || (panel.kind === "take" && panel.uid === page)
+  const body = (
+    <InPanel>
+      {panel.kind === "mark" && <MarkPanel uid={panel.uid} id={panel.id} at={panel.at} />}
+      {panel.kind === "take" && !marks && <TakePanel uid={panel.uid} markAt={panel.markAt} />}
+      {marks && <TakeMarksPanel uid={panel.uid} markAt={panel.kind === "take" ? panel.markAt : undefined} />}
+    </InPanel>
+  )
   return (
     <aside
       key={JSON.stringify(panel)}
@@ -38,22 +48,19 @@ function PanelView() {
           Back
         </button>
       )}
-      <InPanel>
-        {panel.kind === "take" && <TakePanel uid={panel.uid} markAt={panel.markAt} />}
-        {panel.kind === "mark" && <MarkPanel uid={panel.uid} id={panel.id} at={panel.at} />}
-        {panel.kind === "song" && <SongPanel id={panel.id} />}
-        {panel.kind === "labels" && <LabelsPanel />}
-        {panel.kind === "statuses" && <StatusesPanel />}
-        {panel.kind === "new-song" && <NewSongPanel />}
-      </InPanel>
+      {page ? <InDrawer>{body}</InDrawer> : body}
     </aside>
   )
 }
 
+/** The take whose page this is, by its address. */
+const takeOf = (path: string) => /^\/takes\/([^/]+)$/.exec(path)?.[1]
+
 /**
  * The band's pages in their frame: the column of sections down the left,
- * the page, the panel over it from the right, the player along the bottom
- * once the band has a take. On a phone the column hides behind ☰.
+ * the page, the panel over it from the right (on a take's page the drawer
+ * with its strip), the player along the bottom once the band has a take.
+ * On a phone the column hides behind ☰, and a take's page has no strip.
  */
 function Frame() {
   const size = useSize()
@@ -62,6 +69,7 @@ function Frame() {
   // A panel belongs to the page it was opened on: it is in that page's
   // address, so going to another page leaves it behind by itself.
   const path = useRouterState({ select: (s) => s.location.pathname })
+  const take = takeOf(path)
   useEffect(() => {
     setMenu(false)
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -108,7 +116,13 @@ function Frame() {
         >
           <Outlet />
         </main>
-        <PanelView />
+        {take ? (
+          <Drawer uid={take}>
+            <PanelView page={take} />
+          </Drawer>
+        ) : (
+          <PanelView />
+        )}
       </div>
       {bar && <PlayerBar />}
     </div>

@@ -25,7 +25,7 @@ function BarPlay({ take }: { take: TakePage | undefined }) {
   )
 }
 
-/** **Mark**: the playing take's panel, with a new mark at this moment. A take in the trash takes none. */
+/** **Mark**: the playing take's panel, with a new mark at this moment; on a phone the new mark alone. A take in the trash takes none. */
 function MarkHere({ take, at }: { take: TakePage | undefined; at: number }) {
   const { open } = usePanel()
   return (

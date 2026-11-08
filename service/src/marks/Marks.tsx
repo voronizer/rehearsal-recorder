@@ -6,10 +6,13 @@ import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { cn } from "@/lib/utils"
 import { useMarks, type Mark, type Show } from "../api"
 import { Empty, Group, Groups, OPENS, Page, Rows, TitleWith, Trouble, useTitle } from "../shell/parts"
+import { EditCard } from "../shell/EditList"
+import { useEditor } from "../shell/editor"
 import { usePanel } from "../shell/panel"
 import { useSize } from "../shell/size"
 import { clock, count, day, localDay } from "../shell/words"
 import { useLabelOf } from "../takes/parts"
+import { LabelsEditor } from "./Labels"
 import { OnTake } from "./MarkItem"
 
 const SHOWS: [Show, string][] = [
@@ -94,21 +97,27 @@ export function Marks() {
   useTitle("Marks")
   const [show, setShow] = useState<Show>("open")
   const list = useMarks(show)
-  const { open } = usePanel()
+  const { edit, toggle, close } = useEditor<"labels">()
   const head = (
     <TitleWith title="Marks">
-      <Button variant="outline" size="row" onClick={() => open({ kind: "labels" })}>
+      <Button variant="outline" size="row" aria-pressed={edit === "labels"} onClick={() => toggle("labels")}>
         Labels
       </Button>
     </TitleWith>
   )
+  const top = edit && (
+    <EditCard>
+      <LabelsEditor onClose={close} />
+    </EditCard>
+  )
   if (list.error) return <Trouble error={list.error} retry={() => void list.refetch()} />
   if (!list.data) return null
   const { counts, marks } = list.data
-  if (!counts.all) return <Empty title={head} text="No marks yet. Marks set in РЭХА come with the takes, and anyone can set one on a take here." />
+  if (!counts.all) return <Empty title={head} top={top} text="No marks yet. Marks set in РЭХА come with the takes, and anyone can set one on a take here." />
   const songs = [...new Set(marks.map((k) => k.take.song_title ?? "Not named"))]
   return (
     <Page title={head}>
+      {top}
       <ToggleGroup type="single" variant="outline" value={show} onValueChange={(v) => v && setShow(v as Show)} className="self-start" aria-label="Which marks">
         {SHOWS.map(([value, label]) => (
           <ToggleGroupItem key={value} value={value} className="gap-1.5 px-3">

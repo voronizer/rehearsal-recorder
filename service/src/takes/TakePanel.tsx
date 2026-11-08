@@ -1,12 +1,11 @@
 import type { ReactNode } from "react"
 import { Link } from "@tanstack/react-router"
-import { X } from "lucide-react"
-import { Button } from "@/components/ui/button"
 import { Toggle } from "@/components/ui/toggle"
 import { cn } from "@/lib/utils"
 import { usePeaks, useTake, type TakePage } from "../api"
 import { TakeMarks } from "../marks/MarkItem"
-import { Group, Groups, OPENS, Trouble, Waiting } from "../shell/parts"
+import { Closing } from "../marks/MarkPanel"
+import { Group, Groups, OPENS, PanelClose, Trouble, Waiting } from "../shell/parts"
 import { usePanel } from "../shell/panel"
 import { clock, longDay } from "../shell/words"
 import { usePlayer, useTime } from "./player/one"
@@ -84,10 +83,20 @@ export function TakePlayer({ take, height = 64, star }: { take: TakePage; height
 
 /** The take's panel: its rehearsal and song, its player, Tracks folded, Marks. */
 export function TakePanel({ uid, markAt }: { uid: string; markAt?: number }) {
-  const { open, close } = usePanel()
+  const { close } = usePanel()
   const take = useTake(uid)
-  if (take.error) return <Trouble error={take.error} retry={() => void take.refetch()} />
-  if (!take.data) return <Waiting />
+  if (take.error)
+    return (
+      <Closing>
+        <Trouble error={take.error} retry={() => void take.refetch()} />
+      </Closing>
+    )
+  if (!take.data)
+    return (
+      <Closing>
+        <Waiting />
+      </Closing>
+    )
   const t = take.data
   return (
     <div className="flex flex-col gap-6" aria-label={t.name}>
@@ -99,11 +108,9 @@ export function TakePanel({ uid, markAt }: { uid: string; markAt?: number }) {
           </Link>
         </h2>
         {!t.trashed_at && <TakeMenu take={t} onGone={close} />}
-        <Button variant="ghost" size="icon-row" aria-label="Close" onClick={close}>
-          <X />
-        </Button>
+        <PanelClose />
       </div>
-      {/* Where the take comes from: its rehearsal's page, its song's panel. */}
+      {/* Where the take comes from: its rehearsal's page, its song's page. */}
       <p className="-mt-4 flex flex-wrap items-baseline gap-x-1.5 text-xs text-muted-foreground">
         <Link to="/rehearsals/$uid" params={{ uid: t.rehearsal.uid }} className={OPENS}>
           {longDay(t.date)}
@@ -112,9 +119,9 @@ export function TakePanel({ uid, markAt }: { uid: string; markAt?: number }) {
           {t.song && (
             <>
               <span>·</span>
-              <button type="button" className={OPENS} onClick={() => open({ kind: "song", id: t.song!.id })}>
+              <Link to="/songs/$id" params={{ id: String(t.song.id) }} className={OPENS}>
                 {t.song.title}
-              </button>
+              </Link>
             </>
           )}
         </SongWord>

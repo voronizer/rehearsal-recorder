@@ -48,15 +48,15 @@ export function Song() {
       head={<Back to="/songs" label="Songs" />}
       title={
         <span className="flex flex-wrap items-center gap-3">
-          <InPlaceTitle song={song} size="page">
+          <InPlaceTitle song={song}>
             <span className="min-w-0 [overflow-wrap:anywhere]">{song.title}</span>
           </InPlaceTitle>
           <StatusMenu song={song} />
           <KeySelect song={song} />
           <TempoControls song={song} />
-          {/* ⋯ is the song's, not the tempo's: at the row's far end, as in the panel (Alex, 5 November). */}
+          {/* ⋯ is the song's, not the tempo's: at the row's far end (Alex, 5 November). */}
           <span className="flex-1" />
-          <SongMenu song={song} onGone={() => navigate({ to: "/songs" })} />
+          <SongMenu song={song} onGone={() => navigate({ to: "/songs", replace: true })} />
         </span>
       }
       sub={<TitleFacts song={song}>{facts}</TitleFacts>}

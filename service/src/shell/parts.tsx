@@ -1,9 +1,11 @@
 import { Children, createContext, Fragment, useContext, useEffect, useRef, useState, type ReactNode } from "react"
 import { Link } from "@tanstack/react-router"
-import { ChevronLeft, ChevronRight } from "lucide-react"
+import { ChevronLeft, ChevronRight, PanelRightClose, X } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { cn } from "@/lib/utils"
+import { usePanel } from "./panel"
 import { useSize } from "./size"
 
 /*
@@ -16,8 +18,35 @@ import { useSize } from "./size"
 type Surface = "page" | "card" | "panel"
 const SurfaceCtx = createContext<Surface>("page")
 export const InPanel = ({ children }: { children: ReactNode }) => <SurfaceCtx.Provider value="panel">{children}</SurfaceCtx.Provider>
+/** In a card of its own on a page, such as an editor at its top: its groups are parts of that card. */
+export const InCard = ({ children }: { children: ReactNode }) => <SurfaceCtx.Provider value="card">{children}</SurfaceCtx.Provider>
 /** Whether this is drawn in the panel, not on the page. */
 export const useInPanel = () => useContext(SurfaceCtx) === "panel"
+
+/** The panel as the drawer on a take's page (shell/drawer.tsx): it folds into its strip rather than closing. */
+const DrawerCtx = createContext(false)
+export const InDrawer = ({ children }: { children: ReactNode }) => <DrawerCtx.Provider value>{children}</DrawerCtx.Provider>
+
+/** The panel's ✕; in the drawer, the sign that folds it into its strip, so there is one way to fold it. */
+export function PanelClose() {
+  const { close } = usePanel()
+  if (!useContext(DrawerCtx))
+    return (
+      <Button variant="ghost" size="icon-row" aria-label="Close" onClick={close}>
+        <X />
+      </Button>
+    )
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <Button variant="ghost" size="icon-row" aria-label="Fold the panel" onClick={close}>
+          <PanelRightClose />
+        </Button>
+      </TooltipTrigger>
+      <TooltipContent>Fold the panel</TooltipContent>
+    </Tooltip>
+  )
+}
 
 /** A child's own key, so a row keeps its state when one is added above it; its place when it has none. */
 const keyOf = (c: ReturnType<typeof Children.toArray>[number], i: number) =>
@@ -200,10 +229,11 @@ export function TitleWith({ title, children }: { title: string; children: ReactN
   )
 }
 
-/** A section with nothing in it yet: what will come, and how. */
-export function Empty({ title, text }: { title: ReactNode; text: string }) {
+/** A section with nothing in it yet: what will come, and how; `top`, an editor open over it. */
+export function Empty({ title, text, top }: { title: ReactNode; text: string; top?: ReactNode }) {
   return (
     <Page title={title}>
+      {top}
       <Tile>
         <p className="text-muted-foreground">{text}</p>
       </Tile>
