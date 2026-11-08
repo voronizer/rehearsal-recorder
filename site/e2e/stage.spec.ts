@@ -65,7 +65,7 @@ test("the story goes through its four steps", async ({ page }) => {
   // Record, the count-in, and the guitar clipping.
   await step(page, 1)
   await expect.poll(() => scene(page), { timeout: 30_000 }).toBe("during")
-  await expect(page.locator("h1")).toContainText(/Pałyn\s*3/)
+  await expect(page.locator("h1")).toContainText(/Pałyn\s*#3/)
   await expect(page.getByText("clipped 3×")).toBeVisible()
 
   // Stop, save, and back on the rehearsal screen the unnamed take is named
@@ -90,7 +90,7 @@ test("the story goes through its four steps", async ({ page }) => {
   await expect.poll(() => scene(page), { timeout: 30_000 }).toBe("later")
   const open = page.locator("[data-tab][aria-current='true']")
   await expect(open).toHaveAttribute("data-tab", "song:Pałyn")
-  await expect(open.locator("[data-tab-line]")).toHaveText(/^7/)
+  await expect(open.locator("[data-tab-line]")).toHaveText(/^#7/)
   await expect(page.locator("[data-column]").first()).toBeVisible()
   await expect(page.locator("[data-region-span]")).toBeVisible()
 })
@@ -186,7 +186,7 @@ test("the moments of last week's Palyn, Palyn picked with its 128 bpm by the arr
         tempo: row?.querySelector<HTMLInputElement>("input[aria-label='Tempo']")?.value ?? null,
         signature: row?.querySelector("[aria-label='Time signature']")?.textContent ?? null,
         countIn: Boolean(document.querySelector("[data-count-in]")),
-        recording: Boolean(document.querySelector("h1")?.textContent?.match(/Pałyn\s*3/)),
+        recording: Boolean(document.querySelector("h1")?.textContent?.match(/Pałyn\s*#3/)),
       })
     }).observe(document, { attributeFilter: ["data-moment"], subtree: true })
   })
@@ -247,7 +247,7 @@ test("the second step gets to the take with no click to count it in", async ({ p
   )
   await step(page, 1)
   await expect.poll(() => scene(page), { timeout: 30_000 }).toBe("during")
-  await expect(page.locator("h1")).toContainText(/Pałyn\s*3/)
+  await expect(page.locator("h1")).toContainText(/Pałyn\s*#3/)
 })
 
 // The songs beside the next take's field come a moment after the screen; on

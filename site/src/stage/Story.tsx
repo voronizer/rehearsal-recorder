@@ -303,11 +303,11 @@ const FORWARD: Record<(typeof STORY)[number], (tell: Telling) => Promise<void>> 
       )
     await press("Songs", { exact: true })
     ;(await take("Take 3 Pałyn 6")).click()
-    await openTake("6")
+    await openTake("#6")
     await beat(4)
     await linger(LOOPING_MS)
     key("ArrowDown")
-    await openTake("7")
+    await openTake("#7")
     await beat(5)
   },
 }
