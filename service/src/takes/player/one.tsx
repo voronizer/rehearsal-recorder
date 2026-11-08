@@ -145,15 +145,16 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const t = take.data
     if (!t || !supported) return
-    const p = new Player(t.tracks.map((k) => ({ url: k.mp3, gain: levelOf(yoursNow.current, t, k.name) })))
+    // As the take's page left it: its repeat, M and S, and the levels turned
+    // there and not kept yet; else the M and S pressed in its panel.
+    const setup: Setup = setups.current.get(t.uid)?.() ?? { loop: null, ...(desksNow.current[t.uid] ?? NO_DESK), moved: {} }
+    const p = new Player(t.tracks.map((k) => ({ url: k.mp3, gain: setup.moved[k.name] ?? levelOf(yoursNow.current, t, k.name) })))
     p.setMaster(master.current)
     p.onChange = () => {
       tick(t.uid, p.time())
       redraw((n) => n + 1)
     }
     p.onEnd = () => redraw((n) => n + 1)
-    // As the take's page left it: its repeat, M and S; else the M and S pressed in its panel.
-    const setup: Setup = setups.current.get(t.uid)?.() ?? { loop: null, ...(desksNow.current[t.uid] ?? NO_DESK), moved: {} }
     if (setup.loop) p.setLoop(setup.loop.a, setup.loop.b)
     for (const i of setup.muted) p.setMute(i, true)
     if (setup.solo !== null) p.setSolo(setup.solo, true)
