@@ -4,8 +4,9 @@ Putting names right, in the background.
 A take's folder on disk and its copies in the cloud folder are named after
 the take, and the name follows from its song and its go (store/names.py).
 When the name changes without the files — migration 0002 numbering old goes
-across the library, "Polyn" becoming "Polyn 1", "Recovered take 5" becoming
-"Take 5" — this renames whatever no longer carries it.
+across the library, "Polyn" becoming "Polyn 1"; migration 0015 numbering
+the takes with no song, "07 - Take 7" becoming "07 - Take 47" — this renames
+whatever no longer carries it.
 
 One take at a time, each done and recorded before the next, so a pass
 stopped half way (the app closed) is picked up by the next one, which skips
