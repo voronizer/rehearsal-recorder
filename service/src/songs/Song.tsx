@@ -56,7 +56,7 @@ export function Song() {
           <TempoControls song={song} />
           {/* ⋯ is the song's, not the tempo's: at the row's far end (Alex, 5 November). */}
           <span className="flex-1" />
-          <SongMenu song={song} onGone={() => navigate({ to: "/songs" })} />
+          <SongMenu song={song} onGone={() => navigate({ to: "/songs", replace: true })} />
         </span>
       }
       sub={<TitleFacts song={song}>{facts}</TitleFacts>}

@@ -4,6 +4,7 @@ import { Toggle } from "@/components/ui/toggle"
 import { cn } from "@/lib/utils"
 import { usePeaks, useTake, type TakePage } from "../api"
 import { TakeMarks } from "../marks/MarkItem"
+import { Closing } from "../marks/MarkPanel"
 import { Group, Groups, OPENS, PanelClose, Trouble, Waiting } from "../shell/parts"
 import { usePanel } from "../shell/panel"
 import { clock, longDay } from "../shell/words"
@@ -84,8 +85,18 @@ export function TakePlayer({ take, height = 64, star }: { take: TakePage; height
 export function TakePanel({ uid, markAt }: { uid: string; markAt?: number }) {
   const { close } = usePanel()
   const take = useTake(uid)
-  if (take.error) return <Trouble error={take.error} retry={() => void take.refetch()} />
-  if (!take.data) return <Waiting />
+  if (take.error)
+    return (
+      <Closing>
+        <Trouble error={take.error} retry={() => void take.refetch()} />
+      </Closing>
+    )
+  if (!take.data)
+    return (
+      <Closing>
+        <Waiting />
+      </Closing>
+    )
   const t = take.data
   return (
     <div className="flex flex-col gap-6" aria-label={t.name}>

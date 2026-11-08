@@ -98,6 +98,24 @@ test("Statuses and New song open at the top of Songs, one in place of the other,
   await expect(page).toHaveURL(/\/songs$/)
 })
 
+test("New song pressed over a take's panel on Statuses closes the panel, and Cancel is Songs", async ({ page }) => {
+  await page.goto("/songs")
+  const main = page.getByRole("main")
+  const panel = page.getByLabel("Panel")
+  await page.getByRole("button", { name: "Statuses", exact: true }).click()
+  await main.locator('[data-song="Pałyn"]').getByRole("button", { name: /^Pałyn \d+$/ }).click()
+  await expect(panel).toBeVisible()
+  // The panel covers the buttons at the top right: by keyboard.
+  await page.getByRole("button", { name: "New song", exact: true }).focus()
+  await page.keyboard.press("Enter")
+  await expect(main.getByRole("heading", { name: "New song", exact: true })).toBeVisible()
+  await expect(main.getByRole("heading", { name: "Statuses", exact: true })).toHaveCount(0)
+  await expect(panel).toHaveCount(0)
+  await main.getByRole("button", { name: "Cancel" }).click()
+  await expect(page).toHaveURL(/\/songs$/)
+  await expect(main.getByRole("heading", { name: "Statuses", exact: true })).toHaveCount(0)
+})
+
 test("Edit statuses on a song's page opens Statuses on Songs", async ({ page }) => {
   await page.goto(`/songs/${band().songs["Pałyn"]}`)
   await page.getByRole("main").getByRole("button", { name: /^Status: / }).click()
@@ -217,6 +235,9 @@ test("a file and a song with no takes go only after asking", async ({ page }) =>
   await ask.getByRole("button", { name: "Delete song" }).click()
   await expect(page).toHaveURL(/\/songs$/)
   await expect(main.getByRole("link", { name: "Kalyhanka", exact: true })).toHaveCount(0)
+  // Back does not lead to the song that is gone.
+  await page.goBack()
+  await expect(page).toHaveURL(/\/songs$/)
   // It waits in the Trash, so РЭХА can learn of it; put back for the tests after.
   await page.getByRole("navigation", { name: "Sections" }).getByRole("link", { name: "Trash" }).click()
   const kept = page.locator('[data-song="Kalyhanka"]')

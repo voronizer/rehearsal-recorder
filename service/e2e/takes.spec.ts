@@ -611,6 +611,40 @@ test.describe("the drawer on a take's page, as Alex", () => {
     await expect(page.getByLabel("Strip")).toBeVisible()
   })
 
+  test("a drawer a chat link opened folds with Back, and with its sign after another mark", async ({ page }) => {
+    const k = band().takes["Kupalle 2"]
+    const quiet = (await marksOf(page, "Kupalle 2")).find((m) => m.note === "Too quiet here")!
+    const panel = page.getByLabel("Panel", { exact: true })
+    await page.goto(`/takes/${k}?at=3&mark=${quiet.id}`)
+    await expect(panel).toContainText("Mark at 0:03")
+    await page.goBack()
+    await expect(panel).toHaveCount(0)
+    await expect(page).toHaveURL(new RegExp(`/takes/${k}\\?at=3$`))
+
+    await page.goto(`/takes/${k}?at=3&mark=${quiet.id}`)
+    await expect(panel).toContainText("Mark at 0:03")
+    await page.locator("[data-take-player]").getByRole("button", { name: "Count it in" }).click()
+    await expect(panel).toContainText("Mark at 0:02")
+    await panel.getByRole("button", { name: "Fold the panel" }).click()
+    await expect(panel).toHaveCount(0)
+    // Folded, a reload does not open it again.
+    await page.reload()
+    await expect(page.getByLabel("Strip")).toBeVisible()
+    await expect(panel).toHaveCount(0)
+  })
+
+  test("a mark that is gone still has the fold sign, and a take that is not there no signs in its strip", async ({ page }) => {
+    const k = band().takes["Kupalle 2"]
+    await page.goto(`/takes/${k}?panel=mark:${k}:999999`)
+    const panel = page.getByLabel("Panel", { exact: true })
+    await expect(panel).toContainText("This mark is no longer there.")
+    await panel.getByRole("button", { name: "Fold the panel" }).click()
+    await expect(panel).toHaveCount(0)
+    await page.goto("/takes/no-such-take")
+    await expect(page.getByLabel("Strip")).toBeVisible()
+    await expect(page.getByLabel("Strip").getByRole("button")).toHaveCount(0)
+  })
+
   test("the take's name in a mark on its own page opens the drawer's list, not the take's panel", async ({ page }) => {
     await page.goto(`/takes/${band().takes["Kupalle 2"]}`)
     await page.locator("[data-take-player]").getByRole("button", { name: "Too quiet here" }).click()

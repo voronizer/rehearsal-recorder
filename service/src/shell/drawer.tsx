@@ -29,18 +29,23 @@ function Sign({ name, tip, onClick, children }: { name: string; tip: string; onC
  */
 export function Drawer({ uid, children }: { uid: string; children: ReactNode }) {
   const { open } = usePanel()
-  const marks = useTake(uid).data?.marks.length ?? 0
+  const take = useTake(uid).data
   const list = () => open({ kind: "marks", uid })
   return (
     <>
+      {/* There from the start, so the page does not move; its signs once the take has come. */}
       <aside aria-label="Strip" className="flex w-12 shrink-0 flex-col items-center gap-1 border-l bg-panel pt-3">
-        <Sign name="Open the panel" tip="Open the panel" onClick={list}>
-          <PanelRightOpen className="size-4" />
-        </Sign>
-        <Sign name={`Marks: ${marks}`} tip="Marks" onClick={list}>
-          <Diamond className="size-4" />
-          <span className="tnum">{marks}</span>
-        </Sign>
+        {take && (
+          <>
+            <Sign name="Open the panel" tip="Open the panel" onClick={list}>
+              <PanelRightOpen className="size-4" />
+            </Sign>
+            <Sign name={`Marks: ${take.marks.length}`} tip="Marks" onClick={list}>
+              <Diamond className="size-4" />
+              <span className="tnum">{take.marks.length}</span>
+            </Sign>
+          </>
+        )}
       </aside>
       {children}
     </>

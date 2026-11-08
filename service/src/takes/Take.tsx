@@ -45,6 +45,7 @@ export function Take() {
   const p = usePlayer()
   const size = useSize()
   const { open } = usePanel()
+  const navigate = useNavigate()
   const [shown, setShown] = useState("")
   const ready = !!take.data
   useEffect(() => {
@@ -61,8 +62,17 @@ export function Take() {
     if (!about || shown === link) return
     setShown(link)
     if (size === "phone") document.querySelector(`[data-mark="${about.id}"]`)?.scrollIntoView({ block: "center" })
-    else open({ kind: "mark", uid, id: about.id }, { replace: true })
-  }, [take.data, mark, comment, uid, size, shown, open])
+    // The page under the mark without what the link was about: folding the
+    // drawer, Esc or Back come back to it, and a reload does not open the
+    // mark again.
+    else
+      void navigate({
+        to: ".",
+        search: ((prev: Record<string, unknown>) => ({ ...prev, mark: undefined, comment: undefined })) as never,
+        replace: true,
+        resetScroll: false,
+      }).then(() => open({ kind: "mark", uid, id: about.id }))
+  }, [take.data, mark, comment, uid, size, shown, open, navigate])
   if (take.error) return <Trouble error={take.error} retry={() => void take.refetch()} />
   if (!take.data) return null
   return <TakeView take={take.data} />
