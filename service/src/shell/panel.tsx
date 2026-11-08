@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useMemo, type ReactNode } from "react"
 import { useNavigate, useRouter, useRouterState } from "@tanstack/react-router"
+import { useSize } from "./size"
 
 /**
  * What the panel from the right holds: a take (with a new mark at
@@ -71,6 +72,7 @@ export const usePanel = () => useContext(PanelCtx)!
 export function PanelProvider({ children }: { children: ReactNode }) {
   const router = useRouter()
   const navigate = useNavigate()
+  const phone = useSize() === "phone"
   const text = useRouterState({ select: (s) => (s.location.search as { panel?: unknown }).panel })
   const depth = useRouterState({ select: (s) => (s.location.state as Kept).panelDepth ?? 0 })
   const panel = useMemo(() => panelOf(text), [text])
@@ -84,8 +86,16 @@ export function PanelProvider({ children }: { children: ReactNode }) {
     })
   // A panel opened here goes back the way it came, so Back after ✕ does not open it again.
   const close = () => (depth > 0 ? router.history.go(-depth) : go(undefined, true, 0))
-  const open = (p: Panel, how?: { replace?: boolean }) => {
+  const open = (p: Panel, how?: { replace?: boolean }): void => {
     if (!p) return close()
+    // On a phone a take is its page, which has its wave, tracks and marks:
+    // its panel would be the same page with less on it. **Mark** opens a new
+    // mark there, full screen, as a mark's panel is.
+    if (phone && p.kind === "take") {
+      if (p.markAt !== undefined) return open({ kind: "mark", uid: p.uid, at: p.markAt }, how)
+      if (router.state.location.pathname === `/takes/${p.uid}`) return close()
+      return void navigate({ to: "/takes/$uid", params: { uid: p.uid } })
+    }
     const next = panelText(p)
     if (typeof text === "string" && next === text) return close()
     if (how?.replace) go(next, true, depth)

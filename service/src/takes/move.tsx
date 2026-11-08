@@ -56,8 +56,8 @@ function useShown() {
 
 /**
  * **Not named**, then the band's songs, with the take's place ticked, then
- * **New song…**. From a row, New song… opens the take's panel first: the
- * field stands in its line.
+ * **New song…**. From a row, New song… opens the take's panel first (on a
+ * phone its page): the field stands in its line.
  */
 export function MoveSub({
   take,

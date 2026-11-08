@@ -57,6 +57,27 @@ test.describe("on a phone", () => {
     await expect(bar.getByRole("button", { name: "Pause “Viasna 11”" })).toBeVisible()
     await bar.getByRole("button", { name: "Pause “Viasna 11”" }).click()
   })
+
+  test("a take's name opens its page, and Mark in the bar opens a new mark", async ({ page }) => {
+    await page.goto("/")
+    await page.getByRole("region", { name: "The last rehearsal" }).getByRole("button", { name: "Viasna 11", exact: true }).click()
+    await expect(page).toHaveURL(`/takes/${band().takes["Viasna 11"]}`)
+    await expect(page.getByLabel("Panel")).toHaveCount(0)
+    const bar = page.getByLabel("Player")
+    await expect(bar.getByRole("button", { name: "Viasna 11", exact: true })).toBeVisible()
+    await bar.getByRole("button", { name: "Mark", exact: true }).click()
+    await expect(page.getByLabel("Panel")).toContainText(/New mark at \d:\d\d/)
+  })
+
+  test("New song from a take's line opens its page with the name field", async ({ page }) => {
+    await page.goto("/songs")
+    await page.getByRole("region", { name: "Not named" }).getByRole("button", { name: "What to do with Take 7", exact: true }).click()
+    await page.getByRole("menuitem", { name: "Move to song" }).click()
+    await page.getByRole("menuitem", { name: "New song…" }).click()
+    await expect(page).toHaveURL(`/takes/${band().takes["Take 7"]}`)
+    await expect(page.getByRole("main").getByRole("textbox", { name: "New song" })).toBeVisible()
+    await expect(page.getByLabel("Panel")).toHaveCount(0)
+  })
 })
 
 test("Esc in a menu inside a panel closes the menu, not the panel", async ({ page }) => {
