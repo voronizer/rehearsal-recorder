@@ -22,7 +22,8 @@ take taken out of the service by hand, or one it turned down, is left as
 it is, as a rename leaves it (BandService.edited).
 
 Going back drops the table. An app from before reads a take with no song by
-its take number again and does not look at its go.
+its take number again and does not look at its go. Coming back up numbers
+the takes with no song afresh, in the same order.
 """
 from typing import Sequence, Union
 
