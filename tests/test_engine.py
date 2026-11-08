@@ -934,6 +934,9 @@ def main():
     a.start_rehearsal("Jam", 0, SR, [{"name": "Gtr", "channel": 1}])
     folder = Path(a._session["folder"])
     ok("first take is numbered", a.suggest_take_name() == "Take 1")
+    ok("as no song, at the next go of the takes with no song",
+       a._next_take() == {"song": None, "go": 1, "name": "Take 1"}
+       and a.session_state()["next_take_go"] == 1)
 
     def keep(number, name):
         a._session["take_counter"] = number
@@ -942,12 +945,13 @@ def main():
         return a.keep_take(number, str(d), name, 1.0,
                            [{"name": "Gtr", "file": str(d / "Gtr.wav")}])
 
-    # While take 1 is recording the counter already stands at 1, so the name
-    # offered for it must be "Take 1" and not the next one's "Take 2".
+    # While take 1 is recording the counter already stands at 1. A take with
+    # no song is named by its go, not by its place in the rehearsal, and no
+    # go is given until a take is kept.
     a._session["take_counter"] = 1
-    ok("the take being reviewed keeps its own number",
+    ok("the take being reviewed is offered the next go with no song",
        a.suggest_take_name(1) == "Take 1")
-    ok("the next one is still the next one", a.suggest_take_name() == "Take 2")
+    ok("and so is the one after it, until a take is kept", a.suggest_take_name() == "Take 1")
     a._session["take_counter"] = 0
 
     keep(1, "Polyn")
@@ -997,8 +1001,8 @@ def main():
        [c["last_take"] for c in a.song_choices()["here"]] == [2, 3, 4])
     ok("the take being renamed keeps its own go at its own song",
        plain(a.song_choices(str(folder), 2)["here"])[0] == {"song": "Polyn", "go": 2})
-    ok("nothing to name after with no rehearsal and no library",
-       fresh_api(tmp / "nothing")[1].song_choices() == {"here": [], "other": []})
+    ok("nothing to name after with no rehearsal and no library, and a take with no song is the first",
+       fresh_api(tmp / "nothing")[1].song_choices() == {"here": [], "other": [], "unnamed_go": 1})
 
     print("\n[8b] A take can arrive with marks already on it")
     # Marks made on the review screen, before the take had a folder, travel
@@ -2274,8 +2278,11 @@ def main():
     d._session["take_counter"] = 5
     d.keep_take(5, str(draft), "Take 5", 0.25,
                 [{"name": "Gtr", "file": str(draft / "Gtr.wav")}])
+    # Two takes with no song imported from Unnamed, one from Half, take 2
+    # tonight and this one: the next with no song is the sixth.
     ok("a take nobody named is no song, so there is nothing to compare with",
        d.session_state()["next_take_name"] == "Take 6"
+       and d.session_state()["next_take_go"] == 6
        and "last_attempt" in d.session_state()
        and d.session_state()["last_attempt"] is None)
 
@@ -2379,7 +2386,7 @@ def main():
        lt["last"]["folder"] == last and lt["last"]["name"] == "Tuesday jam")
     ok("with every take as the player needs it, and its songs",
        [t["name"] for t in lt["last"]["takes"]]
-       == ["Polyn 2", "Polyn 3", "Vesna 1", "Take 4", "Polyn 4"]
+       == ["Polyn 2", "Polyn 3", "Vesna 1", "Take 1", "Polyn 4"]
        and all("tracks" in t and "markers" in t for t in lt["last"]["takes"])
        and [(s["name"], s["take_numbers"]) for s in lt["last"]["songs"]]
        == [("Polyn", [1, 2, 5]), ("Vesna", [3])])
@@ -2401,6 +2408,10 @@ def main():
     ok("a take being renamed keeps its own go at its own song",
        e.song_choices(last, 2)["here"][0]["go"] == 3
        and e.song_choices(last, 5)["here"][0]["go"] == 4)
+    # Tuesday's take 4 was the first with no song; the soundcheck's two came after.
+    ok("an empty name field is offered the next go with no song, or the take's own when it has no song",
+       e.song_choices(last)["unnamed_go"] == 4 and e.song_choices(last, 2)["unnamed_go"] == 4
+       and e.song_choices(last, 4)["unnamed_go"] == 1)
     ok("an older rehearsal is offered the songs played after it too",
        [c["song"] for c in e.song_choices(older)["other"]] == ["Vesna", "Dym", "Ptaha"]
        and plain(e.song_choices(older)["here"])[1] == {"song": "Doroga", "go": 3})
@@ -5246,8 +5257,14 @@ def main():
     ok("a stop whose name cannot be looked up still stops and keeps the take",
        stopped44.get("ok") is True and a44._recorder is None
        and (Path(stopped44["temp_dir"]) / "Gtr.wav").exists()
-       and stopped44["suggested_name"] == f"Take {stopped44['take_number']}"
-       and stopped44["default_name"] == f"Take {stopped44['take_number']}")
+       and stopped44["suggested_name"] == "Take" and stopped44["default_name"] == "Take")
+    ok("and its line in the background work says Take, not its place in the rehearsal",
+       any(e["title"] == "Saving “Take”" for e in a44.activity()["entries"]))
+    kept44 = a44.keep_take(stopped44["take_number"], stopped44["temp_dir"], stopped44["suggested_name"],
+                           stopped44["duration_sec"], stopped44["tracks"])
+    ok("kept so, it is no song, at the next go of the takes with no song",
+       kept44["ok"] and (kept44["take"]["name"], kept44["take"]["song"], kept44["take"]["go"])
+       == ("Take 1", None, 1))
 
     print("\n[45] Removing a copy that is on its way, and saying what a copy is")
     root45 = Path(tempfile.mkdtemp())
@@ -5814,8 +5831,7 @@ def main():
         a51._session_takes = real_session_takes51
     ok("a name picked before recording survives a library that cannot say "
        "what the take would have been called",
-       third51["suggested_name"] == "Ogon"
-       and third51["default_name"] == f"Take {third51['take_number']}")
+       third51["suggested_name"] == "Ogon" and third51["default_name"] == "Take")
 
     print("\n[52] A take is a go at a song, numbered across the library")
     _, s52 = fresh_api(Path(tempfile.mkdtemp()))
@@ -5851,9 +5867,14 @@ def main():
     ok("a number typed after the title names the song; the go is the app's",
        typed52["name"] == "Polyn 3" and folder_of(typed52) == "01 - Polyn 3")
     unnamed52 = keep52(2, "Take 9")
-    ok("a take nobody named is called by its own number",
-       (unnamed52["name"], unnamed52["song"]) == ("Take 2", None)
-       and folder_of(unnamed52) == "02 - Take 2")
+    ok("a take nobody named is counted with the takes with no song, whatever number was typed; "
+       "its folder still starts with its place in the rehearsal",
+       (unnamed52["name"], unnamed52["song"], unnamed52["go"]) == ("Take 1", None, 1)
+       and folder_of(unnamed52) == "02 - Take 1")
+    ok("after it, the next take is no song at the next go, and the recording screen is told that go",
+       s52._next_take() == {"song": None, "go": 2, "name": "Take 2"}
+       and s52.session_state()["next_take_name"] == "Take 2"
+       and s52.session_state()["next_take_go"] == 2)
     titled52 = keep52(3, "Song 2")
     ok("a title ending in a number is a song of its own when no shorter one exists",
        (titled52["name"], titled52["song"], titled52["go"]) == ("Song 2 1", "Song 2", 1))
@@ -5889,9 +5910,9 @@ def main():
     rescued52.mkdir(parents=True)
     (rescued52 / "Gtr.raw").write_bytes(struct.pack("<h", 1234) * SR)
     got52 = s52.recover_draft(str(rescued52))
-    ok("a draft rescued with no name is a take nobody named",
-       got52["ok"] and got52["take"]["name"] == "Take 4"
-       and folder_of(got52["take"]) == "04 - Take 4")
+    ok("a draft rescued with no name is a take nobody named, at the next go with no song",
+       got52["ok"] and got52["take"]["name"] == "Take 2"
+       and folder_of(got52["take"]) == "04 - Take 2")
 
     print("\n[53] Putting names right")
     import shutil
@@ -6006,9 +6027,9 @@ def main():
         p53._move_take_dir = real_move53
     takes53 = {t["take_number"]: t for t in p53.get_rehearsal(str(jam53))["takes"]}
     ok("old names are put right on disk: the first go gains its number, a case-only "
-       "rename is made, and a recovered take is Take N",
+       "rename is made, and a recovered take is no song, the first in the library",
        renamed53 == 4
-       and dirs53() == ["01 - Polyn 1", "02 - Polyn 2", "03 - Take 3", "04 - polyn 4"]
+       and dirs53() == ["01 - Polyn 1", "02 - Polyn 2", "03 - Take 1", "04 - polyn 4"]
        and Path(takes53[2]["tracks"][0]["file"]).exists())
     ok("goes are numbered across the library on disk too",
        dirs53(later53) == ["01 - Polyn 4"])
@@ -6026,7 +6047,7 @@ def main():
        p53._names_pass.run() == 0 and len(p53.activity()["entries"]) == entries53)
 
     takes53 = {t["take_number"]: t for t in p53.get_rehearsal(str(jam53))["takes"]}
-    taken53 = jam53 / "03 - Take 3 (2)"
+    taken53 = jam53 / "03 - Take 1 (2)"
     Path(takes53[3]["tracks"][0]["file"]).parent.rename(taken53)
     p53._lib.update_take(jam53, 3, tracks=[{"name": "Gtr", "file": str(taken53 / "Gtr.wav")}])
     ok("a folder that took “(2)” because the name was taken counts as carrying it",
@@ -6071,6 +6092,63 @@ def main():
     ok("and once it is there, it is renamed, case or not",
        p53._names_pass.run() == 1 and (cloud53 / jam53.name / "02 - Polyn 2.wav").exists())
 
+    # A library from before the takes with no song were counted (0014),
+    # opened by this version: take 7 of the gig was "Take 7", by its place,
+    # and is the 47th take with no song in the library.
+    tmp53b = Path(tempfile.mkdtemp())
+    rec53b, cloud53b = tmp53b / "Rec", tmp53b / "Drive"
+    old53b = rec53b / "Old - 2026-01-10 19-00"
+    gig53b = rec53b / "Gig - 2026-02-14 19-00"
+    upto53b = tmp53b / "migrations"
+    shutil.copytree(dbmod.MIGRATIONS, upto53b, ignore=shutil.ignore_patterns("__pycache__"))
+    for f in (upto53b / "versions").glob("*.py"):
+        if f.name[:4] > "0014":
+            f.unlink()
+    rec53b.mkdir(parents=True)
+    dbmod.open_engine(rec53b, upto53b).dispose()
+    engine53b = dbmod.make_engine(dbmod.database_path(rec53b))
+    with engine53b.begin() as c:
+        old_id53b = c.execute(sql_text(
+            "INSERT INTO rehearsal (folder, name, created_at, samplerate, bit_depth) "
+            "VALUES (:f, 'Old', '2026-01-10T19:00:00', 48000, 16)"), {"f": old53b.name}).lastrowid
+        # 46 takes nobody named, long ago: their folders are not on this disk.
+        for n in range(1, 47):
+            c.execute(sql_text(
+                "INSERT INTO take (rehearsal_id, take_number, duration_sec, cloud_skip, cloud_send, "
+                "starred, click) VALUES (:r, :n, 0.5, 0, 0, 0, 0)"), {"r": old_id53b, "n": n})
+        gig_id53b = c.execute(sql_text(
+            "INSERT INTO rehearsal (folder, name, created_at, samplerate, bit_depth) "
+            "VALUES (:f, 'Gig', '2026-02-14T19:00:00', 48000, 16)"), {"f": gig53b.name}).lastrowid
+        seven53b = gig53b / "07 - Take 7"
+        write_wav(seven53b / "Gtr.wav", 100, seconds=0.5)
+        tid53b = c.execute(sql_text(
+            "INSERT INTO take (rehearsal_id, take_number, duration_sec, cloud_skip, cloud_send, "
+            "starred, click) VALUES (:r, 7, 0.5, 0, 0, 0, 0)"), {"r": gig_id53b}).lastrowid
+        c.execute(sql_text("INSERT INTO take_file (take_id, position, name, file, kind) "
+                           "VALUES (:t, 0, 'Gtr', '07 - Take 7/Gtr.wav', 'audio')"), {"t": tid53b})
+        mix53b = cloud53b / gig53b.name / "07 - Take 7.wav"
+        mix53b.parent.mkdir(parents=True)
+        mix53b.write_bytes(b"RIFF")
+        c.execute(sql_text("INSERT INTO cloud_copy (take_id, mix, mix_format, source) "
+                           "VALUES (:t, :m, 'wav', '{}')"), {"t": tid53b, "m": f"{gig53b.name}/{mix53b.name}"})
+    engine53b.dispose()
+    (tmp53b / "config.json").write_text(json.dumps(
+        {"recordings_dir": str(rec53b), "cloud_dir": str(cloud53b)}), encoding="utf-8")
+    _, p53b = fresh_api(tmp53b)
+    seven53b_now = p53b._lib.take(gig53b, 7)
+    ok("a library from before is counted when it opens: the gig's take 7 is the 47th with no song",
+       (seven53b_now["name"], seven53b_now["song"], seven53b_now["go"]) == ("Take 47", None, 47))
+    ok("and its folder and cloud copy are out of line until the names pass",
+       {n for _, n, _ in p53b._names_out_of_line()} == {7}
+       and p53b._out_of_line(seven53b_now) == {"disk", "cloud"})
+    ok("the pass at open renames them to the new name; the folder keeps its place, 07",
+       p53b._names_pass.run() == 1
+       and dirs53(gig53b) == ["07 - Take 47"] and (gig53b / "07 - Take 47" / "Gtr.wav").is_file()
+       and sorted(p.name for p in (cloud53b / gig53b.name).iterdir()) == ["07 - Take 47.wav"]
+       and p53b._lib.take(gig53b, 7)["tracks"][0]["file"] == str(gig53b / "07 - Take 47" / "Gtr.wav")
+       and Path(p53b._lib.take(gig53b, 7)["cloud"]["mix"]) == cloud53b / gig53b.name / "07 - Take 47.wav")
+    ok("and a pass after it finds nothing left", p53b._names_out_of_line() == [])
+
     print("\n[54] Stars: a star on a take, and the go a song's play button plays")
     tmp54 = Path(tempfile.mkdtemp())
     _, s54 = fresh_api(tmp54)
@@ -6093,7 +6171,7 @@ def main():
                           ["Polyn", "Polyn 2", "Doroga", "Doroga 2"])
     # Polyn 3, Vesna 1.
     mid54 = rehearsal54("Middle", "2026-09-10T19:00:00", ["Polyn", "Vesna"])
-    # Polyn 4, Vesna 2, Polyn 5, Take 4.
+    # Polyn 4, Vesna 2, Polyn 5, Take 1.
     last54 = rehearsal54("Tuesday", "2026-09-22T19:00:00",
                          ["Polyn", "Vesna", "Polyn 2", "Take 4"])
 
@@ -6270,12 +6348,12 @@ def main():
         import_all(s56._lib, s56._cloud_dir)
         return str(folder)
 
-    # Polyn 1, Polyn 2, Doroga 1, Take 4.
+    # Polyn 1, Polyn 2, Doroga 1, Take 1.
     first56 = rehearsal56("First", "2026-08-25T19:00:00",
                           ["Polyn", "Polyn 2", "Doroga", "Take 4"])
     # Polyn 3, Vesna 1.
     mid56 = rehearsal56("Middle", "2026-09-10T19:00:00", ["Polyn", "Vesna"])
-    # Vesna 2, Polyn 4, Polyn 5, Take 4.
+    # Vesna 2, Polyn 4, Polyn 5, Take 2.
     last56 = rehearsal56("Tuesday", "2026-09-22T19:00:00",
                          ["Vesna", "Polyn", "Polyn 2", "Take 4"])
 
@@ -6323,6 +6401,8 @@ def main():
     ok("the takes with no song have a page of their own, newest first",
        unnamed56["ok"] and unnamed56["title"] is None
        and goes56(None) == [(last56, 4), (first56, 4)])
+    ok("each with its go, counted across the library as a song's goes are",
+       [(g["take"]["name"], g["take"]["go"]) for g in unnamed56["goes"]] == [("Take 2", 2), ("Take 1", 1)])
     ok("a song nobody has is not found",
        s56.get_song(9999) == {"ok": False, "error": "Song not found"})
 
@@ -6653,9 +6733,12 @@ def main():
            "folder": last60, "rehearsal": "Tuesday", "created_at": "2026-09-22T19:00:00",
            "missing": False, "take_number": 1, "name": "Polyn 2", "song": "Polyn", "go": 2,
            "duration_sec": 100, "at": 20, "note": "count"})
-    ok("a take with no song is listed too",
-       went60["marks"][2]["name"] == "Take 2" and went60["marks"][2]["song"] is None
-       and went60["marks"][2]["go"] is None)
+    # First's take 2 was the first with no song in the library, Tuesday's the second.
+    ok("a take with no song is listed too, by its go",
+       (went60["marks"][2]["name"], went60["marks"][2]["song"], went60["marks"][2]["go"])
+       == ("Take 2", None, 2)
+       and (s60.list_marks(1)["marks"][1]["take_number"], s60.list_marks(1)["marks"][1]["name"])
+       == (2, "Take 1"))
     ok("another label's marks are its own",
        where60(1) == [(mid60, 1, 5), (first60, 2, 10)])
     ok("a label that is not there is not found",
@@ -10465,16 +10548,17 @@ def main():
 
     print("  a cloud copy a later take has now")
     mon72 = past71(q72, "Monday", "2026-09-28T19:00:00", ["Polyn"])
-    add71(q72, mon72, 2, "")
+    add71(q72, mon72, 2, "AC+DC")
     q72._copy_to_cloud(str(mon72), 2, "mix")
     copy72 = Path(q72._lib.take(mon72, 2)["cloud"]["mix"])
     old72 = q72.delete_take(str(mon72), 2).get("undo")
-    # recover_draft numbers the next take one past the highest: 2 again,
-    # named "Take 2" again, so its copy lands on the same path.
-    add71(q72, mon72, 2, "")
+    # recover_draft numbers the next take one past the highest: 2 again. A go
+    # is never given twice, but AC&DC 1 is one file name with AC+DC 1
+    # ("AC_DC 1"), so its copy lands on the same path.
+    add71(q72, mon72, 2, "AC&DC")
     q72._copy_to_cloud(str(mon72), 2, "mix")
     ok("(the later take's copy is where the deleted one's was)",
-       q72._lib.take(mon72, 2)["name"] == "Take 2"
+       q72._lib.take(mon72, 2)["name"] == "AC&DC 1" and copy72.name == "02 - AC_DC 1.wav"
        and q72._lib.take(mon72, 2)["cloud"]["mix"] == str(copy72) and copy72.is_file())
     q72.end_trash(old72)
     ok("e. the deleted take's end leaves the copy the later take has there",
@@ -10584,8 +10668,8 @@ def main():
     dir_o = dir72(q72, thu72, 1)
     files_o = bytes71(dir_o)
     refused72 = q72.undo_trash(waiting_h)
-    ok("one whose number another take has now says so, and leaves both as they are",
-       refused72 == {"ok": False, "error": "Take 1 is taken by another take now."}
+    ok("one whose place another take has now says so, with no number, and leaves both as they are",
+       refused72 == {"ok": False, "error": "A newer take has its place now."}
        and waiting_h in entries71(rec72) and bytes71(dir_o) == files_o
        and q72._lib.take(thu72, 1)["name"].startswith("Ogon"))
     waiting_v = q72.delete_take(str(thu72), 2).get("undo")
@@ -12237,15 +12321,16 @@ def main():
     # A copy is filed under its rehearsal's folder name as "NN - name"
     # (_copy_to_cloud). Within one rehearsal two takes never share that:
     # their numbers differ, and Undo refuses a number taken meanwhile. Across
-    # rehearsals a song's go is never given twice, so two takes of songs are
-    # never named alike either. Two takes nobody named are, though ("Take 1"
-    # in each), and two rehearsals can be filed under one folder name: Locate
-    # points a missing one at any folder in the recordings folder, one in a
-    # subfolder named like another rehearsal's included. Their takes 1 were
-    # then written onto one file, and an Undo that dropped a restored copy
-    # because the other take named it sent it again onto that same file. Now
-    # a copy takes the next free name, " (2)" as a take's folder does, and
-    # the other take's copy is left as it was. Copies only.
+    # rehearsals a go is never given twice, a song's or one with no song, so
+    # two takes are never named alike either. Two names can still be one
+    # file name, though ("AC+DC 1" and "AC&DC 1" are both "AC_DC 1"), and two
+    # rehearsals can be filed under one folder name: Locate points a missing
+    # one at any folder in the recordings folder, one in a subfolder named
+    # like another rehearsal's included. Their takes 1 were then written onto
+    # one file, and an Undo that dropped a restored copy because the other
+    # take named it sent it again onto that same file. Now a copy takes the
+    # next free name, " (2)" as a take's folder does, and the other take's
+    # copy is left as it was. Copies only.
     tmp77 = Path(tempfile.mkdtemp())
     apimod77, h77 = fresh_api(tmp77)
     rec77 = h77.recordings_dir
@@ -12253,8 +12338,8 @@ def main():
     apimod77.move_to_trash = trash71
     h77.set_cloud_dir(str(drive77))
     h77.set_auto_publish(True, "mix")
-    mon77 = past71(h77, "Monday", "2026-09-28T19:00:00", ["", "", ""])
-    gig77 = past71(h77, "Gig", "2026-09-30T19:00:00", ["", "Ogon", ""])
+    mon77 = past71(h77, "Monday", "2026-09-28T19:00:00", ["AC+DC", "Sun+Moon", "Rock+Roll"])
+    gig77 = past71(h77, "Gig", "2026-09-30T19:00:00", ["AC&DC", "Ogon", "Rock&Roll"])
     # The gig's takes sound unlike Monday's, so a copy shows whose it is.
     for n77 in (1, 2, 3):
         write_wav(Path(h77._lib.take(gig77, n77)["tracks"][0]["file"]), 3000 + n77,
@@ -12266,9 +12351,10 @@ def main():
     gig77 = moved77
     there77 = drive77 / mon77.name
     ok("(the gig, found again in a folder named like Monday's, is filed under the same "
-       "cloud folder name, and its take 1 is named as Monday's is)",
+       "cloud folder name, and its take 1's name is one file name with Monday's)",
        located77.get("ok") is True and gig77.name == mon77.name
-       and h77._lib.take(gig77, 1)["name"] == h77._lib.take(mon77, 1)["name"] == "Take 1")
+       and (h77._lib.take(gig77, 1)["name"], h77._lib.take(mon77, 1)["name"]) == ("AC&DC 1", "AC+DC 1")
+       and apimod77._safe_name("AC&DC 1") == apimod77._safe_name("AC+DC 1") == "AC_DC 1")
 
     def run77():
         while h77._sending.get("cloud").queue.run_next():
@@ -12294,10 +12380,10 @@ def main():
     run77()
     gig_copy77 = copy77(gig77, 1)
     ok("a. Undo brings the take back without the copy the other take names now",
-       mon_copy77 == there77 / "01 - Take 1.wav" and back77.get("ok") is True and dropped77)
+       mon_copy77 == there77 / "01 - AC_DC 1.wav" and back77.get("ok") is True and dropped77)
     ok("and sends it again beside it, leaving the other take's copy as it was",
        sound77(mon_copy77) == mon_sound77 and copy77(mon77, 1) == mon_copy77
-       and gig_copy77 == there77 / "01 - Take 1 (2).wav"
+       and gig_copy77 == there77 / "01 - AC_DC 1 (2).wav"
        and sound77(gig_copy77) not in (None, mon_sound77))
     h77._copy_to_cloud(str(gig77), 1, "mix")
     ok("sent again, a copy at ' (2)' stays there, and the other take's is left",
@@ -12309,21 +12395,22 @@ def main():
     print("  sent with no Undo, and renamed")
     h77._copy_to_cloud(str(mon77), 3, "mix")
     h77._copy_to_cloud(str(gig77), 3, "mix")
-    ok("b. two takes 3 nobody named, filed under one folder name, each keep their own copy",
-       copy77(mon77, 3) == there77 / "03 - Take 3.wav"
-       and copy77(gig77, 3) == there77 / "03 - Take 3 (2).wav"
+    ok("b. two takes 3 named as one file, filed under one folder name, each keep their own copy",
+       copy77(mon77, 3) == there77 / "03 - Rock_Roll 1.wav"
+       and copy77(gig77, 3) == there77 / "03 - Rock_Roll 1 (2).wav"
        and sound77(copy77(mon77, 3)) not in (None, sound77(copy77(gig77, 3))))
     h77._copy_to_cloud(str(mon77), 2, "mix")
     h77._copy_to_cloud(str(gig77), 2, "mix")
     mon_two77 = copy77(mon77, 2)
     mon_two_sound77 = sound77(mon_two77)
-    h77.rename_take(str(gig77), 2, "Take 2")
+    h77.rename_take(str(gig77), 2, "Sun&Moon")
     run77()
     gig_two77 = copy77(gig77, 2)
-    ok("c. a take renamed to the other's name: its copy goes beside the other's, not onto it",
-       copy77(gig77, 2) is not None and h77._lib.take(gig77, 2)["name"] == "Take 2"
-       and mon_two77 == there77 / "02 - Take 2.wav" and sound77(mon_two77) == mon_two_sound77
-       and gig_two77 == there77 / "02 - Take 2 (2).wav"
+    ok("c. a take renamed to a name that is the other's file name: its copy goes beside the other's, "
+       "not onto it",
+       copy77(gig77, 2) is not None and h77._lib.take(gig77, 2)["name"] == "Sun&Moon 1"
+       and mon_two77 == there77 / "02 - Sun_Moon 1.wav" and sound77(mon_two77) == mon_two_sound77
+       and gig_two77 == there77 / "02 - Sun_Moon 1 (2).wav"
        and sound77(gig_two77) not in (None, mon_two_sound77))
 
     print("  a copy two takes name already")
@@ -12334,7 +12421,7 @@ def main():
     h77._copy_to_cloud(str(gig77), 3, "mix")
     ok("d. sending one of them again takes nothing of the other's out of the cloud folder",
        sound77(mon_three77) == mon_three_sound77 and copy77(mon77, 3) == mon_three77
-       and copy77(gig77, 3) == there77 / "03 - Take 3 (2).wav")
+       and copy77(gig77, 3) == there77 / "03 - Rock_Roll 1 (2).wav")
     # Both rows naming Monday's copy again, the gig's own copy gone.
     copy77(gig77, 3).unlink()
     h77._lib.set_cloud_copy(gig77, 3, {"mix": str(mon_three77), "mix_format": "wav"}, drive77)
@@ -12371,10 +12458,10 @@ def main():
                for n, (path, sound) in mons77.items()))
     ok("and the gig's copies go to its new cloud folder, by their own names there",
        [copy77(gig77, n) for n in (1, 2, 3)]
-       == [again77 / "01 - Take 1.wav", again77 / "02 - Take 2.wav", again77 / "03 - Intro 1.wav"]
+       == [again77 / "01 - AC_DC 1.wav", again77 / "02 - Sun_Moon 1.wav", again77 / "03 - Intro 1.wav"]
        and all(sound77(copy77(gig77, n)) not in (None, mons77[n][1]) for n in (1, 2, 3))
        and sorted(p.name for p in (drive77 / mon77.name).iterdir())
-       == ["01 - Take 1.wav", "02 - Take 2.wav", "03 - Take 3.wav"])
+       == ["01 - AC_DC 1.wav", "02 - Sun_Moon 1.wav", "03 - Rock_Roll 1.wav"])
     h77.shutdown()
     apimod77.move_to_trash = real_trash71
 
