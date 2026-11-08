@@ -5,7 +5,7 @@ versioning](https://semver.org/): until 1.0 the shape of things can still
 move, though recordings on disk are never left behind — old rehearsals keep
 opening.
 
-## Unreleased
+## 0.25.0
 
 - **A take's number stands apart from the song's title.** A take now reads
   “Viasna #12” in РЭХА, in the band service and in its messages to the
@@ -29,9 +29,9 @@ opening.
   opens the take's page.
 - **A take can leave its song in the band service.** A jam that came in
   under a song's title because the name field still said so goes to **Not
-  named** with ⋯ › **Move to song** › **Not named**, and gets the name Take 3
-  if it was the rehearsal's third take. РЭХА does the same on the laptop the
-  next time it asks what the band changed.
+  named** with ⋯ › **Move to song** › **Not named**. РЭХА does the same on
+  the laptop the next time it asks what the band changed, and numbers the
+  take with the others nobody named, “Take #48”.
 - **A fader in the band service stays where you leave it.** On a slow
   connection, a fader turned again straight away could jump back to where
   the turn before had left it, and keep that level. It now stays where you
