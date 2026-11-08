@@ -39,15 +39,15 @@ export function clock(seconds: number): string {
 }
 
 /**
- * A take as the pages write it (src/shell/words.ts): “Viasna #12”, with a
- * no-break space before the #. The number is the one at the end of the
- * name, the take's number at its song; the take's `number` column is its
- * number in its rehearsal. Any other take by its name: one with no song
- * (“Take 4”), and one moved to another song here that РЭХА has not
- * numbered yet, whose name is the song's title.
+ * A take as the pages write it (src/shell/words.ts): “Viasna #12”, or
+ * “Take #47” for a take with no song, with a no-break space before the #.
+ * The number is the one at the end of the name, the take's own number; the
+ * take's `number` column is its number in its rehearsal. Any other take by
+ * its name, such as one moved here that РЭХА has not numbered yet: its name
+ * is the song's title, or “Take” out of a song.
  */
 export function takeText(t: { name: string; songId: number | null; movedBy: string | null }): string {
-  const parts = t.songId === null || t.movedBy !== null ? null : /^(.+) (\d+)$/.exec(t.name)
+  const parts = t.movedBy !== null ? null : (t.songId === null ? /^(Take) (\d+)$/ : /^(.+) (\d+)$/).exec(t.name)
   return parts ? `${parts[1]}\u00a0#${parts[2]}` : t.name
 }
 

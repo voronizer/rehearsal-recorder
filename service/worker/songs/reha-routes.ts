@@ -152,8 +152,8 @@ export const rehaSongRoutes = newApp()
       path: "/api/reha/songs",
       description:
         "Every song with its number, title, tempo, signature, whether it is in the trash, and who last renamed it, " +
-        "changed its tempo, made it or deleted it here (null for РЭХА); and each take moved to another song here " +
-        "that РЭХА has not numbered there yet. РЭХА asks at its check.",
+        "changed its tempo, made it or deleted it here (null for РЭХА); and each take moved to another song here, " +
+        "or out of its song, that РЭХА has not numbered yet. РЭХА asks at its check.",
       middleware: [needKey] as const,
       security: rehaKey,
       request: { headers: RehaHeaders },

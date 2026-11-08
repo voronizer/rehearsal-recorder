@@ -37,12 +37,12 @@ export const colourCss = (l: Label) => `var(${labelLook(l.colour).cssVar})`
 
 /**
  * “Viasna #12”: the song's title, then # and the take's number a shade
- * lighter. `short`, where the song is written beside it: “#12” alone.
- * A long title gives way and the number stays, so two takes of one song
- * never read the same. `wrap`: a heading's, the whole name over as many
- * lines as it takes. A take with no song is its name, “Take 4”. A take moved
- * to another song here is the song's title alone until РЭХА numbers it, and
- * a heading says so.
+ * lighter. A take with no song reads the same way, “Take #47”. `short`,
+ * where the song is written beside it: “#12” alone. A long title gives way
+ * and the number stays, so two takes of one song never read the same.
+ * `wrap`: a heading's, the whole name over as many lines as it takes. A take
+ * moved to another song here is the song's title alone until РЭХА numbers
+ * it, and one taken out of its song is “Take” alone; a heading says so.
  */
 export function TakeName({
   take,

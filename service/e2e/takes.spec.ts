@@ -596,7 +596,7 @@ test.describe("moving a take", () => {
   test("Move to song: to a new song, to one the band has, out of its song", async ({ page }) => {
     await page.goto("/songs")
     const named = page.getByRole("region", { name: "Not named" })
-    await named.getByRole("button", { name: "What to do with Take 7", exact: true }).click()
+    await named.getByRole("button", { name: "What to do with Take 3", exact: true }).click()
     await page.getByRole("menuitem", { name: "Move to song" }).click()
     // A take with no song: Not named is ticked.
     await expect(page.getByRole("menuitemradio", { name: "Not named" })).toHaveAttribute("aria-checked", "true")
@@ -605,6 +605,8 @@ test.describe("moving a take", () => {
     const panel = page.getByLabel("Panel", { exact: true })
     const field = panel.getByRole("textbox", { name: "New song" })
     await expect(field).toBeFocused()
+    // Its number among the takes with no song, not the 7 of its evening.
+    await expect(panel.getByRole("heading", { level: 2 }).first()).toHaveText("Take #3")
     await field.fill("pałyn")
     await expect(panel.getByRole("alert")).toHaveText("“Pałyn” is already a song: pick it in the list.")
     await expect(panel.getByRole("button", { name: "Make the song" })).toBeDisabled()
@@ -625,22 +627,21 @@ test.describe("moving a take", () => {
     const row = page.getByRole("main").locator('[data-take="Pałyn"]')
     await expect(row).toBeVisible()
 
-    // Out of its song from its row: Take 7 again at once, under Not named.
+    // Out of its song from its row: “Take” under Not named, until РЭХА numbers it.
     // The take's ⋯ in its rehearsal's fold, not the song's by its title.
     await page.getByRole("main").getByRole("region").getByRole("button", { name: "What to do with Pałyn", exact: true }).click()
     await page.getByRole("menuitem", { name: "Move to song" }).click()
     await page.getByRole("menuitemradio", { name: "Not named" }).click()
     await expect(row).toHaveCount(0)
     await page.goto("/songs")
-    await expect(named.locator('[data-take="Take 7"]')).toBeVisible()
-    // Its number is its own: no “number from РЭХА”.
-    await named.getByRole("button", { name: "Take 7", exact: true }).click()
-    await expect(panel.getByRole("heading", { level: 2 }).first()).toHaveText("Take 7")
+    await expect(named.locator('[data-take="Take"]')).toBeVisible()
+    await named.getByRole("button", { name: "Take", exact: true }).click()
+    await expect(panel.getByRole("heading", { level: 2 }).first()).toHaveText("Take · number from РЭХА")
 
     // Not named is ticked, and picking it again sends nothing.
     let sent = 0
     page.on("request", (r) => void (r.method() === "PATCH" && sent++))
-    await panel.getByRole("button", { name: "What to do with Take 7", exact: true }).click()
+    await panel.getByRole("button", { name: "What to do with Take", exact: true }).click()
     await page.getByRole("menuitem", { name: "Move to song" }).click()
     const none = page.getByRole("menuitemradio", { name: "Not named" })
     await expect(none).toHaveAttribute("aria-checked", "true")

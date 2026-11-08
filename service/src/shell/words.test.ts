@@ -22,16 +22,32 @@ test("a take's own page gives its song as an object, and reads the same", () => 
   expect(takeText({ name: "Pałyn 9", song: { id: 2 } })).toBe(`Pałyn${NB}#9`)
 })
 
-test("a take with no song is its name", () => {
-  expect(takeText({ name: "Take 4", song_id: null })).toBe("Take 4")
-  expect(takeText({ name: "Take 4", song: null })).toBe("Take 4")
-  expect(songAndNumber({ name: "Take 4", song_id: null })).toBeNull()
+test("a take with no song reads as Take, then # and its number", () => {
+  expect(takeText({ name: "Take 47", song_id: null })).toBe(`Take${NB}#47`)
+  expect(takeText({ name: "Take 47", song: null })).toBe(`Take${NB}#47`)
+  expect(songAndNumber({ name: "Take 47", song_id: null })).toEqual({ song: "Take", number: 47 })
+})
+
+test("a take with no song: the number in its name, never its number in the rehearsal", () => {
+  // The 7th take that evening, the 3rd with no song.
+  const take = { name: "Take 3", number: 7, song_id: null }
+  expect(takeText(take)).toBe(`Take${NB}#3`)
+})
+
+test("a take with no song and some other name is that name", () => {
+  expect(takeText({ name: "Jam 2", song_id: null })).toBe("Jam 2")
+  expect(songAndNumber({ name: "Jam 2", song_id: null })).toBeNull()
 })
 
 test("a take moved to another song, not numbered yet, is the song's title alone", () => {
   expect(takeText({ name: "Kupalle", song_id: 5, moved: true })).toBe("Kupalle")
   // Moved to a song whose title ends in a number.
   expect(takeText({ name: "Opus 5", song_id: 7, moved: true })).toBe("Opus 5")
+})
+
+test("a take moved out of its song, not numbered yet, is Take alone", () => {
+  expect(takeText({ name: "Take", song_id: null, moved: true })).toBe("Take")
+  expect(songAndNumber({ name: "Take", song_id: null, moved: true })).toBeNull()
 })
 
 test("a name with no number at its end is shown as it is", () => {

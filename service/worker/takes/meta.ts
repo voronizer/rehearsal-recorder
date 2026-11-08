@@ -58,6 +58,9 @@ export const TakeMeta = z
       /** A calendar day, with no time zone. */
       date: z.iso.date(),
     }),
+    /** Its place in its rehearsal, which orders the evening's takes and is
+     *  never shown. The take's own number, at its song or among the takes
+     *  with no song, is the end of its name. */
     number: z.int().min(1),
     /** Its name, sent with its song when РЭХА changed which song it is a
      *  take of (or its number there), and the first time. Left out, the take
