@@ -506,7 +506,7 @@ def run(tmp, fake):
     gone = api.delete_take(folder(), n9)
     api.end_trash(gone["undo"])
     ok("its line in the list names the take as the app shows it",
-       f"“Palyn #{go9}” → band service trash" in [e["title"] for e in entries()])
+       f"“Palyn\u00a0#{go9}” → band service trash" in [e["title"] for e in entries()])
     drain()
     ok("a deletion whose undo time passed reaches the trash",
        fake.count(f"delete {uid9}") == 1 and fake.takes[uid9]["trashed"])
@@ -1009,7 +1009,8 @@ def songs_both_ways(api, fake, service, drain, entries, keep, uid_of, take, fold
     n_j = keep("Hušča", band=["Drums"])
     drain()
     uid_j = uid_of(n_j)
-    was = take(n_j)["name"]
+    # As the list writes it: "Hušča #3".
+    was = f"{take(n_j)['song']}\u00a0#{take(n_j)['go']}"
     fake.move_in_service(uid_j, None)
     check()
     ok("a take moved out of its song there is renamed Take N here, as Rename take does",

@@ -86,7 +86,7 @@ test("the story goes through its four steps", async ({ page }) => {
   await expect(page.locator("[data-song-head] h2")).toHaveText("Pałyn", { timeout: 20_000 })
   await expect(
     page.locator("[data-rung-group]").filter({ has: page.locator("[aria-expanded='true']") })
-  ).toContainText("Pałyn 7")
+  ).toContainText("Pałyn #7")
   await expect.poll(() => scene(page), { timeout: 30_000 }).toBe("later")
   const open = page.locator("[data-tab][aria-current='true']")
   await expect(open).toHaveAttribute("data-tab", "song:Pałyn")

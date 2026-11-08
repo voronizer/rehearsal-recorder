@@ -1,5 +1,6 @@
 import type { Marker, NotNamedSummary, SongGo, SongIndex, SongSummary, Take } from "@/lib/api"
 import { formatDate, formatDayIn, rehearsalsLabel, takesLabel } from "@/lib/format"
+import { GO_SPACE } from "@/lib/takeText"
 
 /** Song titles in the order a person looks for them: alphabetical, any
  *  script, capitals or not. The All songs panel and History's Songs view
@@ -161,7 +162,8 @@ export function mergeQuestion(
   into: string,
   { goes, rehearsals, first, last }: MergeCounts
 ): { title: string; says: string } {
-  const become = first === last ? `${into} ${first}` : `${into} ${first}–${last}`
+  // As the screen writes a take, "Pałyn #8", and a run of them "Pałyn #8–9".
+  const become = `${into}${GO_SPACE}#${first === last ? first : `${first}–${last}`}`
   const says =
     goes === 1
       ? `1 take in ${rehearsalsLabel(rehearsals)} becomes ${become}, and its folder and cloud copies are renamed. To split it off again, rename it.`

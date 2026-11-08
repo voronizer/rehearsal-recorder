@@ -10,7 +10,7 @@ import type { Take } from "@/lib/api"
 
 /** Between a title and its go: a no-break space, so the go never starts a
  *  line of its own. */
-export const GO_SPACE = " "
+export const GO_SPACE = "\u00a0"
 
 /** A go as it is drawn: "#12". Alone where the song is written beside it
  *  (a song's tabs, its ladder), after the title everywhere else. */

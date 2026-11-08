@@ -38,6 +38,7 @@ import { DEFAULT_TOLERANCE, spokenDrift, stretches, type TakeDrift } from "@/lib
 import { formatBarOne, formatMMSS, formatTempo } from "@/lib/format"
 import { perBar, songLine, statusLine, tapTempo } from "@/lib/metronome"
 import type { Notice } from "@/lib/notices"
+import { takeText } from "@/lib/takeText"
 import { siteNotes, type SiteNotes } from "../stage/demo"
 
 /** The pieces, each by the id of the item it is drawn for
@@ -86,8 +87,8 @@ export type PieceData = {
  *  the view ends. */
 type MasterData = { take: Take; drift: TakeDrift; at: number; to: number }
 
-/** A tempo counted from a take, by the take's name, in the signature it was
- *  counted in (count_tempo). */
+/** A tempo counted from a take, by the take's name as the screen writes it
+ *  ("Pałyn #4"), in the signature it was counted in (count_tempo). */
 type Counted = { take: string; tempo: number; signature: Signature }
 
 /** What the pieces show, asked of the bridge as the history screen and the
@@ -132,7 +133,7 @@ async function countFrom(
   const found = await takeNamed(rehearsals, name)
   if (!found) return null
   const res = await api().count_tempo(found.folder, found.take.take_number, signature)
-  return res.ok && res.tempo != null ? { take: name, tempo: res.tempo, signature } : null
+  return res.ok && res.tempo != null ? { take: takeText(found.take), tempo: res.tempo, signature } : null
 }
 
 /**
@@ -228,7 +229,7 @@ function masterLabel({ take, drift }: MasterData): string {
   const said = drift.ok
     ? spokenDrift(drift.bars, stretches(drift.bars, drift.aim.tempo, DEFAULT_TOLERANCE), drift.aim.signature)
     : ""
-  return `The Master row in the player under ${take.name}'s tracks, with the band's tempo bar by bar. ${said}`.trim()
+  return `The Master row in the player under ${takeText(take)}'s tracks, with the band's tempo bar by bar. ${said}`.trim()
 }
 
 /** Gig on the 25th mid-set: Pałyn played four times, Viasna up now. */

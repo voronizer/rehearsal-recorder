@@ -209,7 +209,7 @@ describe("mergeQuestion", () => {
     ).toEqual({
       title: "Merge “Palyn” into “Pałyn”?",
       says:
-        "2 takes in 1 rehearsal become Pałyn 8–9, and their folders and cloud copies are renamed. To split them again, rename them one by one.",
+        "2 takes in 1 rehearsal become Pałyn #8–9, and their folders and cloud copies are renamed. To split them again, rename them one by one.",
     })
   })
 
@@ -217,13 +217,13 @@ describe("mergeQuestion", () => {
     expect(
       mergeQuestion("Palyn", "Pałyn", { goes: 1, rehearsals: 1, first: 8, last: 8 }).says
     ).toBe(
-      "1 take in 1 rehearsal becomes Pałyn 8, and its folder and cloud copies are renamed. To split it off again, rename it."
+      "1 take in 1 rehearsal becomes Pałyn #8, and its folder and cloud copies are renamed. To split it off again, rename it."
     )
   })
 
   it("counts rehearsals in the plural", () => {
     expect(
       mergeQuestion("Polin", "Polyn", { goes: 12, rehearsals: 5, first: 11, last: 22 }).says
-    ).toMatch(/^12 takes in 5 rehearsals become Polyn 11–22, /)
+    ).toMatch(/^12 takes in 5 rehearsals become Polyn #11–22, /)
   })
 })

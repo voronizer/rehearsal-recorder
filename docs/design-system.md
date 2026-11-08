@@ -380,10 +380,12 @@ the shared one when it is redone.
   "Pałyn #3", so a title that ends in a number of its own reads apart
   ("Opus 5 #3"). Plain text takes the same form from `lib/takeText.ts`. Only
   the song tabs (`SongTab.tsx`) and the song ladder (`SongLadder.tsx`) still
-  draw the number themselves, alone, as "#3". A track that records is
-  one tile, `TrackTile` (`components/TrackTile.tsx`), where the MIDI tile was
-  a copy of it: its levels, with a narrow column for its notes on Both, or
-  with `kind="notes"` a MIDI track's notes alone. Its fill is `Meter` up, and
+  draw the number themselves, alone, as "#3". Review's columns under its
+  header keep the bare number: a column is too narrow for the #. A track
+  that records is one tile, `TrackTile` (`components/TrackTile.tsx`), where
+  the MIDI tile was a copy of it: its levels, with a narrow column for its
+  notes on Both, or with `kind="notes"` a MIDI track's notes alone. Its fill
+  is `Meter` up, and
   its name is `TileName` (B6). On the recording screen the tiles are one group
   on the card's fill, each tile on a well of its own (C7), and reha.stream
   shows them so. A take drawn as a bar is as tall as it ran against the

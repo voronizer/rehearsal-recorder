@@ -200,7 +200,7 @@ test.describe("Rename song, from a song's page", () => {
     await dialog(page).getByRole("button", { name: "Merge…", exact: true }).click()
     await expect(question(page)).toHaveAccessibleName("Merge “Palyn” into “Pałyn”?")
     await expect(question(page)).toContainText(
-      "2 takes in 1 rehearsal become Pałyn 10–11, and their folders and cloud copies are renamed. To split them again, rename them one by one."
+      "2 takes in 1 rehearsal become Pałyn #10–11, and their folders and cloud copies are renamed. To split them again, rename them one by one."
     )
     await expect(question(page).getByRole("button", { name: "Merge", exact: true })).toBeVisible()
     // Asked, not done: only the counts were read.
@@ -265,7 +265,7 @@ test.describe("Rename song, from a song's page", () => {
     await expect(dialog(page).getByText("3 takes become Old.")).toBeVisible()
     await dialog(page).getByRole("button", { name: "Rename", exact: true }).click()
     await expect(question(page)).toHaveAccessibleName("Merge “Pałyn” into “Old”?")
-    await expect(question(page)).toContainText("3 takes in 2 rehearsals become Old 1–3")
+    await expect(question(page)).toContainText("3 takes in 2 rehearsals become Old #1–3")
     expect((await calls(page, "merge_songs")).map((c) => Boolean(c.args[2]))).toEqual([true])
     await question(page).getByRole("button", { name: "Merge", exact: true }).click()
     await expect(head(page).getByRole("heading", { name: "Old", exact: true })).toBeVisible()

@@ -55,7 +55,7 @@ let serviceQueue = {};
 const serviceAddress = () => serviceKey && serviceKey.slice(0, serviceKey.lastIndexOf(':'));
 // A take as Python words it in a line of background work (names.shown_name):
 // "Viasna #2", a no-break space before the #, or "Take 4" with no song.
-const shownName = (take) => take.song && take.go != null ? `${take.song} #${take.go}` : take.name;
+const shownName = (take) => take.song && take.go != null ? `${take.song}\u00a0#${take.go}` : take.name;
 // A go typed after a title, as names.split_go reads it: "Viasna 2", or
 // "Viasna #2" and "Viasna#2" as the interface writes a take.
 const TYPED_GO = /^(.*?)(?:\s*#\s*|\s+)(\d+)$/;
