@@ -10,6 +10,7 @@ import {
   startRehearsal,
   test,
   themed,
+  recordButton,
 } from "./app.ts"
 import type { Locator, Page } from "@playwright/test"
 
@@ -39,7 +40,7 @@ const rowLine = (page: Page) => row(page).locator("[data-backing-row-line]")
 const volume = (page: Page) => row(page).getByRole("slider", { name: "Backing track volume" })
 const play = (page: Page) => row(page).getByRole("button", { name: "Play the backing track" })
 const stop = (page: Page) => row(page).getByRole("button", { name: "Stop the backing track" })
-const record = (page: Page) => page.getByRole("button", { name: /Record take/ })
+const record = (page: Page) => recordButton(page)
 
 const args = async (page: Page, name: string) => (await calls(page, name)).map((c) => c.args)
 
@@ -337,7 +338,7 @@ test("the Backing lane is last, above Master, dashed and muted the first time; M
   await openBandApp(page)
   await openHistory(page)
   await page.getByRole("radio", { name: "Songs", exact: true }).click()
-  await openOld(page, "Viasna", "Take 4 Viasna")
+  await openOld(page, "Viasna", "Viasna #1")
   const id = await idOf(page, "Viasna")
   // The plate says what the file is, two rings for stereo with the words in
   // its tip, and both it and the lane are dashed.
@@ -360,11 +361,11 @@ test("the Backing lane is last, above Master, dashed and muted the first time; M
   await mute(page).click()
   await expect(mute(page)).toHaveAttribute("aria-pressed", "false")
   await expect.poll(() => args(page, "set_song_backing_heard")).toEqual([[id, true]])
-  await openOld(page, "Viasna", "Take 5 Viasna 2")
+  await openOld(page, "Viasna", "Viasna #2")
   await expect(mute(page)).toHaveAttribute("aria-pressed", "false")
 
   // Another song's is its own: Pałyn's opens muted.
-  await openOld(page, "Pałyn", "Take 3 Pałyn 3")
+  await openOld(page, "Pałyn", "Pałyn #3")
   await expect(mute(page)).toHaveAttribute("aria-pressed", "true")
 
   // S on it turns its M off, and that is kept for Pałyn too.
@@ -384,7 +385,7 @@ test("the drift line is asked with the Backing track named as one", async ({ pag
   await openBandApp(page)
   await openHistory(page)
   await page.getByRole("radio", { name: "Songs", exact: true }).click()
-  await openOld(page, "Viasna", "Take 4 Viasna")
+  await openOld(page, "Viasna", "Viasna #1")
   await expect.poll(async () => (await args(page, "take_drift")).length).toBeGreaterThan(0)
   const [tracks] = (await args(page, "take_drift")).at(-1) as [{ name: string; kind?: string }[]]
   expect(tracks.find((t) => t.name === "Backing")?.kind).toBe("backing")

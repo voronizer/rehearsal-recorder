@@ -11,6 +11,8 @@ import {
   startRehearsal,
   style,
   test,
+  recordButton,
+  takeButton,
 } from "./app.ts"
 import type { Page } from "@playwright/test"
 
@@ -34,8 +36,8 @@ async function openShare(page: Page, justBefore?: () => Promise<unknown>) {
   await recordTake(page, 1)
   await nameTake(page, "Pałyn")
   await page.getByRole("button", { name: /Save take/ }).click()
-  await expect(page.getByRole("button", { name: /Record take 2/ })).toBeVisible()
-  await page.locator("[aria-label='Rehearsal overview'] button[aria-label^='Take 1 Pałyn']").click()
+  await expect(recordButton(page, 2)).toBeVisible()
+  await takeButton(page.locator("[aria-label='Rehearsal overview']"), "Pałyn #1").click()
   await justBefore?.()
   await page.getByRole("button", { name: "Copy Pałyn 1 to the cloud" }).click()
   const dialog = page.getByRole("dialog")
@@ -83,8 +85,8 @@ test("a take is copied to the cloud from its row, and taken back out again", asy
   await recordTake(page, 1)
   await nameTake(page, "Pałyn")
   await page.getByRole("button", { name: /Save take/ }).click()
-  await expect(page.getByRole("button", { name: /Record take 2/ })).toBeVisible()
-  await page.locator("[aria-label='Rehearsal overview'] button[aria-label^='Take 1 Pałyn']").click()
+  await expect(recordButton(page, 2)).toBeVisible()
+  await takeButton(page.locator("[aria-label='Rehearsal overview']"), "Pałyn #1").click()
   await expect(page.getByRole("button", { name: "Mute Guitar" })).toBeVisible()
 
   await page.getByRole("button", { name: "Copy Pałyn 1 to the cloud" }).click()
@@ -125,8 +127,8 @@ test("a share option is named by its title and described by its hint", async ({ 
   await recordTake(page, 1)
   await nameTake(page, "Pałyn")
   await page.getByRole("button", { name: /Save take/ }).click()
-  await expect(page.getByRole("button", { name: /Record take 2/ })).toBeVisible()
-  await page.locator("[aria-label='Rehearsal overview'] button[aria-label^='Take 1 Pałyn']").click()
+  await expect(recordButton(page, 2)).toBeVisible()
+  await takeButton(page.locator("[aria-label='Rehearsal overview']"), "Pałyn #1").click()
   await page.getByRole("button", { name: "Copy Pałyn 1 to the cloud" }).click()
 
   // The name is the title alone; the hint is what a screen reader says after

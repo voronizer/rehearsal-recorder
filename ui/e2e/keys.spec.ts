@@ -17,6 +17,8 @@ import {
   test,
   TONIGHT,
   withKeys,
+  recordButton,
+  takeButton,
 } from "./app.ts"
 import type { Locator, Page } from "@playwright/test"
 
@@ -40,7 +42,7 @@ async function counts(page: Page, names: string[]) {
 
 const timeline = (page: Page) => page.getByRole("group", { name: "Take timeline" })
 const nextTake = (page: Page) => page.getByRole("textbox", { name: "Next take" })
-const firstTake = (overview: Locator) => overview.locator("button[aria-label^='Take 1 Pałyn']")
+const firstTake = (overview: Locator) => takeButton(overview, "Pałyn #1")
 
 test("with Space and Esc off, they do nothing on the start, rehearsal, recording and review screens", async ({
   page,
@@ -85,11 +87,11 @@ test("with Space and Esc off, they do nothing on the start, rehearsal, recording
   await expect(dialog).toHaveCount(0)
   // Nor does the empty strip tell anyone to press Space.
   await expect(page.locator("[data-slot='empty-description']")).toHaveText(
-    "Press Record take. Each take shows up here, ready to play."
+    "Press Record. Each take shows up here, ready to play."
   )
 
   // Recording: Space would stop the take.
-  await page.getByRole("button", { name: /Record take 1/ }).click()
+  await recordButton(page, 1).click()
   const clock = page.locator("[role=timer]")
   await expect(clock).toBeVisible()
   await press(page, "Space", "Escape")
@@ -183,7 +185,7 @@ test("with the keys off, Esc still closes a dialog and leaves a field, and Ctrl+
   await expect(timeline(page)).toBeVisible()
 
   // A take discarded on the screen after it: Ctrl+Z brings that screen back.
-  await page.getByRole("button", { name: /Record take 11/ }).click()
+  await recordButton(page, 11).click()
   await page.getByRole("button", { name: /^Stop/ }).click()
   const summary = page.locator("[data-take-summary]")
   await expect(summary).toBeVisible()
@@ -411,7 +413,7 @@ test("with both off, no button shows a key or says one, on any screen", async ({
   await expect(timeline(page)).toBeVisible()
   await noKeysShown(page, "a take open")
 
-  await page.getByRole("button", { name: /Record take 11/ }).click()
+  await recordButton(page, 11).click()
   await expect(page.locator("[role=timer]")).toBeVisible()
   await noKeysShown(page, "recording")
   await page.getByRole("button", { name: /^Stop/ }).click()
@@ -428,7 +430,7 @@ test("with both off, no button shows a key or says one, on any screen", async ({
   await noKeysShown(page, "History")
   await play(shown)
   await noKeysShown(page, "History playing")
-  await shown.locator("button[aria-label^='Take 1 Pałyn']").click()
+  await takeButton(shown, "Pałyn #1").click()
   await expect(timeline(page)).toBeVisible()
   await noKeysShown(page, "a take open in History")
   await page.getByRole("button", { name: "Back", exact: true }).click()
@@ -451,7 +453,7 @@ test("with the player's keys off, the player's key list keeps only what still wo
   const overview = await openEvening(page, withKeys({ player: false }))
   // Space and Esc are still on: Record and Finish keep theirs, and the next
   // song's arrows by the field go.
-  expect(await keyOn(page.getByRole("button", { name: /Record take 11/ }))).toBe("Space")
+  expect(await keyOn(recordButton(page, 11))).toBe("Space")
   expect(await keyOn(page.getByRole("button", { name: "Finish", exact: true }))).toBe("Esc")
   await expect(page.locator("[data-song-keys]")).toHaveCount(0)
 
@@ -493,7 +495,7 @@ test("with the player's keys off, the player's key list keeps only what still wo
   // Save take.
   await page.keyboard.press("Escape")
   await expect(list).toHaveCount(0)
-  await page.getByRole("button", { name: /Record take 11/ }).click()
+  await recordButton(page, 11).click()
   const stop = page.getByRole("button", { name: /^Stop/ })
   await expect(stop).toBeVisible()
   expect(await keyOn(stop)).toBe("Space")

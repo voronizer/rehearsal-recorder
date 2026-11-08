@@ -21,6 +21,7 @@ import {
   tileNames,
   tipLines,
   watchDrawn,
+  recordButton,
 } from "./app.ts"
 import type { Page } from "@playwright/test"
 
@@ -36,11 +37,11 @@ async function secondGo(page: Page, song = "Viasna", before = "") {
   await page.clock.install()
   await openApp(page, { before: `window.__LEVELS__ = {'Guitar': [0.5], 'Vocals': [0.5]};${before}` })
   await startRehearsal(page)
-  await page.getByRole("button", { name: /Record take 1/ }).click()
+  await recordButton(page, 1).click()
   await page.getByRole("button", { name: /^Stop/ }).click()
   await nameTake(page, song)
   await page.getByRole("button", { name: /Save take/ }).click()
-  await page.getByRole("button", { name: /Record take 2/ }).click()
+  await recordButton(page, 2).click()
   await expect(page.getByRole("button", { name: /^Stop/ })).toBeVisible()
   await vocalsAt(page, 50)
 }
@@ -93,10 +94,10 @@ test("a first take says what is recording, what clipped and what is silent", asy
   // plays its own.
   await openApp(page)
   await startRehearsal(page)
-  await page.getByRole("button", { name: /Record take 1/ }).click()
+  await recordButton(page, 1).click()
   // A take nobody named says so, big: the sign that a name was forgotten.
-  // Said once — "Take 1" up top as well would say it twice.
-  await expect(takeName(page)).toHaveText("Take 1")
+  // Said once: the line up top says only Recording.
+  await expect(takeName(page)).toHaveText("Take #1")
   await expect(topLine(page)).toHaveText("Recording")
   // Silent is said once an input has been quiet for a moment.
   await expect(tile(page, "Vocals")).toHaveAttribute("data-silent")
@@ -128,9 +129,10 @@ test("a second go at a song is measured against the first, under the take's name
 }) => {
   await secondGo(page)
   // The name, big over the clock, half its size and centred over it, so it
-  // reads from as far away. The number goes beside Recording, by Stop.
+  // reads from as far away. Beside Stop, Recording has no number after it:
+  // the take's place in the evening is not shown.
   await expect(takeName(page)).toHaveText("Viasna #2")
-  await expect(topLine(page)).toHaveText(/^Recording\s*Take 2$/)
+  await expect(topLine(page)).toHaveText("Recording")
   const shape = await page.evaluate(() => {
     const name = document.querySelector("h1")!
     const clock = document.querySelector("[role=timer]")!
@@ -169,7 +171,7 @@ test("the screen is the take and the tiles, with the status beside Stop", async 
   await openBandApp(page)
   await page.locator("#rehearsal-name").fill("Tuesday jam")
   await startButton(page).click()
-  await page.getByRole("button", { name: /Record take 6/ }).click()
+  await recordButton(page, 6).click()
   const stop = page.getByRole("button", { name: /^Stop/ })
   await expect(stop).toBeVisible()
   await settled(page)
@@ -188,7 +190,7 @@ test("the screen is the take and the tiles, with the status beside Stop", async 
   const status = page.locator("footer [data-status-row]")
   await expect(status).toHaveCount(1)
   const recording = status.locator("[data-recording-line]")
-  await expect(recording).toHaveText(/^Recording\s*Take 6$/)
+  await expect(recording).toHaveText("Recording")
   expect(await style(recording.getByText("Recording", { exact: true }), "text-transform")).toEqual({
     "text-transform": "none",
   })
@@ -729,7 +731,7 @@ test("sixteen tracks still fit in one row, a stereo one split down the middle", 
   })
   await wideFont(page)
   await startRehearsal(page)
-  await page.getByRole("button", { name: /Record take 1/ }).click()
+  await recordButton(page, 1).click()
   await expect(page.locator("main [role=group]")).toHaveCount(16)
 
   for (const [width, height] of [
@@ -807,7 +809,7 @@ test("a tile carries its track's icon in its top left corner", async ({ page }) 
       {name: 'Vocals', channel: 2}];`,
   })
   await startRehearsal(page)
-  await page.getByRole("button", { name: /Record take 1/ }).click()
+  await recordButton(page, 1).click()
   const guitar = tile(page, "Guitar")
   const icon = guitar.locator("[data-icon]")
   await expect(icon).toHaveAttribute("data-icon", "guitar-electric")
@@ -830,7 +832,7 @@ test("a tile carries its track's icon in its top left corner", async ({ page }) 
 async function firstTake(page: Page) {
   await openApp(page)
   await startRehearsal(page)
-  await page.getByRole("button", { name: /Record take 1/ }).click()
+  await recordButton(page, 1).click()
   await expect(page.getByRole("button", { name: /^Stop/ })).toBeVisible()
   await settled(page)
 }
@@ -1009,7 +1011,7 @@ test("a dB figure with no room hides and is in the tooltip", async ({ page }) =>
       window.__LEVELS__ = ${JSON.stringify(lit)};`,
   })
   await startRehearsal(page)
-  await page.getByRole("button", { name: /Record take 1/ }).click()
+  await recordButton(page, 1).click()
   await expect(page.locator("main [role=group]")).toHaveCount(16)
   await expect(tile(page, "Track 16").locator("[data-side]").first()).toHaveAttribute("data-level", "40")
   await settled(page)

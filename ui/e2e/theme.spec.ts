@@ -8,6 +8,7 @@ import {
   style,
   test,
   themed,
+  recordButton,
 } from "./app.ts"
 import type { Page } from "@playwright/test"
 
@@ -233,7 +234,7 @@ test.describe("motion", () => {
     await expect(html).not.toHaveAttribute("data-recording")
     expect(await animationOf(page, "animate-rise")).toBe("rise")
 
-    await page.getByRole("button", { name: /Record take 1/ }).click()
+    await recordButton(page, 1).click()
     await expect(html).toHaveAttribute("data-recording")
     // Plain and behind a variant, as a dialog or a menu asks for it.
     expect(await animationOf(page, "animate-rise")).toBe("none")
@@ -260,7 +261,7 @@ test.describe("motion", () => {
   test("while a take records, no CSS animation plays on the page", async ({ page }) => {
     await openApp(page)
     await startRehearsal(page)
-    await page.getByRole("button", { name: /Record take 1/ }).click()
+    await recordButton(page, 1).click()
     await expect(page.locator("html")).toHaveAttribute("data-recording")
     await expect(page.locator("[data-recording-line]")).toBeVisible()
     // Let the screen settle first: polling until the first empty reading

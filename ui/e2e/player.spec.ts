@@ -15,6 +15,8 @@ import {
   startRehearsal,
   style,
   test,
+  recordButton,
+  takeButton,
 } from "./app.ts"
 import type { Page } from "@playwright/test"
 
@@ -66,7 +68,7 @@ test("a take neither follows nor controls a different open player", async ({ pag
 test.describe("the review screen", () => {
   test("names a first take, and puts its keys on its buttons", async ({ page }) => {
     await review(page)
-    await expect(page.locator("[data-take-summary]")).toHaveText("Take 1")
+    await expect(page.locator("[data-take-summary]")).toHaveText("Take #1")
     // The keys are on the buttons they press, not in a line underneath.
     await expect.poll(() => keyOn(page.getByRole("button", { name: /Save take/ }))).toBe("Space")
     await expect.poll(() => keyOn(page.getByRole("button", { name: /Discard/ }))).toBe("Esc")
@@ -174,7 +176,7 @@ test.describe("the review screen", () => {
     // And the take on screen is that region now.
     await expect(page.locator("span", { hasText: "/ 0:03" }).first()).toBeVisible()
     await expect(
-      notices(page).filter({ hasText: "“Take 1” is cropped. The uncut take went to the Trash." })
+      notices(page).filter({ hasText: "“Take #1” is cropped. The uncut take went to the Trash." })
     ).toHaveCount(1)
   })
 
@@ -226,7 +228,7 @@ test.describe("the review screen", () => {
     await page.getByRole("button", { name: "Save", exact: true }).click()
     await expect(page.getByText("this one is the take")).toHaveCount(1)
     await page.getByRole("button", { name: /Save take/ }).click()
-    await expect(page.getByRole("button", { name: /Record take 3/ })).toBeVisible()
+    await expect(recordButton(page, 3)).toBeVisible()
     const kept = (await calls(page, "keep_take")).at(-1)!.args
     const marks = kept[5] as { note: string; label_id: number }[]
     expect(marks[0].note).toBe("this one is the take")
@@ -246,10 +248,10 @@ async function savedTake(page: Page) {
   await page.fill("input[aria-label='Comment']", "this one is the take")
   await page.getByRole("button", { name: "Save", exact: true }).click()
   await page.getByRole("button", { name: /Save take/ }).click()
-  await expect(page.getByRole("button", { name: /Record take 3/ })).toBeVisible()
+  await expect(recordButton(page, 3)).toBeVisible()
   // A prefix: right after a take is saved its pill can still say "Waiting
   // for the cloud" after its name, and it is the same take either way.
-  await page.locator("button[aria-label^='Take 2 Pałyn 2']").click()
+  await takeButton(page, "Pałyn #2").click()
   await expect(page.getByRole("button", { name: "Mute Guitar" })).toBeVisible()
 }
 
@@ -272,7 +274,7 @@ test.describe("a saved take", () => {
     await expect(keysList(page)).toContainText("Play / pause")
     await page.keyboard.press("Escape")
     await expect(keysList(page)).toHaveCount(0)
-    expect(await keyOn(page.getByRole("button", { name: /Record take/ }))).toBeNull()
+    expect(await keyOn(recordButton(page))).toBeNull()
     expect(await keyOn(page.getByRole("button", { name: /Finish/ }))).toBeNull()
   })
 
@@ -315,15 +317,15 @@ test.describe("a saved take", () => {
     // A saved device index goes stale the moment the interface is unplugged.
     await savedTake(page)
     await page.getByRole("button", { name: "Songs", exact: true }).click()
-    await page.locator("[aria-label='Take strip'] button[aria-label^='Take 1 Pałyn']").click()
-    await expect(page.locator("[aria-label='Take strip'] button[aria-label^='Take 1 Pałyn']")).toHaveAttribute(
+    await takeButton(page.locator("[aria-label='Take strip']"), "Pałyn #1").click()
+    await expect(takeButton(page.locator("[aria-label='Take strip']"), "Pałyn #1")).toHaveAttribute(
       "aria-current",
       "true"
     )
     await page.evaluate(() => {
       ;(window as unknown as { __OUTPUT_GONE__: boolean }).__OUTPUT_GONE__ = true
     })
-    await page.locator("button[aria-label^='Take 2 Pałyn 2']").click()
+    await takeButton(page, "Pałyn #2").click()
     await expect(page.getByText("so the take plays through the system output")).toBeVisible()
     await expect(page.getByRole("button", { name: "Mute Guitar" })).toHaveCount(1)
   })
@@ -350,7 +352,7 @@ test.describe("a saved take", () => {
     // Space and Escape go back to Record and Finish.
     await page.keyboard.press("Escape")
     await expect(timeline(page)).toHaveCount(0)
-    await expect.poll(() => keyOn(page.getByRole("button", { name: /Record take/ }))).toBe("Space")
+    await expect.poll(() => keyOn(recordButton(page))).toBe("Space")
     await expect.poll(() => keyOn(page.getByRole("button", { name: /Finish/ }))).toBe("Esc")
 
     // Played from its row, a take has Space until Escape puts it away.
@@ -360,10 +362,10 @@ test.describe("a saved take", () => {
       .click()
     await expect(page.getByRole("button", { name: "Pause Pałyn 2" })).toBeVisible()
     await expect(timeline(page)).toHaveCount(0)
-    await expect.poll(() => keyOn(page.getByRole("button", { name: /Record take/ }))).toBeNull()
+    await expect.poll(() => keyOn(recordButton(page))).toBeNull()
     await page.keyboard.press("Escape")
     await expect(page.getByRole("button", { name: "Play Pałyn 2" })).toBeVisible()
-    await expect.poll(() => keyOn(page.getByRole("button", { name: /Record take/ }))).toBe("Space")
+    await expect.poll(() => keyOn(recordButton(page))).toBe("Space")
   })
 
   test("renames the take and the rehearsal, and keeps the player on screen", async ({ page }) => {
@@ -658,8 +660,8 @@ test.describe("the mix", () => {
     // And another take opens at the volume the last one was left at.
     const left = await master.inputValue()
     await page.getByRole("button", { name: "Songs", exact: true }).click()
-    await page.locator("[aria-label='Take strip'] button[aria-label^='Take 1 Pałyn']").click()
-    await expect(page.locator("[aria-label='Take strip'] button[aria-label^='Take 1 Pałyn']")).toHaveAttribute("aria-current", "true")
+    await takeButton(page.locator("[aria-label='Take strip']"), "Pałyn #1").click()
+    await expect(takeButton(page.locator("[aria-label='Take strip']"), "Pałyn #1")).toHaveAttribute("aria-current", "true")
     await expect(master).toHaveValue(left)
   })
 })
@@ -944,8 +946,8 @@ test.describe("zooming the timeline", () => {
     // Another go at the song keeps the zoom and the region (goes in the
     // player, D2), so the chip stays away there too.
     await page.getByRole("button", { name: "Songs", exact: true }).click()
-    await page.locator("[aria-label='Take strip'] button[aria-label^='Take 1 Pałyn']").click()
-    await expect(page.locator("[aria-label='Take strip'] button[aria-label^='Take 1 Pałyn']")).toHaveAttribute("aria-current", "true")
+    await takeButton(page.locator("[aria-label='Take strip']"), "Pałyn #1").click()
+    await expect(takeButton(page.locator("[aria-label='Take strip']"), "Pałyn #1")).toHaveAttribute("aria-current", "true")
     await expect(whole(page)).toHaveCount(1)
     await expect(page.locator("[data-region-span]")).toHaveCount(0)
   })
@@ -1085,7 +1087,7 @@ test("a tick at the very end of the ruler does not push the lanes sideways", asy
   // track. Headless Chromium hides scrollbars, so the overflow is measured.
   await openApp(page, { before: "window.__OLD_LENGTH_SEC__ = 606;" })
   await openHistory(page)
-  await page.getByRole("button", { name: "Take 1 Pałyn" }).click()
+  await takeButton(page, "Pałyn #1").click()
   const ruler = page.getByRole("group", { name: "Timeline clock" })
   await expect(ruler.getByText("10:00")).toBeVisible()
   const sideways = await ruler.evaluate((r) => {

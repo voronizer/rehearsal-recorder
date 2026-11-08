@@ -11,6 +11,7 @@ import {
   startRehearsal,
   style,
   test,
+  recordButton,
 } from "./app.ts"
 import type { Locator, Page } from "@playwright/test"
 
@@ -74,7 +75,7 @@ test("the marker dialog's buttons are the labels, in their order, the first chos
   await dialog.getByRole("radio", { name: "Went wrong" }).click()
   await dialog.getByRole("button", { name: "Save", exact: true }).click()
   await page.getByRole("button", { name: /Save take/ }).click()
-  await expect(page.getByRole("button", { name: /Record take 2/ })).toBeVisible()
+  await expect(recordButton(page, 2)).toBeVisible()
   const kept = (await calls(page, "keep_take")).at(-1)!.args
   expect((kept[5] as { label_id: number }[])[0].label_id).toBe(3)
 })

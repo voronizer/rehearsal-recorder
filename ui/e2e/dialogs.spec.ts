@@ -10,6 +10,8 @@ import {
   recordTake,
   startRehearsal,
   test,
+  recordButton,
+  takeButton,
 } from "./app.ts"
 import type { Page } from "@playwright/test"
 
@@ -28,7 +30,7 @@ async function twoTakesKept(page: Page, system?: string) {
   for (const n of [1, 2]) {
     await recordTake(page, n)
     await page.getByRole("button", { name: /Save take/ }).click()
-    await expect(page.getByRole("button", { name: new RegExp(`Record take ${n + 1}`) })).toBeVisible()
+    await expect(recordButton(page, n + 1)).toBeVisible()
   }
 }
 
@@ -59,7 +61,7 @@ test("Escape with takes in the rehearsal asks to finish, on Cancel, and Enter le
   await page.keyboard.press("Enter")
   await expect(dialog).toHaveCount(0)
   // The screen stays: nothing was finished.
-  await expect(page.getByRole("button", { name: /Record take 3/ })).toBeVisible()
+  await expect(recordButton(page, 3)).toBeVisible()
   expect(await callCount(page, "finish_rehearsal")).toBe(finishes)
 })
 
@@ -154,8 +156,8 @@ test("a dialog opened with its Enter button disabled still has the keyboard insi
   await recordTake(page, 1)
   await nameTake(page, "Pałyn")
   await page.getByRole("button", { name: /Save take/ }).click()
-  await expect(page.getByRole("button", { name: /Record take 2/ })).toBeVisible()
-  await page.locator("[aria-label='Rehearsal overview'] button[aria-label^='Take 1 Pałyn']").click()
+  await expect(recordButton(page, 2)).toBeVisible()
+  await takeButton(page.locator("[aria-label='Rehearsal overview']"), "Pałyn #1").click()
   await page.getByRole("button", { name: "Copy Pałyn 1 to the cloud" }).click()
   const dialog = page.getByRole("dialog")
   await dialog.getByText("Choose").click()
@@ -289,10 +291,8 @@ const CONVERTED: { name: string; open: (page: Page) => Promise<void> }[] = [
       await recordTake(page, 1)
       await nameTake(page, "Pałyn")
       await page.getByRole("button", { name: /Save take/ }).click()
-      await expect(page.getByRole("button", { name: /Record take 2/ })).toBeVisible()
-      await page
-        .locator("[aria-label='Rehearsal overview'] button[aria-label^='Take 1 Pałyn']")
-        .click()
+      await expect(recordButton(page, 2)).toBeVisible()
+      await takeButton(page.locator("[aria-label='Rehearsal overview']"), "Pałyn #1").click()
       await page.getByRole("button", { name: "Copy Pałyn 1 to the cloud" }).click()
     },
   },

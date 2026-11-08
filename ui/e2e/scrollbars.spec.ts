@@ -25,7 +25,7 @@ test("no scrollbar under the songs: the wheel, the fade and ‹ › stand for it
   })
   await startRehearsal(page, TWENTY.length + 1)
   const overview = page.locator("[aria-label='Rehearsal overview']")
-  await overview.getByRole("button", { name: /^Take 1 / }).click()
+  await overview.getByRole("button", { name: /^Pałyn #1(,|$)/ }).click()
   const strip = page.getByRole("group", { name: "Take strip" })
   await expect(strip.getByRole("button", { name: "Later songs" })).toBeVisible()
   const bar = await strip

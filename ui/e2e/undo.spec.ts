@@ -13,6 +13,8 @@ import {
   setFake,
   startRehearsal,
   test,
+  recordButton,
+  takeButton,
 } from "./app.ts"
 import type { Locator, Page } from "@playwright/test"
 
@@ -127,7 +129,7 @@ test("deleting a take in History asks nothing, and Undo brings it back with its 
   const notice = said(page, "“Pałyn #2” went to the Trash.")
   await expect(notice).toHaveCount(1)
   await notice.getByRole("button", { name: "Undo" }).click()
-  await expect(overview.getByRole("button", { name: /^Take 2 Pałyn 2/ })).toBeVisible()
+  await expect(takeButton(overview, "Pałyn #2")).toBeVisible()
   await expect(star).toHaveAttribute("aria-pressed", "true")
   await expect(notice).toHaveCount(0)
   expect(await callCount(page, "undo_trash")).toBe(1)
@@ -141,7 +143,7 @@ test("Ctrl+Z brings a take back as Undo does", async ({ page }) => {
   await deleteTake(overview, 2, "Pałyn 2")
   await expect(row(overview, 2)).toHaveCount(0)
   await page.keyboard.press("Control+z")
-  await expect(overview.getByRole("button", { name: /^Take 2 Pałyn 2/ })).toBeVisible()
+  await expect(takeButton(overview, "Pałyn #2")).toBeVisible()
   await expect(notices(page)).toHaveCount(0)
 })
 
@@ -155,7 +157,7 @@ test("on a Mac Cmd+Z brings it back, and Ctrl+Z does not", async ({ page }) => {
   await page.waitForTimeout(200)
   expect(await callCount(page, "undo_trash")).toBe(0)
   await page.keyboard.press("Meta+z")
-  await expect(overview.getByRole("button", { name: /^Take 2 Pałyn 2/ })).toBeVisible()
+  await expect(takeButton(overview, "Pałyn #2")).toBeVisible()
 })
 
 test("Ctrl+Z in the take name field is the field's own", async ({ page }) => {
@@ -180,7 +182,7 @@ test("two deletions: Ctrl+Z brings back the second, and the first still offers U
   const overview = await tuesday(page)
   await deleteTake(overview, 1, "Pałyn 1")
   await expect(row(overview, 1)).toHaveCount(0)
-  await deleteTake(overview, 3, "Take 3")
+  await deleteTake(overview, 3, "Take 1")
   await expect(row(overview, 3)).toHaveCount(0)
   await page.mouse.move(10, 10)
   await page.keyboard.press("Control+z")
@@ -188,7 +190,7 @@ test("two deletions: Ctrl+Z brings back the second, and the first still offers U
   await expect(row(overview, 1)).toHaveCount(0)
   const first = said(page, "“Pałyn #1” went to the Trash.")
   await expect(first.getByRole("button", { name: "Undo" })).toBeVisible()
-  await expect(said(page, "“Take 3” went to the Trash.")).toHaveCount(0)
+  await expect(said(page, "“Take #1” went to the Trash.")).toHaveCount(0)
   await page.keyboard.press("Control+z")
   await expect(row(overview, 1)).toBeVisible()
 })
@@ -238,7 +240,7 @@ test("clearing false starts asks nothing, and Undo brings them all back", async 
   const overview = await tonight(page, [
     { name: "Pałyn", duration_sec: 200 },
     { name: "Pałyn", duration_sec: 12 },
-    { name: "Take 3", duration_sec: 8 },
+    { name: "Take 1", duration_sec: 8 },
   ])
   const clear = overview.getByRole("button", { name: /Clear false starts/ })
   await expect(clear).toHaveText(/Clear false starts\s*2/)
@@ -257,7 +259,7 @@ test("clearing false starts asks nothing, and Undo brings them all back", async 
 test("one false start cleared is said as one", async ({ page }) => {
   const overview = await tonight(page, [
     { name: "Pałyn", duration_sec: 200 },
-    { name: "Take 2", duration_sec: 8 },
+    { name: "Take 1", duration_sec: 8 },
   ])
   await overview.getByRole("button", { name: /Clear false starts/ }).click()
   await expect(said(page, "1 false start went to the Trash.")).toHaveCount(1)
@@ -278,7 +280,7 @@ test.describe("on the screen after a take", () => {
 
     await page.keyboard.press("Escape")
     await expect(title(page)).toHaveCount(0)
-    await expect(page.getByRole("button", { name: /Record take 2/ })).toBeVisible()
+    await expect(recordButton(page, 2)).toBeVisible()
     expect(await callCount(page, "discard_take")).toBe(1)
     await said(page, "“Sonca #1” went to the Trash.").getByRole("button", { name: "Undo" }).click()
 
@@ -325,10 +327,10 @@ test.describe("on the screen after a take", () => {
     await startRehearsal(page)
     await recordTake(page)
     await page.getByRole("button", { name: /^Discard/ }).click()
-    const notice = said(page, "“Take 1” went to the Trash.")
+    const notice = said(page, "“Take #1” went to the Trash.")
     await expect(notice).toHaveCount(1)
     const tokens = await waiting(page)
-    await page.getByRole("button", { name: /Record take 2/ }).click()
+    await recordButton(page, 2).click()
     await expect(page.getByRole("button", { name: /^Stop/ })).toBeVisible()
     await expect(notice).toHaveCount(0)
     await expect
@@ -341,7 +343,7 @@ test.describe("on the screen after a take", () => {
     await startRehearsal(page)
     await recordTake(page)
     await page.getByRole("button", { name: /^Discard/ }).click()
-    const notice = said(page, "“Take 1” went to the Trash.")
+    const notice = said(page, "“Take #1” went to the Trash.")
     await expect(notice).toHaveCount(1)
     await page.getByRole("button", { name: /^Finish/ }).click()
     await expect(page.getByRole("button", { name: /Start rehearsal/ })).toBeVisible()
@@ -363,7 +365,7 @@ test.describe("on the screen after a take", () => {
     await expect(page.getByRole("dialog")).toHaveCount(0)
     await expect(page.locator("span", { hasText: "/ 0:03" }).first()).toBeVisible()
     await expect(page.getByRole("button", { name: /^Remove mark at/ })).toHaveCount(0)
-    const notice = said(page, "“Take 1” is cropped. The uncut take went to the Trash.")
+    const notice = said(page, "“Take #1” is cropped. The uncut take went to the Trash.")
     await notice.getByRole("button", { name: "Undo" }).click()
     await expect(page.locator("span", { hasText: "/ 0:06" }).first()).toBeVisible()
     await expect(page.getByRole("button", { name: /^Remove mark at/ })).toHaveCount(1)
@@ -375,11 +377,11 @@ test.describe("on the screen after a take", () => {
     await recordTake(page)
     await dragRegion(page, 0.25, 0.75)
     await page.getByRole("button", { name: "Crop to the region" }).click()
-    const notice = said(page, "“Take 1” is cropped. The uncut take went to the Trash.")
+    const notice = said(page, "“Take #1” is cropped. The uncut take went to the Trash.")
     await expect(notice).toHaveCount(1)
     const tokens = await waiting(page)
     await page.getByRole("button", { name: /Save take/ }).click()
-    await expect(page.getByRole("button", { name: /Record take 2/ })).toBeVisible()
+    await expect(recordButton(page, 2)).toBeVisible()
     await expect(notice).toHaveCount(0)
     await expect
       .poll(async () => (await calls(page, "end_trash")).map((c) => c.args))
@@ -392,11 +394,11 @@ test.describe("on the screen after a take", () => {
     await recordTake(page)
     await dragRegion(page, 0.25, 0.75)
     await page.getByRole("button", { name: "Crop to the region" }).click()
-    const cropped = said(page, "“Take 1” is cropped. The uncut take went to the Trash.")
+    const cropped = said(page, "“Take #1” is cropped. The uncut take went to the Trash.")
     await expect(cropped).toHaveCount(1)
     const [crop] = await waiting(page)
     await page.getByRole("button", { name: /^Discard/ }).click()
-    await expect(said(page, "“Take 1” went to the Trash.")).toHaveCount(1)
+    await expect(said(page, "“Take #1” went to the Trash.")).toHaveCount(1)
     await expect(cropped).toHaveCount(0)
     await expect
       .poll(async () => (await calls(page, "end_trash")).map((c) => c.args))
@@ -409,7 +411,7 @@ test.describe("on the screen after a take", () => {
     await recordTake(page)
     await dragRegion(page, 0.25, 0.75)
     await page.getByRole("button", { name: "Crop to the region" }).click()
-    const cropped = said(page, "“Take 1” is cropped. The uncut take went to the Trash.")
+    const cropped = said(page, "“Take #1” is cropped. The uncut take went to the Trash.")
     await expect(cropped).toHaveCount(1)
     await page.evaluate(() => {
       const w = window as unknown as { pywebview: { api: Record<string, unknown> } }
@@ -433,8 +435,8 @@ test.describe("on the screen after a take", () => {
     await box.uncheck()
     await page.keyboard.press("Escape")
     await expect(title(page)).toHaveCount(0)
-    await said(page, "“Take 1” went to the Trash.").getByRole("button", { name: "Undo" }).click()
-    await expect(title(page)).toHaveText("Take 1")
+    await said(page, "“Take #1” went to the Trash.").getByRole("button", { name: "Undo" }).click()
+    await expect(title(page)).toHaveText("Take #1")
     await expect(box).not.toBeChecked()
     await page.getByRole("button", { name: /Save take/ }).click()
     await expect.poll(() => callCount(page, "keep_take")).toBe(1)
@@ -459,11 +461,11 @@ test.describe("on the screen after a take", () => {
       }
     })
     await page.keyboard.press("Escape")
-    const notice = said(page, "“Take 1” went to the Trash.")
+    const notice = said(page, "“Take #1” went to the Trash.")
     await expect(notice).toHaveCount(1)
-    await expect(page.getByRole("button", { name: /^Record take/ })).toBeVisible()
+    await expect(recordButton(page)).toBeVisible()
     await notice.getByRole("button", { name: "Undo" }).click()
-    await expect(title(page)).toHaveText("Take 1")
+    await expect(title(page)).toHaveText("Take #1")
     expectedError(pageErrors, /session_state failed/)
   })
 
@@ -473,12 +475,12 @@ test.describe("on the screen after a take", () => {
     await recordTake(page)
     await holdSession(page)
     await page.keyboard.press("Escape")
-    await expect(said(page, "“Take 1” went to the Trash.")).toHaveCount(1)
+    await expect(said(page, "“Take #1” went to the Trash.")).toHaveCount(1)
     await page.keyboard.press("Space")
     await page.waitForTimeout(200)
     expect(await callCount(page, "keep_take")).toBe(0)
     await releaseSession(page)
-    await expect(page.getByRole("button", { name: /Record take 2/ })).toBeVisible()
+    await expect(recordButton(page, 2)).toBeVisible()
     expect(await callCount(page, "keep_take")).toBe(0)
   })
 
@@ -508,7 +510,7 @@ test("a crop asks nothing, and Undo gives back the take's old length", async ({ 
   await recordTake(page)
   await nameTake(page, "Pałyn")
   await page.getByRole("button", { name: /Save take/ }).click()
-  await page.locator("[aria-label='Rehearsal overview'] button[aria-label^='Take 1 Pałyn']").click()
+  await takeButton(page.locator("[aria-label='Rehearsal overview']"), "Pałyn #1").click()
   await expect(page.locator("span", { hasText: "/ 0:06" }).first()).toBeVisible()
   await dragRegion(page, 0.25, 0.75)
   await page.getByRole("button", { name: "Crop to the region" }).click()
@@ -526,7 +528,7 @@ test("a second crop of a take ends the first one's offer", async ({ page }) => {
   await recordTake(page)
   await nameTake(page, "Pałyn")
   await page.getByRole("button", { name: /Save take/ }).click()
-  await page.locator("[aria-label='Rehearsal overview'] button[aria-label^='Take 1 Pałyn']").click()
+  await takeButton(page.locator("[aria-label='Rehearsal overview']"), "Pałyn #1").click()
   await expect(page.locator("span", { hasText: "/ 0:06" }).first()).toBeVisible()
   await dragRegion(page, 0.25, 0.75)
   await page.getByRole("button", { name: "Crop to the region" }).click()
@@ -551,7 +553,7 @@ test("a crop in History asks nothing, and Undo gives back the take's old length"
 }) => {
   await openApp(page, { before: "window.__OLD_LENGTH_SEC__ = 20;" })
   await openHistory(page)
-  await page.getByRole("button", { name: "Take 1 Pałyn" }).click()
+  await takeButton(page, "Pałyn #1").click()
   await expect(page.locator("span", { hasText: "/ 0:20" }).first()).toBeVisible()
   await dragRegion(page, 0.25, 0.75)
   await page.getByRole("button", { name: "Crop to the region" }).click()
@@ -615,7 +617,7 @@ test("Undo of a take deleted in History, its rehearsal renamed since, shows it b
   expect(stale).toEqual({ ok: false, error: "Rehearsal not found" })
   await said(page, "“Pałyn #2” went to the Trash.").getByRole("button", { name: "Undo" }).click()
   // Read again where Python said the rehearsal is now.
-  await expect(overview.getByRole("button", { name: /^Take 2 Pałyn 2/ })).toBeVisible()
+  await expect(takeButton(overview, "Pałyn #2")).toBeVisible()
   expect((await calls(page, "get_rehearsal")).at(-1)?.args).toEqual(["/rec/Tuesday blues"])
 })
 
@@ -624,7 +626,7 @@ test("Undo of a crop in History, its rehearsal renamed since, gives back the old
 }) => {
   await openApp(page, { before: "window.__OLD_LENGTH_SEC__ = 20;" })
   await openHistory(page)
-  await page.getByRole("button", { name: "Take 1 Pałyn" }).click()
+  await takeButton(page, "Pałyn #1").click()
   await dragRegion(page, 0.25, 0.75)
   await page.getByRole("button", { name: "Crop to the region" }).click()
   await expect(page.locator("span", { hasText: "/ 0:10" }).first()).toBeVisible()
@@ -740,7 +742,7 @@ test("during a take Ctrl+Z brings nothing back", async ({ page }) => {
   const overview = await tonight(page, TWO)
   await deleteTake(overview, 1, "Pałyn 1")
   await expect(row(overview, 1)).toHaveCount(0)
-  await page.getByRole("button", { name: /Record take 3/ }).click()
+  await recordButton(page, 3).click()
   await expect(page.getByRole("button", { name: /^Stop/ })).toBeVisible()
   await page.keyboard.press("Control+z")
   await page.waitForTimeout(200)

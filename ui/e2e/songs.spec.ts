@@ -22,6 +22,7 @@ import {
   test,
   waitingFor,
   watchHeads,
+  takeButton,
 } from "./app.ts"
 import type { Locator, Page } from "@playwright/test"
 
@@ -91,7 +92,7 @@ async function toFirstRehearsal(page: Page): Promise<number> {
   await rung(page, "/rec/gone").click()
   const songPage = page.getByRole("region", { name: "Pałyn", exact: true })
   await songPage.evaluate((el) => (el.scrollTop = 200))
-  await rungGroup(page, "/rec/old").getByRole("button", { name: "Take 2 Pałyn 2" }).click()
+  await takeButton(rungGroup(page, "/rec/old"), "Pałyn #2").click()
   const timeline = page.getByRole("group", { name: "Take timeline" })
   await expect(timeline).toBeVisible()
   const box = (await timeline.boundingBox())!
@@ -426,7 +427,7 @@ test.describe("Songs in History", () => {
     await expect(gone.getByRole("button", { name: /^Rename take/ })).toHaveCount(0)
     await expect(gone.getByRole("button", { name: /^Star / })).toHaveCount(0)
 
-    const bar = gone.getByRole("button", { name: "Take 1 Pałyn 8" })
+    const bar = takeButton(gone, "Pałyn #8")
     await expect(bar).toBeDisabled()
     const opens = (await calls(page, "player_open")).length
     await bar.click({ force: true })
@@ -452,11 +453,11 @@ test.describe("Songs in History", () => {
     const gone = rungGroup(page, "/rec/gone").locator("[data-take='1']")
     await expect(gone).toContainText("Not found on disk")
     await expect(gone).not.toContainText("Not in the cloud")
-    const bar = gone.getByRole("button", { name: /^Take 1 Pałyn 8/ })
+    const bar = takeButton(gone, "Pałyn #8")
     await expect(bar).toBeDisabled()
     await expect(bar).not.toHaveAttribute("aria-describedby")
     // Its name says what the row says, not the cloud's status.
-    await expect(bar).toHaveAccessibleName("Take 1 Pałyn 8, not found on disk")
+    await expect(bar).toHaveAccessibleName("Pałyn #8, not found on disk")
   })
 
   test("starred goes come first, and from last time lists the marks", async ({ page }) => {
@@ -590,7 +591,7 @@ test.describe("Songs in History", () => {
     await songPage.evaluate((el) => (el.scrollTop = 200))
     expect(await songPage.evaluate((el) => el.scrollTop)).toBe(200)
 
-    await rungGroup(page, "/rec/old").getByRole("button", { name: "Take 2 Pałyn 2" }).click()
+    await takeButton(rungGroup(page, "/rec/old"), "Pałyn #2").click()
     await expect(page.locator("[aria-label='Take timeline']")).toBeVisible()
     await expect(page.getByRole("heading", { name: "Tuesday jam" })).toBeVisible()
     await expect(
@@ -612,7 +613,7 @@ test.describe("Songs in History", () => {
     await openApp(page, { before: EVERY_PALYN })
     await openSongs(page)
     await chooseSong(page, "Pałyn")
-    await rungGroup(page, "/rec/old").getByRole("button", { name: "Take 2 Pałyn 2" }).click()
+    await takeButton(rungGroup(page, "/rec/old"), "Pałyn #2").click()
     const strip = page.getByRole("group", { name: "Take strip" })
     await strip.getByRole("button", { name: "Songs", exact: true }).click()
     const column = strip.locator("[data-column='song:Pałyn']")
@@ -620,9 +621,9 @@ test.describe("Songs in History", () => {
     // not on disk.
     await expect(column.locator("[data-day]")).toHaveText(["Tue 25 Aug", "Thu 10 Sep"])
     await expect(column.locator("button[data-go-row]")).toHaveCount(4)
-    await expect(column.getByRole("button", { name: /Pałyn [89]/ })).toHaveCount(0)
+    await expect(column.getByRole("button", { name: /Pałyn #[89]/ })).toHaveCount(0)
     await expect(column.locator("button[aria-current='true']")).toHaveAccessibleName(
-      /^Take 2 Pałyn 2/
+      /^Pałyn\s#2(,|$)/
     )
   })
 
@@ -636,7 +637,7 @@ test.describe("Songs in History", () => {
     })
     await openSongs(page)
     await chooseSong(page, "Pałyn")
-    await rungGroup(page, "/rec/old").getByRole("button", { name: "Take 2 Pałyn 2" }).click()
+    await takeButton(rungGroup(page, "/rec/old"), "Pałyn #2").click()
     const strip = page.getByRole("group", { name: "Take strip" })
     await strip.getByRole("button", { name: "Songs", exact: true }).click()
     const column = strip.locator("[data-column='song:Pałyn']")
@@ -681,13 +682,13 @@ test.describe("Songs in History", () => {
     await openApp(page, { before: "window.__FULL_EVENING__ = true;" })
     await openSongs(page)
     // Rehearsals has Tuesday jam chosen; Daroha's goes are First rehearsal's.
-    await rungGroup(page, "/rec/older").getByRole("button", { name: "Take 1 Daroha 1" }).click()
+    await takeButton(rungGroup(page, "/rec/older"), "Daroha #1").click()
     await expect(page.locator("[aria-label='Take timeline']")).toBeVisible()
     await expect(page.getByRole("heading", { name: "First rehearsal" })).toBeVisible()
     const strip = page.getByRole("group", { name: "Take strip" })
     await expect(strip.locator("[data-tab='song:Daroha']")).toHaveAttribute("aria-current", "true")
     await strip.getByRole("button", { name: "Songs", exact: true }).click()
-    await expect(strip.getByRole("button", { name: /^Take 2 Daroha 2/ })).toBeVisible()
+    await expect(takeButton(strip, "Daroha #2")).toBeVisible()
     await expect(strip.getByRole("button", { name: /Pałyn/ })).toHaveCount(0)
     expect((await calls(page, "player_open")).at(-1)?.args[0]).toEqual([
       { name: "Guitar", file: "/rec/older/d1.wav" },
@@ -701,7 +702,7 @@ test.describe("Songs in History", () => {
     await openApp(page, { before: "window.__FULL_EVENING__ = true;" })
     await openSongs(page)
     await chooseSong(page, "Pałyn")
-    await rungGroup(page, "/rec/old").getByRole("button", { name: "Take 2 Pałyn 2" }).click()
+    await takeButton(rungGroup(page, "/rec/old"), "Pałyn #2").click()
     await expect(page.locator("[aria-label='Take timeline']")).toBeVisible()
     const id = (await calls(page, "get_song")).at(-1)?.args[0]
     await page.getByRole("button", { name: "Rename take Pałyn 2" }).click()
@@ -729,7 +730,7 @@ test.describe("Songs in History", () => {
     await openSongs(page)
     await chooseSong(page, "Daroha")
     // First rehearsal's, while Rehearsals has Tuesday jam chosen.
-    await rungGroup(page, "/rec/older").getByRole("button", { name: "Take 1 Daroha 1" }).click()
+    await takeButton(rungGroup(page, "/rec/older"), "Daroha #1").click()
     await expect(page.locator("[aria-label='Take timeline']")).toBeVisible()
     await expect(page.getByRole("button", { name: "Copy Daroha 1 to the cloud" })).toBeVisible()
     // Past the first answer about background work, which is old news.
@@ -881,7 +882,7 @@ test.describe("Songs in History", () => {
     await openApp(page, { before: "window.__FULL_EVENING__ = true;" })
     await openSongs(page)
     await chooseSong(page, "Pałyn")
-    await rungGroup(page, "/rec/old").getByRole("button", { name: "Take 2 Pałyn 2" }).click()
+    await takeButton(rungGroup(page, "/rec/old"), "Pałyn #2").click()
     await expect(page.locator("[aria-label='Take timeline']")).toBeVisible()
     await page.keyboard.press("m")
     await expect.poll(async () => (await calls(page, "add_take_marker")).length).toBe(1)

@@ -9,6 +9,7 @@ import {
   startRehearsal,
   test,
   withSets,
+  takeButton,
 } from "./app.ts"
 import type { Page } from "@playwright/test"
 
@@ -79,10 +80,10 @@ test("up at the first row does nothing, down past the last does nothing", async 
 test("down from a name that is no row goes to the first row", async ({ page }) => {
   await openApp(page)
   await startRehearsal(page)
-  await expect(field(page)).toHaveValue("Take 1")
+  await expect(field(page)).toHaveValue("Take")
   await page.keyboard.press("ArrowUp")
   await page.waitForTimeout(200)
-  await expect(field(page)).toHaveValue("Take 1")
+  await expect(field(page)).toHaveValue("Take")
   await down(page, "Pałyn")
 
   // A song nobody has played, typed: the same.
@@ -104,7 +105,7 @@ test("with a take open the arrows step through the takes and leave the next take
   await page.getByRole("button", { name: /Save take/ }).click()
   await setRow(page, "Viasna").click()
   await expect(field(page)).toHaveValue("Viasna")
-  await page.locator("[aria-label='Rehearsal overview'] button[aria-label^='Take 1 Pałyn']").click()
+  await takeButton(page.locator("[aria-label='Rehearsal overview']"), "Pałyn #1").click()
   await expect(page.getByRole("group", { name: "Take timeline" })).toBeVisible()
   const opens = await callCount(page, "player_open")
   const sent = await callCount(page, "set_next_take_name")
@@ -189,7 +190,7 @@ test("the arrow keys hint sits beside the label and is hidden while a take is op
   // The panel rises in again with the screen, and a box is measured after.
   await settled(page)
   const fieldAt = (await field(page).boundingBox())!
-  await page.locator("[aria-label='Rehearsal overview'] button[aria-label^='Take 1']").click()
+  await takeButton(page.locator("[aria-label='Rehearsal overview']"), "Take #1").click()
   await expect(page.getByRole("group", { name: "Take timeline" })).toBeVisible()
   await expect(hint).toBeHidden()
   // Gone without moving the field.
@@ -252,12 +253,12 @@ test("with six songs played tonight and the list folded, down goes to the first 
 }) => {
   const tonight = ["Pałyn", "Viasna", "Ahoń", "Sonca", "Dym", "Ptuška"]
     .map((name) => `{name: '${name}', duration_sec: 60}`)
-    .concat("{name: 'Take 7', duration_sec: 5}")
+    .concat("{name: 'Take 1', duration_sec: 5}")
   await openApp(page, {
     before: `window.__MORE_SONGS__ = ["Opus", "Kupalle"]; window.__TONIGHT__ = [${tonight}];`,
   })
   await startRehearsal(page, 8)
-  await expect(field(page)).toHaveValue("Take 8")
+  await expect(field(page)).toHaveValue("Take")
   await expect(rows(page)).toHaveCount(5)
   const first = await rows(page).first().getAttribute("data-song-row")
   await down(page, first!)

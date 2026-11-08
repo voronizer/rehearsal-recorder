@@ -6,7 +6,7 @@ import {
   expect,
   hold,
   letGo,
-  literally,
+  takeButton,
   mixed,
   openApp,
   openEvening,
@@ -17,6 +17,7 @@ import {
   style,
   test,
   TONIGHT,
+  recordButton,
 } from "./app.ts"
 
 // The player's transport, and the one line it keeps for what it has to say
@@ -41,7 +42,7 @@ const QUIET =
 /** A take of the evening open in the player, loaded and settled. */
 async function openTonight(page: Page, take: string, before = "", tonight: object[] = TONIGHT) {
   const overview = await openEvening(page, before, tonight)
-  await overview.getByRole("button", { name: new RegExp(`^${literally(take)}`) }).click()
+  await takeButton(overview, take).click()
   await expect(timeline(page)).toBeVisible()
   await expect(play(page)).toBeEnabled()
   await settled(page)
@@ -93,7 +94,7 @@ const shows = (locator: Locator) => locator.isVisible()
 test.describe("the transport", () => {
   test("near a mark the transport keeps its height at 960 px", async ({ page }) => {
     await page.setViewportSize({ width: 960, height: 820 })
-    await openTonight(page, "Take 3 Viasna 1")
+    await openTonight(page, "Viasna #1")
     // All in one go in the page: the playhead is by the mark for two seconds
     // only, and a box read after it has gone on proves nothing.
     const seen = () =>
@@ -134,7 +135,7 @@ test.describe("the transport", () => {
   })
 
   test("the transport is a card without a frame, in the air of a group", async ({ page }) => {
-    await openTonight(page, "Take 1 Pałyn 1")
+    await openTonight(page, "Pałyn #1")
     expect(
       await style(
         transport(page),
@@ -154,7 +155,7 @@ test.describe("the transport", () => {
   })
 
   test("Repeat is a toggle, grey when on", async ({ page }) => {
-    await openTonight(page, "Take 1 Pałyn 1")
+    await openTonight(page, "Pałyn #1")
     const repeat = transport(page).getByRole("button", { name: "Repeat", exact: true })
     await expect(repeat).toHaveAttribute("aria-pressed", "false")
     // Its icon alone; the word is its name and its tip.
@@ -181,7 +182,7 @@ test.describe("the transport", () => {
   test("Play shows a spinner only after one second", async ({ page }) => {
     const overview = await openEvening(page)
     await hold(page, "player_open")
-    const open = overview.getByRole("button", { name: /^Take 1 Pałyn 1/ })
+    const open = takeButton(overview, "Pałyn #1")
     const playing = play(page)
     const spinner = playing.getByRole("status", { name: "Loading" })
     const since = Date.now()
@@ -205,7 +206,7 @@ test.describe("the player's line", () => {
   test("the warning and the crop line take the player's kept line and the timeline stays", async ({
     page,
   }) => {
-    await openTonight(page, "Take 1 Pałyn 1", "window.__ACTIVITY__ = [];")
+    await openTonight(page, "Pałyn #1", "window.__ACTIVITY__ = [];")
     const top = async () => (await timeline(page).boundingBox())!.y
     const rest = await top()
     // There at rest, between the transport and the map, with no gap round it
@@ -238,7 +239,7 @@ test.describe("the player's line", () => {
     await openEvening(page, "", [
       { name: "Pałyn", duration_sec: 60, tracks: [{ name: "Guitar", file: "/gone/t1.wav" }] },
     ])
-    await page.getByRole("button", { name: /^Take 1 Pałyn 1/ }).click()
+    await takeButton(page, "Pałyn #1").click()
     const said = line(page).getByRole("alert")
     await expect(said).toHaveText("Track file not found")
     // An alert of its own colour, with no box round it.
@@ -277,7 +278,7 @@ test.describe("the player's line", () => {
   })
 
   test("one thing at a time in the player's line", async ({ page }) => {
-    await openTonight(page, "Take 1 Pałyn 1", "window.__ACTIVITY__ = [];")
+    await openTonight(page, "Pałyn #1", "window.__ACTIVITY__ = [];")
     await goQuiet(page)
 
     // A crop, held: it is said over the warning, which is not.
@@ -296,14 +297,14 @@ test.describe("the player's line", () => {
       { name: "Pałyn", duration_sec: 60, tracks: [{ name: "Guitar", file: "/gone/t1.wav" }] },
     ])
     await croppingTake(page)
-    await page.getByRole("button", { name: /^Take 1 Pałyn 1/ }).click()
+    await takeButton(page, "Pałyn #1").click()
     await expect(line(page).getByRole("alert")).toHaveText("Track file not found")
     await expect(line(page).getByRole("status")).toHaveCount(0)
     await expect(page.getByText("Cropping…")).toHaveCount(0)
   })
 
   test("a line too long for its room is cut, and shows whole on hover", async ({ page }) => {
-    await openTonight(page, "Take 1 Pałyn 1")
+    await openTonight(page, "Pałyn #1")
     await goQuiet(page)
     const words = line(page).locator("[data-slot='alert-description'] > span")
     await expect(words).toHaveText(QUIET)
@@ -320,7 +321,7 @@ test.describe("the player's line", () => {
   })
 
   test("a line that is cut takes Tab and shows whole in the tip", async ({ page }) => {
-    await openTonight(page, "Take 1 Pałyn 1")
+    await openTonight(page, "Pałyn #1")
     await goQuiet(page)
     const alert = line(page).getByRole("alert")
     await expect(alert).toHaveAttribute("tabindex", "0")
@@ -339,7 +340,7 @@ test.describe("the player's line", () => {
   })
 
   test("a line that fits is no stop for Tab", async ({ page }) => {
-    await openTonight(page, "Take 1 Pałyn 1")
+    await openTonight(page, "Pałyn #1")
     await goQuiet(page, "Playback stopped.")
     const alert = line(page).getByRole("alert")
     const words = lineWords(page)
@@ -469,7 +470,7 @@ test.describe("the marker's kind", () => {
     await dialog.getByRole("button", { name: "Save", exact: true }).click()
     await expect(dialog).toHaveCount(0)
     await page.getByRole("button", { name: /Save take/ }).click()
-    await expect(page.getByRole("button", { name: /Record take 2/ })).toBeVisible()
+    await expect(recordButton(page, 2)).toBeVisible()
     const kept = (await calls(page, "keep_take")).at(-1)!.args
     expect((kept[5] as { label_id: number }[]).map((m) => m.label_id)).toEqual([1])
   })
@@ -526,7 +527,7 @@ test.describe("the marker's kind", () => {
 
 test.describe("the map", () => {
   test("the map's view frame is grey", async ({ page }) => {
-    await openTonight(page, "Take 1 Pałyn 1")
+    await openTonight(page, "Pałyn #1")
     const box = (await timeline(page).boundingBox())!
     await page.mouse.move(box.x + box.width * 0.3, box.y + box.height / 2)
     await page.keyboard.down("Control")
@@ -614,7 +615,7 @@ test.describe("the share dialog", () => {
 
 test.describe("the marks and the region", () => {
   test("a mark chip's time and words are buttons with the shared focus ring", async ({ page }) => {
-    await openTonight(page, "Take 3 Viasna 1")
+    await openTonight(page, "Viasna #1")
     const time = page.getByRole("button", { name: "0:04", exact: true })
     const words = time.locator("xpath=following-sibling::button[1]")
     await expect(time).toHaveCount(1)
@@ -640,7 +641,7 @@ test.describe("the marks and the region", () => {
   }) => {
     // The page is settled by openTonight: a box read while the groups rise is
     // up to 12 px off.
-    await openTonight(page, "Take 3 Viasna 1")
+    await openTonight(page, "Viasna #1")
     await settled(page)
     const chip = page.getByRole("button", { name: "0:04", exact: true }).locator("xpath=..")
     const row = chip.locator("xpath=..")
@@ -658,7 +659,7 @@ test.describe("the marks and the region", () => {
       "the second chorus drifts flat against the bass line and the drums rush it again " +
       "after the bridge, and nobody noticed until we listened back to the whole take"
     await page.setViewportSize({ width: 960, height: 820 })
-    await openTonight(page, "Take 3 Viasna 1", "", [
+    await openTonight(page, "Viasna #1", "", [
       ...TONIGHT.slice(0, 2),
       { name: "Viasna", duration_sec: 12, markers: [{ at: 4, note: long, label_id: 1 }] },
     ])
@@ -675,7 +676,7 @@ test.describe("the marks and the region", () => {
   test("the player says what its icon buttons do in the shared tip, not a native title", async ({
     page,
   }) => {
-    await openTonight(page, "Take 3 Viasna 1")
+    await openTonight(page, "Viasna #1")
     await dragRegion(page, 0.2, 0.6)
     const loop = page.getByRole("button", { name: "Loop the region" })
     await expect(loop).toBeVisible()
@@ -707,7 +708,7 @@ test.describe("the marks and the region", () => {
   test("To start's tip is for the eyes, not read again as the button's description", async ({
     page,
   }) => {
-    await openTonight(page, "Take 3 Viasna 1")
+    await openTonight(page, "Viasna #1")
     const start = transport(page).getByRole("button", { name: "To start" })
     await transport(page).getByRole("button", { name: /^Back \d+ seconds$/ }).focus()
     await page.keyboard.press("Shift+Tab")
@@ -717,7 +718,7 @@ test.describe("the marks and the region", () => {
   })
 
   test("the region's tag is on the shared buttons, in the tag's own tints", async ({ page }) => {
-    await openTonight(page, "Take 1 Pałyn 1")
+    await openTonight(page, "Pałyn #1")
     await dragRegion(page, 0.25, 0.75)
     const loop = page.getByRole("button", { name: "Loop the region" })
     const clear = page.getByRole("button", { name: "Clear the loop region" })

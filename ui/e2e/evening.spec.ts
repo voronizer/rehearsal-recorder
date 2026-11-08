@@ -174,7 +174,7 @@ test("Clear false starts is off while it clears", async ({ page }) => {
 test("Not named goes once its last take is cleared", async ({ page }) => {
   const overview = await openEvening(page, "", [
     { name: "Pałyn", duration_sec: 200 },
-    { name: "Take 2", duration_sec: 8 },
+    { name: "Take 1", duration_sec: 8 },
   ])
   await expect(overview.getByRole("group", { name: "Not named" })).toBeVisible()
   await overview.getByRole("button", { name: /Clear false starts/ }).click()

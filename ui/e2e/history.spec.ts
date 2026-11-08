@@ -19,6 +19,8 @@ import {
   startRehearsal,
   style,
   test,
+  recordButton,
+  takeButton,
 } from "./app.ts"
 import type { Locator, Page } from "@playwright/test"
 
@@ -32,7 +34,7 @@ test("finishing a rehearsal with takes in it asks, and is answered from the keyb
   await recordTake(page, 1)
   await nameTake(page, "Pałyn")
   await page.getByRole("button", { name: /Save take/ }).click()
-  await page.locator("[aria-label='Rehearsal overview'] button[aria-label^='Take 1 Pałyn']").click()
+  await takeButton(page.locator("[aria-label='Rehearsal overview']"), "Pałyn #1").click()
   const timeline = page.getByRole("group", { name: "Take timeline" })
   await expect(timeline).toBeVisible()
   await page.keyboard.press("Escape")
@@ -93,7 +95,7 @@ test.describe("History", () => {
     // Chosen already, and on screen next to the list: no row to open first.
     await expect(page.getByRole("heading", { name: "Tuesday jam" })).toBeVisible()
     await expect(list.locator("[aria-current='true']")).toContainText("Tuesday jam")
-    await page.getByRole("button", { name: "Take 1 Pałyn 1", exact: true }).click()
+    await page.getByRole("button", { name: "Pałyn #1", exact: true }).click()
     await expect(page.getByRole("button", { name: "Mute Guitar" })).toBeVisible()
     // A ten-minute take gets a clock in minutes.
     await expect(page.getByRole("group", { name: "Timeline clock" })).toContainText("2:00")
@@ -102,7 +104,7 @@ test.describe("History", () => {
     await page.keyboard.press("Escape")
     await expect(page.getByRole("group", { name: "Take timeline" })).toHaveCount(0)
     await expect(list).toBeVisible()
-    await expect(page.getByRole("button", { name: "Take 1 Pałyn 1", exact: true })).toHaveCount(1)
+    await expect(page.getByRole("button", { name: "Pałyn #1", exact: true })).toHaveCount(1)
     // The list is history itself, so the next rung is the setup screen.
     await page.keyboard.press("Escape")
     await expect(startButton(page)).toBeVisible()
@@ -623,7 +625,7 @@ test("a take open keeps its header, with 48 px between the strip and the player"
   page,
 }) => {
   const overview = await openEvening(page)
-  await overview.getByRole("button", { name: "Take 2 Pałyn 2" }).click()
+  await takeButton(overview, "Pałyn #2").click()
   await expect(page.locator("[aria-label='Take timeline']")).toBeVisible()
   await settled(page)
   // The rehearsal's name and figures, and the button to its folder.
@@ -1129,7 +1131,7 @@ test("a take opened from the overview is deleted at once, and Undo puts it back"
   page,
 }) => {
   const overview = await openEvening(page)
-  await overview.getByRole("button", { name: "Take 2 Pałyn 2" }).click()
+  await takeButton(overview, "Pałyn #2").click()
   await expect(page.locator("[aria-label='Take timeline']")).toBeVisible()
   await expect(current(page)).toContainText("Pałyn #2")
   await page.getByRole("button", { name: "Delete take Pałyn 2" }).click()
@@ -1139,7 +1141,7 @@ test("a take opened from the overview is deleted at once, and Undo puts it back"
   await expect(strip.getByRole("button", { name: /Pałyn 2/ })).toHaveCount(0)
   const notice = notices(page).filter({ hasText: "“Pałyn #2” went to the Trash." })
   await notice.getByRole("button", { name: "Undo" }).click()
-  await expect(overview.getByRole("button", { name: "Take 2 Pałyn 2" })).toBeVisible()
+  await expect(takeButton(overview, "Pałyn #2")).toBeVisible()
 })
 
 test("the whole of a take's row opens it, not only its bar", async ({ page }) => {
@@ -1148,7 +1150,7 @@ test("the whole of a take's row opens it, not only its bar", async ({ page }) =>
   const overview = await openEvening(page)
   const opens = async (x: number, y: number) => {
     await page.mouse.click(x, y)
-    await expect(current(page)).toContainText("Take 3")
+    await expect(current(page)).toContainText("Take #1")
     await page.keyboard.press("Escape")
     await expect(overview).toBeVisible()
   }
@@ -1184,7 +1186,7 @@ test("a take plays from its row, and on in the player and back", async ({ page }
 
   // Its bar opens it in the player without opening it again, and it carries
   // on playing there.
-  await overview.getByRole("button", { name: "Take 4 Viasna" }).click()
+  await takeButton(overview, "Viasna #1").click()
   await expect(page.locator("[aria-label='Take timeline']")).toBeVisible()
   expect(await callCount(page, "player_open")).toBe(opens + 1)
   await expect(page.getByRole("button", { name: "Pause", exact: true })).toHaveCount(1)
@@ -1309,7 +1311,7 @@ test.describe("last time, on the setup screen", () => {
     expect(await keyOn(startButton(page))).toBeNull()
     await page.keyboard.press("Space")
     await expect(panel.getByRole("button", { name: "Play Pałyn 2, the last take of Pałyn" })).toBeVisible()
-    await expect(page.getByRole("button", { name: /Record take/ })).toHaveCount(0)
+    await expect(recordButton(page)).toHaveCount(0)
     await page.keyboard.press("Space")
     await expect(panel.getByRole("button", { name: "Pause Pałyn 2, the last take of Pałyn" })).toBeVisible()
 

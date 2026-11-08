@@ -8,6 +8,7 @@ import {
   openHistory,
   style,
   test,
+  takeButton,
 } from "./app.ts"
 import type { Page } from "@playwright/test"
 
@@ -236,8 +237,8 @@ test.describe("Rename song, from a song's page", () => {
     await expect(list.locator("[data-song='Palyn']")).toHaveCount(0)
     await page.locator("[data-rung='/rec/older']").click()
     const older = page.locator("[data-rung-group='/rec/older']")
-    await expect(older.getByRole("button", { name: "Take 3 Pałyn 10" })).toBeVisible()
-    await expect(older.getByRole("button", { name: "Take 4 Pałyn 11" })).toBeVisible()
+    await expect(takeButton(older, "Pałyn #10")).toBeVisible()
+    await expect(takeButton(older, "Pałyn #11")).toBeVisible()
     await expect(head(page).locator("[data-old-names]")).toContainText("Palyn")
     await page.locator("button[aria-label^='Background work']").click()
     await expect(page.getByText("Merging Palyn into Pałyn · 2 takes")).toBeVisible()

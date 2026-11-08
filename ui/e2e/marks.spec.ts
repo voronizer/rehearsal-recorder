@@ -322,7 +322,7 @@ test.describe("Marks in History", () => {
     await expect(pane(page, "Note").locator("[data-group-title]")).toHaveCount(0)
     await expect(pane(page, "Note").locator("[data-mark]")).toHaveCount(3)
     await expect(row(page, "/rec/quiet#1@120").locator("[data-line='take']")).toHaveText(
-      "Take 1 · 2:00 · Wednesday jam, 3 Sep"
+      "Take #1 · 2:00 · Wednesday jam, 3 Sep"
     )
     expect((await calls(page, "save_marks_grouping")).map((c) => c.args[0])).toEqual(["song", "list"])
 

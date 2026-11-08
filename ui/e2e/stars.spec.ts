@@ -9,12 +9,13 @@ import {
   recordTake,
   startRehearsal,
   test,
+  takeButton,
 } from "./app.ts"
 import type { Page } from "@playwright/test"
 
 // ★ on a take: one click on, one click off, as many per song as are worth
 // coming back to. The fuller evening is Pałyn 1, Pałyn 2 (with a Keep this
-// mark), Take 3 and Viasna 1, at /rec/old.
+// mark), Take 1 (of no song, the evening's third) and Viasna 1, at /rec/old.
 
 async function openEvening(page: Page, before = "") {
   await openApp(page, { before: `window.__FULL_EVENING__ = true; ${before}` })
@@ -44,8 +45,8 @@ test("★ on a row goes on and comes off with one click, and opens nothing", asy
 
 test("two goes at a song can both have ★, and so can a take with no song", async ({ page }) => {
   const overview = await openEvening(page)
-  for (const name of ["Pałyn 1", "Pałyn 2", "Take 3"]) await star(overview, name).click()
-  for (const name of ["Pałyn 1", "Pałyn 2", "Take 3"])
+  for (const name of ["Pałyn 1", "Pałyn 2", "Take 1"]) await star(overview, name).click()
+  for (const name of ["Pałyn 1", "Pałyn 2", "Take 1"])
     await expect(star(overview, name)).toHaveAttribute("aria-pressed", "true")
   await expect(star(overview, "Viasna 1")).toHaveAttribute("aria-pressed", "false")
 })
@@ -101,7 +102,7 @@ test("a take just saved is starred from the rehearsal's own overview", async ({ 
 
 test("in the player, ★ is beside the open take, and its tab carries it", async ({ page }) => {
   const overview = await openEvening(page)
-  await overview.getByRole("button", { name: "Take 2 Pałyn 2" }).click()
+  await takeButton(overview, "Pałyn #2").click()
   const strip = page.getByRole("group", { name: "Take strip" })
   await expect(star(strip, "Pałyn 2")).toHaveAttribute("aria-pressed", "false")
   await star(strip, "Pałyn 2").click()
@@ -112,14 +113,14 @@ test("in the player, ★ is beside the open take, and its tab carries it", async
 
 test("a tab carries the ★ of its go, and the columns every starred go", async ({ page }) => {
   const overview = await openEvening(page, "window.__STARRED__ = ['/rec/old#1', '/rec/old#3'];")
-  await overview.getByRole("button", { name: "Take 4 Viasna 1" }).click()
+  await takeButton(overview, "Viasna #1").click()
   const strip = page.getByRole("group", { name: "Take strip" })
   // Pałyn's tab shows Pałyn 2, the go a click on it opens, which has none.
   await expect(strip.locator("[data-tab='take:3'] [data-tab-line] [data-starred]")).toHaveCount(1)
   await expect(strip.locator("[data-tab='song:Pałyn'] [data-tab-line] [data-starred]")).toHaveCount(0)
   await strip.getByRole("button", { name: "Songs", exact: true }).click()
-  await expect(strip.getByRole("button", { name: /^Take 1 Pałyn 1, starred/ })).toBeVisible()
-  await expect(strip.getByRole("button", { name: /^Take 3 Take 3, starred/ })).toBeVisible()
+  await expect(strip.getByRole("button", { name: /^Pałyn #1, starred/ })).toBeVisible()
+  await expect(strip.getByRole("button", { name: /^Take #1, starred/ })).toBeVisible()
 })
 
 const lastTime = (page: Page) => page.getByRole("complementary", { name: "Last time" })

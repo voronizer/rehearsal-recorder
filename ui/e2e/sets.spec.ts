@@ -17,6 +17,7 @@ import {
   test,
   waitingFor,
   withSets,
+  recordButton,
 } from "./app.ts"
 import type { SetSeed } from "./app.ts"
 import type { Locator, Page } from "@playwright/test"
@@ -67,7 +68,7 @@ const titlesOf = (loc: ReturnType<typeof rows>, attr: string) =>
 async function keep(page: Page, n: number) {
   await recordTake(page, n)
   await page.getByRole("button", { name: /Save take/ }).click()
-  await expect(page.getByRole("button", { name: new RegExp(`Record take ${n + 1}`) })).toBeVisible()
+  await expect(recordButton(page, n + 1)).toBeVisible()
 }
 
 test.describe("on the rehearsal screen", () => {
@@ -256,7 +257,7 @@ test.describe("on the rehearsal screen", () => {
   test("with no set the list is called Songs and has every song", async ({ page }) => {
     await openApp(page)
     await startRehearsal(page)
-    await expect(field(page)).toHaveValue("Take 1")
+    await expect(field(page)).toHaveValue("Take")
     await expect(card(page)).toHaveCount(0)
     await expect(list(page)).toContainText("Songs")
     await expect(list(page)).not.toContainText("Other songs")
@@ -670,7 +671,7 @@ test.describe("on the start screen", () => {
     await menu(page).getByRole("menuitemradio", { name: /Short/ }).click()
     await expect(menu(page)).toHaveCount(0)
     await page.keyboard.press("Space")
-    await expect(page.getByRole("button", { name: /Record take 1/ })).toBeVisible()
+    await expect(recordButton(page, 1)).toBeVisible()
     expect((await calls(page, "start_rehearsal")).at(-1)?.args[5]).toBe(2)
   })
 
@@ -683,7 +684,7 @@ test.describe("on the start screen", () => {
     await picker(page).click({ force: true })
     await expect(menu(page)).toHaveCount(0)
     await page.keyboard.press("Space")
-    await expect(page.getByRole("button", { name: /Record take 1/ })).toBeVisible()
+    await expect(recordButton(page, 1)).toBeVisible()
   })
 
   test("Space on the set button reached with the keyboard opens the menu", async ({ page }) => {

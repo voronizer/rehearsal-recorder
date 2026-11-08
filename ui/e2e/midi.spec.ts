@@ -1,4 +1,4 @@
-import { callCount, calls, expect, notices, openApp, setFake, startButton, test } from "./app.ts"
+import { callCount, calls, expect, notices, openApp, setFake, startButton, test, recordButton } from "./app.ts"
 import type { Locator, Page } from "@playwright/test"
 
 // MIDI on the setup screen: what each track records (Audio, Both or MIDI),
@@ -294,7 +294,7 @@ test.describe("setup", () => {
     await page.getByRole("button", { name: "Check signal" }).click()
     await expect(page.getByRole("button", { name: "Stop checking" })).toBeVisible()
     await startButton(page).click()
-    await expect(page.getByRole("button", { name: /Record take 1/ })).toBeVisible()
+    await expect(recordButton(page, 1)).toBeVisible()
 
     const log = await page.evaluate(() =>
       (window as unknown as { __CALLS__: { name: string; args: unknown[] }[] }).__CALLS__

@@ -21,6 +21,7 @@ import {
   test,
   themed,
   withLineups,
+  recordButton,
 } from "./app.ts"
 import type { Locator, Page } from "@playwright/test"
 
@@ -298,7 +299,7 @@ test.describe("the signal check", () => {
     expect(await boxes()).toEqual(before)
 
     await letGo(page, "start_rehearsal")
-    await expect(page.getByRole("button", { name: /Record take 1/ })).toBeVisible()
+    await expect(recordButton(page, 1)).toBeVisible()
   })
 
   test("Space after clicking Check signal starts the rehearsal, not the check again", async ({
@@ -315,7 +316,7 @@ test.describe("the signal check", () => {
     )
     const monitors = await callCount(page, "start_monitor")
     await page.keyboard.press("Space")
-    await expect(page.getByRole("button", { name: /Record take 1/ })).toBeVisible()
+    await expect(recordButton(page, 1)).toBeVisible()
     expect(await callCount(page, "start_monitor")).toBe(monitors)
     // With exactly what the screen said it would record with.
     const started = await calls(page, "start_rehearsal")
@@ -330,7 +331,7 @@ test("Escape leaves a rehearsal with nothing in it yet, without asking", async (
   // rehearsal is what Finish does. Python takes the empty folder with it.
   await openApp(page)
   await startButton(page).click()
-  await expect(page.getByRole("button", { name: /Record take 1/ })).toBeVisible()
+  await expect(recordButton(page, 1)).toBeVisible()
   await page.keyboard.press("Escape")
   await expect(startButton(page)).toBeVisible()
   await expect(page.locator("#rehearsal-name")).toBeVisible()
@@ -349,7 +350,7 @@ test("Finish goes straight to the start screen; Escape asks first", async ({ pag
   await expect(page.getByText("Rehearsal finished")).toHaveCount(0)
 
   await startButton(page).click()
-  await expect(page.getByRole("button", { name: /Record take 2/ })).toBeVisible()
+  await expect(recordButton(page, 2)).toBeVisible()
   await page.keyboard.press("Escape")
   const dialog = page.getByRole("dialog")
   await expect(dialog.getByRole("heading")).toHaveText("Finish this rehearsal?")
@@ -1344,7 +1345,7 @@ test.describe("lineups", () => {
     await openApp(page, { before: both() })
     await pick(page, "Trio")
     await page.keyboard.press("Space")
-    await expect(page.getByRole("button", { name: /Record take 1/ })).toBeVisible()
+    await expect(recordButton(page, 1)).toBeVisible()
     await expect(menu(page)).toHaveCount(0)
   })
 
@@ -1547,7 +1548,7 @@ test.describe("the tracks during the check", () => {
     await page.getByRole("button", { name: "Remove track Vocals" }).click()
     await expect(notices(page)).toHaveCount(2)
     await startButton(page).click()
-    await expect(page.getByRole("button", { name: /Record take 1/ })).toBeVisible()
+    await expect(recordButton(page, 1)).toBeVisible()
     await expect(notices(page)).toHaveCount(0)
   })
 

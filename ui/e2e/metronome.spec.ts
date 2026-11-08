@@ -15,6 +15,8 @@ import {
   test,
   themed,
   withKeys,
+  recordButton,
+  takeButton,
 } from "./app.ts"
 import type { Locator, Page } from "@playwright/test"
 
@@ -39,7 +41,7 @@ const onOff = (page: Page) => row(page).getByRole("button", { name: "Click in ta
 const gear = (page: Page) => row(page).getByRole("button", { name: "Click and backing track" })
 const dots = (page: Page) => row(page).locator("[data-beat-dots] [data-dot]")
 const status = (page: Page) => row(page).locator("[data-status-line]")
-const record = (page: Page) => page.getByRole("button", { name: /Record take/ })
+const record = (page: Page) => recordButton(page)
 const finish = (page: Page) => page.getByRole("button", { name: "Finish", exact: true })
 
 /** Names the next take, as typed and taken with Enter, and waits for the
@@ -389,7 +391,7 @@ test.describe("the row on the rehearsal screen", () => {
   test("a free take", async ({ page }) => {
     await openApp(page)
     await startRehearsal(page)
-    await expect(field(page)).toHaveValue("Take 1")
+    await expect(field(page)).toHaveValue("Take")
     // Empty, the field shows a dash.
     await expect(tempo(page)).toHaveValue("")
     await expect(tempo(page)).toHaveAttribute("placeholder", "—")
@@ -663,7 +665,7 @@ test.describe("the row on the rehearsal screen", () => {
             return r.top >= main.top && r.bottom <= bottom + 0.5
           }).length
         })
-      await page.locator("[aria-label='Rehearsal overview']").locator("button[aria-label^='Take 1 Pałyn']").click()
+      await takeButton(page.locator("[aria-label='Rehearsal overview']"), "Pałyn #1").click()
       await expect(page.getByRole("group", { name: "Take timeline" })).toBeVisible()
       await settled(page)
       const inView = await lanes()
@@ -1287,9 +1289,9 @@ test("a song page's click leaves a change held in the row", async ({ page }) => 
   expect((await calls(page, "metronome_set")).map((c) => c.args)).toEqual([[96, "3/4"]])
 })
 
-/** A take of the evening, opened in the player. */
+/** A take of the evening, opened in the player: by its label, "Pałyn #1". */
 async function openTake(page: Page, label: string) {
-  await page.locator(`[aria-label='Rehearsal overview'] button[aria-label^='${label}']`).click()
+  await takeButton(page.locator("[aria-label='Rehearsal overview']"), label).click()
   await expect(page.locator("[data-master-plate]")).toBeVisible()
   await settled(page)
 }
@@ -1323,7 +1325,7 @@ test("master click plays with the take", async ({ page }) => {
     { name: "Pałyn", duration_sec: 200 },
     { name: "Ahoń", duration_sec: 150 },
   ])
-  await openTake(page, "Take 1 Pałyn")
+  await openTake(page, "Pałyn #1")
   const button = masterClick(page)
   // Off when the app starts.
   await expect(button).toBeEnabled()
@@ -1351,7 +1353,7 @@ test("master click plays with the take", async ({ page }) => {
 test("master stripes follow zoom", async ({ page }) => {
   // Ten minutes at 128: 1280 clicks.
   await openEvening(page, "", [{ name: "Pałyn", duration_sec: 600 }])
-  await openTake(page, "Take 1 Pałyn")
+  await openTake(page, "Pałyn #1")
   const well = (await masterLane(page).boundingBox())!
   // The whole take: every fourth bar, 7.5 s apart, the first on the file's
   // first sample.
@@ -1380,7 +1382,7 @@ test("master stripes follow zoom", async ({ page }) => {
 
 test("master lane shows the region and takes a drag as the tracks do", async ({ page }) => {
   await openEvening(page)
-  await openTake(page, "Take 1 Pałyn")
+  await openTake(page, "Pałyn #1")
   const lane = (await masterLane(page).boundingBox())!
   const y = lane.y + lane.height / 2
   const from = lane.x + lane.width * 0.2
@@ -1419,7 +1421,7 @@ test("master lane shows the region and takes a drag as the tracks do", async ({ 
 
 test("a take without the click", async ({ page }) => {
   await openEvening(page)
-  await openTake(page, "Take 6")
+  await openTake(page, "Take #1")
   await expect(masterClick(page)).toBeDisabled()
   await page.locator("[data-master-click]").hover()
   await expect(page.getByRole("tooltip")).toHaveText("This take was recorded without the click")
@@ -1433,7 +1435,7 @@ test("a cropped click take says where it starts", async ({ page }) => {
   // Python puts a click take's region on its grid: its start back to the
   // bar line before it.
   await openEvening(page, "window.__CROP_ON_GRID__ = true;")
-  await openTake(page, "Take 2 Pałyn 2")
+  await openTake(page, "Pałyn #2")
   await dragRegion(page, 0.25, 0.75)
   await page.getByRole("button", { name: "Crop to the region" }).click()
   await expect.poll(() => callCount(page, "crop_take")).toBe(1)
@@ -1443,7 +1445,7 @@ test("a cropped click take says where it starts", async ({ page }) => {
   // The same notice for a take still on the review screen.
   await page.keyboard.press("Escape")
   await nameNext(page, "Pałyn")
-  await page.getByRole("button", { name: /Record take 11/ }).click()
+  await recordButton(page, 11).click()
   await page.getByRole("button", { name: /^Stop/ }).click()
   await expect(page.locator("[data-take-summary]")).toBeVisible()
   await settled(page)
@@ -1460,7 +1462,7 @@ test("review moves its marks by where the take was cut", async ({ page }) => {
   // six seconds long.
   await openEvening(page, "window.__CROP_ON_GRID__ = true;")
   await nameNext(page, "Pałyn")
-  await page.getByRole("button", { name: /Record take 11/ }).click()
+  await recordButton(page, 11).click()
   await page.getByRole("button", { name: /^Stop/ }).click()
   await expect(page.locator("[data-take-summary]")).toBeVisible()
   await settled(page)
@@ -1487,7 +1489,7 @@ test("review moves its marks by where the take was cut", async ({ page }) => {
 test("master lane lines up with the tracks at 960", async ({ page }) => {
   await page.setViewportSize({ width: 960, height: 680 })
   await openEvening(page)
-  await openTake(page, "Take 1 Pałyn")
+  await openTake(page, "Pałyn #1")
   const group = (await page.locator("[data-master-group]").boundingBox())!
   const lanes = (await page.locator("[data-lanes]").boundingBox())!
   expect(Math.abs(group.x - lanes.x)).toBeLessThanOrEqual(0.5)
@@ -1508,7 +1510,7 @@ test("master lane lines up with the tracks at 960", async ({ page }) => {
 
 test("the master plate keeps its height", async ({ page }) => {
   await openEvening(page)
-  await openTake(page, "Take 1 Pałyn")
+  await openTake(page, "Pałyn #1")
   const plate = (await page.locator("[data-master-plate]").boundingBox())!
   const track = (await page.locator("[data-plate]").first().boundingBox())!
   expect(plate.height).toBe(56)
@@ -1527,7 +1529,7 @@ test("stripes sit on the demo band's beats", async ({ page }) => {
   await openBandApp(page)
   await page.locator("#rehearsal-name").fill("Tuesday jam")
   await startButton(page).click()
-  await openTake(page, "Take 5 Viasna")
+  await openTake(page, "Viasna #1")
   // The closest zoom from the take's start: 0 to 2 s.
   const surface = page.getByRole("group", { name: "Take timeline" })
   await surface.evaluate((el) => {
