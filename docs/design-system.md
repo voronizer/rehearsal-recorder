@@ -80,6 +80,9 @@ showcase and reha.stream all import. A screen uses the names (`bg-primary`,
   One exception: the band service's panel from the right is white in the
   light theme, as a page is (Alex, 5 November 2026). Its column on the left
   stays grey, and in the dark theme the panel keeps its colour.
+  On a take's page the panel folds into a strip 48 px wide along the right
+  edge, in that column's grey, with a sign for each of its sections (Alex,
+  8 November 2026).
 
 ### Type
 

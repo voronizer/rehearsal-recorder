@@ -7,6 +7,12 @@ opening.
 
 ## Unreleased
 
+- **The band service's panel covers less of the page.** A song's name opens
+  the song's page, and **New song**, **Statuses** and **Labels** open at the
+  top of **Songs** and **Marks**. On a take's page its marks sit in a strip
+  along the right edge: the diamond with their count opens them over the
+  lanes, and the panel folds back into the strip. On a phone a take's name
+  opens the take's page.
 - **A take can leave its song in the band service.** A jam that came in
   under a song's title because the name field still said so goes to **Not
   named** with ⋯ › **Move to song** › **Not named**, and gets the name Take 3
