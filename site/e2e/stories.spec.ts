@@ -1,4 +1,4 @@
-import type { Locator, Page } from "@playwright/test"
+import type { Locator, Page, Response } from "@playwright/test"
 import { test, expect } from "./fixtures.ts"
 
 // Alex's stories: their page, each story, and the way to them. Each is
@@ -161,11 +161,16 @@ test("on the narrowest phone the block fits, its words over its chat", async ({ 
 // The main page's scripts have the block's words and chats, not every story.
 test("the main page carries only what its block shows of the stories", async ({ page }) => {
   const scripts: Promise<string>[] = []
-  page.on("response", (r) => {
+  const keep = (r: Response) => {
     if (r.url().endsWith(".js") && r.ok()) scripts.push(r.text())
-  })
+  }
+  page.on("response", keep)
   await page.goto("/")
   await expect(page.locator("#stories .say")).toHaveCount(6)
+  // The scripts the page loads later too, all read before the test ends:
+  // one still being read then failed the test with "Test ended".
+  await page.waitForLoadState("networkidle")
+  page.off("response", keep)
   const code = (await Promise.all(scripts)).join("\n")
   // As true or false: the scripts' whole text would fill the report.
   for (const [words, carried] of [
