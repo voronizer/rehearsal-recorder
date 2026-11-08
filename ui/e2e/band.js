@@ -124,12 +124,13 @@ const KIND = {};
 // (PAST, below): a file is one take's, and plays as long as that take.
 const TONIGHT = '/rec/tonight';
 // What a take is a go at, from its name, as the library would say: "Pałyn 2",
-// or "Pałyn #2" as the interface writes it, is the second go at Pałyn,
-// "Take 11" a go at nothing.
+// or "Pałyn #2" as the interface writes it, is the second go at Pałyn, and
+// "Take 3" the third take of no song, counted across the library as a
+// song's goes are.
 function goOfName(name) {
-  if (/^Take \d+$/.test(name)) return {song: null, go: null};
   const m = /^(.*?)(?:(?:\s*#\s*|\s+)(\d+))?$/.exec(name);
-  return {song: m[1], go: m[2] ? Number(m[2]) : 1};
+  const go = m[2] ? Number(m[2]) : 1;
+  return UNNAMED.test(name) ? {song: null, go} : {song: m[1], go};
 }
 // The goes someone marked as the one to keep are starred.
 const isTheTake = markers => markers.some(m => /the take|keep this/.test(m.note));
@@ -170,7 +171,8 @@ const EARLIER = [
   // A count-in that went wrong, and a take nobody named: what sorting the
   // evening is for. Ahoń, so tonight's Pałyn and Viasna keep their goes, and
   // before Viasna, so Viasna is still the last song played and the Next
-  // take field still offers its next go.
+  // take field still offers its next go. Take 4 is the library's fourth take
+  // of no song: the soundcheck had two, and last Tuesday one.
   takeOf(3, 'Ahoń', 12, 11, []),
   takeOf(4, 'Take 4', 108, 104, []),
   takeOf(5, 'Viasna', 141, 137, []),
@@ -340,7 +342,8 @@ api.take_media = async (tracks, buckets, from, to) => tracks.map(t => {
 // marks, as in life. Their files have the band's song on them, as tonight's
 // do, each as long as its take: the site's story plays last Tuesday's Pałyn
 // 5 to 7. Goes are numbered across them, oldest first, as Python numbers
-// them: a song's page lists Pałyn 1 to 7, not two Pałyn 2s.
+// them: a song's page lists Pałyn 1 to 7, not two Pałyn 2s, and the takes
+// of no song are Take 1 to 3, tonight's the fourth.
 const PAST = {
   '/rec/tue': ['Tuesday jam', '2026-09-22T19:00:00', 1560000000, [
     ['Pałyn 4', 185, [{at: 111, note: 'came in late after the break', label_id: 3}]],
@@ -352,7 +355,7 @@ const PAST = {
     ['Viasna 4', 265, []], ['Viasna 5', 252, []],
     ['Ahoń 3', 340, [{at: 187, note: 'solo too long, cut to 8 bars', label_id: 4}]],
     ['Ahoń 4', 302, []], ['Sonca 2', 390, []],
-    ['Take 11', 130, [{at: 42, note: 'bass riff after the count-in', label_id: 1}]]]],
+    ['Take 3', 130, [{at: 42, note: 'bass riff after the count-in', label_id: 1}]]]],
   '/rec/sat': ['New songs', '2026-09-19T15:00:00', 1070000000, [
     ['Dym 2', 280, []],
     ['Dym 3', 275, [{at: 130, note: 'tempo drops in the second verse', label_id: 3}]],

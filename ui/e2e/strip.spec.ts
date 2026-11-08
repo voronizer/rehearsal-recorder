@@ -38,7 +38,7 @@ async function openTake(page: Page, n: number, theme: Theme = "dark") {
   expect(await page.evaluate(() => document.documentElement.classList.contains("dark"))).toBe(
     theme === "dark"
   )
-  await overview.getByRole("button", { name: new RegExp(`^Take ${n} `) }).click()
+  await overview.locator(`[data-take="${n}"] [data-take-name]`).click()
   await expect(timeline(page)).toBeVisible()
   await expect(strip(page)).toBeVisible()
   await settled(page)
@@ -225,7 +225,7 @@ test("the edge buttons are the shared ones with their name in a tip", async ({ p
   await startRehearsal(page, 33)
   await page
     .locator("[aria-label='Rehearsal overview']")
-    .getByRole("button", { name: /^Take 1 / })
+    .getByRole("button", { name: /^Pałyn #1(,|$)/ })
     .click()
   await expect(timeline(page)).toBeVisible()
   await settled(page)
@@ -291,7 +291,7 @@ test("a tab list's day headings have no capitals", async ({ page }) => {
   await page.locator("[data-song='Pałyn']").click()
   await page
     .locator(`[data-rung-group="/rec/old"]`)
-    .getByRole("button", { name: "Take 1 Pałyn 1" })
+    .getByRole("button", { name: /^Pałyn #1(,|$)/ })
     .click()
   await expect(timeline(page)).toBeVisible()
   await songs(page).click()
@@ -314,7 +314,7 @@ test("with no takes the strip says how they get there on the shared Empty", asyn
   await expect(empty).toHaveCount(1)
   await expect(empty.locator("[data-slot='empty-title']")).toHaveText("No takes yet")
   await expect(empty.locator("[data-slot='empty-description']")).toContainText(
-    "Press Record take or Space"
+    "Press Record or Space"
   )
   await expect(empty.locator("[data-slot='empty-description']")).toContainText(
     "ready to play"

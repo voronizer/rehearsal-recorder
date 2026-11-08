@@ -46,7 +46,7 @@ A song has one tempo in the app, so a change the song is meant to have shows up 
 
 ## The song's tempo
 
-The dashed line has to come from somewhere. We don't play to a click at rehearsals: the drummer has views on clicks, and that's a story of its own. A take still keeps the tempo that was in the metronome's row when we pressed **Record take**, which is the song's own, and the line measures us against that.
+The dashed line has to come from somewhere. We don't play to a click at rehearsals: the drummer has views on clicks, and that's a story of its own. A take still keeps the tempo that was in the metronome's row when we pressed **Record**, which is the song's own, and the line measures us against that.
 
 To give a song its tempo, our drummer taps it in. Press **Tap** in the app, and hits on any pad of the kit count as taps. Five are enough.
 

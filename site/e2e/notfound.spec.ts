@@ -14,10 +14,10 @@ test("the 404 page says nothing was recorded here, and goes back", async ({ page
   await expect(page.locator('meta[name="robots"]')).toHaveAttribute("content", "noindex")
 })
 
-test("its take is Take 404, four minutes and four seconds of nothing", async ({ page }) => {
+test("its take is Take #404, four minutes and four seconds of nothing", async ({ page }) => {
   await page.goto(MISSING)
-  const take = page.getByRole("img", { name: /^Take 404/ })
-  await expect(take.getByText("Take 404")).toBeVisible()
+  const take = page.getByRole("img", { name: /^Take #404/ })
+  await expect(take.getByText(/Take\s#404/).first()).toBeVisible()
   await expect(take.getByText("0:00 / 4:04")).toBeVisible()
   for (const name of ["Drums", "Bass", "Guitar", "Vocals"]) await expect(take.getByText(name, { exact: true })).toBeVisible()
 })
@@ -70,7 +70,7 @@ test.describe("on a phone", () => {
     await expect(page.getByText("0:00 / 4:04")).toBeVisible()
     expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390)
     const button = (await page.getByRole("link", { name: "Go to the main page" }).boundingBox())!
-    const take = (await page.getByRole("img", { name: /^Take 404/ }).boundingBox())!
+    const take = (await page.getByRole("img", { name: /^Take #404/ }).boundingBox())!
     expect(take.y).toBeGreaterThanOrEqual(button.y + button.height)
   })
 
@@ -78,7 +78,7 @@ test.describe("on a phone", () => {
   // stays under the tracks, and does not hide one as the page scrolls.
   test("the take's master is under its four tracks", async ({ page }) => {
     await page.goto(MISSING)
-    const take = page.getByRole("img", { name: /^Take 404/ })
+    const take = page.getByRole("img", { name: /^Take #404/ })
     await expect(take.getByText("0:00 / 4:04")).toBeVisible()
     const vocals = (await take.getByText("Vocals", { exact: true }).boundingBox())!
     const master = (await take.getByText("Master", { exact: true }).boundingBox())!

@@ -55,8 +55,8 @@
   const LONG1 = 'Dancing barefoot on the roof of the old brewery';
   const LONG2 = 'Kalychanka (slow version for the wedding, with the long intro the bride asked for)';
   const names = ['Pałyn', 'Pałyn 2', 'Ahoń', 'Take 4', 'Viasna', LONG1, LONG1 + ' 2', 'Zorka', 'Zorka 2', 'Zorka 3',
-    'Zorka 4', 'Zorka 5', 'Zorka 6', 'Zorka 7', 'Zorka 8', LONG2, 'Vecharyna', 'Ranica', 'Ranica 2', 'Take 20',
-    'Kupalle', 'Žniŭnaja', 'Kalada', 'Dym', 'Dym 2', 'Sonca', 'Ptuška', 'Pałyn 3', 'Viasna 2', 'Take 30',
+    'Zorka 4', 'Zorka 5', 'Zorka 6', 'Zorka 7', 'Zorka 8', LONG2, 'Vecharyna', 'Ranica', 'Ranica 2', 'Take 5',
+    'Kupalle', 'Žniŭnaja', 'Kalada', 'Dym', 'Dym 2', 'Sonca', 'Ptuška', 'Pałyn 3', 'Viasna 2', 'Take 6',
     'Kupalle 2', 'Sonca 2'];
   const marks = {2: [{at: 50.5, note: 'chorus came in early', label_id: 3}, {at: 112, note: 'bridge — try it slower, and the horn section waits a whole bar before it comes back in', label_id: 4}, {at: 131, note: 'this one is the take', label_id: 2}],
                  6: [{at: 80, note: 'the second verse drags, count it in faster next time', label_id: 4}],

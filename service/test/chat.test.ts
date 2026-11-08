@@ -167,20 +167,31 @@ test("a take is written as the pages write it: the title, # and its number", () 
   const row = { name: "Viasna 12", number: 33, songId: 3, movedBy: null }
   expect(takeText(row)).toBe(`Viasna${NB}#12`)
   expect(takeText({ ...row, name: "Opus 5 3" })).toBe(`Opus 5${NB}#3`)
-  // No song: the word Take sets the number apart already.
-  expect(takeText({ ...row, name: "Take 4", songId: null })).toBe("Take 4")
+  // No song: Take, # and its number among the takes with no song.
+  expect(takeText({ ...row, name: "Take 47", songId: null })).toBe(`Take${NB}#47`)
   // Moved to another song here and not numbered by REHA yet: the song's title alone.
   expect(takeText({ ...row, name: "Kupalle", movedBy: "ira" })).toBe("Kupalle")
+  // Moved out of its song and not numbered yet: Take alone.
+  expect(takeText({ ...row, name: "Take", songId: null, movedBy: "ira" })).toBe("Take")
 })
 
-test("a take with no song goes in by its name", async () => {
+test("a take with no song goes in as Take and its number, not its number in the rehearsal", async () => {
   const { chatEnv, queued } = withBot()
   const fake = fakeTelegram()
   const uid = crypto.randomUUID()
-  await putTake(chatEnv, uid, takeMeta({ number: 7, name: "Take 7", song: null }) as never)
+  // The 7th take that evening, the 3rd with no song.
+  await putTake(chatEnv, uid, takeMeta({ number: 7, name: "Take 3", song: null }) as never)
   await ready(chatEnv, uid, 1, "mp3", ORIGIN)
   await deliver(chatEnv, fake, queued[queued.length - 1])
-  expect(fake.sent.map((s) => s.text)).toEqual([`New takes from Thursday, 30 October: <a href="${ORIGIN}/takes/${uid}">Take 7</a>`])
+  expect(fake.sent.map((s) => s.text)).toEqual([`New takes from Thursday, 30 October: <a href="${ORIGIN}/takes/${uid}">Take${NB}#3</a>`])
+
+  // A mark on it says the same.
+  const page = `${ORIGIN}/takes/${uid}`
+  const mark = await memberMark(uid, "Ira", 42, "Keep this one")
+  await deliver(chatEnv, fake, mark)
+  expect(fake.sent[1].text).toBe(
+    `Ira on <a href="${page}">Take${NB}#3</a>: <a href="${page}?at=42&amp;mark=${(mark as { mark_id: number }).mark_id}">0:42 “Keep this one”</a>`
+  )
 })
 
 test("after 3 hours a new message starts", async () => {

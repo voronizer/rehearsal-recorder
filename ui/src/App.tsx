@@ -25,6 +25,7 @@ import { reportBridgeError } from "@/lib/bridgeErrors"
 import { loadDeletionKind, wentTo } from "@/lib/deletion"
 import { loadKeys } from "@/lib/keys"
 import { loadLabels } from "@/lib/labels"
+import { NO_SONG } from "@/lib/takeText"
 import { draftMovedTo, offerUndo } from "@/lib/trash"
 import {
   applyAppearance,
@@ -37,7 +38,7 @@ type Screen =
   | { name: "drafts"; drafts: Draft[] }
   | { name: "setup" }
   | { name: "rehearsal" }
-  | { name: "recording"; takeNumber: number; takeName: string; takeGo: number | null }
+  | { name: "recording"; takeName: string; takeGo: number | null }
   | { name: "review"; take: PendingTake; kept?: ReviewKept; visit?: number }
   | { name: "history"; folder?: string; song?: string | null }
   | { name: "settings" }
@@ -174,8 +175,8 @@ export function App() {
             }
             if (alive && state.state === "recording" && current.name !== "recording" && state.take_number != null) {
               await refreshSession()
-              if (alive) setScreen({ name: "recording", takeNumber: state.take_number,
-                takeName: state.take_name ?? `Take ${state.take_number}`, takeGo: state.take_go })
+              if (alive) setScreen({ name: "recording",
+                takeName: state.take_name ?? NO_SONG, takeGo: state.take_go })
             } else if (alive && current.name === "recording" && state.state === "ready") {
               await refreshSession()
               if (alive) setScreen({ name: "rehearsal" })
@@ -375,9 +376,9 @@ export function App() {
       <Rehearsal
         session={session}
         controlState={controlState}
-        onStartTake={(takeNumber, takeName, takeGo) => {
+        onStartTake={(takeName, takeGo) => {
           endDiscardOffer()
-          setScreen({ name: "recording", takeNumber, takeName, takeGo })
+          setScreen({ name: "recording", takeName, takeGo })
         }}
         // Straight to the start screen: its Last time is the evening just
         // finished, and bands mostly close the app instead anyway.
@@ -393,7 +394,6 @@ export function App() {
   if (screen.name === "recording") {
     return (
       <Recording
-        takeNumber={screen.takeNumber}
         takeName={screen.takeName}
         takeGo={screen.takeGo}
         tracks={session.tracks}

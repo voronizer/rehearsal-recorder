@@ -55,7 +55,7 @@ const TakePage = z
     /** The originals are still on their way. */
     flac_coming: z.boolean(),
     trashed_at: z.string().nullable(),
-    /** Moved to another song here and not numbered by РЭХА yet. */
+    /** Moved to another song here, or out of its song, and not numbered by РЭХА yet. */
     moved: z.boolean(),
   })
   .openapi("TakePage")
@@ -183,8 +183,8 @@ export const takeRoutes = newApp()
       path: "/api/takes/{uid}",
       description:
         "**Move to song**: the take moves to the song `song`, out of its song with `song` null, or to a new song " +
-        "titled `new_song`. In a song its name is the song's title until РЭХА gives it its number there, at its " +
-        "next check; out of one it is “Take” and its number at once, as РЭХА names a take with no song.",
+        "titled `new_song`. Its name is the song's title, or “Take” out of a song, until РЭХА gives it its " +
+        "number there at its next check.",
       middleware: [needMember] as const,
       request: {
         params: Uid,
@@ -207,9 +207,9 @@ export const takeRoutes = newApp()
       let id: number
       if ("song" in to) {
         if (to.song === null) {
-          // Out of its song: РЭХА's name for a take with no song; РЭХА learns of it at its check.
+          // Out of its song: “Take” until РЭХА numbers it with the takes that have no song, at its check.
           if (t.songId !== null)
-            await db.update(take).set({ songId: null, name: `Take ${t.number}`, movedBy: me, updatedAt: iso() }).where(eq(take.uid, uid))
+            await db.update(take).set({ songId: null, name: "Take", movedBy: me, updatedAt: iso() }).where(eq(take.uid, uid))
           return c.json({ ok: true as const }, 200)
         }
         const [s] = await db

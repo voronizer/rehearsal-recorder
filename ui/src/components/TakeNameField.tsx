@@ -5,9 +5,9 @@ import { Button } from "@/components/ui/button"
 import { Popover, PopoverAnchor, PopoverContent } from "@/components/ui/popover"
 import { Whole } from "@/components/ui/whole"
 import type { SongChoices } from "@/lib/api"
-import { goFor, songFor, songNamed, withoutGo } from "@/lib/goes"
+import { goFor, isNoSong, nameWithGo, songFor, songNamed, unnamedGo, withoutGo } from "@/lib/goes"
 import { forgetSongName } from "@/lib/songNames"
-import { GO_SPACE, goMark } from "@/lib/takeText"
+import { GO_SPACE, NO_SONG, goMark } from "@/lib/takeText"
 import { cn } from "@/lib/utils"
 
 /** The choices with one old name taken out of them: forgotten, until
@@ -19,7 +19,7 @@ function without(choices: SongChoices | null, name: string): SongChoices | null 
     ...c,
     also: c.also?.filter((a) => a.toLocaleLowerCase() !== key),
   })
-  return { here: choices.here.map(strip), other: choices.other.map(strip) }
+  return { ...choices, here: choices.here.map(strip), other: choices.other.map(strip) }
 }
 
 /** A line break, with the spaces round it: one space in a name. */
@@ -153,12 +153,32 @@ export function TakeNameField({
   // is taken out of them until Python's fresh list replaces them.
   const [forgot, setForgot] = useState<{ name: string; from: SongChoices | null } | null>(null)
   const known = forgot && forgot.from === choices ? without(choices, forgot.name) : choices
-  const shown = draft ?? value
+  // A take with no song is "Take 49" to Python and "Take #49" on screen: the
+  // field holds "Take", and 49 is drawn after it as a song's go is. "Take",
+  // "Take 5" or "Take #5" typed is no song too, and Python gives it the go
+  // whatever the number: the one it has for the name settled on (knownGo),
+  // else its answer for this take (unnamed_go), else the number in the name
+  // it gave. Python reads "take" in small letters as a song's title, so the
+  // field does too.
+  const isUnnamed = (text: string) => goes && isNoSong(text)
+  const atRest = (name: string) => (isUnnamed(name) ? NO_SONG : name)
+  const noSongGo =
+    (draft === null && knownGo != null ? knownGo : null) ?? known?.unnamed_go ?? unnamedGo(value)
+  // A name as ✕ says it: "Take #49" for one with no song.
+  const said = (name: string) => (goes ? nameWithGo(name, null) : name)
+  const shown = draft ?? atRest(value)
+  // An emptied field puts back `fallback`. When that has no song, its go is
+  // drawn beside the empty field.
+  const empty = shown.trim() === "" && isUnnamed(fallback)
   const go = !goes
     ? null
-    : known === null && draft === null && knownGo !== undefined
-      ? knownGo
-      : goFor(shown, known)
+    : empty
+      ? (unnamedGo(fallback) ?? noSongGo)
+      : isUnnamed(shown)
+        ? noSongGo
+        : known === null && draft === null && knownGo !== undefined
+          ? knownGo
+          : goFor(shown, known)
   // The song an old name in the field is now. A title is taken whole: in
   // Rename song, "Palyn 5" is a title of its own, not Palyn.
   const via = goes ? songFor(shown, known) : songNamed(shown, known)
@@ -167,7 +187,13 @@ export function TakeNameField({
   // one and has its line under them: filling again on leaving would move
   // what is under the area, or the buttons beside it, under the pointer.
   const holding = startedAs !== null || old !== null
-  const named = (text: string) => text.trim() || fallback
+  const named = (text: string) => {
+    const name = text.trim()
+    if (!name) return fallback
+    // No song for a take that has none already: its own name, so it keeps
+    // its go.
+    return isUnnamed(name) && isUnnamed(value) ? value : name
+  }
   const edit = (text: string | null) => {
     typed.current = text
     setDraft(text)
@@ -181,15 +207,15 @@ export function TakeNameField({
   // or saves rather than typing a space. What was typed is dropped first, so
   // onBlur, which runs inside blur(), finds nothing of it to send. Given
   // `onEnter`, the name goes into the field and stays there to type on;
-  // `startedAs` moves with it, so a fallback that is not itself a song (e.g.
-  // "Take 4") does not narrow the pills by its own text until the field is
-  // left and refocused.
+  // `startedAs` moves with it, so a fallback that is not itself a song (the
+  // "Take" of a take nobody named) does not narrow the pills by its own text
+  // until the field is left and refocused.
   const put = (name: string) => {
     if (typed.current === null) {
       commit(name)
     } else if (onEnter) {
-      edit(name)
-      setStartedAs(name)
+      edit(atRest(name))
+      setStartedAs(atRest(name))
       commit(name)
     } else {
       typed.current = null
@@ -252,8 +278,8 @@ export function TakeNameField({
       wholeOnClick.current = false
     },
     onFocus: () => {
-      edit(value)
-      setStartedAs(value)
+      edit(atRest(value))
+      setStartedAs(atRest(value))
       setHeld(songsArea.current?.offsetHeight ?? null)
     },
     onBlur: () => {
@@ -341,7 +367,7 @@ export function TakeNameField({
             {old
               ? `${old.song}${go !== null ? `${GO_SPACE}${goMark(go)}` : ""}`
               : go !== null
-                ? `${via?.choice.song ?? shown.trim()}${GO_SPACE}${goMark(go)}`
+                ? `${isUnnamed(shown) || empty ? NO_SONG : (via?.choice.song ?? shown.trim())}${GO_SPACE}${goMark(go)}`
                 : ""}
           </span>
           {size === "big" ? (
@@ -372,7 +398,7 @@ export function TakeNameField({
             type="button"
             variant="ghost"
             size="icon-row"
-            aria-label={`Put back “${fallback}”`}
+            aria-label={`Put back “${said(fallback)}”`}
             // Takes no focus of its own, as the songs take none: `put` says
             // whether the field keeps it.
             onMouseDown={(e) => e.preventDefault()}

@@ -36,10 +36,14 @@ def main():
             assert fake.feedback[-2:] == [bytes([0xBF,119,5]), bytes([0xBF,118,0])]
             assert ctl.status()["synchronized"]
             assert ascii_row("Pałyn Žąsis") == "Palyn Zasis"
-            assert display_rows({"state":"ready", "playback_take_number":13,
-                                 "playback_take_name":"An exceptionally long song name"})[0].startswith("T13 ")
-            assert display_rows({"state":"recording", "take_number":4,
-                                 "take_name":"A long song"})[0].startswith("T4 ")
+            assert display_rows({"state":"ready", "playback_take_number":13, "playback_take_go":3,
+                                 "playback_take_name":"An exceptionally long song name"})[0].startswith("#3 An ")
+            assert display_rows({"state":"recording", "take_number":4, "take_go":2,
+                                 "take_name":"A long song"})[0].startswith("#2 A long")
+            assert display_rows({"state":"recording", "take_number":4, "take_go":47,
+                                 "take_name":"Take 47"})[0] == "#47 Take"
+            # The next take, before it is recorded, reads the same.
+            assert display_rows({"state":"ready", "next_take_name":"Take 47"})[0] == "#47 Take"
             frames = row_frames(0, "REC")
             assert frames[-1] == (103, (3+82+69+67)&127)
             assert api.start_rehearsal("MIDI remote", 0, SR, [{"name":"Guitar", "channel":1}])["ok"]

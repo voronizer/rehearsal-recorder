@@ -132,13 +132,15 @@ export type MissingNotes = {
 
 /** A take already saved to disk. */
 export type Take = {
+  /** Its place in the rehearsal, in the order played: the key the app finds
+   *  it by, never shown to a person. */
   take_number: number
   name: string
   /** The song this take is a go at, or null for a take nobody named. Its
-   *  name ("Polyn 3") follows from the two. */
+   *  name ("Polyn 3", or "Take 47" with no song) follows from the two. */
   song?: string | null
-  /** Which go at the song this is, counted across the library; null with no
-   *  song. */
+  /** Which go at the song this is, counted across the library. Takes with
+   *  no song are counted the same way, as if "Take" were a song. */
   go?: number | null
   /** ★: somebody starred this take as one worth coming back to. A song can
    *  have several, and a take with no song can have one. */
@@ -269,7 +271,9 @@ export type ControlState = Omit<TransportState, "state"> & {
   selection_reference: string | null
   playback_open: boolean
 }
-export type ControlCatalog = { identity: string; songs: string[]; takes: number[]; selected_song: string | null; selected_take: number | null }
+/** takes: each take's place in the rehearsal, to choose by; shown: its
+ *  number at its song, which the controller draws. */
+export type ControlCatalog = { identity: string; songs: string[]; takes: number[]; shown: number[]; selected_song: string | null; selected_take: number | null }
 
 export type TransportResult = Ok<{
   take_number?: number
@@ -347,7 +351,8 @@ export type SessionState =
       songs: Song[]
       next_take_number: number
       next_take_name: string
-      /** The go beside the name field's title; null with no song. */
+      /** The go beside the name field's title: a song's, or the next go of
+       *  a take with no song. */
       next_take_go?: number | null
       /** What the next take would be called without a name picked for it. */
       next_take_default?: string
@@ -468,8 +473,11 @@ export type SongChoice = {
 }
 
 /** The songs a take can be named after (api.song_choices): what its own
- *  rehearsal played, in order, and every other, the most recent first. */
-export type SongChoices = { here: SongChoice[]; other: SongChoice[] }
+ *  rehearsal played, in order, and every other, the most recent first.
+ *  `unnamed_go` is the go the take would have with no song: its own when it
+ *  has no song already, otherwise the next one, so the field reads "Take
+ *  #47". Left out of choices made here rather than by Python. */
+export type SongChoices = { here: SongChoice[]; other: SongChoice[]; unnamed_go?: number | null }
 
 /** What a song's ▶ plays (api.last_time): its newest ★ go, from whichever
  *  rehearsal it was played at, or with none its last go last time. */

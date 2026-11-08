@@ -48,7 +48,7 @@ from rehearsal_recorder.store.library import (  # noqa: E402
 )
 from rehearsal_recorder.store.models import Base  # noqa: E402
 from rehearsal_recorder.store.names import (  # noqa: E402
-    legacy_song, shown_from_name, shown_name, split_go, take_name,
+    UNNAMED_TAKE, legacy_song, shown_from_name, shown_name, split_go, take_name,
 )
 
 # The newest migration the app ships. The test-only migrations below sit on
@@ -419,7 +419,9 @@ def main():
     ok("a take is called by its song and its go, the first go too",
        take_name("Polyn", 1, 4) == "Polyn 1" and take_name("Polyn", 3, 4) == "Polyn 3")
     ok("a title ending in a number keeps it", take_name("Song 2", 2, 1) == "Song 2 2")
-    ok("a take with no song is called by its own number",
+    ok("a take with no song is called by its go, not its place in the rehearsal",
+       take_name(None, 47, 7) == "Take 47")
+    ok("one with no go yet, from before they were counted, by its take number as then",
        take_name(None, None, 7) == "Take 7")
     ok("a trailing number is split off", split_go(" Polyn 3 ") == ("Polyn", 3))
     ok("a name without one has none", split_go("Polyn") == ("Polyn", None))
@@ -431,12 +433,20 @@ def main():
     ok("a # and a number alone are a name", split_go("#3") == ("#3", None))
     ok("a take is shown with a # before its go, kept to its title",
        shown_name("Polyn", 3, 4) == "Polyn\u00a0#3" and shown_name("Opus 5", 1, 4) == "Opus 5\u00a0#1")
-    ok("a take with no song is shown by its own number", shown_name(None, None, 7) == "Take 7")
+    ok("a take with no song is shown by its go, as a song's take is",
+       shown_name(None, 47, 7) == "Take\u00a0#47")
+    ok("and with no go, as Take alone: its take number is not for reading",
+       shown_name(None, None, 7) == "Take")
     ok("a name as stored is shown with its #",
-       shown_from_name("Polyn 3") == "Polyn\u00a0#3" and shown_from_name("Song 2 2") == "Song 2\u00a0#2")
-    ok("a take nobody named, or a name with no go, is shown as it is",
-       shown_from_name("Take 7") == "Take 7" and shown_from_name("Polyn") == "Polyn"
+       shown_from_name("Polyn 3") == "Polyn\u00a0#3" and shown_from_name("Song 2 2") == "Song 2\u00a0#2"
+       and shown_from_name("Take 47") == "Take\u00a0#47")
+    ok("a name with no go is shown as it is",
+       shown_from_name("Polyn") == "Polyn" and shown_from_name("Take") == "Take"
        and shown_from_name("") == "")
+    ok("Take, Take N and Take #N are a take with no song, as typed or as shown",
+       all(UNNAMED_TAKE.match(n) for n in ("Take", "Take 47", "Take #47", "Take#47", "Take # 47")))
+    ok("but not a title that only starts so",
+       not any(UNNAMED_TAKE.match(n) for n in ("Takes", "Take 4b", "Take five", "take 4", "Polyn #3")))
     ok("old names: a trailing number was the go, the rest the song",
        legacy_song("Polyn 3") == "Polyn" and legacy_song("Polyn") == "Polyn"
        and legacy_song("Полынь 2") == "Полынь")
@@ -446,6 +456,8 @@ def main():
     ok("old names: what the rule cannot know stays as it reads",
        legacy_song("Опус 5") == "Опус")
     ok("old names: a # was part of the title", legacy_song("Polyn #3") == "Polyn #3")
+    ok("old names: only Take N was the app's own, so Take #3 and Take were titles then",
+       legacy_song("Take #3") == "Take #3" and legacy_song("Take") == "Take")
 
     print("\n[9] Old names become songs (migration 0002)")
     rec9 = tmp / "Songs"
@@ -508,9 +520,9 @@ def main():
     def names_of(folder):
         return [(t["name"], t["song"], t["go"]) for t in lib.rehearsal(rec9 / folder)["takes"]]
 
-    ok("the app's own names are no song, a recovered take's and an empty one included",
-       names_of("Old")[1:4] == [("Take 2", None, None), ("Take 3", None, None),
-                                ("Take 4", None, None)])
+    ok("the app's own names are no song, a recovered take's and an empty one included, "
+       "counted in the order played (migration 0015)",
+       names_of("Old")[1:4] == [("Take 1", None, 1), ("Take 2", None, 2), ("Take 3", None, 3)])
     ok("a song is spelled as the newest rehearsal first spells it",
        names_of("Old")[0] == ("Polyn 1", "Polyn", 1)
        and names_of("Mid")[3] == ("Полынь 1", "Полынь", 1)
@@ -563,9 +575,9 @@ def main():
        add(2, "polyn") == ("Polyn 2", "Polyn", 2))
     ok("a number typed after the title names the song; the go is the app's",
        add(3, "Polyn 7") == ("Polyn 3", "Polyn", 3))
-    ok("Take N is no song, and is called by the take's own number",
-       add(4, "Take 9") == ("Take 4", None, None))
-    ok("so is an empty name", add(5, "  ") == ("Take 5", None, None))
+    ok("Take N is no song, at the next go of the takes with no song; the go is the app's",
+       add(4, "Take 9") == ("Take 1", None, 1))
+    ok("so is an empty name", add(5, "  ") == ("Take 2", None, 2))
     ok("a title ending in a number is a song of its own when no shorter one exists",
        add(6, "Song 2") == ("Song 2 1", "Song 2", 1)
        and add(7, "Song 2") == ("Song 2 2", "Song 2", 2))
@@ -578,7 +590,8 @@ def main():
     ok("asking what a name would be writes nothing",
        lib.resolve_name(jam, "Vesna", 10) == {"song": "Vesna", "go": 1, "name": "Vesna 1"}
        and lib.resolve_name(jam, "polyn", 10) == {"song": "Polyn", "go": 4, "name": "Polyn 4"}
-       and lib.resolve_name(jam, "", 10) == {"song": None, "go": None, "name": "Take 10"}
+       and lib.resolve_name(jam, "", 10) == {"song": None, "go": 3, "name": "Take 3"}
+       and lib.next_unnamed_go() == 3
        and song_titles() == before)
     ok("a take's name as the app shows it, with its #, names the song",
        lib.resolve_name(jam, "Polyn #3", 10)["song"] == "Polyn"
@@ -602,7 +615,7 @@ def main():
     ok("but not a song that other takes are goes at",
        rename(1, "POLYN") == ("Polyn 1", "Polyn", 1))
     ok("a song left with no takes keeps its count: its next go is not 1 again",
-       rename(9, "Take 9") == ("Take 9", None, None)
+       rename(9, "Take 9") == ("Take 3", None, 3)
        and lib.resolve_name(jam, "vesna", 20) == {"song": "Vesna", "go": 2, "name": "Vesna 2"})
     lib.delete_take(jam, 2)
     ok("deleting a go does not renumber the rest", lib.take(jam, 3)["name"] == "Polyn 3")
@@ -631,9 +644,9 @@ def main():
     }), encoding="utf-8")
     import_all(lib, None)
     ok("an imported rehearsal is read by the old rule, its goes carrying on from "
-       "each song's count, even though it is older",
+       "each song's count, and from the count of takes with no song, even though it is older",
        [(t["name"], t["song"], t["go"]) for t in lib.rehearsal(old_jam)["takes"]] == [
-           ("Polyn 7", "Polyn", 7), ("Polyn 8", "Polyn", 8), ("Take 3", None, None),
+           ("Polyn 7", "Polyn", 7), ("Polyn 8", "Polyn", 8), ("Take 4", None, 4),
            ("zima 1", "zima", 1), ("zima 2", "zima", 2), ("Опус 1", "Опус", 1)])
     lib.close()
 
@@ -1655,8 +1668,8 @@ def main():
         refused17 = None
     except ValueError as e:
         refused17 = str(e)
-    ok("a number another take has now is refused, saying so",
-       refused17 == "Take 4 is taken by another take now.")
+    ok("a place another take has now is refused, saying so with no number",
+       refused17 == "A take recorded since has taken its place.")
     ok("and the take that has it is left as it is", lib.take(night17, 4)["name"] == "Sonca 1")
 
     record17 = lib.take_record(night17, 1)
@@ -1706,8 +1719,8 @@ def main():
         refused17 = None
     except ValueError as e:
         refused17 = str(e)
-    ok("takes put back together go all or none: one whose number is taken keeps the others out",
-       refused17 == "Take 3 is taken by another take now."
+    ok("takes put back together go all or none: one whose place is taken keeps the others out",
+       refused17 == "A take recorded since has taken its place."
        and lib.take(night17, 2) is None and lib.take(night17, 3)["name"].startswith("Sonca"))
     lib.delete_take(night17, 3)
     lib.restore_takes([round_trip(record2), round_trip(record3)])
@@ -1899,8 +1912,8 @@ def main():
     add18(8, "Take 8", tempo=80, signature="2/4", click=True)
     add18(9, "Take 9")
     ok("a free take keeps its tempo with itself and makes no song",
-       (free18["name"], free18["song"], free18["tempo"], free18["click"]) == ("Take 6", None, 100, True)
-       and lib.song_id("Take 6") is None and lib.songs()["not_named"]["takes"] == 4)
+       (free18["name"], free18["song"], free18["tempo"], free18["click"]) == ("Take 1", None, 100, True)
+       and lib.song_id("Take 1") is None and lib.songs()["not_named"]["takes"] == 4)
 
     lib.update_take(night18, 6, name="Viasna")
     ok("a free take named as a song with no tempo gives the song its tempo",
@@ -2343,6 +2356,147 @@ def main():
     ok("one made with a file missing is drawn, not kept: it is made again next time",
        len(asked21) == 4 and rows19(rec21, "SELECT shape FROM take") == [(None,)])
     lib.close()
+
+    print("\n[22] Takes with no song are counted across the library (migration 0015)")
+    # A take nobody named was called by its place in the rehearsal, so every
+    # rehearsal had its own "Take 7". Now the takes with no song are counted
+    # as a song's takes are: one count for the whole library, never given twice.
+    rec22 = tmp / "Unnamed"
+    rec22.mkdir()
+    db.open_engine(rec22, migrations_up_to(tmp, "0014")).dispose()
+    engine = db.make_engine(db.database_path(rec22))
+    with engine.begin() as c:
+        sid22 = c.execute(text("INSERT INTO song (title, last_go) VALUES ('Polyn', 2)")).lastrowid
+        # The later rehearsal is made first, and its takes out of order, so
+        # the order can only come from when they were played.
+        late22 = c.execute(text(
+            "INSERT INTO rehearsal (folder, name, created_at, samplerate, bit_depth) "
+            "VALUES ('Late', 'Late', '2026-03-01T19:00:00', 48000, 24)")).lastrowid
+        early22 = c.execute(text(
+            "INSERT INTO rehearsal (folder, name, created_at, samplerate, bit_depth) "
+            "VALUES ('Early', 'Early', '2026-01-01T19:00:00', 48000, 24)")).lastrowid
+        ids22 = {}
+        for rid22, n22, song22, go22 in ((late22, 3, None, None), (late22, 1, sid22, 2),
+                                         (late22, 2, None, None), (early22, 7, None, None),
+                                         (early22, 2, sid22, 1), (early22, 4, None, None)):
+            ids22[(rid22, n22)] = c.execute(text(
+                "INSERT INTO take (rehearsal_id, take_number, song_id, go, duration_sec, cloud_skip, "
+                "cloud_send, starred, click) VALUES (:r, :n, :s, :g, 1.0, 0, 0, 0, 0)"),
+                {"r": rid22, "n": n22, "s": song22, "g": go22}).lastrowid
+        for key22, uid22, removed22, error22 in (
+                ((early22, 4), "u1", 0, None), ((early22, 7), "u2", 1, None),
+                ((late22, 2), "u3", 0, "The band service said no"), ((early22, 2), "u4", 0, None)):
+            c.execute(text(
+                "INSERT INTO service_copy (take_id, uid, gen, pending_cut, due, removed, error, by_hand) "
+                "VALUES (:t, :u, 1, 0.0, 0, :rm, :e, 0)"),
+                {"t": ids22[key22], "u": uid22, "rm": removed22, "e": error22})
+        # On its way to the service's trash, under the name it had then.
+        for uid22, name22 in (("d1", "Take 7"), ("d2", "Polyn 3"), ("d3", "Take Five 2")):
+            c.execute(text("INSERT INTO service_delete (uid, name) VALUES (:u, :n)"),
+                      {"u": uid22, "n": name22})
+    engine.dispose()
+
+    engine = db.open_engine(rec22)
+    ok("a database at 0014 is moved on to the newest migration, copied aside first",
+       db.current_revision(engine) == HEAD and (rec22 / "library.sqlite.bak-0014").exists())
+    with engine.connect() as c:
+        drift22 = compare_metadata(MigrationContext.configure(c), Base.metadata)
+    engine.dispose()
+    ok("and it is then what models.py describes", drift22 == [])
+    goes22 = {(r, n): g for r, n, g in rows19(
+        rec22, "SELECT rehearsal_id, take_number, go FROM take WHERE song_id IS NULL")}
+    ok("every take with no song gets a go: the oldest rehearsal first, then in the order of its takes",
+       goes22 == {(early22, 4): 1, (early22, 7): 2, (late22, 2): 3, (late22, 3): 4})
+    ok("a song's takes keep their goes",
+       rows19(rec22, "SELECT go FROM take WHERE song_id IS NOT NULL ORDER BY go") == [(1,), (2,)])
+    ok("and the count starts at the last one given",
+       rows19(rec22, "SELECT id, last_unnamed_go FROM counter") == [(1, 4)])
+    due22 = dict(rows19(rec22, "SELECT uid, due FROM service_copy"))
+    ok("their band service rows are due, so the new names go there when the app opens",
+       due22["u1"] == 1)
+    ok("but not one taken out of the service by hand, one it turned down, or a song's take",
+       due22["u2"] == 0 and due22["u3"] == 0 and due22["u4"] == 0)
+    ok("a take on its way to the service's trash loses its place in the rehearsal from its name",
+       dict(rows19(rec22, "SELECT uid, name FROM service_delete"))
+       == {"d1": "Take", "d2": "Polyn 3", "d3": "Take Five 2"})
+
+    lib = Library(rec22)
+    early22_dir, late22_dir, now22 = rec22 / "Early", rec22 / "Late", rec22 / "Now"
+
+    def named22(folder, n):
+        t = lib.take(folder, n)
+        return t["name"], t["song"], t["go"]
+
+    ok("a take with no song is named by its go, and the interface is given it",
+       named22(early22_dir, 7) == ("Take 2", None, 2) and named22(late22_dir, 3) == ("Take 4", None, 4))
+    lib.create_rehearsal(now22, "Now", "2026-11-08T19:00:00", 48000, 24, [])
+
+    def add22(n, name):
+        t = lib.add_take(now22, {"take_number": n, "name": name, "tracks": []})
+        return t["name"], t["song"], t["go"]
+
+    def rename22(n, name):
+        t = lib.update_take(now22, n, name=name)
+        return t["name"], t["song"], t["go"]
+
+    ok("the next take with no song goes on from the count",
+       lib.next_unnamed_go() == 5 and add22(1, "") == ("Take 5", None, 5))
+    ok("Take #3 typed, as the app shows a take, is no song at the next go, not go 3",
+       add22(2, "Take #3") == ("Take 6", None, 6) and add22(3, "Take#3") == ("Take 7", None, 7))
+    ok("and so is Take alone", add22(4, "Take") == ("Take 8", None, 8))
+    lib.delete_take(now22, 4)
+    ok("a deleted take's go is not given again, even when it was the last one",
+       add22(5, "") == ("Take 9", None, 9) and lib.next_unnamed_go() == 10)
+    ok("a take with no song named no song again keeps its go, whatever number is typed",
+       rename22(1, "Take 1") == ("Take 5", None, 5) and rename22(1, "") == ("Take 5", None, 5)
+       and rename22(1, "Take #99") == ("Take 5", None, 5) and lib.next_unnamed_go() == 10)
+    ok("named as a song, it is the song's next go", rename22(1, "polyn") == ("Polyn 3", "Polyn", 3))
+    ok("out of the song again, it is the next go with no song: its old one is not given back",
+       rename22(1, "") == ("Take 10", None, 10))
+    ok("and back into the song, the song's next go: Polyn 3 is not given twice either",
+       rename22(1, "Polyn") == ("Polyn 4", "Polyn", 4))
+
+    record22 = lib.take_record(now22, 2)
+    lib.delete_take(now22, 2)
+    lib.restore_take(json.loads(json.dumps(record22)))
+    ok("put back by Undo, a take with no song keeps its go, and the count stays",
+       named22(now22, 2) == ("Take 6", None, 6) and lib.next_unnamed_go() == 11)
+    record22 = lib.take_record(now22, 3)
+    lib.delete_take(now22, 3)
+    before22 = json.loads(json.dumps(record22))
+    before22["take"]["go"] = None
+    lib.restore_take(before22)
+    ok("one recorded before takes with no song had goes is given the next one",
+       named22(now22, 3) == ("Take 11", None, 11) and lib.next_unnamed_go() == 12)
+    record22 = lib.take_record(now22, 3)
+    lib.delete_take(now22, 3)
+    clash22 = json.loads(json.dumps(record22))
+    clash22["take"]["go"] = 9
+    lib.restore_take(clash22)
+    ok("and one whose go another take with no song has is given the next one too",
+       named22(now22, 3) == ("Take 12", None, 12) and named22(now22, 5) == ("Take 9", None, 9))
+    whole22 = lib.rehearsal(now22)
+    record22 = lib.rehearsal_record(now22)
+    lib.forget_rehearsal(now22)
+    lib.restore_rehearsal(json.loads(json.dumps(record22)))
+    ok("a rehearsal put back keeps the goes of its takes with no song",
+       lib.rehearsal(now22)["takes"] == whole22["takes"] and lib.next_unnamed_go() == 13)
+    lib.close()
+
+    engine = db.make_engine(db.database_path(rec22))
+    with engine.begin() as c:
+        command.downgrade(db.alembic_config(c), "0014")
+    engine.dispose()
+    ok("going back to 0014 drops the count and keeps every take",
+       rows19(rec22, "SELECT name FROM sqlite_master WHERE name = 'counter'") == []
+       and rows19(rec22, "SELECT COUNT(*) FROM take") == [(10,)])
+    db.open_engine(rec22).dispose()
+    ok("coming back up counts the takes with no song afresh, in the order played",
+       rows19(rec22, "SELECT last_unnamed_go FROM counter") == [(7,)]
+       and [g for _, g in rows19(rec22, "SELECT take.take_number, take.go FROM take "
+                                        "JOIN rehearsal ON rehearsal.id = take.rehearsal_id "
+                                        "WHERE take.song_id IS NULL AND rehearsal.folder = 'Now' "
+                                        "ORDER BY take.take_number")] == [5, 6, 7])
 
     print()
     if problems:

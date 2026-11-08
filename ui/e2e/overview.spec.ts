@@ -20,7 +20,7 @@ import {
 const row = (overview: Locator, n: number) => overview.locator(`[data-take="${n}"]`)
 /** The take's name: the button that opens it, and the way in by the keys. */
 const bar = (overview: Locator, n: number) =>
-  row(overview, n).getByRole("button", { name: new RegExp(`^Take ${n} `) })
+  row(overview, n).locator("[data-take-name]")
 const play = (overview: Locator, n: number) =>
   row(overview, n).getByRole("button", { name: /^(Play|Pause|Could not load) / })
 /** A take's length as its row draws it: with the time played before it while it plays. */
@@ -283,7 +283,7 @@ test.describe("the take row", () => {
     await said.hover()
     await expect(page.getByRole("tooltip")).toHaveText("Cloud folder not found")
     // And the bar says it to a screen reader: the take, its state, then why.
-    await expect(bar(overview, 6)).toHaveAccessibleName("Take 6 Take 6, not in the cloud")
+    await expect(bar(overview, 6)).toHaveAccessibleName("Take #1, not in the cloud")
     await expect(bar(overview, 6)).toHaveAccessibleDescription("Cloud folder not found")
   })
 
@@ -358,5 +358,13 @@ test.describe("the wave of a take", () => {
     const overview = await openEvening(page)
     await bar(overview, 3).click()
     await expect(row(overview, 3)).toHaveCount(0)
+  })
+
+  test("a row's name is its song and number, with no place in the evening before it", async ({
+    page,
+  }) => {
+    const overview = await openEvening(page)
+    // Take 3 of the evening is Viasna's first.
+    await expect(bar(overview, 3)).toHaveText(/^Viasna\s#1$/)
   })
 })

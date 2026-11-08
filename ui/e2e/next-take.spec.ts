@@ -3,7 +3,6 @@ import {
   callCount,
   colour,
   expect,
-  literally,
   openApp,
   openBandApp,
   openEvening,
@@ -12,6 +11,7 @@ import {
   style,
   test,
   withSets,
+  recordButton,
 } from "./app.ts"
 
 // The rehearsal screen's Next take panel as one group (owner, 2026-10-12, Q1):
@@ -240,9 +240,7 @@ test.describe("the Next take panel", () => {
       await page.keyboard.press("Escape")
       await expect(field(page)).not.toBeFocused()
       expect(await callCount(page, "finish_rehearsal")).toBe(0)
-      await expect(
-        page.getByRole("button", { name: new RegExp(literally("Record take 1")) })
-      ).toBeVisible()
+      await expect(recordButton(page, 1)).toBeVisible()
     })
   })
 })

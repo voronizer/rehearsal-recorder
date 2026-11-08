@@ -13,7 +13,7 @@
 // - Percussion's input is dead, so its tile is silent;
 // - the disk is nearly full: about 5 min left.
 // The evening is under way when the app opens, as Start rehearsal would have
-// begun it, and Record take is pressed, as a person would: the screen is the
+// begun it, and Record is pressed, as a person would: the screen is the
 // recording screen once the take records, and a test waits for its clock.
 {
   const SONG = 'Kalychanka (slow version for the wedding, with the long intro the bride asked for)';
@@ -37,12 +37,11 @@
   api.start_rehearsal('Tuesday jam', 3, 48000, null, 24, null);
   nextName = SONG;
 
-  // Record take, once the rehearsal screen has it ready.
+  // Record, once the rehearsal screen has it ready.
   const until = performance.now() + 10000;
   const press = () => {
     if (document.querySelector('[role=timer]') || performance.now() > until) return;
-    const record = Array.prototype.find.call(document.querySelectorAll('button'), (b) =>
-      /^Record take/.test(b.textContent.trim()) && !b.disabled);
+    const record = document.querySelector('button[data-next-take]:not(:disabled)');
     if (record) record.click();
     else setTimeout(press, 40);
   };

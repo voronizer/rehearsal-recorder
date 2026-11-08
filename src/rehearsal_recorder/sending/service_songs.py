@@ -372,9 +372,9 @@ class ServiceSongs:
     def _moves(self, moved, done):
         """Takes the band moved to another song there, or out of their song
         to Not named: renamed here as Rename take renames them, the song's
-        next number and folder, or Take and the take's number, and then sent
-        with their new song and name, which ends the wait there. One being
-        cropped waits for the next check."""
+        next number and folder, or no song at the next number of the takes
+        with no song, and then sent with their new song and name, which ends
+        the wait there. One being cropped waits for the next check."""
         lib = self._lib
         titles = {r["sid"]: r["now"]["title"] for r in lib.service_songs()}
         for m in moved:
@@ -388,9 +388,13 @@ class ServiceSongs:
             if take is None:
                 continue
             sent = row["sent"] or {}
-            if (take.get("song") or None, take["name"]) != (sent.get("song"), sent.get("name")):
-                # Renamed here since it last went: РЭХА's change goes and
-                # wins, as with a song's title.
+            here = (take.get("song") or None, take["name"])
+            there = (sent.get("song"), sent.get("name"))
+            # Renamed here since it last went: РЭХА's change goes and wins, as
+            # with a song's title. A take with no song on both sides has only
+            # its number changed, which is no rename: migration 0015 numbered
+            # them afresh, and the band's move must not wait on that.
+            if here != there and (here[0], there[0]) != (None, None):
                 continue
             if out and not take.get("song"):
                 # No song here already: its name goes again, so the service
@@ -404,7 +408,8 @@ class ServiceSongs:
                 lib.change_service_row(row["take_id"], lambda c: {"sent": {**(c["sent"] or {}), "song": None}})
                 self.service.edited(row["folder"], row["take_number"])
                 continue
-            name = f"Take {row['take_number']}" if out else title
+            # "Take" is no song: the take gets the next go of the takes with none.
+            name = "Take" if out else title
             got = self._api.rename_take(row["folder"], row["take_number"], name)
             if not got.get("ok"):
                 print(f"Band service: {take['name']} could not move to {name}: {got.get('error')}", file=sys.stderr)

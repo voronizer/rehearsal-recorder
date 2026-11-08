@@ -95,6 +95,21 @@ class Song(Base):
     backing_heard: Mapped[bool] = mapped_column(Boolean, default=False)
 
 
+class Counter(Base):
+    """
+    The library's counts that belong to no song: one row, id 1 (migration
+    0015).
+    """
+
+    __tablename__ = "counter"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    # The highest go a take with no song has ever been given, across the
+    # library, as Song.last_go is for a song. The next is one past it, so a
+    # number is never given twice, even after its take is deleted.
+    last_unnamed_go: Mapped[int] = mapped_column(Integer, default=0)
+
+
 class SongName(Base):
     """
     A title a song had before it was renamed, or the title of a song merged
@@ -145,9 +160,12 @@ class Take(Base):
     rehearsal_id: Mapped[int] = mapped_column(
         ForeignKey("rehearsal.id", ondelete="CASCADE"), index=True
     )
+    # Its place in the rehearsal: the order of the evening's takes and the
+    # "07 - " its folder starts with. Not part of its name, and not shown.
     take_number: Mapped[int] = mapped_column(Integer)
-    # What the take is a go at, and which go: both None for a take nobody
-    # named. Goes are numbered per song across the whole library and kept,
+    # What the take is a go at, and which go. A take nobody named has no
+    # song, and its go counts the takes with no song (Counter, migration
+    # 0015). Goes are numbered per song across the whole library and kept,
     # not counted again on every read: deleting Polyn 2 must not turn Polyn 3
     # into another name, and so another folder and another cloud copy.
     #

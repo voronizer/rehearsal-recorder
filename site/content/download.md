@@ -4,5 +4,5 @@
      words, then the downloads and the version as on the first screen (see
      site/src/page/GetIt.tsx). -->
 
-Free, for macOS and Windows. Plug in the interface, press **Record take**,
+Free, for macOS and Windows. Plug in the interface, press **Record**,
 play.

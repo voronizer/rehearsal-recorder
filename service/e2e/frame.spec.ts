@@ -71,10 +71,10 @@ test.describe("on a phone", () => {
 
   test("New song from a take's line opens its page with the name field", async ({ page }) => {
     await page.goto("/songs")
-    await page.getByRole("region", { name: "Not named" }).getByRole("button", { name: "What to do with Take 7", exact: true }).click()
+    await page.getByRole("region", { name: "Not named" }).getByRole("button", { name: "What to do with Take 3", exact: true }).click()
     await page.getByRole("menuitem", { name: "Move to song" }).click()
     await page.getByRole("menuitem", { name: "New song…" }).click()
-    await expect(page).toHaveURL(`/takes/${band().takes["Take 7"]}`)
+    await expect(page).toHaveURL(`/takes/${band().takes["Take 3"]}`)
     await expect(page.getByRole("main").getByRole("textbox", { name: "New song" })).toBeVisible()
     await expect(page.getByLabel("Panel")).toHaveCount(0)
   })

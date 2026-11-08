@@ -22,7 +22,7 @@ from rehearsal_recorder.audio.click import SIGNATURE_RULE, SIGNATURES, tempo_ran
 from rehearsal_recorder.midi import rules
 from rehearsal_recorder.store.db import MIGRATIONS, open_engine
 from rehearsal_recorder.store.models import (
-    AUDIO_FILE, BACKING_FILE, NOTES_FILE, CloudCopy, Label, Marker, Rehearsal, ServiceCopy, ServiceDelete,
+    AUDIO_FILE, BACKING_FILE, NOTES_FILE, CloudCopy, Counter, Label, Marker, Rehearsal, ServiceCopy, ServiceDelete,
     ServiceFile, ServiceSong, ServiceSongMerge, Song, SongName, SongSet, Take, TakeFile, Track,
 )
 from rehearsal_recorder.store.names import UNNAMED_TAKE, legacy_song, split_go, take_name
@@ -36,6 +36,8 @@ LABEL_NAME_MAX = 40
 # Why something a record names cannot come back: said to the person as it is.
 REHEARSAL_GONE = "Its rehearsal is gone."
 TAKE_GONE = "Its take is gone."
+# A take's place in its rehearsal is held by a take recorded since.
+PLACE_TAKEN = "A take recorded since has taken its place."
 
 # The tempo a song or a take may have, by time signature: whole clicks a minute,
 # quarters in x/4 and eighths in 6/8 (the metronome spec, "Words"), 30 to 300 and
@@ -279,7 +281,8 @@ class Library:
             "song": title,
             # For what the player sets on the song (set_song_backing_heard).
             "song_id": take.song_id,
-            "go": take.go if title is not None else None,
+            # With no song too: the takes with no song are counted as well.
+            "go": take.go,
             "starred": take.starred,
             "tempo": take.tempo,
             "signature": take.signature,
@@ -425,7 +428,9 @@ class Library:
     # lower() folds only ASCII), so it is enforced here: a title is looked up
     # casefolded before a song is made. A song is never deleted with its
     # takes: one with none keeps its title and its count of goes given
-    # (Song.last_go), so a number is never given twice.
+    # (Song.last_go), so a number is never given twice. The takes with no
+    # song are counted the same way, in one count of their own
+    # (Counter.last_unnamed_go).
     #
     # A title a song leaves, renamed or merged into another, stays a way to
     # name it: an old name (models.SongName). Old names are unique
@@ -457,6 +462,25 @@ class Library:
             select(Take.id).where(Take.song_id == song_id, Take.id != take_id).limit(1)
         ).first() is not None
 
+    @staticmethod
+    def _next_unnamed(db):
+        """The go the next take with no song would be: one past the count
+        of such goes given (Counter.last_unnamed_go)."""
+        count = db.get(Counter, 1)
+        return (0 if count is None else count.last_unnamed_go or 0) + 1
+
+    @staticmethod
+    def _count_unnamed(db, go):
+        """The count of goes given to takes with no song, moved on to `go`.
+        Its row is made if it is not there."""
+        count = db.get(Counter, 1)
+        if count is None:
+            count = Counter(id=1, last_unnamed_go=0)
+            db.add(count)
+            # So the next look in this transaction finds it.
+            db.flush()
+        count.last_unnamed_go = max(count.last_unnamed_go or 0, go)
+
     def _resolve(self, db, rehearsal_id, name, take_number):
         """
         What take `take_number` of a rehearsal is a go at when the name field
@@ -464,7 +488,7 @@ class Library:
         one already; `title` is None for no song, and a new song's title
         otherwise. In order:
 
-        1. Nothing, or "Take N", is no song.
+        1. Nothing, "Take", "Take N" or "Take #N" is no song.
         2. A song whose title is the whole text, compared casefolded, is that
            song; failing that, a song with the whole text as an old name.
         3. The same for the text less a trailing number: a number typed out
@@ -477,15 +501,21 @@ class Library:
         is deleted. A take already a go at the song keeps its go ("Polyn 2"
         renamed to Polyn stays Polyn 2); and when it is the song's only take,
         a name differing from the title only in case respells the song.
+
+        No song is counted the same way, across the library: one past the
+        goes given to takes with no song (Counter.last_unnamed_go), whatever
+        number was typed. A take that already has no song keeps its go.
         """
         name = (name or "").strip()
-        if not name or UNNAMED_TAKE.match(name):
-            return None, None, None
         current = None
         if rehearsal_id is not None:
             current = db.scalars(select(Take).where(
                 Take.rehearsal_id == rehearsal_id, Take.take_number == take_number
             )).one_or_none()
+        if not name or UNNAMED_TAKE.match(name):
+            if current is not None and current.song_id is None and current.go is not None:
+                return None, None, current.go
+            return None, None, self._next_unnamed(db)
         songs = self._songs_by_key(db)
         olds = self._names_by_key(db)
 
@@ -514,8 +544,10 @@ class Library:
     def _song_row(db, song, title, go):
         """The Song a take resolved to (_resolve): made if it is new,
         respelled if _resolve said so, and its count moved on to `go`. None
-        for no song."""
+        for no song, whose count moves on to `go` instead."""
         if title is None:
+            if go is not None:
+                Library._count_unnamed(db, go)
             return None
         if song is None:
             song = Song(title=title, last_go=0)
@@ -529,10 +561,11 @@ class Library:
         """
         What take `take_number` of the rehearsal in `folder` would be if the
         name field held `name`, by the rule add_take and update_take follow
-        (_resolve), without writing anything: {"song": title or None, "go":
-        int or None, "name": the plain-text name}. Used to name a take's
-        folder before the take is written, and the next take before it is
-        recorded.
+        (_resolve), without writing anything: {"song": title or None, "go",
+        "name": the plain-text name}. With no song, "go" is the take's own
+        when it has no song already, else the next for a take with no song:
+        "Take 47". Used to name a take's folder before the take is written,
+        and the next take before it is recorded.
         """
         take_number = int(take_number)
         with self._session() as db:
@@ -573,8 +606,8 @@ class Library:
         "signature"} or None, "last_take": {"folder", "take_number", "name",
         "song", "go"} or None}. The song is the one the name leads to by the rule add_take
         follows (_resolve, as resolve_name has it), tempo and signature None
-        when it has none; None for an empty name, "Take N" and a title no song
-        has. Nothing is written, not even the song a new title would make.
+        when it has none; None for an empty name, "Take N" or "Take #N", and
+        a title no song has. Nothing is written, not even the song a new title would make.
         "last_take" is the song's newest take, for counting its tempo from:
         the newest rehearsal's, the highest number in it; None for a song with
         no takes left.
@@ -630,8 +663,8 @@ class Library:
         A song with no takes yet (New song, backing track spec Part 6), so a
         tempo and a backing track can be given to it before its first take:
         its count of goes is 0, so that take is its first. Refused
-        (SongRefused) for an empty title, "Take N", and a title that is a
-        song's or one of a song's old names, saying which song. Returns
+        (SongRefused) for an empty title, "Take N" or "Take #N", and a title
+        that is a song's or one of a song's old names, saying which song. Returns
         {"id", "title"}.
         """
         title = str(title or "").strip()
@@ -762,6 +795,12 @@ class Library:
             rows = db.execute(select(Song.title, Song.last_go)).all()
         return {title: (last or 0) + 1 for title, last in rows}
 
+    def next_unnamed_go(self):
+        """The go the next take with no song would be, as _resolve counts
+        it: for the go shown beside an empty name field."""
+        with self._session() as db:
+            return self._next_unnamed(db)
+
     def song_names(self):
         """{title: its old names} for every song that has any, each list in
         case-blind order: for the songs offered under a take's name."""
@@ -812,7 +851,7 @@ class Library:
         it leaves is remembered as an old name (D6), unless only its case
         changed (R4); an old name of its own taken back as its title is no
         longer one (D7). Refused (SongRefused) for an empty title, for "Take
-        N", and for another song's title or old name, which is a merge
+        N" or "Take #N", and for another song's title or old name, which is a merge
         (merge_songs) into the song it names.
 
         Returns {"from", "title", "takes"}: the takes whose names changed,
@@ -1076,8 +1115,7 @@ class Library:
             folder, missing = there[key]
             out.append({"folder": folder, "rehearsal": rehearsal, "created_at": created_at,
                         "missing": missing, "take_number": number,
-                        "name": take_name(title, go, number), "song": title,
-                        "go": go if title is not None else None,
+                        "name": take_name(title, go, number), "song": title, "go": go,
                         "duration_sec": duration, "at": at, "note": note})
         return out
 
@@ -1185,7 +1223,8 @@ class Library:
         """
         A whole rehearsal at once, for the importer: all of it goes in or none
         of it does. takes as for add_take, their names read by the old rule
-        (names.legacy_song); cloud: {take_number: shared} as for
+        (names.legacy_song), a take with no name or "Take N" being no song,
+        counted on from the takes with no song; cloud: {take_number: shared} as for
         set_cloud_copy, relative to cloud_dir; cloud_errors: {take_number:
         message}.
 
@@ -1203,16 +1242,20 @@ class Library:
             for key, old in self._names_by_key(db).items():
                 songs.setdefault(key, db.get(Song, old.song_id))
             counted = {}
+            unnamed = [self._next_unnamed(db) - 1]
 
             def go_at(name):
                 # Old names by the old rule, as migration 0002 read the
                 # database's own. A song already in the library keeps its
                 # title, and its goes go on from its count, however old
                 # this rehearsal is: a number, once given, is kept. A new
-                # song is spelled as this rehearsal first spells it.
+                # song is spelled as this rehearsal first spells it. A take
+                # with no song goes on from the count of those.
                 title = legacy_song(name)
                 if title is None:
-                    return None, None
+                    unnamed[0] += 1
+                    self._count_unnamed(db, unnamed[0])
+                    return None, unnamed[0]
                 key = title.casefold()
                 if key not in songs:
                     songs[key] = Song(title=title, last_go=0)
@@ -1563,13 +1606,14 @@ class Library:
         the recorded id when that is still the song (its title or an old name
         is the recorded title); else the song that title leads to now, as an
         old name too; else a new song of that title. It keeps its go when no
-        other take of that song has it, and takes the next otherwise. A mark
+        other take of that song has it, and takes the next otherwise; a take
+        with no song likewise, among the takes with no song. A mark
         whose label is gone gets the first label, as any mark does
         (_labelled). Its cloud copy comes back only when no take names that
         copy now (_cloud_named): the file there is that take's.
 
-        Raises ValueError, saying why, when its number is another take's now
-        or its rehearsal is gone.
+        Raises ValueError, saying why, when its place in the rehearsal is
+        another take's now (PLACE_TAKEN) or its rehearsal is gone.
         """
         self.restore_takes([record])
 
@@ -1589,7 +1633,7 @@ class Library:
         taken = db.scalars(select(Take.id).where(
             Take.rehearsal_id == rehearsal.id, Take.take_number == number)).first()
         if taken is not None:
-            raise ValueError(f"Take {number} is taken by another take now.")
+            raise ValueError(PLACE_TAKEN)
         song, go = self._song_back(db, record.get("song"), columns.get("go"))
         copy = record.get("cloud_copy")
         if copy is not None and self._cloud_named(db, copy):
@@ -1736,9 +1780,18 @@ class Library:
                 for m, kept in zip(markers, labelled)]
 
     def _song_back(self, db, recorded, go):
-        """The Song and the go a take comes back as (restore_take)."""
+        """The Song and the go a take comes back as (restore_take). A take
+        with no song keeps its go, as a song's take does, when no other take
+        with no song has it; it takes the next otherwise, as a take recorded
+        before goes were counted for takes with no song does."""
         if recorded is None:
-            return None, None
+            free = go is not None and db.scalars(
+                select(Take.id).where(Take.song_id.is_(None), Take.go == go).limit(1)
+            ).first() is None
+            if not free:
+                go = self._next_unnamed(db)
+            self._count_unnamed(db, go)
+            return None, go
         title = recorded["title"]
         key = title.casefold()
         song = db.get(Song, recorded.get("id")) if recorded.get("id") is not None else None

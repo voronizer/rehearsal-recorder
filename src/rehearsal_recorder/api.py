@@ -119,8 +119,8 @@ from rehearsal_recorder.midi.smf import NO_METER, crop_mid, meter_of
 from rehearsal_recorder.store.db import LibraryUnavailable
 from rehearsal_recorder.store.importer import import_all, read_text
 from rehearsal_recorder.store.library import (
-    REHEARSAL_GONE, TAKE_GONE, LabelRefused, Library, SetRefused, SongRefused, as_marker,
-    as_tempo, paths_overlap,
+    PLACE_TAKEN, REHEARSAL_GONE, TAKE_GONE, LabelRefused, Library, SetRefused, SongRefused,
+    as_marker, as_tempo, paths_overlap,
 )
 from rehearsal_recorder.store.db import DB_NAME
 from rehearsal_recorder.store.names import shown_name
@@ -322,8 +322,9 @@ def _free_copy_name(base, lands, taken):
 
     Within one rehearsal two takes never get one name, their numbers being
     different. Two rehearsals can be filed under one folder name, though (one
-    pointed by Locate at a folder named like the other's), and a take nobody
-    named in each, "Take 1", would then be written onto the other's copy.
+    pointed by Locate at a folder named like the other's), and two of their
+    takes whose names are one file name ("AC/DC 1" and "AC:DC 1" are both
+    "AC_DC 1" on disk) would then be written onto each other's copy.
     """
     name, counter = base, 2
     while any(paths_overlap(p, t) for p in lands(name) for t in taken):
@@ -630,7 +631,8 @@ def _last_attempt(takes, song, before=None):
 def _field_text(named):
     """What the name field holds for a take resolved to `named`
     (Library.resolve_name): the song's title, its go shown beside it rather
-    than typed into it; or "Take N" for a take nobody named."""
+    than typed into it; or "Take 47" for a take nobody named, its go
+    counted across the takes with no song."""
     return named["song"] or named["name"]
 
 
@@ -2692,12 +2694,13 @@ class Api:
 
         A new take is usually another go at the same song, so it is the
         previous take's song at its next go. After a take nobody named, it is
-        "Take N".
+        no song, at the next go of the takes with no song: {"song": None,
+        "go": 47, "name": "Take 47"}.
 
         take_number is the take being named. Left out, it means the take that
         comes next, which is what the rehearsal screen shows before
-        recording. Right after a take it must be passed, otherwise the very
-        first take would be offered as "Take 2".
+        recording. A take already kept under that number keeps its own go
+        (Library._resolve).
 
         A title picked for the next take on the rehearsal screen comes before
         all of that (see set_next_take_name), resolved as any name is —
@@ -2705,7 +2708,7 @@ class Api:
         is what the take would be without it.
         """
         if self._session is None:
-            return {"song": None, "go": None, "name": "Take 1"}
+            return {"song": None, "go": None, "name": "Take"}
         number = (take_number if take_number is not None
                   else self._session["take_counter"] + 1)
         folder = self._session["folder"]
@@ -2727,7 +2730,7 @@ class Api:
 
     def suggest_take_name(self, take_number=None, chosen=True):
         """What the name field holds for the take being named: its song's
-        title, or "Take N" — see _next_take."""
+        title, or "Take 47" — see _next_take."""
         return _field_text(self._next_take(take_number, chosen))
 
     @serialised
@@ -2787,6 +2790,11 @@ class Api:
         A song with no takes yet (New song) comes last under "other", as its
         first take would be its first go.
 
+        "unnamed_go" is the go the take would have with no song, for the go
+        shown beside an empty name field: the take being renamed keeps its
+        own when it has no song already; otherwise it is the next go of the
+        takes with no song, "Take #47".
+
         `folder` is the rehearsal, the one in progress when left out.
         `take_number` is the take being named.
         """
@@ -2830,7 +2838,9 @@ class Api:
                 seen.add(title.casefold())
                 other.append({"song": title, "go": go_for(title), "also": also.get(title, []),
                               **tempo_of(title)})
-        return {"here": here, "other": other}
+        unnamed = (own["go"] if own is not None and own.get("song") is None and own.get("go")
+                   else self._lib.next_unnamed_go())
+        return {"here": here, "other": other, "unnamed_go": unnamed}
 
     @serialised
     def finish_rehearsal(self):
@@ -3172,19 +3182,21 @@ class Api:
             field = self.suggest_take_name(take_number)
             coming = self._next_take(take_number)
             # As a person reads it, for the line in the list of background
-            # work; a title the library could not resolve, as it was typed.
-            plain_name = (coming["name"] if coming["song"] is None
+            # work: "Polyn #3", "Take #47"; a title the library could not
+            # resolve, as it was typed.
+            plain_name = (coming["name"] if coming["go"] is None
                           else shown_name(coming["song"], coming["go"], take_number))
         except Exception:
             # The name comes from the library. A take is not left recording,
-            # holding the card, because the library could not answer.
-            field = plain_name = f"Take {take_number}"
+            # holding the card, because the library could not answer. "Take"
+            # is no song, and Keep gives it its go.
+            field = plain_name = "Take"
         try:
             # What ✕ on the review screen puts back: what the field would hold
             # with no title picked before recording.
             default = self.suggest_take_name(take_number, chosen=False)
         except Exception:
-            default = f"Take {take_number}"
+            default = "Take"
 
         # Whether РЭХА's sound process stopped under the take: said by its
         # event, or found by Stop itself when the event has not come yet.
@@ -3753,7 +3765,8 @@ class Api:
         # and for a draft written before it kept them, last time's.
         meter = self._meter_of_draft(draft_dir)
         icon_of = {**layouts.icons(self._config.get("tracks")), **draft_icons(draft_dir)}
-        # A draft rescued with no name is a take nobody named: "Take 5".
+        # A draft rescued with no name is a take nobody named, counted with
+        # the other takes with no song: "Take 47".
         display_name = (name or "").strip()
         named = self._lib.resolve_name(folder, display_name, take_number)
         take_dir = _unique_path(folder / _take_dir_name(take_number, named["name"]))
@@ -6208,9 +6221,9 @@ class Api:
             # be in that very place.
             live = self._lib.cloud_paths()
             for copy in shared:
-                # A take that came after it under the same name
-                # (recover_draft gives the next number, and "Take 7" is "Take
-                # 7" again) has its own copy in that place now: that one stays.
+                # A take that came after it under the same file name (see
+                # _free_copy_name) has its own copy in that place now: that
+                # one stays.
                 self._remove_shared(self._unused(copy, live))
         return {"ok": True}
 
@@ -6392,7 +6405,7 @@ class Api:
             for take in record.get("takes") or []:
                 n = int(take["take"]["take_number"])
                 if self._lib.take(folder, n) is not None:
-                    return f"Take {n} is taken by another take now."
+                    return PLACE_TAKEN
             return None
         if not items:
             raise holding.Gone()  # nothing of it is waiting: it has gone on
@@ -7362,8 +7375,7 @@ class Api:
 
     def _cloud_base(self, take_number, take):
         """What a take's copies are called: "03 - Polyn"."""
-        return (f"{int(take_number):02d} - "
-                f"{_safe_name(take.get('name', '') or f'Take {take_number}')}")
+        return f"{int(take_number):02d} - {_safe_name(take.get('name', '') or 'Take')}"
 
     def _rename_take_copies(self, folder, take_number, take, requeue=True):
         """

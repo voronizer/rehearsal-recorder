@@ -10,6 +10,7 @@ import {
   setFake,
   startRehearsal,
   test,
+  recordButton,
 } from "./app.ts"
 
 /** The level Python kept from last time, set before the app opens. */
@@ -87,7 +88,7 @@ test.describe("Playback volume in the header", () => {
 
     await startRehearsal(page)
     await expect(headerVolume(page)).toBeVisible()
-    await page.getByRole("button", { name: /Record take 1/ }).click()
+    await recordButton(page, 1).click()
     await expect(page.getByRole("button", { name: /^Stop/ })).toBeVisible()
     await expect(headerVolume(page)).toHaveCount(0)
     await page.getByRole("button", { name: /^Stop/ }).click()
@@ -99,7 +100,7 @@ test.describe("Playback volume in the header", () => {
     await openApp(page)
     await openHistory(page)
     await expect(headerVolume(page)).toBeVisible()
-    await page.getByRole("button", { name: "Take 1 Pałyn 1", exact: true }).click()
+    await page.getByRole("button", { name: "Pałyn #1", exact: true }).click()
     await expect(page.getByRole("button", { name: "Mute Guitar" })).toBeVisible()
     await expect(headerVolume(page)).toBeVisible()
   })
@@ -122,14 +123,14 @@ test.describe("Playback volume in the header", () => {
 
     await page.keyboard.press("Escape")
     await openHistory(page)
-    await page.getByRole("button", { name: "Take 1 Pałyn 1", exact: true }).click()
+    await page.getByRole("button", { name: "Pałyn #1", exact: true }).click()
     await expect(page.getByRole("slider", { name: "Master volume" })).toHaveValue(String(kept))
   })
 
   test("is the same level as the master fader under a take, both ways", async ({ page }) => {
     await openApp(page)
     await openHistory(page)
-    await page.getByRole("button", { name: "Take 1 Pałyn 1", exact: true }).click()
+    await page.getByRole("button", { name: "Pałyn #1", exact: true }).click()
     const fader = page.getByRole("slider", { name: "Master volume" })
     await expect(fader).toHaveValue("1")
 
@@ -152,7 +153,7 @@ test.describe("Playback volume in the header", () => {
   test("leaves Space with the screen once it is shut, whichever way", async ({ page }) => {
     await openApp(page)
     await openHistory(page)
-    await page.getByRole("button", { name: "Take 1 Pałyn 1", exact: true }).click()
+    await page.getByRole("button", { name: "Pałyn #1", exact: true }).click()
     await expect(page.getByRole("button", { name: "Mute Guitar" })).toBeVisible()
     const panel = page.getByRole("dialog", { name: "Playback volume" })
 

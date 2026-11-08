@@ -9,7 +9,7 @@ import { useKeysOn } from "@/lib/keys"
 import { labelOf, useLabels } from "@/lib/labels"
 import { formatMMSS } from "@/lib/format"
 import type { SendTo, Take } from "@/lib/api"
-import { goMark } from "@/lib/takeText"
+import { goMark, takeTitle } from "@/lib/takeText"
 import { takeButtonLabel, takeCloudStatus } from "@/components/TakeStrip"
 
 /** One go in a tab: the take, and the rehearsal it is in when the tab's goes
@@ -59,7 +59,9 @@ function GoLine({
   // ↑ and ↓ go through the song's takes while Settings › Keys has the
   // player's keys on; off, the button and its tip do not say them.
   const arrows = useKeysOn("player")
-  const number = take.song ? (
+  // A take with no song has its go too, counted as a song's are: "#47".
+  const numbered = Boolean(take.song) || take.go != null
+  const number = numbered ? (
     toggle && !ghost ? (
       <Tooltip>
         <TooltipTrigger asChild>
@@ -102,12 +104,12 @@ function GoLine({
       aria-hidden={ghost || undefined}
       className={cn(
         "flex items-center gap-0.5 [grid-area:1/1]",
-        take.song ? "-ml-1.5" : "",
+        numbered ? "-ml-1.5" : "",
         ghost && "pointer-events-none invisible"
       )}
     >
       {number}{" "}
-      <span className={cn("flex items-center gap-1.5", take.song && "ml-1")}>
+      <span className={cn("flex items-center gap-1.5", numbered && "ml-1")}>
         <span className="tnum text-xs">{formatMMSS(take.duration_sec)}</span>{" "}
         {take.starred && (
           <Star
@@ -177,7 +179,8 @@ export function SongTab({
     el.style.minWidth = `${widest.current}px`
   })
 
-  const title = song ?? `Take ${shown.take.take_number}`
+  // A take with no song is "Take", its go on the line under it as a song's.
+  const title = song ?? takeTitle(shown.take)
 
   // A long name is cut short so it does not take half the strip; the whole
   // of it is in the shared tip, on the names that were cut and only on those.
@@ -357,7 +360,7 @@ function Column({
         const inner = (
           <>
             <span className="tnum min-w-4 text-left font-semibold">
-              {go.take.song && go.take.go != null ? goMark(go.take.go) : "—"}
+              {go.take.go != null ? goMark(go.take.go) : "—"}
             </span>
             <span className="tnum text-xs">{formatMMSS(go.take.duration_sec)}</span>
             {go.take.starred && (
@@ -409,9 +412,13 @@ function Column({
 }
 
 /** A shut tab, as a screen reader and the tests name it: "Viasna, take 1,
- *  4:10", or "Take 3, 1:30" with no song. */
+ *  4:10", or "Take 47, 1:30" with no song, 47 being its go. */
 function tabLabel(song: string | null, take: Take, status: string | null): string {
-  const what = song ? `${song}, take ${take.go}` : `Take ${take.take_number}`
+  const what = song
+    ? `${song}, take ${take.go}`
+    : take.go != null
+      ? `${takeTitle(take)} ${take.go}`
+      : takeTitle(take)
   const base = `${what}, ${formatMMSS(take.duration_sec)}${take.starred ? ", starred" : ""}`
   return status ? `${base}, ${status.charAt(0).toLowerCase()}${status.slice(1)}` : base
 }

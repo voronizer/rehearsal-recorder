@@ -5,7 +5,7 @@ import { takeFacts } from "./takeFacts"
 /** A take kept tonight, as session_state lists it. */
 const kept = (n: number, song: string | null, go: number | null, sec: number, starred = false): Take => ({
   take_number: n,
-  name: song ? `${song}${go && go > 1 ? ` ${go}` : ""}` : `Take ${n}`,
+  name: song ? `${song}${go && go > 1 ? ` ${go}` : ""}` : `Take ${go ?? n}`,
   song,
   go,
   starred,
@@ -27,12 +27,19 @@ const facts = (name: string, takes: Take[], known: SongChoices | null = choices)
   takeFacts({ name, takeNumber: 4, durationSec: 6, takes, choices: known })
 
 describe("takeFacts", () => {
-  it("names an unnamed take as typed, with no song, number or columns", () => {
-    const f = facts("Take 4", tonight)
-    expect(f).toMatchObject({ song: null, go: null, unnamed: true, shown: "Take 4" })
+  it("names an unnamed take Take, with the number in its name and no columns", () => {
+    // Its number is its own across the library, not its place tonight (4).
+    const f = facts("Take 47", tonight)
+    expect(f).toMatchObject({ song: null, go: 47, unnamed: true, shown: "Take" })
     expect(f.columns).toEqual([])
     expect(f.columnsText).toBe("")
     expect(f.columnsSaid).toBe("")
+  })
+
+  it("gives no song typed the go Python has for it, whatever the number", () => {
+    const told = { ...choices, unnamed_go: 48 }
+    expect(facts("Take", tonight, told)).toMatchObject({ song: null, go: 48, unnamed: true, shown: "Take" })
+    expect(facts("Take #5", tonight, told)).toMatchObject({ song: null, go: 48, shown: "Take" })
   })
 
   it("gives a song's first take tonight its number and no columns", () => {

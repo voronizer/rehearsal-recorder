@@ -9,6 +9,7 @@ import {
   setFake,
   startRehearsal,
   test,
+  recordButton,
 } from "./app.ts"
 
 // When something goes wrong: in Python, at startup, or with the card.
@@ -129,7 +130,7 @@ test("a long list of problems lists the first 20, counts the rest, and scrolls i
 test("a card that goes away mid-take stops it, and says why", async ({ page }) => {
   await openApp(page)
   await startRehearsal(page)
-  await page.getByRole("button", { name: /Record take 1/ }).click()
+  await recordButton(page, 1).click()
   await expect(page.getByRole("button", { name: /^Stop/ })).toBeVisible()
   await setFake(
     page,
@@ -148,7 +149,7 @@ test("a card that goes away mid-take stops it, and says why", async ({ page }) =
   // corner over a take that is recording would be a lie.
   await setFake(page, "__IFACE_GONE__", null)
   await page.getByRole("button", { name: /Save take/ }).click()
-  await page.getByRole("button", { name: /Record take 2/ }).click()
+  await recordButton(page, 2).click()
   await expect(page.getByRole("button", { name: /^Stop/ })).toBeVisible()
   await expect(said).toHaveCount(0)
 })
@@ -156,7 +157,7 @@ test("a card that goes away mid-take stops it, and says why", async ({ page }) =
 test("a card that goes away and a Stop that fails are both said", async ({ page }) => {
   await openApp(page)
   await startRehearsal(page)
-  await page.getByRole("button", { name: /Record take 1/ }).click()
+  await recordButton(page, 1).click()
   await expect(page.getByRole("button", { name: /^Stop/ })).toBeVisible()
   await page.evaluate(() => {
     const w = window as unknown as { pywebview: { api: Record<string, unknown> } }
@@ -176,7 +177,7 @@ test("a card that goes away and a Stop that fails are both said", async ({ page 
 test("a laptop that went to sleep ends the take, and says when", async ({ page }) => {
   await openApp(page)
   await startRehearsal(page)
-  await page.getByRole("button", { name: /Record take 1/ }).click()
+  await recordButton(page, 1).click()
   await expect(page.getByRole("button", { name: /^Stop/ })).toBeVisible()
   // What the take says once the laptop is awake again.
   await setFake(
@@ -253,7 +254,7 @@ test("a screen that cannot open keeps the window, says why on the bar, and can t
       " Object.defineProperty(t, 'duration_sec', { get() { throw new Error('no length') } }); return t; };",
   })
   await startRehearsal(page)
-  await page.getByRole("button", { name: /Record take 1/ }).click()
+  await recordButton(page, 1).click()
   await page.getByRole("button", { name: /^Stop/ }).click()
   const guard = page.locator("[data-crash-guard]")
   await expect(guard).toContainText("This screen could not open.")

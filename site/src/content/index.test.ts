@@ -90,7 +90,7 @@ describe("the site's content", () => {
   it("has the words of the downloads at the end of the main page", () => {
     expect(content.download.title).toBe("Record the next rehearsal.")
     expect(content.download.lede.replace(/\s+/g, " ")).toBe(
-      "Free, for macOS and Windows. Plug in the interface, press **Record take**, play."
+      "Free, for macOS and Windows. Plug in the interface, press **Record**, play."
     )
   })
 

@@ -2891,7 +2891,7 @@
         }
       },
       "get": {
-        "description": "Every song with its number, title, tempo, signature, whether it is in the trash, and who last renamed it, changed its tempo, made it or deleted it here (null for РЭХА); and each take moved to another song here that РЭХА has not numbered there yet. РЭХА asks at its check.",
+        "description": "Every song with its number, title, tempo, signature, whether it is in the trash, and who last renamed it, changed its tempo, made it or deleted it here (null for РЭХА); and each take moved to another song here, or out of its song, that РЭХА has not numbered yet. РЭХА asks at its check.",
         "security": [
           {
             "rehaKey": []
@@ -5897,7 +5897,7 @@
         }
       },
       "patch": {
-        "description": "**Move to song**: the take moves to the song `song`, out of its song with `song` null, or to a new song titled `new_song`. In a song its name is the song's title until РЭХА gives it its number there, at its next check; out of one it is “Take” and its number at once, as РЭХА names a take with no song.",
+        "description": "**Move to song**: the take moves to the song `song`, out of its song with `song` null, or to a new song titled `new_song`. Its name is the song's title, or “Take” out of a song, until РЭХА gives it its number there at its next check.",
         "parameters": [
           {
             "schema": {

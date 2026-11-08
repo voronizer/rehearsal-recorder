@@ -10,5 +10,9 @@ export const fold = (name: string) => name.trim().toUpperCase().toLowerCase().re
 /** Two names the band would call one. */
 export const same = (a: string, b: string) => fold(a) === fold(b)
 
-/** What a take with no song is called, so no song can be (РЭХА's store/names.py). */
-export const TAKE_NAME = /^Take \d+$/
+/**
+ * What a take with no song is called, so no song can be (РЭХА's
+ * store/names.py): “Take 47”, “Take #47” as the pages write it, and
+ * “Take” alone, as a take moved out of its song is called here.
+ */
+export const TAKE_NAME = /^Take(?:\s*#\s*\d+|\s+\d+)?$/

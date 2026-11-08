@@ -233,7 +233,10 @@ class BandService:
                 continue  # never sent, or in the service's trash already
             columns = record.get("take") or {}
             song = record.get("song") or {}
-            name = take_name(song.get("title"), columns.get("go"), columns.get("take_number"))
+            title, go = song.get("title"), columns.get("go")
+            # One with no song and no go yet was deleted before migration 0015:
+            # its take number is its place in the rehearsal, not for reading.
+            name = "Take" if title is None and go is None else take_name(title, go, columns.get("take_number"))
             self._to_trash(columns.get("id"), copy["uid"], name)
 
     def _to_trash(self, take_id, uid, name):

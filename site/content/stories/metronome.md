@@ -47,7 +47,7 @@ So the drummer played it the usual way, and РЭХА recorded the kit's MIDI bes
 
 On the start screen, put the drum track on **Both**, so it records the kit's sound and its MIDI. Use a cable for the kit: Bluetooth MIDI adds a few milliseconds of uneven delay, and the hits come out a little late and loose.
 
-A `.mid` file says its tempo. A take carries the tempo that was in the metronome's row when you pressed **Record take**, even with the click switched off. With no tempo there, the file is written at 120 bpm. So give the song its tempo before you record.
+A `.mid` file says its tempo. A take carries the tempo that was in the metronome's row when you pressed **Record**, even with the click switched off. With no tempo there, the file is written at 120 bpm. So give the song its tempo before you record.
 
 In the DAW, set the project to the file's tempo, or let the DAW take it from the file, and put the `.mid` at bar 1, where the WAV files start. Then the hits line up with the sound. At any other tempo the notes drift away from the audio, and you spend an evening wondering why.
 

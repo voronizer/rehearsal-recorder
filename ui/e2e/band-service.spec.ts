@@ -186,7 +186,7 @@ test("the take says it is waiting for the band service", async ({ page }) => {
   const overview = await openTonight(page, WITH_KEY)
   await overview.getByRole("button", { name: "Send Viasna 1 to the band service" }).click()
   await expect(overview.getByText("Waiting for the band service")).toBeVisible()
-  await expect(overview.getByRole("button", { name: /^Take 2 Viasna 1, waiting for the band service/ })).toBeVisible()
+  await expect(overview.getByRole("button", { name: /^Viasna #1, waiting for the band service/ })).toBeVisible()
   await page.evaluate(() => (window as unknown as { __serviceUp: (n: number) => void }).__serviceUp(2))
   await expect(overview.getByText("Waiting for the band service")).toHaveCount(0)
   await expect(overview.getByLabel("In the band service", { exact: true })).toBeVisible()

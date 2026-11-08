@@ -135,6 +135,7 @@ test("a song made in РЭХА gets its number; a title the band has is that song
   // A long title from РЭХА, which has no limit of its own, is taken.
   expect((await r.post("/api/reha/songs", { title: "Doŭhaja ".repeat(20).trim(), tempo: null, signature: null })).status).toBe(200)
   expect((await r.post("/api/reha/songs", { title: "Take 4", tempo: null, signature: null })).status).toBe(400)
+  expect((await r.post("/api/reha/songs", { title: "Take #4", tempo: null, signature: null })).status).toBe(400)
   expect((await r.post("/api/reha/songs", { title: "Kupalle", tempo: 128, signature: null })).status).toBe(400)
   expect((await r.post("/api/reha/songs", { title: "Kupalle", tempo: 400, signature: "4/4" })).status).toBe(400)
 })
@@ -205,6 +206,20 @@ test("the band renames a song and sets its tempo where it stands, by РЭХА's 
     status: 400,
     body: { error: "Take 3 is what a take with no song is called." },
   })
+  // As the pages write it, too.
+  expect(await answer(patch(`/api/songs/${dym.id}`, { title: "Take #3" }, ivan))).toEqual({
+    status: 400,
+    body: { error: "Take #3 is what a take with no song is called." },
+  })
+  expect((await patch(`/api/songs/${dym.id}`, { title: "Take#3" }, ivan)).status).toBe(400)
+  // And the word alone, as a take moved out of its song is called.
+  expect(await answer(patch(`/api/songs/${dym.id}`, { title: "Take" }, ivan))).toEqual({
+    status: 400,
+    body: { error: "Take is what a take with no song is called." },
+  })
+  // A title that only starts with the word is a song's.
+  expect((await patch(`/api/songs/${dym.id}`, { title: "Take Five" }, ivan)).status).toBe(200)
+  expect((await patch(`/api/songs/${dym.id}`, { title: "Dym nad vadoj" }, ivan)).status).toBe(200)
   expect(await answer(patch(`/api/songs/${dym.id}`, { tempo: 400, signature: "4/4" }, ivan))).toEqual({
     status: 400,
     body: { error: "A tempo in 4/4 is a whole number from 30 to 300" },
@@ -237,30 +252,33 @@ test("a take moves to another song here; a ★ from РЭХА leaves it there, Р
   expect((await r.put(`/api/reha/takes/${uid}`, takeMeta({ number: 3, song: undefined, song_id: 9999 }))).status).toBe(409)
 })
 
-test("a take leaves its song here: Take N at once, listed for РЭХА with no song, the song stays", async () => {
+test("a take leaves its song here: Take until REHA numbers it, listed for REHA with no song, the song stays", async () => {
   const { alex, ivan, r } = await band()
+  // The 3rd take that evening, Viasna's 13th.
   const uid = await shownTake({ song: "Viasna", number: 3, name: "Viasna 13" })
   const viasna = (await called(alex, "Viasna"))!
 
   expect(await answer(patch(`/api/takes/${uid}`, { song: null }, ivan))).toEqual({ status: 200, body: { ok: true } })
-  expect(await takeOf(uid)).toMatchObject({ name: "Take 3", song_id: null })
-  // Its number is known: no “number from РЭХА”.
-  expect((await songs(alex)).not_named.find((t) => t.uid === uid)).toMatchObject({ name: "Take 3", moved: false })
+  // Its number with no song comes from РЭХА: “Take · number from РЭХА” till then, never the 3 of its evening.
+  expect(await takeOf(uid)).toMatchObject({ name: "Take", song_id: null })
+  expect((await songs(alex)).not_named.find((t) => t.uid === uid)).toMatchObject({ name: "Take", moved: true })
+  expect(await read<{ name: string; moved: boolean }>(`/api/takes/${uid}`, alex)).toMatchObject({ name: "Take", moved: true })
   expect(await called(alex, "Viasna")).toMatchObject({ id: viasna.id, takes: 0 })
   expect(((await answer(r.get("/api/reha/songs"))).body as Listed).moved).toEqual([{ uid, song_id: null, by: "Ivan" }])
 
-  // РЭХА renames it and sends it with no song: the wait ends.
-  const done = await answer(r.put(`/api/reha/takes/${uid}`, takeMeta({ number: 3, song: null, name: "Take 3" })))
+  // РЭХА numbers it with the takes that have no song and sends it: the wait ends.
+  const done = await answer(r.put(`/api/reha/takes/${uid}`, takeMeta({ number: 3, song: null, name: "Take 48" })))
   expect(done.body).toMatchObject({ ok: true, song_id: null })
-  expect(await takeOf(uid)).toEqual({ name: "Take 3", song_id: null, moved_by: null })
+  expect(await takeOf(uid)).toEqual({ name: "Take 48", song_id: null, moved_by: null })
+  expect((await songs(alex)).not_named.find((t) => t.uid === uid)).toMatchObject({ name: "Take 48", moved: false })
 
   // Again, on a take with no song: nothing changes, nothing is listed.
   expect((await patch(`/api/takes/${uid}`, { song: null }, ivan)).status).toBe(200)
-  expect(await takeOf(uid)).toEqual({ name: "Take 3", song_id: null, moved_by: null })
+  expect(await takeOf(uid)).toEqual({ name: "Take 48", song_id: null, moved_by: null })
   expect(((await answer(r.get("/api/reha/songs"))).body as Listed).moved).toEqual([])
 })
 
-test("moved to a song, then out of it before РЭХА's check: listed once, with no song", async () => {
+test("moved to a song, then out of it before REHA's check: listed once, with no song", async () => {
   const { alex, ivan, r } = await band()
   const uid = await shownTake({ song: "Viasna", number: 5, name: "Viasna 5" })
   await shownTake({ song: "Pałyn", number: 6, name: "Pałyn 2" })
@@ -268,7 +286,7 @@ test("moved to a song, then out of it before РЭХА's check: listed once, with
 
   expect((await patch(`/api/takes/${uid}`, { song: palyn.id }, ivan)).status).toBe(200)
   expect((await patch(`/api/takes/${uid}`, { song: null }, ivan)).status).toBe(200)
-  expect(await takeOf(uid)).toMatchObject({ name: "Take 5", song_id: null })
+  expect(await takeOf(uid)).toMatchObject({ name: "Take", song_id: null })
   expect(((await answer(r.get("/api/reha/songs"))).body as Listed).moved).toEqual([{ uid, song_id: null, by: "Ivan" }])
 })
 

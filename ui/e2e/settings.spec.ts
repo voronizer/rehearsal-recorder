@@ -22,6 +22,8 @@ import {
   test,
   themed,
   tipLines,
+  recordButton,
+  takeButton,
 } from "./app.ts"
 import type { Locator, Page } from "@playwright/test"
 
@@ -1720,8 +1722,8 @@ test("the share dialog says the same about the original tracks", async ({ page }
   await recordTake(page, 1)
   await nameTake(page, "Verse")
   await page.getByRole("button", { name: /Save take/ }).click()
-  await expect(page.getByRole("button", { name: /Record take 2/ })).toBeVisible()
-  await page.locator("[aria-label='Rehearsal overview'] button[aria-label^='Take 1 Verse']").click()
+  await expect(recordButton(page, 2)).toBeVisible()
+  await takeButton(page.locator("[aria-label='Rehearsal overview']"), "Verse #1").click()
   await page.getByRole("button", { name: "Copy Verse 1 to the cloud" }).click()
   const dialog = page.getByRole("dialog")
   const hint = dialog.getByText(TRACKS_HINT, { exact: true })

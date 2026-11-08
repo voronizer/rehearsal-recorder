@@ -1,4 +1,4 @@
-import { calls, hold, letGo, expect, openApp, openHistory, startRehearsal, setFake, test } from "./app.ts"
+import { calls, hold, letGo, expect, openApp, openHistory, startRehearsal, setFake, test, recordButton } from "./app.ts"
 
 test("external recording and stop/save navigate the recorder screens", async ({ page }) => {
   await openApp(page, { before: "window.__CONTROLLER_ENABLED__ = true;" })
@@ -19,7 +19,7 @@ test("external recording and stop/save navigate the recorder screens", async ({ 
     await win.pywebview.api.control_command("stop_keep")
   })
   await setFake(page, "__CONTROL_STATE__", null)
-  await expect(page.getByRole("button", { name:/Record take 2/ })).toBeVisible()
+  await expect(recordButton(page, 2)).toBeVisible()
 })
 
 test("Controls settings shows a disabled controller without opening ports", async ({ page }) => {
@@ -37,7 +37,7 @@ test("externally started and stopped rehearsals update the setup/rehearsal scree
     await w.pywebview.api.start_rehearsal("Remote rehearsal", 0, 44100, [{ name: "Guitar", channel: 1 }], "pcm24")
   })
   await setFake(page, "__CONTROL_STATE__", { state:"ready", busy:false, rehearsal_active:true })
-  await expect(page.getByRole("button", { name:/Record take 1/ })).toBeVisible()
+  await expect(recordButton(page, 1)).toBeVisible()
   await page.evaluate(async () => {
     const w = window as unknown as { pywebview: { api: { finish_rehearsal(): Promise<unknown> } } }
     await w.pywebview.api.finish_rehearsal()
@@ -63,7 +63,7 @@ test("starting a rehearsal remotely leaves History", async ({ page }) => {
     await w.pywebview.api.control_command("start_rehearsal")
   })
   await setFake(page, "__CONTROL_STATE__", { state:"ready", busy:false, rehearsal_active:true })
-  await expect(page.getByRole("button", { name:/Record take 1/ })).toBeVisible()
+  await expect(recordButton(page, 1)).toBeVisible()
 })
 
 

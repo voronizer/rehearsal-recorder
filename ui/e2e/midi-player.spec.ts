@@ -9,6 +9,8 @@ import {
   recordTake,
   startRehearsal,
   test,
+  recordButton,
+  takeButton,
 } from "./app.ts"
 import type { Locator, Page } from "@playwright/test"
 
@@ -598,8 +600,8 @@ test.describe("notes in the player", () => {
   test("a saved take opens with its notes", async ({ page }) => {
     await review(page)
     await page.getByRole("button", { name: /Save take/ }).click()
-    await expect(page.getByRole("button", { name: /Record take 2/ })).toBeVisible()
-    await page.locator("button[aria-label^='Take 1']").first().click()
+    await expect(recordButton(page, 2)).toBeVisible()
+    await takeButton(page, "Take #1").first().click()
     await expect(notesPlate(page, "Drums")).toContainText("TD-17")
     await expect(notesPlate(page, "Keys")).toContainText("Launchkey Mini MK3")
     await expect(notesLane(page, "Keys")).toBeVisible()
@@ -614,7 +616,7 @@ test.describe("notes in the player", () => {
           notes_missing: [{name: 'Pads', port: 'Pad box', after: null}]};`,
     })
     await openHistory(page)
-    await page.getByRole("button", { name: "Take 1 Pałyn" }).click()
+    await takeButton(page, "Pałyn #1").click()
     await expect(lockedM(notesPlate(page, "Keys"), SAVED)).toBeVisible()
     await expect(notesPlate(page, "Keys").locator("[data-icon]")).toHaveAttribute("data-icon", "keys")
     await expect(notesLane(page, "Pads")).toContainText("No notes in this take")

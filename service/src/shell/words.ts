@@ -46,7 +46,7 @@ export const quoted = (name: string) => `“${name}”`
 /**
  * What a take's name is read from. Its song comes as `song_id` in a list
  * and as `song` on the take's own page; `moved`: moved to another song here,
- * and not numbered by РЭХА yet.
+ * or out of its song, and not numbered by РЭХА yet.
  */
 export type TakeNaming = {
   name: string
@@ -57,28 +57,36 @@ export type TakeNaming = {
 
 /**
  * РЭХА names a take of a song by the song's title and the take's number at
- * that song, “Viasna 12”. The number РЭХА sends beside the name is the
- * take's number in its rehearsal, a different one, so the song's number is
- * read from the end of the name.
+ * that song, “Viasna 12”. It numbers the takes with no song the same way,
+ * across the whole library: “Take 47”. The number РЭХА sends beside the
+ * name is the take's number in its rehearsal, a different one, so the
+ * take's own number is read from the end of the name.
  */
 const SONG_AND_NUMBER = /^(.+) (\d+)$/
+const NO_SONG = /^Take (\d+)$/
 
 /**
- * “Viasna” and 12 of “Viasna 12”. Null where the name is read as it is: a
- * take with no song (“Take 4”, where the word Take already sets the number
- * apart), and a take moved here, whose name is the song's title alone.
+ * “Viasna” and 12 of “Viasna 12”, and “Take” and 47 of “Take 47” for a
+ * take with no song. Null where the name is read as it is: a take moved
+ * here, whose name is the song's title alone, or “Take” alone for one
+ * taken out of its song.
  */
 export function songAndNumber(t: TakeNaming): { song: string; number: number } | null {
+  if (t.moved) return null
   const song = t.song?.id ?? t.song_id ?? null
-  const parts = song === null || t.moved ? null : SONG_AND_NUMBER.exec(t.name)
+  if (song === null) {
+    const n = NO_SONG.exec(t.name)
+    return n ? { song: "Take", number: Number(n[1]) } : null
+  }
+  const parts = SONG_AND_NUMBER.exec(t.name)
   return parts ? { song: parts[1], number: Number(parts[2]) } : null
 }
 
 /**
- * A take's name in plain text, as the page draws it: “Viasna #12”, with a
- * no-break space so the number never starts a line of its own. Any other
- * take by its name. The name РЭХА stores and sends stays “Viasna 12”, and
- * so do the downloaded files.
+ * A take's name in plain text, as the page draws it: “Viasna #12” or
+ * “Take #47”, with a no-break space so the number never starts a line of
+ * its own. Any other take by its name. The name РЭХА stores and sends stays
+ * “Viasna 12”, and so do the downloaded files.
  */
 export function takeText(t: TakeNaming): string {
   const parts = songAndNumber(t)

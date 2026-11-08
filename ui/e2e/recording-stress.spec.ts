@@ -12,6 +12,7 @@ import {
   tileNames,
   tipLines,
   watchDrawn,
+  recordButton,
 } from "./app.ts"
 import type { Page } from "@playwright/test"
 
@@ -24,11 +25,12 @@ import type { Page } from "@playwright/test"
 test("the recording stress data opens on take 33 with eight tiles", async ({ page }) => {
   await openApp(page, { stress: "recording" })
   // The second take of the longest song name, take 33 of the evening,
-  // recording. Read whole: drawn, it is cut after two lines.
+  // recording. Read whole: drawn, it is cut after two lines. The evening
+  // number is nowhere on the screen.
   await expect(page.getByRole("heading", { level: 1 })).toHaveAccessibleName(
     "Kalychanka (slow version for the wedding, with the long intro the bride asked for) #2"
   )
-  await expect(page.getByText("Take 33", { exact: true })).toBeVisible()
+  await expect(page.getByText(/Take\s*#?33/)).toHaveCount(0)
   await expect(page.getByText("Recording", { exact: true })).toBeVisible()
   // Seven tracks that take sound and the Nord, on MIDI alone.
   const tiles = page.locator("main [role=group]")
@@ -286,7 +288,7 @@ test("the band's names are whole at 960x680", async ({ page }) => {
   await openBandApp(page)
   await startRehearsal(page, 6)
   await page.locator("#next-take-name").fill("Viasna")
-  await page.getByRole("button", { name: /Record take 6/ }).click()
+  await recordButton(page, 6).click()
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("Viasna #2")
   await fitted(page, { width: 960, height: 680 })
   const seen = await tileNames(page)

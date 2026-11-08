@@ -207,7 +207,7 @@ async function openTake2(page: Page, held?: () => Promise<void>) {
   await startRehearsal(page, 33)
   await held?.()
   const since = Date.now()
-  await page.locator('[data-take="2"]').getByRole("button", { name: /^Take 2 / }).click()
+  await page.locator('[data-take="2"]').getByRole("button", { name: /^Pałyn #2(,|$)/ }).click()
   await expect(page.getByRole("group", { name: "Take timeline" })).toBeVisible()
   return since
 }

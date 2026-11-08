@@ -11,6 +11,7 @@ import {
   style,
   test,
   tipLines,
+  recordButton,
 } from "./app.ts"
 import type { Locator, Page } from "@playwright/test"
 
@@ -47,7 +48,7 @@ async function recording(
     after,
   })
   await startRehearsal(page)
-  await page.getByRole("button", { name: /Record take 1/ }).click()
+  await recordButton(page, 1).click()
   await expect(page.getByRole("button", { name: /^Stop/ })).toBeVisible()
 }
 
@@ -746,7 +747,7 @@ test.describe("recording", () => {
         window.pywebview.api.midi_activity = (...a) => { window.__MIDI_POLLS__++; return was(...a) };`,
     })
     await startRehearsal(page)
-    await page.getByRole("button", { name: /Record take 1/ }).click()
+    await recordButton(page, 1).click()
     await expect(tile(page, "Guitar")).toHaveAttribute("data-clipped")
     await page.waitForTimeout(600)
     expect(await count()).toBe(0)

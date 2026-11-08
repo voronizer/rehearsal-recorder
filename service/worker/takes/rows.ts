@@ -11,8 +11,11 @@ export const initial = (name: string, email: string) => (Array.from((name || ema
 /** The name the band sees for a member: their own, or their address until they give one. */
 export const shownName = (name: string, email: string) => name || email
 
-/** Moved to a song here and not numbered by РЭХА yet: its name is the song's title alone. A take moved out of its song has its number. */
-export const waits = (t: { movedBy: string | null; songId: number | null }) => t.movedBy !== null && t.songId !== null
+/**
+ * Moved to a song here, or out of its song, and not numbered by РЭХА yet:
+ * its name is the song's title alone, or “Take”.
+ */
+export const waits = (t: { movedBy: string | null }) => t.movedBy !== null
 
 export const Star = z.object({ member_id: z.string(), initial: z.string(), name: z.string() }).openapi("Star")
 
@@ -37,7 +40,7 @@ export const TakeRow = z
     marks: z.array(MarkTick),
     stars: z.array(Star),
     starred_at_rehearsal: z.boolean(),
-    /** Moved to another song here and not numbered by РЭХА yet: its name is the song's title alone. */
+    /** Moved to another song here, or out of its song, and not numbered by РЭХА yet: its name is the song's title alone, or “Take”. */
     moved: z.boolean(),
   })
   .openapi("TakeRow")

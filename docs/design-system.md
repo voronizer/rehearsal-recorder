@@ -217,7 +217,7 @@ the shared one when it is redone.
   2026-11-02): what is marked `data-squeeze="1"` goes first, with the keys'
   letters, then 2, then 3, and the buttons keep their size; the metronome
   shows what went under its gear, and its keys still work. The main one is
-  `footer` (56 px): Start rehearsal, Record take, Stop, Save take and
+  `footer` (56 px): Start rehearsal, Record, Stop, Save take and
   Recover, which is Recover all while more than one take is listed or a run
   goes on. The ones beside it are `footer-aside`: Finish, Discard and
   Decide later.
@@ -263,7 +263,7 @@ the shared one when it is redone.
   (`hooks/useUndoKey.ts`), except in a text field, which undoes its own
   typing, with a dialog, a menu or a list open, or while a take records.
   What a button could not do is said in a notice of kind `error`, the
-  footer's buttons included (Start rehearsal, Record take, Stop, Save take,
+  footer's buttons included (Start rehearsal, Record, Stop, Save take,
   Discard), as the evening's buttons and Settings say theirs. It stays
   until it is closed or its screen is left, and a retry puts it away; an
   answer that comes once its screen has gone says nothing

@@ -40,7 +40,6 @@ type Scene =
   | { step: "rehearsal"; session: SessionState }
   | {
       step: "record"
-      takeNumber: number
       takeName: string
       takeGo: number | null
       tracks: PlacedTrack[]
@@ -108,7 +107,6 @@ export function Story() {
     case "record":
       return (
         <Recording
-          takeNumber={now.takeNumber}
           takeName={now.takeName}
           takeGo={now.takeGo}
           tracks={now.tracks}
@@ -204,7 +202,6 @@ const FORWARD: Record<(typeof STORY)[number], (tell: Telling) => Promise<void>> 
     if (!started.ok || started.take_number == null) throw new Error("demo: the take did not start")
     show({
       step: "record",
-      takeNumber: started.take_number,
       takeName: session.next_take_name,
       takeGo: session.next_take_go ?? null,
       tracks: session.tracks,
@@ -282,11 +279,12 @@ const FORWARD: Record<(typeof STORY)[number], (tell: Telling) => Promise<void>> 
     await beat(2)
     await linger(BEAT_MS)
 
+    // A take by its name as the screen writes it, "Pałyn #5", starred or not.
     const take = (label: string) =>
-      waitFor(() => document.querySelector<HTMLButtonElement>(`button[aria-label^="${label}"]`))
+      waitFor(() => document.querySelector<HTMLButtonElement>(`button[aria-label="${label}"], button[aria-label^="${label},"]`))
     const exactly = (label: string) =>
       waitFor(() => document.querySelector<HTMLButtonElement>(`button[aria-label="${label}"]`))
-    ;(await take("Take 2 Pałyn 5")).click()
+    ;(await take("Pałyn\u00a0#5")).click()
     await waitFor(() => document.querySelector('[aria-label="Take timeline"]'))
     await sleep(700)
     await dragTimeline(0.55, 0.7)
@@ -302,7 +300,7 @@ const FORWARD: Record<(typeof STORY)[number], (tell: Telling) => Promise<void>> 
           ?.textContent?.startsWith(n)
       )
     await press("Songs", { exact: true })
-    ;(await take("Take 3 Pałyn 6")).click()
+    ;(await take("Pałyn\u00a0#6")).click()
     await openTake("#6")
     await beat(4)
     await linger(LOOPING_MS)

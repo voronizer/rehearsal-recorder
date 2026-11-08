@@ -6,6 +6,7 @@ import {
   startButton,
   startRehearsal,
   test,
+  recordButton,
 } from "./app.ts"
 import type { Page } from "@playwright/test"
 
@@ -50,7 +51,7 @@ test("rehearsal: Finish with an edge, Record rightmost", async ({ page }) => {
   await openApp(page)
   await startRehearsal(page)
   const f = await footer(page)
-  expect(f.main).toMatch(/^Record take 1/)
+  expect(f.main).toMatch(/^Record/)
   expect(f.variants).toEqual(["outline", "destructive"])
   expect(f).toMatchObject({ oneLine: true, onTheRight: true, sideways: false, inside: true })
 })
@@ -58,7 +59,7 @@ test("rehearsal: Finish with an edge, Record rightmost", async ({ page }) => {
 test("recording: Stop on the right, autosave said under it", async ({ page }) => {
   await openApp(page)
   await startRehearsal(page)
-  await page.getByRole("button", { name: /Record take 1/ }).click()
+  await recordButton(page, 1).click()
   await expect(page.getByRole("button", { name: /^Stop/ })).toBeVisible()
   const f = await footer(page)
   expect(f.main).toMatch(/^Stop/)

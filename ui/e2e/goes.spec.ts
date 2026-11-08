@@ -13,19 +13,21 @@ import {
   startRehearsal,
   style,
   test,
+  recordButton,
+  takeButton,
 } from "./app.ts"
 import type { Locator, Page } from "@playwright/test"
 
 // Goes in the player: a tab per song on the strip, opening down into
 // columns of its goes. The fuller evening is Pałyn 1 (3:12), Pałyn 2 (2:58,
-// a Keep this mark, in the cloud), Take 3 (1:30) and Viasna 1 (4:10), at
-// /rec/old.
+// a Keep this mark, in the cloud), Take 1 (1:30, of no song, the evening's
+// third) and Viasna 1 (4:10), at /rec/old.
 
-async function openGo(page: Page, name = "Take 2 Pałyn 2", before = "") {
+async function openGo(page: Page, name = "Pałyn #2", before = "") {
   await openApp(page, { before: `window.__FULL_EVENING__ = true; ${before}` })
   await openHistory(page)
   const overview = page.locator("[aria-label='Rehearsal overview']")
-  await overview.getByRole("button", { name }).click()
+  await takeButton(overview, name).click()
   await expect(timeline(page)).toBeVisible()
   return strip(page)
 }
@@ -54,7 +56,7 @@ test("one tab per song, in the order first played", async ({ page }) => {
   await expect(openTab(s)).toHaveAttribute("data-tab", "song:Pałyn")
   await expect(openTab(s).locator("[data-tab-line]")).toHaveText(/^#2/)
   await expect(s.getByRole("button", { name: "Viasna, take 1, 4:10", exact: true })).toBeVisible()
-  await expect(s.getByRole("button", { name: "Take 3, 1:30", exact: true })).toBeVisible()
+  await expect(s.getByRole("button", { name: "Take 1, 1:30", exact: true })).toBeVisible()
 })
 
 test("another song's tab opens its last go from the start", async ({ page }) => {
@@ -94,8 +96,8 @@ test("Songs opens the tabs into columns, and the number too", async ({ page }) =
   await expect(s.locator("[data-column]")).toHaveCount(3)
   const palyn = s.locator("[data-column='song:Pałyn']")
   await expect(palyn.locator("button[data-go-row]")).toHaveCount(2)
-  await expect(palyn.getByRole("button", { name: "Take 1 Pałyn 1" })).toBeVisible()
-  await expect(palyn.getByRole("button", { name: "Take 2 Pałyn 2" })).toHaveAttribute(
+  await expect(takeButton(palyn, "Pałyn #1")).toBeVisible()
+  await expect(takeButton(palyn, "Pałyn #2")).toHaveAttribute(
     "aria-current",
     "true"
   )
@@ -120,7 +122,7 @@ test("Escape closes the columns first, then the take, and a take opened again st
   await page.keyboard.press("Escape")
   const overview = page.locator("[aria-label='Rehearsal overview']")
   await expect(overview).toBeVisible()
-  await overview.getByRole("button", { name: "Take 1 Pałyn 1" }).click()
+  await takeButton(overview, "Pałyn #1").click()
   await expect(timeline(page)).toBeVisible()
   await expect(songs(page)).toHaveAttribute("aria-expanded", "false")
 })
@@ -133,7 +135,7 @@ test("a go in another song's column starts from the start", async ({ page }) => 
   await page.mouse.click(box.x + box.width * (30 / 178), box.y + box.height / 2)
   await expect.poll(() => callCount(page, "player_seek")).toBe(seeks + 1)
   const after = await callCount(page, "player_seek")
-  await s.locator("[data-column='song:Viasna']").getByRole("button", { name: "Take 4 Viasna 1" }).click()
+  await takeButton(s.locator("[data-column='song:Viasna']"), "Viasna #1").click()
   await expect(openTab(s)).toHaveAttribute("data-tab", "song:Viasna")
   expect((await calls(page, "player_open")).at(-1)?.args[0]).toEqual([
     { name: "Guitar", file: "/rec/old/v1.wav" },
@@ -179,7 +181,7 @@ async function zoomIn(page: Page) {
 }
 
 test("the place is kept going to another go at the song", async ({ page }) => {
-  const s = await openGo(page, "Take 1 Pałyn 1")
+  const s = await openGo(page, "Pałyn #1")
   await dragRegion(page, 0.25, 0.5)
   await repeat(page).click()
   await expect(repeat(page)).toHaveAttribute("aria-pressed", "true")
@@ -190,7 +192,7 @@ test("the place is kept going to another go at the song", async ({ page }) => {
 
   await songs(page).click()
   const from = await everyCall(page)
-  await s.locator("[data-column='song:Pałyn']").getByRole("button", { name: "Take 2 Pałyn 2" }).click()
+  await takeButton(s.locator("[data-column='song:Pałyn']"), "Pałyn #2").click()
   await expect(openTab(s).locator("[data-tab-line]")).toHaveText(/^#2/)
   await expect.poll(() => opened(page)).toBe("/rec/old/p2.wav")
   await expect(transport(page).getByRole("button", { name: "Pause", exact: true })).toBeVisible()
@@ -207,7 +209,7 @@ test("the place is kept going to another go at the song", async ({ page }) => {
 })
 
 test("↓ and ↑ go through the song's goes, and do nothing at the ends", async ({ page }) => {
-  const s = await openGo(page, "Take 1 Pałyn 1")
+  const s = await openGo(page, "Pałyn #1")
   await page.keyboard.press("ArrowDown")
   await expect.poll(() => opened(page)).toBe("/rec/old/p2.wav")
   await expect(openTab(s).locator("[data-tab-line]")).toHaveText(/^#2/)
@@ -218,7 +220,7 @@ test("↓ and ↑ go through the song's goes, and do nothing at the ends", async
   await page.keyboard.press("ArrowUp")
   await expect.poll(() => opened(page)).toBe("/rec/old/p1.wav")
 
-  await s.getByRole("button", { name: /^Take 3, 1:30/ }).click()
+  await s.getByRole("button", { name: /^Take 1, 1:30/ }).click()
   await expect.poll(() => opened(page)).toBe("/rec/old/t3.wav")
   const atTake3 = await callCount(page, "player_open")
   await page.keyboard.press("ArrowUp")
@@ -228,7 +230,7 @@ test("↓ and ↑ go through the song's goes, and do nothing at the ends", async
 })
 
 test("a place past the end of a shorter go is clamped", async ({ page }) => {
-  await openGo(page, "Take 1 Pałyn 1")
+  await openGo(page, "Pałyn #1")
   await clickAt(page, 185, 192)
   const seeks = await callCount(page, "player_seek")
   await page.keyboard.press("ArrowDown")
@@ -242,7 +244,7 @@ test("a place past the end of a shorter go is clamped", async ({ page }) => {
 test("a second ↑ or ↓ before the go has opened carries the first one's place", async ({
   page,
 }) => {
-  await openGo(page, "Take 1 Pałyn 1")
+  await openGo(page, "Pałyn #1")
   await clickAt(page, 30, 192)
   await hold(page, "player_open")
   const opens = await callCount(page, "player_open")
@@ -276,7 +278,7 @@ test("the keys list says ↑ and ↓ in the player, and the review screen's does
 
 test("the place is not carried by a tab", async ({ page }) => {
   // Another song is another song: its go opens from the start.
-  const s = await openGo(page, "Take 1 Pałyn 1")
+  const s = await openGo(page, "Pałyn #1")
   await dragRegion(page, 0.25, 0.5)
   await clickAt(page, 30, 192)
   const after = await callCount(page, "player_seek")
@@ -318,7 +320,7 @@ test("the rehearsal screen has the same header", async ({ page }) => {
   await page.getByRole("button", { name: /Save take/ }).click()
   await recordTake(page, 2)
   await page.getByRole("button", { name: /Save take/ }).click()
-  await expect(page.getByRole("button", { name: /Record take 3/ })).toBeVisible()
+  await expect(recordButton(page, 3)).toBeVisible()
   await expect(fact(page, "Takes")).toHaveText("2, 1 song")
   await expect(fact(page, "On disk")).toHaveText("96 MB")
   // The facts say the count once: no badge beside them in the header (the
@@ -368,7 +370,7 @@ test("a narrow window keeps the most needed figures and the button", async ({ pa
 
 /** Pałyn 1 open with a loop on Repeat, then ↓ held on its way to Pałyn 2. */
 async function moveOnItsWay(page: Page) {
-  await openGo(page, "Take 1 Pałyn 1")
+  await openGo(page, "Pałyn #1")
   await dragRegion(page, 0.25, 0.5)
   await repeat(page).click()
   await expect(repeat(page)).toHaveAttribute("aria-pressed", "true")
@@ -405,7 +407,7 @@ test("a place on its way is dropped when the take is closed", async ({ page }) =
   await page.keyboard.press("Escape")
   const overview = page.locator("[aria-label='Rehearsal overview']")
   await expect(overview).toBeVisible()
-  await overview.getByRole("button", { name: "Take 4 Viasna 1" }).click()
+  await takeButton(overview, "Viasna #1").click()
   const from = await everyCall(page)
   await letGo(page, "player_open")
   await expect(timeline(page)).toBeVisible()
@@ -417,7 +419,7 @@ test("the place goes to the next go a step at a time: the loop, then the seek, t
 }) => {
   // Python answers each call on a thread of its own, so a call sent before
   // the one ahead of it has answered can overtake it.
-  await openGo(page, "Take 1 Pałyn 1")
+  await openGo(page, "Pałyn #1")
   await dragRegion(page, 0.25, 0.5)
   await repeat(page).click()
   await expect(repeat(page)).toHaveAttribute("aria-pressed", "true")
@@ -447,7 +449,7 @@ test("the place goes to the next go a step at a time: the loop, then the seek, t
 test("a place still waiting on the loop's answer is not put on a go opened since", async ({
   page,
 }) => {
-  await openGo(page, "Take 1 Pałyn 1")
+  await openGo(page, "Pałyn #1")
   await dragRegion(page, 0.25, 0.5)
   await repeat(page).click()
   await expect(repeat(page)).toHaveAttribute("aria-pressed", "true")
@@ -520,10 +522,7 @@ async function fromSongPage(page: Page) {
   await openHistory(page)
   await page.getByRole("radio", { name: "Songs", exact: true }).click()
   await page.locator("[data-song='Pałyn']").click()
-  await page
-    .locator(`[data-rung-group="/rec/old"]`)
-    .getByRole("button", { name: "Take 1 Pałyn 1" })
-    .click()
+  await takeButton(page.locator(`[data-rung-group="/rec/old"]`), "Pałyn #1").click()
   await expect(timeline(page)).toBeVisible()
 }
 const openedFiles = async (page: Page, from: number) =>
@@ -595,7 +594,7 @@ async function startWith(page: Page, names: string[], clock = false, tracks = ["
 test("no tab moves when a copy to the cloud finishes", async ({ page }) => {
   await startWith(page, ["Pałyn", "Viasna", "Pałyn"], true)
   const overview = page.locator("[aria-label='Rehearsal overview']")
-  await overview.getByRole("button", { name: /^Take 2 Viasna/ }).click()
+  await takeButton(overview, "Viasna #1").click()
   await expect(timeline(page)).toBeVisible()
   await expect(strip(page).getByText("Waiting for the cloud").first()).toBeVisible()
   const before = await places(page)
@@ -610,7 +609,7 @@ test("a renamed go's tab is scrolled into view", async ({ page }) => {
   await startWith(page, names)
   const overview = page.locator("[aria-label='Rehearsal overview']")
   await expect(overview.getByText("Waiting for the cloud")).toHaveCount(0)
-  await overview.getByRole("button", { name: /^Take 9 India/ }).click()
+  await takeButton(overview, "India #1").click()
   await expect(timeline(page)).toBeVisible()
   await page.getByRole("button", { name: /^Rename take India/ }).click()
   await page.getByRole("dialog").locator("input").fill("Alpha")
@@ -645,10 +644,7 @@ test("from a song's page, its tab is as wide shut as open", async ({ page }) => 
   await openHistory(page)
   await page.getByRole("radio", { name: "Songs", exact: true }).click()
   await page.locator("[data-song='Pałyn']").click()
-  await page
-    .locator(`[data-rung-group="/rec/old"]`)
-    .getByRole("button", { name: "Take 2 Pałyn 2" })
-    .click()
+  await takeButton(page.locator(`[data-rung-group="/rec/old"]`), "Pałyn #2").click()
   await expect(timeline(page)).toBeVisible()
   const open = await places(page)
   await strip(page).getByRole("button", { name: /^Viasna, take 1/ }).click()
@@ -665,7 +661,7 @@ async function openOf(page: Page, names: string[], open = 1, tracks = ["Guitar"]
   await startWith(page, names, false, tracks)
   const overview = page.locator("[aria-label='Rehearsal overview']")
   await expect(overview.getByText("Waiting for the cloud")).toHaveCount(0)
-  await overview.getByRole("button", { name: new RegExp(`^Take ${open} `) }).click()
+  await overview.locator(`[data-take="${open}"] [data-take-name]`).click()
   await expect(timeline(page)).toBeVisible()
 }
 

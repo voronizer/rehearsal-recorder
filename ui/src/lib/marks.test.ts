@@ -26,7 +26,7 @@ const NEW_SONGS = { folder: "/rec/new", rehearsal: "New songs", created_at: "202
 const MARKS = [
   hit(4, "Pałyn 4", "Pałyn", 111, { go: 4, note: "came in late" }),
   hit(5, "Pałyn 5", "Pałyn", 58, { go: 5 }),
-  hit(11, "Take 11", null, 42, { go: null }),
+  hit(11, "Take 47", null, 42, { go: 47 }),
   hit(3, "Viasna 3", "Viasna", 100, { go: 3, ...NEW_SONGS }),
 ]
 
@@ -89,7 +89,7 @@ describe("the lines", () => {
       song: "Pałyn",
       rest: " #4 · 1:51 · Tuesday jam, 22 Sep",
     })
-    expect(rowLine(MARKS[2], "rehearsal", NOW)).toEqual({ song: null, rest: "Take 11 · 0:42" })
+    expect(rowLine(MARKS[2], "rehearsal", NOW)).toEqual({ song: null, rest: "Take\u00a0#47 · 0:42" })
   })
 
   it("a mark sent with no go keeps the name as it is", () => {

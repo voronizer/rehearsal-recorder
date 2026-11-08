@@ -11,6 +11,8 @@ import {
   startRehearsal,
   style,
   test,
+  recordButton,
+  takeButton,
 } from "./app.ts"
 import type { Page } from "@playwright/test"
 
@@ -258,7 +260,7 @@ test.describe("long work shows its progress where it runs", () => {
   test("saving a take, and cropping it under review and once saved", async ({ page }) => {
     await openApp(page, { before: "window.__ACTIVITY__ = [];" })
     await startRehearsal(page)
-    await page.getByRole("button", { name: /Record take 1/ }).click()
+    await recordButton(page, 1).click()
     await hold(page, "stop_take")
     const seen = await polls(page)
     await page.getByRole("button", { name: /^Stop/ }).click()
@@ -282,8 +284,8 @@ test.describe("long work shows its progress where it runs", () => {
     // Saved, and cropped again from the rehearsal screen.
     await nameTake(page, "Pałyn")
     await page.getByRole("button", { name: /Save take/ }).click()
-    await expect(page.getByRole("button", { name: /Record take 2/ })).toBeVisible()
-    await page.locator("[aria-label='Rehearsal overview'] button[aria-label^='Take 1 Pałyn']").click()
+    await expect(recordButton(page, 2)).toBeVisible()
+    await takeButton(page.locator("[aria-label='Rehearsal overview']"), "Pałyn #1").click()
     await expect(page.getByRole("button", { name: "Mute Guitar" })).toBeVisible()
     await hold(page, "crop_take")
     await drag(page, 0.25, 0.75)

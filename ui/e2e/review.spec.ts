@@ -11,12 +11,13 @@ import {
   settled,
   startRehearsal,
   test,
+  recordButton,
 } from "./app.ts"
 import type { Page } from "@playwright/test"
 
 // The screen after a take (issue #12 step 8, and the design system's Q1,
 // "the name in the header"): the header's title is the take, its song with
-// its number and a pencil, on up to two lines, with "Take N · rehearsal"
+// its number and a pencil, on up to two lines, with the rehearsal's name
 // over it and the song's takes tonight as columns at its right. The footer
 // is one row: the cloud line, then Discard and Save take. The take's length
 // is the transport's to say.
@@ -51,7 +52,7 @@ const TONIGHT =
 const PALYN =
   "window.__TONIGHT__ = [{name: 'Pałyn', duration_sec: 58}," +
   " {name: 'Pałyn 2', duration_sec: 155, starred: true}, {name: 'Ahoń', duration_sec: 12}," +
-  " {name: 'Take 4', duration_sec: 108}, {name: 'Viasna', duration_sec: 141}," +
+  " {name: 'Take 1', duration_sec: 108}, {name: 'Viasna', duration_sec: 141}," +
   " {name: 'Pałyn 3', duration_sec: 172}];"
 
 /** A cloud folder, with every take sent to it. */
@@ -85,9 +86,10 @@ const rules = (page: Page) =>
 /** The stress take's song, take 33 being its second. */
 const KALYCHANKA =
   "Kalychanka (slow version for the wedding, with the long intro the bride asked for)"
-/** The stress rehearsal's name, in the subtitle with take 33. */
+/** The stress rehearsal's name: take 33's subtitle, its place in the
+ *  evening left out. */
 const STRESS_SUBTITLE =
-  "Take 33 · Tuesday jam at the old brewery, with the horn section and the choir from upstairs"
+  "Tuesday jam at the old brewery, with the horn section and the choir from upstairs"
 
 /** Whether the page has scrolled sideways anywhere. */
 const sideways = (page: Page) =>
@@ -97,7 +99,7 @@ const sideways = (page: Page) =>
     )
   )
 
-test("the header's title is the take with its number and pencil, under Take N and the rehearsal", async ({
+test("the header's title is the take with its number and pencil, over the rehearsal alone", async ({
   page,
 }) => {
   await openApp(page, { before: PALYN })
@@ -107,7 +109,7 @@ test("the header's title is the take with its number and pencil, under Take N an
   await expect(title(page)).toHaveText("Pałyn #4")
   await expect(title(page).locator("[data-go]")).toHaveText("#4")
   await expect(title(page).getByRole("button", { name: "Rename take" })).toBeVisible()
-  await expect(subtitle(page)).toHaveText("Take 7 · Tuesday jam")
+  await expect(subtitle(page)).toHaveText("Tuesday jam")
   await expect(page.getByText(/recorded/)).toHaveCount(0)
   await expect(page.locator("#take-name")).toHaveCount(0)
   // The pencil says what it does in the shared tip.
@@ -197,12 +199,12 @@ test("thirty takes tonight show the last ten as columns and the title stays whol
   await expect(drawn(page)).not.toHaveAttribute("data-cut")
 })
 
-test("a take nobody named is Take N in grey, with no columns", async ({ page }) => {
+test("a take nobody named is Take and its number in grey, with no columns", async ({ page }) => {
   await openApp(page)
   await startRehearsal(page)
   await recordTake(page)
-  await expect(title(page)).toHaveText("Take 1")
-  await expect(title(page).locator("[data-go]")).toHaveCount(0)
+  await expect(title(page)).toHaveText("Take #1")
+  await expect(title(page).locator("[data-go]")).toHaveText("#1")
   await expect(figures(page)).toHaveCount(0)
   const colour = (selector: string) =>
     page.locator(selector).first().evaluate((el) => getComputedStyle(el).color)
@@ -280,7 +282,10 @@ test("a long rehearsal name is cut before the columns, never making them give wa
   page,
 }) => {
   // Zorka 9, a short title with nine columns, under the stress rehearsal's
-  // long name: at 150 % the name is wider than the room the columns leave.
+  // long name: at 150 % in the small window the name is far wider than the
+  // room the columns leave, whatever the font. In the large window a narrow
+  // font fits it whole.
+  await page.setViewportSize({ width: 960, height: 680 })
   await openApp(page, { stress: "recording", before: scaled(1.5) })
   await page.getByRole("button", { name: /^Stop/ }).click()
   await expect(summary(page)).toBeVisible()
@@ -318,7 +323,7 @@ test("Save take is the footer's 56 px button and Discard 40", async ({ page }) =
 test("the cloud line holds its room before the settings answer", async ({ page }) => {
   await openApp(page, { before: CLOUD + LONG_ENOUGH })
   await startRehearsal(page)
-  await page.getByRole("button", { name: /Record take 1/ }).click()
+  await recordButton(page, 1).click()
   // The screen asks for the settings as it comes up; they are held there.
   await page.evaluate(() => {
     const w = window as unknown as {
@@ -480,10 +485,12 @@ test("a take renamed and then cropped keeps its new name and columns", async ({ 
   await recordTake(page, 4)
   await nameTake(page, "Dym")
   await expect(title(page)).toHaveText("Dym #2")
+  const rehearsal = (await subtitle(page).textContent()) ?? ""
+  expect(rehearsal).not.toBe("")
   await dragRegion(page, 0.25, 0.75)
   await page.getByRole("button", { name: "Crop to the region" }).click()
   await expect(page.getByRole("toolbar", { name: "Transport" })).toContainText("0:03")
-  await expect(subtitle(page)).toHaveText(/^Take 4 · /)
+  await expect(subtitle(page)).toHaveText(rehearsal)
   await expect(title(page)).toHaveText("Dym #2")
   await expect(columns(page)).toHaveText(["1", "2"])
   await page.getByRole("button", { name: /Save take/ }).click()
@@ -503,7 +510,7 @@ test("Space types in the dialog and Esc closes it without discarding", async ({ 
   await page.keyboard.press("Escape")
   await expect(dialog(page)).toHaveCount(0)
   await page.waitForTimeout(200)
-  await expect(title(page)).toHaveText("Take 1")
+  await expect(title(page)).toHaveText("Take #1")
   expect(await callCount(page, "discard_take")).toBe(0)
 })
 

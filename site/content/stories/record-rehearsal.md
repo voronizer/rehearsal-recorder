@@ -35,7 +35,7 @@ Nothing on that list needs a DAW. So I wrote РЭХА, a free app for macOS and 
 
 On the start screen there's a track for each of us, with a name and an input, filled in from last time.
 
-Before a song, pick its name under **Next take** and press Space, which is **Record take**. Every track goes to its own WAV file as we play, it's safely on the disk every 30 seconds, and the laptop doesn't fall asleep halfway through the bridge.
+Before a song, pick its name under **Next take** and press Space, which is **Record**. Every track goes to its own WAV file as we play, it's safely on the disk every 30 seconds, and the laptop doesn't fall asleep halfway through the bridge.
 
 **At a rehearsal you need one key, and it's the biggest one on the laptop.**
 

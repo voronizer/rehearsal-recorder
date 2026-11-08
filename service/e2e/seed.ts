@@ -57,7 +57,10 @@ const TAKES: Seeded[] = [
   { name: "Pałyn 3", song: "Pałyn", number: 3, rehearsal: "first", tracks: 2 },
   { name: "Kupalle 2", song: "Kupalle", number: 2, rehearsal: "second", tracks: 2, starred: true, flac: true,
     marks: [{ at: 2, label: "Again", colour: "red", note: "Count it in" }] },
-  { name: "Take 7", song: null, number: 7, rehearsal: "second", tracks: 1 },
+  // РЭХА numbers the takes with no song as it numbers a song's, across the
+  // whole library: the 7th take that evening is the 3rd with no song. The
+  // pages write “Take #3”.
+  { name: "Take 3", song: null, number: 7, rehearsal: "second", tracks: 1 },
   // The keys recorded only their notes: a chord a bar.
   { name: "Pałyn 9", song: "Pałyn", number: 9, rehearsal: "second", tracks: 2,
     notes: [{ name: "Keys", icon: "keys", notes: [0, 2, 4, 6, 8].flatMap((at) => [60, 64, 67].map((n): Note => [at, 1.8, n])) }] },

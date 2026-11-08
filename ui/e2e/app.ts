@@ -241,18 +241,39 @@ export async function openHistory(page: Page, name?: string): Promise<Locator> {
   return list
 }
 
+/**
+ * The rehearsal screen's Record button. It says only "Record": the take's
+ * place in the evening is not for a person to read. With `n`, the button
+ * only while the next take is the evening's `n`th (data-next-take), so a
+ * test can wait for the take before it to be kept.
+ */
+export function recordButton(page: Page, n?: number): Locator {
+  const button = page.getByRole("button", { name: "Record", exact: true })
+  return n === undefined ? button : button.and(page.locator(`[data-next-take="${n}"]`))
+}
+
+/**
+ * The button that names a take, in the overview, the strip's columns or a
+ * song's ladder, by the take as the screen writes it: "Pałyn #2", or "Take
+ * #1" for a take with no song. Starred or with a status after it as well,
+ * but never another take whose label starts the same ("Pałyn #20").
+ */
+export function takeButton(scope: Page | Locator, label: string): Locator {
+  return scope.getByRole("button", { name: new RegExp(`^${literally(label)}(,|$)`) })
+}
+
 /** From the setup screen into a rehearsal, ready to record take `n`, once
  *  the Next take panel has risen into place: a box in it is measured then. */
 export async function startRehearsal(page: Page, n = 1) {
   await startButton(page).click()
-  await expect(page.getByRole("button", { name: new RegExp(`Record take ${n}`) })).toBeVisible()
+  await expect(recordButton(page, n)).toBeVisible()
   await settled(page)
 }
 
 /** Records take `n` and stops it, leaving it up for review once the
  *  player's groups have risen into place: a box in them is measured then. */
 export async function recordTake(page: Page, n = 1) {
-  await page.getByRole("button", { name: new RegExp(`Record take ${n}`) }).click()
+  await recordButton(page, n).click()
   await page.getByRole("button", { name: /^Stop/ }).click()
   await expect(page.locator("[data-take-summary]")).toBeVisible()
   await settled(page)
@@ -312,11 +333,12 @@ export async function setFake(page: Page, name: string, value: unknown) {
 /**
  * Tonight is ten takes, the rehearsal started with them already in it:
  *   1 Pałyn 3:20 ★          2 Pałyn 0:12 ★         3 Viasna 0:12, a mark
- *   4 Pałyn 0:12            5 Viasna 3:00 ★ mix    6 Take 6 2:30
+ *   4 Pałyn 0:12            5 Viasna 3:00 ★ mix    6 Take 1 2:30
  *   7 Viasna 3:10           8 Pałyn 3:30           9 Sonca 2:50 ★ tracks
- *  10 Take 10 0:08
+ *  10 Take 2 0:08
  * So with the 30 s default 4 and 10 are false starts, and 1 and 2 are the
- * ★ takes with nothing in the cloud folder.
+ * ★ takes with nothing in the cloud folder. The takes with no song are
+ * counted as a song's are: 6 is "Take #1" and 10 "Take #2".
  */
 export const TONIGHT = [
   { name: "Pałyn", duration_sec: 200, starred: true },
@@ -324,11 +346,11 @@ export const TONIGHT = [
   { name: "Viasna", duration_sec: 12, markers: [{ at: 4, note: "", label_id: 1 }] },
   { name: "Pałyn", duration_sec: 12 },
   { name: "Viasna", duration_sec: 180, starred: true, cloud: { mix: "/cloud/Viasna 2.mp3" } },
-  { name: "Take 6", duration_sec: 150 },
+  { name: "Take 1", duration_sec: 150 },
   { name: "Viasna", duration_sec: 190 },
   { name: "Pałyn", duration_sec: 210 },
   { name: "Sonca", duration_sec: 170, starred: true, cloud: { tracks: "/cloud/Sonca 1" } },
-  { name: "Take 10", duration_sec: 8 },
+  { name: "Take 2", duration_sec: 8 },
 ]
 
 /** Opens a rehearsal with `tonight`'s takes in it and a cloud folder set, and

@@ -17,6 +17,7 @@ import {
   style,
   test,
   TONIGHT,
+  recordButton,
 } from "./app.ts"
 
 // The rehearsal screen's frame (owner, 2026-10-12, Q1): a header whose name
@@ -30,7 +31,7 @@ const header = (page: Page) => page.locator("header")
 const title = (page: Page) => header(page).getByRole("heading", { level: 1 })
 const facts = (page: Page) => page.getByRole("group", { name: "About this rehearsal" })
 const finish = (page: Page) => page.getByRole("button", { name: "Finish", exact: true })
-const record = (page: Page) => page.getByRole("button", { name: /^Record take/ })
+const record = (page: Page) => recordButton(page)
 const panel = (page: Page) => page.locator("[data-next-take-panel]")
 
 /** The facts in the order the header says them, most needed first. */
@@ -296,7 +297,7 @@ test.describe("the footer", () => {
     const row = overview.locator('[data-take="1"]')
     // The take's bar, and the Next take field beside the takes: nothing
     // round the footer moves either.
-    const bar = row.getByRole("button", { name: /^Take 1 / })
+    const bar = row.getByRole("button", { name: /^Pałyn #1(,|$)/ })
     const field = page.locator("#next-take-name")
     const was = {
       finish: await box(finish(page)),
@@ -324,7 +325,7 @@ test.describe("the footer", () => {
 
     // Opened in the player, it plays on: nothing toggles it again.
     const toggles = await callCount(page, "player_toggle")
-    await row.getByRole("button", { name: /^Take 1 / }).click()
+    await row.getByRole("button", { name: /^Pałyn #1(,|$)/ }).click()
     await expect(page.getByRole("group", { name: "Take timeline" })).toBeVisible()
     await settled(page)
     expect(await callCount(page, "player_toggle")).toBe(toggles)
@@ -353,11 +354,14 @@ test.describe("the footer", () => {
     await openEvening(page, "", TONIGHT.slice(0, 8))
     await settled(page)
     const was = { finish: await box(finish(page)), record: await box(record(page)) }
-    await expect(record(page)).toHaveAccessibleName("Record take 9")
+    // It says Record and nothing else: the take's place in the evening is
+    // not on it.
+    await expect(record(page)).toHaveAccessibleName("Record")
+    await expect(record(page)).not.toContainText(/\d/)
 
     await recordTake(page, 9)
     await page.getByRole("button", { name: /Save take/ }).click()
-    await expect(record(page)).toHaveAccessibleName("Record take 10")
+    await expect(recordButton(page, 10)).toHaveAccessibleName("Record")
     await settled(page)
     expectSame(await box(record(page)), was.record, "Record at take 10")
     expectSame(await box(finish(page)), was.finish, "Finish at take 10")

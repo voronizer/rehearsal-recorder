@@ -20,20 +20,21 @@ const TAKE: Take = {
   take_number: 404,
   name: "Take 404",
   song: null,
-  go: null,
+  // A take with no song reads by its own number, “Take #404”.
+  go: 404,
   duration_sec: SILENT_SECONDS,
   tracks: TRACKS,
 }
 const GO = { take: TAKE }
 const nothing = () => {}
 
-/** Take 404 as the player shows it: four tracks, and nothing on them. A
+/** Take #404 as the player shows it: four tracks, and nothing on them. A
  *  picture, like the pieces on the page: still, and not for clicking. */
 function EmptyTake({ player }: { player: MultitrackPlayer }) {
   return (
     <div
       role="img"
-      aria-label="Take 404 in the app: Drums, Bass, Guitar and Vocals, 4 minutes 4 seconds, and nothing on any of them"
+      aria-label="Take #404 in the app: Drums, Bass, Guitar and Vocals, 4 minutes 4 seconds, and nothing on any of them"
       className="piece nf-take"
     >
       <div inert className="flex min-w-0 flex-col gap-3 font-sans text-foreground">

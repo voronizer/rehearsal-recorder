@@ -134,6 +134,7 @@ class Transport(ControlAPI):
                 "take_name": self.recording_name, "take_go": self.recording_go,
                 "playback_take_number": selected["take_number"] if selected else 0,
                 "playback_take_name": (selected.get("song") or selected.get("name")) if selected else None,
+                "playback_take_go": selected.get("go") if selected else None,
                 "playback_open": owns_player,
                 "master_volume": player.get("master", self.api._config.get("master_volume", 1.0)),
                 "playback_muted": self.playback_muted,
@@ -209,12 +210,15 @@ class Transport(ControlAPI):
         song = api._next_take()["song"]
         takes = [t for t in api._session_takes() if t.get("song") == song]
         numbers = tuple(t["take_number"] for t in takes)
+        # What the controller shows for each: the take's number at its song
+        # (or among the takes nobody named), never its place in the rehearsal.
+        shown = tuple(t.get("go") or 0 for t in takes)
         selected = self._selected_take()
         selected_number = selected["take_number"] if selected else None
         identity = self._identity((str(api._session["folder"]), song, songs,
                     tuple((t["take_number"], tuple(x["file"] for x in t["tracks"])) for t in takes),
                     selected_number))
-        return {"identity": identity, "songs": songs, "takes": numbers,
+        return {"identity": identity, "songs": songs, "takes": numbers, "shown": shown,
                 "selected_song": song, "selected_take": selected_number}
 
     def _select(self, action, target):

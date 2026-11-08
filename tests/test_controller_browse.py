@@ -30,19 +30,27 @@ def main():
             for _ in range(30):ctl.tick()
             assert not ctl._browse_frames # explicitly empty idle catalog is complete
             assert api.start_rehearsal('Browse',0,SR,[{'name':'Guitar','channel':1}])['ok']
-            api._session['set']={'songs':['One','Two','Three']};api.set_next_take_name('One')
-            for _ in range(2):
+            api._session['set']={'songs':['One','Two','Three']}
+            # A take of Three first, so One's takes are 2 and 3 of the evening, One #1 and #2.
+            for song in ('Three','One','One'):
+                api.set_next_take_name(song)
                 assert api._transport.command('record_stop')['ok']
                 fake_rtmixer.recorded(api._recorder, np.full((512,1),1000,dtype=np.int32),512,None,None)
                 assert api._transport.command('record_stop')['ok']
             ctl.snapshot();tag=ctl._browse_tag
             for _ in range(200):ctl.tick()
             assert not ctl._browse_frames and bytes([0xBF,90,3]) in fake.feedback
-            assert ctl._browse_values==(('One','Two','Three'),(1,2),0,1)
-            assert api._transport.state()['playback_take_number']==2 # no selection while merely receiving preview data
-            press(1,74,tag,0);assert ctl.last_action['ok'] and api._transport.state()['playback_take_number']==1
+            assert ctl._browse_values==(('One','Two','Three'),(2,3),0,1)
+            # The device draws One #1 and #2, never the takes' places in the evening.
+            assert ctl._browse_shown==(1,2)
+            sent=[bytes(m) for m in fake.feedback]
+            for i,go in enumerate((1,2)):
+                want=[bytes([0xBF,cc,v]) for cc,v in frame(2,number(tag)+index(i)+number(go))]
+                assert any(sent[n:n+len(want)]==want for n in range(len(sent))), f'take {i} not drawn as #{go}'
+            assert api._transport.state()['playback_take_number']==3 # no selection while merely receiving preview data
+            press(1,74,tag,0);assert ctl.last_action['ok'] and api._transport.state()['playback_take_number']==2
             seq=ctl.last_action['sequence'];press(1,74,tag,1)
-            assert ctl.last_action['sequence']==seq and api._transport.state()['playback_take_number']==1
+            assert ctl.last_action['sequence']==seq and api._transport.state()['playback_take_number']==2
             press(2,75,tag,1);assert not ctl.last_action.get('sequence')==seq+1 # old generation cannot retarget
             assert api._next_take()['song']=='One'
             tag=ctl._browse_tag;press(3,75,tag,1)

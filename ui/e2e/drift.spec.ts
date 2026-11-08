@@ -11,6 +11,7 @@ import {
   settled,
   startButton,
   test,
+  takeButton,
 } from "./app.ts"
 import type { Locator, Page } from "@playwright/test"
 
@@ -32,7 +33,7 @@ async function bandTake(page: Page, label: string, before = "") {
   await openBandApp(page)
   await page.locator("#rehearsal-name").fill("Tuesday jam")
   await startButton(page).click()
-  await page.locator(`[aria-label='Rehearsal overview'] button[aria-label^='${label}']`).click()
+  await takeButton(page.locator("[aria-label='Rehearsal overview']"), label).click()
   await expect(page.locator("[data-master-plate]")).toBeVisible()
   await settled(page)
 }
@@ -40,7 +41,7 @@ async function bandTake(page: Page, label: string, before = "") {
 const box = async (l: Locator) => (await l.boundingBox())!
 
 test("Palyn 2: the line, the band, the chips and a bar on hover", async ({ page }) => {
-  await bandTake(page, "Take 2 Pałyn 2")
+  await bandTake(page, "Pałyn #2")
   await expect(tag(page)).toHaveText("No click · 128 bpm · 4/4")
   await expect(line(page)).toBeVisible()
   await expect(line(page).locator("[data-drift-aim]")).toHaveCount(1)
@@ -63,7 +64,7 @@ test("Palyn 2: the line, the band, the chips and a bar on hover", async ({ page 
 })
 
 test("Viasna, to the click: its stripes dimmed under the line", async ({ page }) => {
-  await bandTake(page, "Take 5 Viasna")
+  await bandTake(page, "Viasna #1")
   await expect(tag(page)).toHaveText("Click 128 bpm · 4/4")
   await expect(line(page)).toBeVisible()
   expect(await lane(page).locator("[data-click-line]").count()).toBeGreaterThan(0)
@@ -73,7 +74,7 @@ test("Viasna, to the click: its stripes dimmed under the line", async ({ page })
 })
 
 test("Take 4, of no song, against its own middle", async ({ page }) => {
-  await bandTake(page, "Take 4")
+  await bandTake(page, "Take #4")
   await expect(tag(page)).toHaveText("No tempo set · about 126 bpm")
   await expect(line(page)).toBeVisible()
 })
@@ -82,7 +83,7 @@ test("a take while it counts: nothing for a second, a spinner, then words", asyn
   await openEvening(page)
   await page.clock.install()
   await hold(page, "take_drift")
-  await page.locator("[aria-label='Rehearsal overview'] button[aria-label^='Take 6']").click()
+  await takeButton(page.locator("[aria-label='Rehearsal overview']"), "Take #1").click()
   await expect(lane(page)).toBeVisible()
   // The tag is hidden from a screen reader, which hears the lane's label.
   const spinner = tag(page).locator("[role=status]")
@@ -103,7 +104,7 @@ for (const [why, said] of [
 ] as const) {
   test(`a take with ${why} says so in the tag's place`, async ({ page }) => {
     await openEvening(page, `window.__DRIFT__ = {ok: false, why: '${why}'};`)
-    await page.locator("[aria-label='Rehearsal overview'] button[aria-label^='Take 7 Viasna']").click()
+    await takeButton(page.locator("[aria-label='Rehearsal overview']"), "Viasna #3").click()
     await expect(tag(page)).toHaveText(said)
     await expect(lane(page)).toHaveAttribute("aria-label", said)
     await expect(line(page)).toHaveCount(0)
@@ -113,12 +114,12 @@ for (const [why, said] of [
 }
 
 for (const [take, said] of [
-  ["Take 6", "Recorded without the click"],
-  ["Take 7 Viasna", "Click 128 bpm · 4/4"],
+  ["Take #1", "Recorded without the click"],
+  ["Viasna #3", "Click 128 bpm · 4/4"],
 ] as const) {
   test(`${take}, its files missing, shows the lane as before`, async ({ page }) => {
     await openEvening(page, "window.__DRIFT__ = {ok: false, why: 'missing'};")
-    await page.locator(`[aria-label='Rehearsal overview'] button[aria-label^='${take}']`).click()
+    await takeButton(page.locator("[aria-label='Rehearsal overview']"), take).click()
     await expect(tag(page)).toHaveText(said)
     await expect(lane(page)).toHaveAttribute("aria-label", said)
     await expect(line(page)).toHaveCount(0)
@@ -126,7 +127,7 @@ for (const [take, said] of [
 }
 
 test("a mark refreshes the screen, and the line stays put without being asked for again", async ({ page }) => {
-  await bandTake(page, "Take 2 Pałyn 2")
+  await bandTake(page, "Pałyn #2")
   await expect(chips(page)).toHaveCount(3)
   const asked = (await calls(page, "take_drift")).length
   // Watched from here on: the line must not leave the lane even for a frame.
@@ -148,7 +149,7 @@ test("a mark refreshes the screen, and the line stays put without being asked fo
 test("a count Record stopped is asked for again once the take is over", async ({ page }) => {
   await bandTake(
     page,
-    "Take 2 Pałyn 2",
+    "Pałyn #2",
     "let asked = 0; window.__DRIFT__ = () => (asked++ === 0 ? {ok: false, why: 'recording'} : null);"
   )
   await expect(line(page)).toBeVisible()
@@ -167,7 +168,7 @@ test("a stop inside a stretch is a gap in its amber too, with one chip", async (
     bars,
   }
   await openEvening(page, `window.__DRIFT__ = ${JSON.stringify(answer)};`)
-  await page.locator("[aria-label='Rehearsal overview'] button[aria-label^='Take 6']").click()
+  await takeButton(page.locator("[aria-label='Rehearsal overview']"), "Take #1").click()
   await expect(chips(page)).toHaveText(["+6"])
   await expect(line(page).locator("[data-drift-stretch]")).toHaveCount(2)
   await expect(line(page).locator("[data-drift-tempo]")).toHaveCount(2)
@@ -183,7 +184,7 @@ test("Review right after a take shows its line", async ({ page }) => {
 test("a wider tolerance in Settings leaves fewer stretches amber", async ({ page }) => {
   await bandTake(
     page,
-    "Take 2 Pałyn 2",
+    "Pałyn #2",
     `localStorage.setItem("mock-python-config", JSON.stringify({theme: "dark", ui_scale: 1, drift_tolerance: 0.05}));`
   )
   await expect(chips(page)).toHaveText(["+7"])
@@ -210,7 +211,7 @@ test("the tolerance is picked in Settings > Click & backing track", async ({ pag
 })
 
 test("a stretch inside a region still reads, and the line zooms with the lanes", async ({ page }) => {
-  await bandTake(page, "Take 2 Pałyn 2")
+  await bandTake(page, "Pałyn #2")
   const bridge = chips(page).nth(1)
   await expect(bridge).toHaveText("+7")
   const timeline = await box(page.getByRole("group", { name: "Take timeline" }))
@@ -243,7 +244,7 @@ for (const theme of ["dark", "light"] as const) {
     await page.setViewportSize({ width: 960, height: 680 })
     await bandTake(
       page,
-      "Take 2 Pałyn 2",
+      "Pałyn #2",
       `localStorage.setItem("mock-python-config", JSON.stringify({theme: "${theme}", ui_scale: 1}));`
     )
     await expect(chips(page)).toHaveCount(3)

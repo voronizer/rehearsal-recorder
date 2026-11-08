@@ -62,7 +62,7 @@ export const WithKbd: Story = {
       </Button>
       <Button {...args} size="footer" variant="destructive" aria-keyshortcuts="Space">
         <Circle className="fill-current" />
-        Record take 3
+        Record
         <Kbd aria-hidden>Space</Kbd>
       </Button>
       <Button {...args} size="footer-aside" variant="default" aria-keyshortcuts="Space">

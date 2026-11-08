@@ -121,7 +121,7 @@ rows from Crash to Kick, and never plays them.
 
 The clock starts at 0:00 when the band comes in.
 
-With the click on, Record take counts the band in where the clock will be:
+With the click on, Record counts the band in where the clock will be:
 1 to 4 in 4/4, the first in blue. With 2 bars it counts twice. The take's
 files start with the count-in, so in the player a take runs that much
 longer than the clock showed.
@@ -268,8 +268,8 @@ A song's take numbers go on from one rehearsal to the next: Pałyn #17 is one
 take, wherever you played it.
 
 The number counts the song's takes across every rehearsal, and deleting a
-take does not free its number. A take nobody named is called by its place
-in the rehearsal: “Take 4”.
+take does not free its number. A take nobody named is counted the same way:
+“Take #4”.
 
 ### The cloud copy keeps up. {#cloud-follows}
 
