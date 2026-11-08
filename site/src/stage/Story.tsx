@@ -282,11 +282,12 @@ const FORWARD: Record<(typeof STORY)[number], (tell: Telling) => Promise<void>> 
     await beat(2)
     await linger(BEAT_MS)
 
+    // A take by its name as the screen writes it, "Pałyn #5", starred or not.
     const take = (label: string) =>
-      waitFor(() => document.querySelector<HTMLButtonElement>(`button[aria-label^="${label}"]`))
+      waitFor(() => document.querySelector<HTMLButtonElement>(`button[aria-label="${label}"], button[aria-label^="${label},"]`))
     const exactly = (label: string) =>
       waitFor(() => document.querySelector<HTMLButtonElement>(`button[aria-label="${label}"]`))
-    ;(await take("Take 2 Pałyn 5")).click()
+    ;(await take("Pałyn\u00a0#5")).click()
     await waitFor(() => document.querySelector('[aria-label="Take timeline"]'))
     await sleep(700)
     await dragTimeline(0.55, 0.7)
@@ -302,7 +303,7 @@ const FORWARD: Record<(typeof STORY)[number], (tell: Telling) => Promise<void>> 
           ?.textContent?.startsWith(n)
       )
     await press("Songs", { exact: true })
-    ;(await take("Take 3 Pałyn 6")).click()
+    ;(await take("Pałyn\u00a0#6")).click()
     await openTake("#6")
     await beat(4)
     await linger(LOOPING_MS)

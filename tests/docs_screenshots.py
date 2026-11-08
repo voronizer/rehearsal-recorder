@@ -34,6 +34,12 @@ UI_DIST = PROJECT / "ui" / "dist"
 # The faked Python side the interface's tests run against, which the band
 # below is laid over.
 MOCK = (PROJECT / "ui" / "e2e" / "fake-bridge.js").read_text(encoding="utf-8")
+
+
+def take_button(label):
+    """A take's button by its name as the screen writes it, "Pałyn #2", starred
+    or with a status after it, but never "Pałyn #20"."""
+    return f"button[aria-label='{label}'], button[aria-label^='{label},']"
 # The pictures show Windows, paths and all, whatever machine takes them: on a
 # Mac the interface would write ⌘ for Ctrl, and zoom only with ⌘ held.
 MOCK = "Object.defineProperty(Navigator.prototype, 'platform', {get: () => 'Win32'});\n" + MOCK
@@ -269,7 +275,7 @@ def main():
         page.fill("#rehearsal-name", "Tuesday jam")
 
         page.click("text=Start rehearsal")
-        page.wait_for_selector("text=Record take 6")
+        page.wait_for_selector("button[data-next-take='6']")
         page.wait_for_timeout(500)
         shoot(page, "rehearsal")
         # Its footer: the metronome's row with the next take's song, Viasna,
@@ -286,7 +292,7 @@ def main():
         # is found as a button, since the metronome's line, "Clicking to
         # Stop.", has the word too.
         stop = page.get_by_role("button", name="Stop", exact=True)
-        page.click("text=Record take 6")
+        page.click("button[data-next-take='6']")
         stop.wait_for()
         page.wait_for_selector("[data-count-in]")
         page.wait_for_selector("[data-count-in]", state="detached")
@@ -304,9 +310,9 @@ def main():
         shoot(page, "backing-lane",
               around([page.get_by_role("group", name="Take timeline"), page.locator("[data-master-group]")]))
         page.get_by_role("button", name="Save take").click()
-        page.wait_for_selector("text=Record take 7")
+        page.wait_for_selector("button[data-next-take='7']")
 
-        page.click("button[aria-label^='Take 2 Pałyn 2']")
+        page.click(take_button("Pałyn\u00a0#2"))
         page.wait_for_selector("[aria-label='Take timeline']")
         page.wait_for_timeout(800)
         song = page.evaluate(
@@ -347,7 +353,7 @@ def main():
         # click on: its bars and beats under the tracks, the band's tempo
         # over them. The pointer leaves the button, so no tip shows.
         page.get_by_role("button", name="Songs", exact=True).click()
-        page.click("button[aria-label^='Take 5 Viasna']")
+        page.click(take_button("Viasna\u00a0#1"))
         page.wait_for_selector("[data-click-tag]:has-text('Click 128')")
         page.wait_for_timeout(800)
         zoom_to(page, 0.3, 12)
@@ -404,8 +410,8 @@ def main():
         page.click("[data-set-picker]")
         page.get_by_role("menuitemradio", name="Gig on the 25th").click()
         page.click("text=Start rehearsal")
-        page.wait_for_selector("text=Record take 6")
-        page.click("button[aria-label^='Take 2 Pałyn 2']")
+        page.wait_for_selector("button[data-next-take='6']")
+        page.click(take_button("Pałyn\u00a0#2"))
         page.wait_for_selector("[aria-label='Take timeline']")
         page.wait_for_selector("[data-notes-lane='Drums']")
         page.wait_for_timeout(800)
