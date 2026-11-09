@@ -20,7 +20,7 @@ import {
   type SessionState,
 } from "@/lib/api"
 import { bandCameIn, CLIPS } from "./demo"
-import { Hero } from "./Hero"
+import { RehearsalScreen } from "./Hero"
 import { bringIntoView, button, dragTimeline, fill, hasText, key, press, sleep, waitFor } from "./drive"
 
 export const STORY = ["before", "during", "after", "later"] as const
@@ -95,10 +95,10 @@ export function Story() {
           onOpenSettings={nothing}
         />
       )
-    // The rehearsal screen as the hero has it: with no take open, or with
-    // the take Stop has just saved open for listening.
+    // The rehearsal screen: with no take open, or with the take Stop has
+    // just saved open for listening.
     case "rehearsal":
-      return <Hero initial={now.session} openTake={now.open} />
+      return <RehearsalScreen initial={now.session} openTake={now.open} />
     case "record":
       return (
         <Recording

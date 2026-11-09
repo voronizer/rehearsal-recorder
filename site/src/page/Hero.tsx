@@ -20,7 +20,7 @@ export function Hero({ windows }: { windows: boolean }) {
       <div>
         <LiveFrame
           scene="hero"
-          title="РЭХА playing the bridge of a take on repeat; you can use it"
+          title="РЭХА before the next take; you can record one"
           interactive
         />
         <p className="caption on-computer">
