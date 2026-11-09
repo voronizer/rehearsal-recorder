@@ -24,9 +24,10 @@ test("the band service page is there and linked from the footer", async ({ page 
     "Know which take you're aiming for",
     "Nothing gets lost",
     "Take your track home",
+    "Make the set for a gig",
     "How to start",
   ])
-  await expect(page.locator(".chap-head .n")).toHaveText(["1", "2", "3", "4", "5", "6", "7"])
+  await expect(page.locator(".chap-head .n")).toHaveText(["1", "2", "3", "4", "5", "6", "7", "8"])
   await expect(page.locator("#how-to-start .chap-steps li")).toHaveCount(4)
   await expect(page.locator("#how-to-start .chap-steps li").last()).toBeVisible()
 })
@@ -36,8 +37,10 @@ for (const theme of ["light", "dark"] as const) {
     await page.emulateMedia({ colorScheme: theme })
     await page.goto(PAGE)
     await expect(page.locator(".phone-shot img")).toHaveCount(7)
-    // Downloading is for the recording program at home: that one is a computer.
+    // Downloading is for the recording program at home, and a set is made on
+    // a computer: those two are of a computer.
     await expect(page.locator("#take-your-track-home .computer-shot img")).toHaveCount(1)
+    await expect(page.locator("#make-the-set-for-a-gig .computer-shot img")).toHaveCount(1)
     for (const img of await page.locator("figure img").all()) {
       await img.scrollIntoViewIfNeeded()
       await expect(img).toHaveJSProperty("complete", true)
@@ -70,6 +73,6 @@ test.describe("with script off", () => {
     await page.goto(PAGE)
     await expect(page.getByRole("heading", { level: 1 })).toHaveText("A band service of your own")
     await expect(page.locator("#how-to-start").getByRole("link", { name: "the steps on GitHub" })).toBeVisible()
-    await expect(page.locator("figure img")).toHaveCount(8)
+    await expect(page.locator("figure img")).toHaveCount(9)
   })
 })

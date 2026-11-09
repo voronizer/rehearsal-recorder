@@ -71,7 +71,7 @@ describe("the band service's page", () => {
     expect(() => parseBandService(text(at(16, "### How to start")))).toThrow("band-service.md:16: the page has # for its title")
   })
 
-  it("is what the page shows: seven things the service does, each with its picture, then how to start", () => {
+  it("is what the page shows: eight things the service does, each with its picture, then how to start", () => {
     const page = parseBandService(md)
     expect(page.title).toBe("A band service of your own")
     expect(page.chapters.map((c) => c.title)).toEqual([
@@ -82,6 +82,7 @@ describe("the band service's page", () => {
       "Know which take you're aiming for",
       "Nothing gets lost",
       "Take your track home",
+      "Make the set for a gig",
       "How to start",
     ])
     const steps = page.chapters.at(-1)!.blocks.find((b) => b.kind === "steps")
