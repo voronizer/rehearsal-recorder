@@ -22,8 +22,10 @@ let playerClick = false;       // player_set_click: off in a fresh app, kept fro
 let session = null;
 let controlSequence = 0;
 let controlEvents = [];
-let controlPending = null;
 let takeCounter = 0;
+// The take the last Stop saved, while it is held (api.py's hold): sent
+// nowhere until it is let go. Held in memory only, as Python holds it.
+let heldTake = null;
 let nextName = null;            // api.set_next_take_name, until a take is kept
 let drafts = window.__DRAFTS__ || [];
 let cloudDir = window.__CLOUD_DIR__ || null;
@@ -380,7 +382,8 @@ function pastRehearsal(folder) {
   // sharing a dummy path would let one's mocked length leak onto the other.
   // A page can ask for another length, to put a tick where it wants one.
   const oldLength = window.__OLD_LENGTH_SEC__ || 600;
-  // A page can ask for a fuller evening, for the rehearsal overview.
+  // A page can ask for a fuller evening, for the rehearsal overview, and
+  // give its Viasna's mark a note of its own (__OLD_MARK_NOTE__).
   const takes = window.__FULL_EVENING__ ? [
     {take_number:1, name:'Pałyn', duration_sec:192, markers:[],
      tracks:[{name:'Guitar', file:'/rec/old/p1.wav'}]},
@@ -392,7 +395,7 @@ function pastRehearsal(folder) {
      markers:[{at:5, note:'', label_id:1}],
      tracks:[{name:'Guitar', file:'/rec/old/t3.wav'}]},
     {take_number:4, name:'Viasna', duration_sec:250,
-     markers:[{at:40, note:'guitar drifts here', label_id:3}],
+     markers:[{at:40, note:window.__OLD_MARK_NOTE__ || 'guitar drifts here', label_id:3}],
      tracks:[{name:'Guitar', file:'/rec/old/v1.wav'}]},
   ] : [{take_number:1, name:'Pałyn', duration_sec:oldLength, markers:[],
         tracks:[{name:'Guitar', file:'/rec/old/g.wav'}],
@@ -2039,9 +2042,10 @@ window.__MAKE_API__ = () => ({
     const before = await goBeforeTonight(song);
     const set = await setAsSent(session.set);
     // Drain on read, the way the real queue empties once a take is copied —
-    // otherwise the interface would see the same take "queued" forever.
+    // otherwise the interface would see the same take "queued" forever. The
+    // held take stays queued, as Python leaves its job till the hold ends.
     const cq = cloudQueue;
-    cloudQueue = {};
+    cloudQueue = heldTake !== null && cq[heldTake] ? {[heldTake]: cq[heldTake]} : {};
     // The real bridge deserializes its own JSON on every call, so the
     // interface never gets the same object twice. Handing out session.takes
     // directly would let the interface's "selected" take alias the mock's
@@ -2054,11 +2058,12 @@ window.__MAKE_API__ = () => ({
        next_take_default:suggestName(undefined, false),
        last_attempt:lastAttempt(session.takes, song, before), set,
        recording:false, cloud_queue:cq, service_queue:serviceQueue, service_up:serviceUp(),
-       disk_bytes:48000000 * session.takes.length}));
+       held_take:heldTake, disk_bytes:48000000 * session.takes.length}));
   },
   finish_rehearsal: track('finish_rehearsal', async () => {
     const r = {ok:true, folder:session.folder, take_count:session.takes.length};
     session = null;
+    heldTake = null;
     midiTake = null;
     metro.run = metro.take = null;
     return r;
@@ -2079,17 +2084,14 @@ window.__MAKE_API__ = () => ({
   control_state: track('control_state', async () => {
     const api = window.pywebview.api;
     const state = await api.transport_state();
-    if (controlPending && session?.takes.some(t => t.take_number === controlPending.take_number)) controlPending = null;
-    return {...state, state: controlPending ? 'unavailable' : state.state === 'unavailable' && !session ? 'idle' : state.state,
-      rehearsal_active:!!session, pending_take:controlPending, playback_open:!!P,
+    return {...state, state: state.state === 'unavailable' && !session ? 'idle' : state.state,
+      rehearsal_active:!!session, playback_open:!!P,
       revision:controlSequence, action_sequence:controlSequence,
       events:window.__CONTROL_EVENTS__ || controlEvents, ...window.__CONTROL_STATE__};
   }),
   control_catalog: async () => null,
   control_command: track('control_command', async (action, parameters) => {
     const result = await window.pywebview.api.transport_command(action, parameters);
-    if (result.ok && action === 'stop_review') controlPending = result;
-    if (result.ok && action === 'start') controlPending = null;
     controlEvents.push({sequence:++controlSequence, action, ok:result.ok, error:result.error, undo:result.undo});
     controlEvents = controlEvents.slice(-64);
     return result;
@@ -2110,17 +2112,29 @@ window.__MAKE_API__ = () => ({
       await api.player_pause();
       return {...await api.start_take(), take_name:name, take_go:go};
     }
-    if (action === 'stop_review') return api.stop_take();
-    if (action === 'stop_keep') {
+    // stop_review is another name for stop_keep, for controllers made
+    // before Stop saved the take (docs/control-api.md).
+    if (action === 'stop_keep' || action === 'stop_review') {
       const take = await api.stop_take();
       if (!take.ok) return take;
+      // A save that fails leaves the take's draft on disk, where Unsaved
+      // takes finds it.
+      const failed = (error) => {
+        drafts = [...drafts, {dir:`${session.folder}/_drafts/take ${take.take_number}`,
+          name:`take ${take.take_number}`, tracks:take.tracks.map(t => t.name),
+          duration_sec:take.duration_sec, rehearsal_folder:session.folder,
+          rehearsal_name:session.name, created_at:'2026-09-17T20:15:00'}];
+        return {ok:false, error, transport:{state:'error', error, pending_take:take}};
+      };
       try {
         const kept = await api.keep_take(take.take_number, take.temp_dir,
           take.suggested_name, take.duration_sec, take.tracks, [], null, take.notes);
-        if (!kept.ok) return {...kept, transport:{state:'error', error:kept.error, pending_take:take}};
-        return kept;
+        if (!kept.ok) return failed(kept.error);
+        // Held while it is open to listen to, till release_take.
+        heldTake = take.take_number;
+        return JSON.parse(JSON.stringify(kept));
       } catch (error) {
-        return {ok:false, error:error.message, transport:{state:'error', error:error.message, pending_take:take}};
+        return failed(error.message);
       }
     }
     return {ok:false, error:'Unknown transport action'};
@@ -2129,6 +2143,7 @@ window.__MAKE_API__ = () => ({
   // Record takes the row's tempo, signature and switch from the metronome: it
   // is given none.
   start_take: track('start_take', async () => {
+    heldTake = null;
     takeCounter += 1;
     midiTake = {since: clock(), ended: null, read: {},
       heard: new Set((session ? session.tracks : []).filter(t => takesNotes(t) && midiPortState(t) === 'ok')
@@ -2176,14 +2191,8 @@ window.__MAKE_API__ = () => ({
       duration_sec:TAKE, suggested_name:suggestName(takeCounter), default_name:suggestName(takeCounter, false),
       tracks:[{name:'Guitar', file:'/rec/g.wav'}, {name:'Vocals', file:'/rec/v.wav'}],
       ...metroStop()};
-    // A page can have the draft where Python keeps it, in the rehearsal's
-    // _drafts folder, its files in it: a rename of the rehearsal moves them.
-    if (window.__DRAFTS_IN_REHEARSAL__ && session) {
-      take.temp_dir = `${session.folder}/_drafts/take ${takeCounter}`;
-      take.tracks = take.tracks.map(t => ({...t, file:`${take.temp_dir}/${t.name}.wav`}));
-    }
-    // Each with its track's icon at Start, as Python hands it to the review
-    // screen and Keep keeps it.
+    // Each with its track's icon at Start, as Python hands it on and
+    // keep_take keeps it.
     const iconed = (f) => {
       const own = band.find(t => t.name === f.name);
       return own && own.icon ? {...f, icon: own.icon} : f;
@@ -2228,10 +2237,16 @@ window.__MAKE_API__ = () => ({
     } else cloudQueue = {...cloudQueue, [n]: 'queued'};
     return {ok:true, take, ended};
   }),
-  discard_take: track('discard_take', async (dir) => {
-    const folder = session ? session.folder : null;
-    const ended = endHeld(dir, null);
-    return {ok:true, ended, undo: hold(() => ({kind:'draft', temp_dir:dir, folder}), {folder:dir})};
+  // The take the last Stop saved goes now, whatever is held.
+  // Its cloud job runs once the hold ends, and here it is done at once: the
+  // screen's next sending_queue finds the queue changed and reads it again.
+  release_take: track('release_take', async () => {
+    if (heldTake !== null) {
+      const {[heldTake]: _done, ...left} = cloudQueue;
+      cloudQueue = left;
+    }
+    heldTake = null;
+    return {ok:true};
   }),
   crop_take: track('crop_take', async (folder, n, a, b) => {
     await held('crop_take');
@@ -2267,27 +2282,6 @@ window.__MAKE_API__ = () => ({
     return JSON.parse(JSON.stringify({ok:true, take, markers_dropped:dropped, undo, ended,
       start_sec:a, end_sec:b}));
   }),
-  crop_draft: track('crop_draft', async (dir, tracks, a, b, notes) => {
-    await held('crop_draft');
-    // The draft is the take last stopped, with the meter it was recorded at.
-    const length = tracks && tracks.length ? (fileDurations[tracks[0].file] ?? TAKE) : TAKE;
-    [a, b] = cutAt(metro.meters[takeCounter], a, b, length);
-    const cut = (tracks || []).map(t => ({...t, file: t.file + '#' + Math.round(a * 100)}));
-    for (const t of cut) fileDurations[t.file] = b - a;
-    // The notes are cut with the audio, and come back when they were sent.
-    const cutNotes = (notes || []).map(n => ({...n, file: n.file + '#' + Math.round(a * 100)}));
-    for (const n of cutNotes) fileDurations[n.file] = b - a;
-    P = null;
-    const ended = endHeld(dir, null, true);
-    const undo = hold(() => {
-      P = null;
-      return {kind:'crop', temp_dir:dir};
-    }, {folder:dir, crop:true});
-    return JSON.parse(JSON.stringify(
-      {ok:true, tracks:cut, ...(notes ? {notes:cutNotes} : {}), duration_sec: b - a, undo, ended,
-       start_sec:a, end_sec:b}));
-  }),
-
   take_media: track('take_media', async (tracks, _buckets, _from, _to) => tracks.map(t => {
     // A file under a folder a rename moved away (spelledNow), as Python
     // answers one that is not on disk: the take is there, its file is not.
@@ -2609,7 +2603,11 @@ window.__MAKE_API__ = () => ({
       earlier}));
   }),
   // Out of the live rehearsal too, as Python takes it out of the library.
+  // The held take ends its hold, and its number comes back: the mock counts
+  // goes from the takes there are, so the next take has it again (Python
+  // gives back only the held take's).
   delete_take: track('delete_take', async (folder, n) => {
+    if (session && folder === session.folder && n === heldTake) heldTake = null;
     const ended = endHeld(folder, [n]);
     const key = `${folder}#${n}`;
     deleted.add(key);
@@ -2628,6 +2626,7 @@ window.__MAKE_API__ = () => ({
   // to the Trash does.
   delete_takes: track('delete_takes', async (folder, numbers) => {
     if (window.__DELETE_MS__) await new Promise(r => setTimeout(r, window.__DELETE_MS__));
+    if (session && folder === session.folder && numbers.includes(heldTake)) heldTake = null;
     const ended = endHeld(folder, numbers);
     for (const n of numbers) deleted.add(`${folder}#${n}`);
     const live = session && folder === session.folder
@@ -2907,9 +2906,17 @@ window.__MAKE_API__ = () => ({
     const take = (session ? session.takes : []).find(t => t.take_number === n);
     if (take && sendTo === 'service') {
       take.service = null;
+      // A take still waiting goes no further.
+      const {[n]: _gone, ...rest} = serviceQueue;
+      serviceQueue = rest;
       return {ok:true, take: JSON.parse(JSON.stringify(take))};
     }
     if (take) take.cloud = {};
+    // The held take has not started: its job is dropped.
+    if (n === heldTake) {
+      const {[n]: _dropped, ...left} = cloudQueue;
+      cloudQueue = left;
+    }
     return JSON.parse(JSON.stringify({ok:true, removed:[], trashed:true}));
   }),
 
