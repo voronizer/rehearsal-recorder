@@ -1,6 +1,7 @@
 import {
   callCount,
   calls,
+  closeTake,
   expect,
   expectedError,
   nameTake,
@@ -22,16 +23,17 @@ import type { Page } from "@playwright/test"
 // there to click, and nobody types a title twice. The fake's repertoire is
 // Pałyn, Viasna, Ahoń, Sonca, Dym, Ptuška and Daroha.
 
-/** The take's name field in Rename take, on the screen after a take. */
-const nameField = (page: Page) => page.locator("#take-name")
-/** That screen's title: the take's song and its number. */
-const reviewTitle = (page: Page) => page.locator("[data-take-summary] [data-go-title]")
-const renameReview = (page: Page) =>
-  page.locator("[data-take-summary]").getByRole("button", { name: "Rename take" }).click()
+/** The take's name field in Rename take. */
+const nameField = (page: Page) => page.locator("#rename-take")
+/** The open take's pencil in the strip, named after the take as Python
+ *  has it: "Rename take Viasna 1". */
+const pencil = (page: Page) =>
+  page.getByRole("group", { name: "Take strip" }).getByRole("button", { name: /^Rename take / })
 
+/** Renames the take Stop opened, and closes it. */
 async function saveAs(page: Page, name: string) {
   await nameTake(page, name)
-  await page.getByRole("button", { name: /Save take/ }).click()
+  await closeTake(page)
 }
 
 /** The pills under Rename take's field, in the order shown. */
@@ -63,7 +65,7 @@ test("five songs show beside the next take, and the songs played latest stay", a
   await expect(page.locator("[data-songs-more]")).toHaveText(/All 27 songs/)
 })
 
-test("a quick click on Record or Save take after a name nothing matches still lands", async ({
+test("a quick click on Record after a name nothing matches still lands", async ({
   page,
 }) => {
   await openApp(page, {
@@ -82,17 +84,6 @@ test("a quick click on Record or Save take after a name nothing matches still la
   await page.mouse.down()
   await page.mouse.up()
   await expect(page.getByRole("heading", { level: 1, name: "Nothing like it" })).toBeVisible()
-
-  await page.getByRole("button", { name: /^Stop/ }).click()
-  await nameTake(page, "Still nothing")
-  const save = page.getByRole("button", { name: /Save take/ })
-  const saveBox = (await save.boundingBox())!
-  await page.mouse.move(saveBox.x + saveBox.width / 2, saveBox.y + 6)
-  await page.mouse.down()
-  await page.mouse.up()
-  await expect
-    .poll(async () => (await calls(page, "keep_take")).at(-1)?.args[2])
-    .toBe("Still nothing")
 })
 
 test("a song name longer than its row is cut short, and the row keeps its height", async ({
@@ -169,8 +160,10 @@ test("a rename that fails and then works on the rehearsal screen leaves no error
       " (++n === 1 ? {ok: false, error: 'Could not rename the take'} : rename(...a));",
   })
   await startRehearsal(page)
+  await page.getByRole("textbox", { name: "Next take" }).fill("Pałyn")
+  await page.keyboard.press("Enter")
   await recordTake(page)
-  await saveAs(page, "Pałyn")
+  await closeTake(page, 2)
   const rename = async (name: string) => {
     await page.hover("[data-take='1']")
     await page.getByRole("button", { name: /^Rename take / }).click()
@@ -252,7 +245,7 @@ test.describe("the next take", () => {
     await expect(page.locator('[aria-label$="efore tonight"]')).toHaveCount(0)
   })
 
-  test("is named in one field over Record, and keeps its name through a take thrown away", async ({
+  test("is named in one field over Record, and a take thrown away gives its number back", async ({
     page,
   }) => {
     await openApp(page)
@@ -288,19 +281,23 @@ test.describe("the next take", () => {
     await page.keyboard.press("Space")
     await expect(page.getByRole("heading", { level: 1, name: "Viasna" })).toBeVisible()
     await page.getByRole("button", { name: /^Stop/ }).click()
-    await expect(reviewTitle(page)).toHaveText("Viasna #1")
+    await expect(pencil(page)).toHaveAccessibleName("Rename take Viasna 1")
+    // Kept at Stop, the name is used up, and the next one follows on from it.
+    await closeTake(page)
+    await expect(field(page)).toHaveValue("Viasna")
+    await expect(go).toHaveText("#2")
 
-    // Thrown away, it is played again under the same name.
-    await page.getByRole("button", { name: /^Discard/ }).click()
-    await expect(field(page)).toHaveValue("Viasna")
+    // A bad second one thrown away by its trash gives its number back: the
+    // next take is "Viasna #2" again.
     await recordTake(page, 2)
-    await expect(reviewTitle(page)).toHaveText("Viasna #1")
-    await page.getByRole("button", { name: /Save take/ }).click()
-    // Kept, it is used up, and the next one follows on from it.
+    await expect(pencil(page)).toHaveAccessibleName("Rename take Viasna 2")
+    await page.getByRole("group", { name: "Take strip" }).getByRole("button", { name: /^Delete take/ }).click()
     await expect(field(page)).toHaveValue("Viasna")
-    await expect(
-      page.getByRole("group", { name: "Next take" }).locator("[data-take-go]")
-    ).toHaveText("#2")
+    await expect(go).toHaveText("#2")
+    await recordTake(page, 3)
+    await expect(pencil(page)).toHaveAccessibleName("Rename take Viasna 2")
+    await closeTake(page)
+    await expect(go).toHaveText("#3")
   })
 
   test("a name typed is the one recorded, however the field is left", async ({ page }) => {
@@ -473,9 +470,9 @@ test.describe("the next take", () => {
 })
 
 test.describe("after Stop", () => {
-  // The screen after a take says the take's song; its name field is in
-  // Rename take, behind the pencil beside it (step 8, A4).
-  test("the name carries over to the save screen, and ✕ in Rename take puts back the one it would have had", async ({
+  // Stop saves the take under the name it was recorded as, and opens it;
+  // its name field is in Rename take, behind its pencil in the strip.
+  test("the name carries over to the open take, and the cross in Rename take puts back the one it has", async ({
     page,
   }) => {
     await openApp(page)
@@ -485,34 +482,33 @@ test.describe("after Stop", () => {
     await page.keyboard.press("Enter")
     await recordButton(page, 1).click()
     await page.getByRole("button", { name: /^Stop/ }).click()
-    await expect(reviewTitle(page)).toHaveText("Viasna #1")
-    // The header's title, and no line in the footer between it and the buttons.
-    await expect(page.locator("header [data-take-summary]")).toHaveCount(1)
-    await expect(page.locator("footer [data-footer-rule]")).toHaveCount(0)
+    await expect(pencil(page)).toHaveAccessibleName("Rename take Viasna 1")
 
-    await renameReview(page)
+    await pencil(page).click()
     await expect(nameField(page)).toHaveValue("Viasna")
-    await page.getByRole("button", { name: "Put back “Take #1”" }).click()
-    await expect(nameField(page)).toHaveValue("Take")
+    await nameField(page).fill("Something else")
+    await page.getByRole("button", { name: "Put back “Viasna”" }).click()
+    await expect(nameField(page)).toHaveValue("Viasna")
+    await nameField(page).fill("Take")
     await page.getByRole("dialog").getByRole("button", { name: "Rename", exact: true }).click()
-    await expect(reviewTitle(page)).toHaveText("Take #1")
-    await page.getByRole("button", { name: /Save take/ }).click()
-    expect((await calls(page, "keep_take")).at(-1)?.args[2]).toBe("Take 1")
+    await expect(pencil(page)).toHaveAccessibleName("Rename take Take 1")
+    expect((await calls(page, "rename_take")).at(-1)?.args.slice(1)).toEqual([1, "Take"])
   })
 
-  test("a song picked in Rename take names the take, and Space then saves it", async ({ page }) => {
+  test("a song picked in Rename take names the take, and Space then plays it", async ({ page }) => {
     await openApp(page)
     await startRehearsal(page)
     await recordTake(page)
-    await renameReview(page)
+    await pencil(page).click()
     await nameField(page).fill("Ah")
     await pills(page).filter({ hasText: /^Ahoń\s#1$/ }).click()
     await expect(nameField(page)).toHaveValue("Ahoń")
     await page.keyboard.press("Enter")
     await expect(page.getByRole("dialog")).toHaveCount(0)
-    await expect(reviewTitle(page)).toHaveText("Ahoń #1")
+    await expect(pencil(page)).toHaveAccessibleName("Rename take Ahoń 1")
+    expect((await calls(page, "rename_take")).at(-1)?.args.slice(1)).toEqual([1, "Ahoń"])
     await page.keyboard.press("Space")
-    await expect.poll(async () => (await calls(page, "keep_take")).at(-1)?.args[2]).toBe("Ahoń")
+    await expect(page.locator("footer").getByRole("button", { name: "Pause", exact: true })).toBeVisible()
   })
 })
 
@@ -591,7 +587,7 @@ test("a take with a song renamed to Take has the next go of the takes with no so
   await openApp(page)
   await startRehearsal(page)
   await recordTake(page)
-  await page.getByRole("button", { name: /Save take/ }).click()
+  await closeTake(page, 2)
   await recordTake(page, 2)
   await saveAs(page, "Pałyn")
   // Take 1 has no song and is "Take #1"; Pałyn's take, renamed to no song,
@@ -612,13 +608,12 @@ test("a pill puts only the song's title in the field", async ({ page }) => {
   await recordTake(page)
   await saveAs(page, "Pałyn")
   await recordTake(page, 2)
-  await renameReview(page)
+  await pencil(page).click()
   await expect(pills(page).first()).toHaveText("Pałyn #2")
   await pills(page).filter({ hasText: /^Viasna/ }).click()
   await expect(nameField(page)).toHaveValue("Viasna")
   await page.getByRole("dialog").getByRole("button", { name: "Rename", exact: true }).click()
-  await page.getByRole("button", { name: /Save take/ }).click()
-  await expect.poll(async () => (await calls(page, "keep_take")).at(-1)?.args[2]).toBe("Viasna")
+  await expect.poll(async () => (await calls(page, "rename_take")).at(-1)?.args.slice(1)).toEqual([2, "Viasna"])
 })
 
 // Tonight's takes.
@@ -642,8 +637,9 @@ test("until the songs are in, the go beside the field is Python's, never a guess
   await recordTake(page)
   await saveAs(page, "Pałyn")
   await expect(takeButton(overview(page), "Pałyn #1")).toBeVisible()
-  await recordTake(page, 2)
-  // song_choices is held from here: the next Rehearsal mounts without it.
+  await recordButton(page, 2).click()
+  // song_choices is held from here: the Rehearsal that Stop opens mounts
+  // without it.
   await page.evaluate(() => {
     const w = window as unknown as Record<string, unknown> & {
       __HOLD__?: Record<string, Promise<void>>
@@ -653,7 +649,8 @@ test("until the songs are in, the go beside the field is Python's, never a guess
       w.__RELEASE_song_choices = r
     })
   })
-  await page.getByRole("button", { name: /Save take/ }).click()
+  await page.getByRole("button", { name: /^Stop/ }).click()
+  await closeTake(page, 3)
   const next = page.getByRole("textbox", { name: "Next take" })
   await expect(next).toHaveValue("Pałyn")
   const go = page.getByRole("group", { name: "Next take" }).locator("[data-take-go]")

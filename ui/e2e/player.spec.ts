@@ -2,6 +2,8 @@ import {
   TAKE_SECONDS,
   callCount,
   calls,
+  closeTake,
+  closeTakeButton,
   colour,
   dragRegion,
   expect,
@@ -21,28 +23,34 @@ import {
 import type { Page } from "@playwright/test"
 
 // The player: a take's tracks on one timeline, the region on it, the zoom —
-// on the review screen after a take, and for a saved take.
+// on the take Stop has just saved and opened, and on any take opened later.
 
-/** The first take, stopped and up for review. */
-async function review(page: Page) {
+/** The first take, stopped: saved, and open in the player. */
+async function stopped(page: Page) {
   await openApp(page)
   await startRehearsal(page)
   await recordTake(page, 1)
 }
 
-/** Take 1 saved as "Pałyn", and take 2 recorded and up for review. */
+/** Take 1 saved as "Pałyn", and take 2 stopped and open. */
 async function secondTake(page: Page) {
-  await review(page)
+  await stopped(page)
   await nameTake(page, "Pałyn")
-  await page.getByRole("button", { name: /Save take/ }).click()
+  await closeTake(page, 2)
   await recordTake(page, 2)
 }
 
 const transport = (page: Page) => page.getByRole("toolbar", { name: "Transport" })
 const keysList = (page: Page) => page.getByRole("dialog").filter({ hasText: "Keys in the player" })
+/** A button in the footer, by its name: Play, Pause, Stop. */
+const inFooter = (page: Page, name: string) =>
+  page.locator("footer").getByRole("button", { name, exact: true })
+/** The open take's pencil in the strip, named after the take. */
+const pencil = (page: Page) =>
+  page.getByRole("group", { name: "Take strip" }).getByRole("button", { name: /^Rename take / })
 
 test("a take neither follows nor controls a different open player", async ({ page }) => {
-  await review(page)
+  await stopped(page)
   await page.evaluate(() => {
     const w = window as unknown as { __PLAYER_POLLS__:number; __RESTORE_PLAYER__:() => void; pywebview:{api:{player_state:() => Promise<Record<string,unknown>>}} }
     const original = w.pywebview.api.player_state
@@ -55,41 +63,39 @@ test("a take neither follows nor controls a different open player", async ({ pag
   })
   await expect.poll(() => page.evaluate(() => (window as unknown as {__PLAYER_POLLS__:number}).__PLAYER_POLLS__)).toBeGreaterThan(1)
   await expect(page.getByRole("button", {name:"Pause", exact:true})).toHaveCount(0)
-  await page.getByRole("button", {name:"Play", exact:true}).click()
+  await transport(page).getByRole("button", {name:"Play", exact:true}).click()
   expect(await callCount(page, "player_toggle")).toBe(0)
   await page.evaluate(() => (window as unknown as {__RESTORE_PLAYER__:() => void}).__RESTORE_PLAYER__())
   // A matching player becomes usable again after its next state poll.
   await expect(async () => {
-    await page.getByRole("button", {name:"Play", exact:true}).click()
+    await transport(page).getByRole("button", {name:"Play", exact:true}).click()
     expect(await callCount(page, "player_toggle")).toBe(1)
   }).toPass()
 })
 
-test.describe("the review screen", () => {
-  test("names a first take, and puts its keys on its buttons", async ({ page }) => {
-    await review(page)
-    await expect(page.locator("[data-take-summary]")).toHaveText("Take #1")
+test.describe("the take Stop opened", () => {
+  test("is the take just recorded, and puts its keys on its buttons", async ({ page }) => {
+    await stopped(page)
+    await expect(pencil(page)).toHaveAccessibleName("Rename take Take 1")
     // The keys are on the buttons they press, not in a line underneath.
-    await expect.poll(() => keyOn(page.getByRole("button", { name: /Save take/ }))).toBe("Space")
-    await expect.poll(() => keyOn(page.getByRole("button", { name: /Discard/ }))).toBe("Esc")
-    await expect(page.getByText("save take", { exact: true })).toHaveCount(0)
-    // With no cloud folder it says the take stays on this computer.
-    await expect(page.getByText("Stays on this computer")).toHaveCount(1)
-    await expect(page.locator("#send-to-cloud")).toHaveCount(0)
+    await expect.poll(() => keyOn(inFooter(page, "Play"))).toBe("Space")
+    await expect.poll(() => keyOn(closeTakeButton(page))).toBe("Esc")
+    await expect(page.getByText("play or pause", { exact: true })).toHaveCount(0)
   })
 
-  test("can play the take before it is saved, from its button", async ({ page }) => {
-    // Space saves here, so the button is the way to listen.
-    await review(page)
-    await page.getByRole("button", { name: "Play", exact: true }).click()
+  test("plays from Space, and from the transport's button", async ({ page }) => {
+    await stopped(page)
+    await page.keyboard.press("Space")
     await expect.poll(() => callCount(page, "player_toggle")).toBe(1)
-    await page.getByRole("button", { name: "Pause", exact: true }).click()
+    await expect(inFooter(page, "Pause")).toBeVisible()
+    await transport(page).getByRole("button", { name: "Pause", exact: true }).click()
+    await expect.poll(() => callCount(page, "player_toggle")).toBe(2)
   })
 
   test("keeps the transport plain, with Repeat by the time and Mark at the end", async ({
     page,
   }) => {
-    await review(page)
+    await stopped(page)
     // A key drawn on each small button was clutter however it was drawn.
     await expect(transport(page).locator(":is(kbd, [data-key])")).toHaveCount(0)
     // Repeat is part of how the take plays, so it sits with the playing.
@@ -109,7 +115,7 @@ test.describe("the review screen", () => {
     await page.addInitScript(
       "Object.defineProperty(navigator, 'platform', {get: () => 'Win32'});"
     )
-    await review(page)
+    await stopped(page)
     await page.keyboard.press("?")
     const listed = keysList(page)
     for (const k of ["Home", "To the start", "Mark", "Repeat", "10 seconds"]) {
@@ -120,12 +126,11 @@ test.describe("the review screen", () => {
     await expect(listed).toContainText("Ctrl + wheel")
     await expect(listed).toContainText("Zoom in / out")
     await expect(listed).toContainText("Shift + wheel")
-    // Without Space here, where Space saves the take.
-    await expect(listed).not.toContainText("Play / pause")
+    // Space plays here, as on any take open.
+    await expect(listed).toContainText("Play / pause")
     await page.keyboard.press("Escape")
     await expect(listed).toHaveCount(0)
-    await expect(page.locator("[data-take-summary]")).toBeVisible()
-    expect(await callCount(page, "discard_take")).toBe(0)
+    await expect(closeTakeButton(page)).toBeVisible()
 
     // Radix closes the dialog on Escape without stopping the keydown, so the
     // app's own Escape runs too and decided by looking at what had focus —
@@ -136,8 +141,7 @@ test.describe("the review screen", () => {
     await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur())
     await page.keyboard.press("Escape")
     await expect(listed).toHaveCount(0)
-    await expect(page.locator("[data-take-summary]")).toBeVisible()
-    expect(await callCount(page, "discard_take")).toBe(0)
+    await expect(closeTakeButton(page)).toBeVisible()
   })
 
   test("on a Mac the list says Cmd for the zoom", async ({ page }) => {
@@ -145,7 +149,7 @@ test.describe("the review screen", () => {
     await page.addInitScript(
       "Object.defineProperty(navigator, 'platform', {get: () => 'MacIntel'});"
     )
-    await review(page)
+    await stopped(page)
     await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur())
     await page.keyboard.press("?")
     await expect(keysList(page)).toContainText("⌘ + wheel")
@@ -153,7 +157,7 @@ test.describe("the review screen", () => {
   })
 
   test("R turns repeat on and off", async ({ page }) => {
-    await review(page)
+    await stopped(page)
     const repeat = transport(page).getByRole("button", { name: "Repeat" })
     await page.keyboard.press("r")
     await expect(repeat).toHaveAttribute("aria-pressed", "true")
@@ -161,16 +165,17 @@ test.describe("the review screen", () => {
     await expect(repeat).toHaveAttribute("aria-pressed", "false")
   })
 
-  test("can crop a take before it is ever saved", async ({ page }) => {
+  test("is cropped the moment it stops, as any saved take is", async ({ page }) => {
     // The dead air at the start of a take is visible the moment recording
-    // stops, which makes this the screen where trimming is most wanted.
-    await review(page)
+    // stops, which makes this where trimming is most wanted.
+    await stopped(page)
     await expect(page.getByRole("button", { name: "Crop to the region" })).toHaveCount(0)
     await dragRegion(page, 0.25, 0.75)
     await page.getByRole("button", { name: "Crop to the region" }).click()
     await expect(page.getByRole("dialog")).toHaveCount(0)
-    await expect.poll(() => callCount(page, "crop_draft")).toBe(1)
-    const [, , from, to] = (await calls(page, "crop_draft"))[0].args as number[]
+    await expect.poll(() => callCount(page, "crop_take")).toBe(1)
+    const [, n, from, to] = (await calls(page, "crop_take"))[0].args as number[]
+    expect(n).toBe(1)
     expect(Math.abs(from - TAKE_SECONDS * 0.25)).toBeLessThan(0.4)
     expect(Math.abs(to - TAKE_SECONDS * 0.75)).toBeLessThan(0.4)
     // And the take on screen is that region now.
@@ -180,46 +185,50 @@ test.describe("the review screen", () => {
     ).toHaveCount(1)
   })
 
-  test("named in Rename take, Space then saves it, and it waits for the cloud", async ({
+  test("named in Rename take, Space then plays it, and once closed it waits for the cloud", async ({
     page,
   }) => {
-    // Everywhere else space runs the screen's main action, and here that is
-    // saving the take. Rename take gives the keyboard back when it closes.
-    await review(page)
+    // Rename take gives the keyboard back to the screen when it closes.
+    await stopped(page)
     await nameTake(page, "Pałyn")
-    expect(await callCount(page, "discard_take")).toBe(0)
-    await expect(page.locator("[data-take-summary]")).toHaveText("Pałyn #1")
+    await expect(pencil(page)).toHaveAccessibleName("Rename take Pałyn 1")
     await page.keyboard.press("Space")
-    await expect.poll(() => callCount(page, "keep_take")).toBe(1)
-    // A saved take says it is on its way to the cloud, and stops saying so
+    await expect.poll(() => callCount(page, "player_toggle")).toBe(1)
+    // Closed, it says it is on its way to the cloud, and stops saying so
     // once the queue drains, as the real one does once the copy is done.
+    await closeTake(page, 2)
     await expect(page.getByText("Waiting for the cloud").first()).toBeVisible()
     await expect(page.getByText("Waiting for the cloud")).toHaveCount(0)
   })
 
   test("the next take takes the last one's name, numbered", async ({ page }) => {
     await secondTake(page)
-    await expect(page.locator("[data-take-summary]")).toHaveText("Pałyn #2")
-    await expect(page.locator("[data-take-summary] [data-go]")).toHaveText("#2")
+    await expect(pencil(page)).toHaveAccessibleName("Rename take Pałyn 2")
+    const strip = page.getByRole("group", { name: "Take strip" })
+    await expect(
+      strip.locator("[data-tab='song:Pałyn'][aria-current='true'] [data-tab-line]")
+    ).toContainText("#2")
   })
 
-  test("Escape throws a take away at once, and Undo brings it back", async ({ page }) => {
-    // The take was played seconds ago and cannot be played again, so a
-    // stray key is taken back by Undo rather than asked about first.
+  test("its trash throws it away at once, and Undo brings it back", async ({ page }) => {
+    // The take was played seconds ago, so a slip is taken back by Undo
+    // rather than asked about first.
     await secondTake(page)
-    await page.keyboard.press("Escape")
+    await page
+      .getByRole("group", { name: "Take strip" })
+      .getByRole("button", { name: "Delete take Pałyn 2" })
+      .click()
     await expect(page.getByRole("dialog")).toHaveCount(0)
-    await expect(page.locator("[data-take-summary]")).toHaveCount(0)
-    expect(await callCount(page, "discard_take")).toBe(1)
+    await expect(closeTakeButton(page)).toHaveCount(0)
+    expect(await callCount(page, "delete_take")).toBe(1)
     await notices(page)
       .filter({ hasText: "“Pałyn #2” went to the Trash." })
       .getByRole("button", { name: "Undo" })
       .click()
-    await expect(page.locator("[data-take-summary]")).toHaveText("Pałyn #2")
+    await expect(takeButton(page.locator("[aria-label='Rehearsal overview']"), "Pałyn #2")).toBeVisible()
   })
 
-  test("a mark made before saving goes with the take when it is saved", async ({ page }) => {
-    // There is no folder for it yet, so it rides along with keep_take.
+  test("a mark made on it is kept on the take at once", async ({ page }) => {
     await secondTake(page)
     await page.getByRole("button", { name: "Add mark" }).click()
     await expect(page.getByText("Mark at")).toBeVisible()
@@ -227,29 +236,27 @@ test.describe("the review screen", () => {
     await page.fill("input[aria-label='Comment']", "this one is the take")
     await page.getByRole("button", { name: "Save", exact: true }).click()
     await expect(page.getByText("this one is the take")).toHaveCount(1)
-    await page.getByRole("button", { name: /Save take/ }).click()
-    await expect(recordButton(page, 3)).toBeVisible()
-    const kept = (await calls(page, "keep_take")).at(-1)!.args
-    const marks = kept[5] as { note: string; label_id: number }[]
-    expect(marks[0].note).toBe("this one is the take")
-    expect(marks[0].label_id).toBe(2)
+    expect((await calls(page, "add_take_marker")).at(-1)!.args[1]).toBe(2)
+    expect((await calls(page, "update_take_marker")).at(-1)!.args.slice(3)).toEqual([
+      "this one is the take",
+      2,
+    ])
   })
 })
 
 /** Two takes saved — "Pałyn", and "Pałyn 2" with a keeper's mark at its
- *  start — and "Pałyn 2" open in the player. */
+ *  start — and "Pałyn 2" open in the player again. */
 async function savedTake(page: Page) {
-  await review(page)
+  await stopped(page)
   await nameTake(page, "Pałyn")
-  await page.getByRole("button", { name: /Save take/ }).click()
+  await closeTake(page, 2)
   await recordTake(page, 2)
   await page.getByRole("button", { name: "Add mark" }).click()
   await page.getByRole("radio", { name: "Keep this" }).click()
   await page.fill("input[aria-label='Comment']", "this one is the take")
   await page.getByRole("button", { name: "Save", exact: true }).click()
-  await page.getByRole("button", { name: /Save take/ }).click()
-  await expect(recordButton(page, 3)).toBeVisible()
-  // A prefix: right after a take is saved its pill can still say "Waiting
+  await closeTake(page, 3)
+  // A prefix: right after a take is closed its pill can still say "Waiting
   // for the cloud" after its name, and it is the same take either way.
   await takeButton(page, "Pałyn #2").click()
   await expect(page.getByRole("button", { name: "Mute Guitar" })).toBeVisible()
@@ -258,7 +265,7 @@ async function savedTake(page: Page) {
 const timeline = (page: Page) => page.getByRole("group", { name: "Take timeline" })
 
 test.describe("a saved take", () => {
-  test("opens in the player below its pill, with the mark made before it was saved", async ({
+  test("opens in the player below its pill, with the mark made on it", async ({
     page,
   }) => {
     await savedTake(page)
@@ -269,23 +276,25 @@ test.describe("a saved take", () => {
     ).toContainText("#2")
     // Same take, same marker, one player.
     await expect(page.getByText("this one is the take")).toHaveCount(1)
-    // Space plays here, and says so; Record and Finish give their keys up.
+    // Space plays here, and says so, as Play in the footer does.
     await page.getByRole("button", { name: "Player keys" }).click()
     await expect(keysList(page)).toContainText("Play / pause")
     await page.keyboard.press("Escape")
     await expect(keysList(page)).toHaveCount(0)
-    expect(await keyOn(recordButton(page))).toBeNull()
-    expect(await keyOn(page.getByRole("button", { name: /Finish/ }))).toBeNull()
+    expect(await keyOn(inFooter(page, "Play"))).toBe("Space")
+    expect(await keyOn(closeTakeButton(page))).toBe("Esc")
   })
 
   test("M drops a marker where the take is, and opens its note straight away", async ({
     page,
   }) => {
     await savedTake(page)
+    // The mark savedTake made is the first.
+    const made = await callCount(page, "add_take_marker")
     await page.getByRole("button", { name: "Forward 10 seconds" }).click()
     await page.keyboard.press("m")
-    await expect.poll(() => callCount(page, "add_take_marker")).toBe(1)
-    expect(((await calls(page, "add_take_marker"))[0].args[2] as number) > 0).toBe(true)
+    await expect.poll(() => callCount(page, "add_take_marker")).toBe(made + 1)
+    expect(((await calls(page, "add_take_marker")).at(-1)!.args[2] as number) > 0).toBe(true)
     // The thought about what just went wrong does not survive a hunt through
     // the interface.
     await expect(page.getByText("Mark at")).toBeVisible()
@@ -295,7 +304,7 @@ test.describe("a saved take", () => {
     await expect
       .poll(async () => (await calls(page, "update_take_marker")).at(-1)?.args.slice(3))
       .toEqual(["guitar drifts here", 3])
-    // On the chip without ever going away from the take and back.
+    // In the marks panel without ever going away from the take and back.
     await expect(page.getByText("guitar drifts here").first()).toBeVisible()
 
     // On top of an existing mark the button opens it rather than adding a
@@ -332,6 +341,8 @@ test.describe("a saved take", () => {
 
   test("Escape closes a dialog first, and the take second", async ({ page }) => {
     await savedTake(page)
+    // savedTake has renamed take 1 already.
+    const renames = await callCount(page, "rename_take")
     await page.getByRole("button", { name: "Rename take Pałyn 2" }).click()
     // Its own focus lands in the name field; a click on the words moves it
     // to the dialog itself, a DIV, which a guard by tag could not see.
@@ -345,7 +356,7 @@ test.describe("a saved take", () => {
     await page.keyboard.press("Escape")
     await expect(page.getByRole("dialog")).toHaveCount(0)
     expect(await callCount(page, "player_toggle")).toBe(toggles)
-    expect(await callCount(page, "rename_take")).toBe(0)
+    expect(await callCount(page, "rename_take")).toBe(renames)
     await expect(timeline(page)).toHaveCount(1)
 
     // With no dialog left to claim it, the same key gives the take up, and
@@ -355,14 +366,17 @@ test.describe("a saved take", () => {
     await expect.poll(() => keyOn(recordButton(page))).toBe("Space")
     await expect.poll(() => keyOn(page.getByRole("button", { name: /Finish/ }))).toBe("Esc")
 
-    // Played from its row, a take has Space until Escape puts it away.
+    // Played from its row, a take has Space and Escape, on Pause and Stop,
+    // until Escape stops it.
     await page
       .locator("[aria-label='Rehearsal overview']")
       .getByRole("button", { name: "Play Pałyn 2" })
       .click()
     await expect(page.getByRole("button", { name: "Pause Pałyn 2" })).toBeVisible()
     await expect(timeline(page)).toHaveCount(0)
-    await expect.poll(() => keyOn(recordButton(page))).toBeNull()
+    await expect(recordButton(page)).toHaveCount(0)
+    await expect.poll(() => keyOn(inFooter(page, "Pause"))).toBe("Space")
+    await expect.poll(() => keyOn(inFooter(page, "Stop"))).toBe("Esc")
     await page.keyboard.press("Escape")
     await expect(page.getByRole("button", { name: "Play Pałyn 2" })).toBeVisible()
     await expect.poll(() => keyOn(recordButton(page))).toBe("Space")
@@ -514,12 +528,12 @@ test.describe("the mix", () => {
     // until something plays.
     await savedTake(page)
     const meter = page.getByRole("meter", { name: "Guitar level" })
-    await page.getByRole("button", { name: "Play", exact: true }).click()
+    await transport(page).getByRole("button", { name: "Play", exact: true }).click()
     await expect.poll(async () => Number(await meter.getAttribute("aria-valuenow"))).toBeGreaterThan(0)
     await page.getByRole("button", { name: "Mute Guitar" }).click()
     await expect(meter).toHaveAttribute("aria-valuenow", "0")
     await page.getByRole("button", { name: "Mute Guitar" }).click()
-    await page.getByRole("button", { name: "Pause", exact: true }).click()
+    await transport(page).getByRole("button", { name: "Pause", exact: true }).click()
     await expect(meter).toHaveAttribute("aria-valuenow", "0")
   })
 
@@ -541,7 +555,7 @@ test.describe("the mix", () => {
     await startRehearsal(page)
     await recordTake(page, 1)
     const meter = page.getByRole("meter", { name: "Guitar level" })
-    await page.getByRole("button", { name: "Play", exact: true }).click()
+    await transport(page).getByRole("button", { name: "Play", exact: true }).click()
     await setFake(page, "__GUITAR__", 0.97)
     await expect(meter).toHaveAttribute("aria-valuenow", "97")
     await expect(meter).not.toHaveAttribute("data-clipping")
@@ -692,7 +706,7 @@ test.describe("a track's plate", () => {
       page.getByRole("meter", { name: `${name} level` }).locator("[data-fill]")
     await expect(fills("Guitar")).toHaveCount(1)
     await expect(fills("Vocals")).toHaveCount(2)
-    await page.getByRole("button", { name: "Play", exact: true }).click()
+    await transport(page).getByRole("button", { name: "Play", exact: true }).click()
     await expect
       .poll(async () => {
         const [left, right] = await fills("Vocals").evaluateAll((els) =>
@@ -705,7 +719,7 @@ test.describe("a track's plate", () => {
 
   test("is 56 px tall, however tall the window", async ({ page }) => {
     await page.setViewportSize({ width: 1180, height: 1400 })
-    await review(page)
+    await stopped(page)
     for (const name of ["Guitar", "Vocals"]) {
       const box = (await page.locator(`[data-plate='${name}']`).boundingBox())!
       expect(box.height).toBeCloseTo(56, 0)

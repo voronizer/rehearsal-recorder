@@ -1,6 +1,7 @@
 import {
   callCount,
   calls,
+  closeTake,
   expect,
   hold,
   letGo,
@@ -29,7 +30,7 @@ async function twoTakesKept(page: Page, system?: string) {
   await startRehearsal(page)
   for (const n of [1, 2]) {
     await recordTake(page, n)
-    await page.getByRole("button", { name: /Save take/ }).click()
+    await closeTake(page)
     await expect(recordButton(page, n + 1)).toBeVisible()
   }
 }
@@ -155,7 +156,7 @@ test("a dialog opened with its Enter button disabled still has the keyboard insi
   await startRehearsal(page)
   await recordTake(page, 1)
   await nameTake(page, "Pałyn")
-  await page.getByRole("button", { name: /Save take/ }).click()
+  await closeTake(page)
   await expect(recordButton(page, 2)).toBeVisible()
   await takeButton(page.locator("[aria-label='Rehearsal overview']"), "Pałyn #1").click()
   await page.getByRole("button", { name: "Copy Pałyn 1 to the cloud" }).click()
@@ -271,7 +272,10 @@ const CONVERTED: { name: string; open: (page: Page) => Promise<void> }[] = [
       await openApp(page)
       await startRehearsal(page)
       await recordTake(page, 1)
-      await page.locator("[data-take-summary]").getByRole("button", { name: "Rename take" }).click()
+      await page
+        .getByRole("group", { name: "Take strip" })
+        .getByRole("button", { name: /^Rename take/ })
+        .click()
     },
   },
   {
@@ -290,7 +294,7 @@ const CONVERTED: { name: string; open: (page: Page) => Promise<void> }[] = [
       await startRehearsal(page)
       await recordTake(page, 1)
       await nameTake(page, "Pałyn")
-      await page.getByRole("button", { name: /Save take/ }).click()
+      await closeTake(page)
       await expect(recordButton(page, 2)).toBeVisible()
       await takeButton(page.locator("[aria-label='Rehearsal overview']"), "Pałyn #1").click()
       await page.getByRole("button", { name: "Copy Pałyn 1 to the cloud" }).click()

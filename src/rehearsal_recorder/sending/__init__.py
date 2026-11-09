@@ -54,6 +54,10 @@ class Module(Protocol):
 
     def stop(self, timeout=2.0) -> None: ...
 
+    # Look at the queue again now rather than at the next turn: the take
+    # held after Stop may go (Api._release_take).
+    def wake(self) -> None: ...
+
 
 class Sending:
     """
@@ -101,3 +105,7 @@ class Sending:
     def stop(self, timeout=2.0):
         for module in self.all():
             module.stop(timeout)
+
+    def wake(self):
+        for module in self.all():
+            module.wake()

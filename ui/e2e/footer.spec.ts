@@ -28,7 +28,9 @@ const footer = (page: Page) =>
     return {
       variants: buttons.map((b) => b.dataset.variant),
       oneLine: Math.max(...middles) - Math.min(...middles) <= 2,
-      main: (buttons[rightmost]?.textContent ?? "").trim(),
+      // What it says now: a button that changes keeps the words of its
+      // other states, unseen, to keep its width.
+      main: (buttons[rightmost]?.innerText ?? "").trim(),
       onTheRight: boxes.every((r) => r.left > window.innerWidth / 2),
       sideways: document.documentElement.scrollWidth > window.innerWidth,
       // Shell clips rather than scrolls, so a button cut off at the edge
@@ -76,12 +78,12 @@ test("recording: Stop on the right, autosave said under it", async ({ page }) =>
   expect(under).toBe(true)
 })
 
-test("review: Discard with an edge, Save take rightmost", async ({ page }) => {
+test("an open take: Close take with an edge, Play rightmost", async ({ page }) => {
   await openApp(page)
   await startRehearsal(page)
   await recordTake(page)
   const f = await footer(page)
-  expect(f.main).toMatch(/^Save take/)
+  expect(f.main).toMatch(/^Play/)
   expect(f.variants).toEqual(["outline", "default"])
   expect(f).toMatchObject({ oneLine: true, onTheRight: true, sideways: false, inside: true })
 })

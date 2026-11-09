@@ -1,6 +1,6 @@
-import { calls, hold, letGo, expect, openApp, openHistory, startRehearsal, setFake, test, recordButton } from "./app.ts"
+import { calls, closeTake, hold, letGo, expect, openApp, openHistory, startRehearsal, setFake, test, recordButton } from "./app.ts"
 
-test("external recording and stop/save navigate the recorder screens", async ({ page }) => {
+test("external recording and stop/save navigate the recorder screens, and the take opens", async ({ page }) => {
   await openApp(page, { before: "window.__CONTROLLER_ENABLED__ = true;" })
   await startRehearsal(page)
   // What the controller's take is called is in place before it starts: the
@@ -19,7 +19,8 @@ test("external recording and stop/save navigate the recorder screens", async ({ 
     await win.pywebview.api.control_command("stop_keep")
   })
   await setFake(page, "__CONTROL_STATE__", null)
-  await expect(recordButton(page, 2)).toBeVisible()
+  // Saved, and open to listen to, as the screen's own Stop leaves it.
+  await closeTake(page, 2)
 })
 
 test("Controls settings shows a disabled controller without opening ports", async ({ page }) => {

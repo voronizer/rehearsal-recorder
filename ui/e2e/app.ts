@@ -270,21 +270,37 @@ export async function startRehearsal(page: Page, n = 1) {
   await settled(page)
 }
 
-/** Records take `n` and stops it, leaving it up for review once the
- *  player's groups have risen into place: a box in them is measured then. */
+/** The rehearsal screen's Close take, in the footer while a take is open. */
+export function closeTakeButton(page: Page): Locator {
+  return page.getByRole("button", { name: "Close take", exact: true })
+}
+
+/** Records take `n` and stops it: Stop saves it, and the rehearsal screen
+ *  opens it, paused, once the screen has risen into place: a box in it is
+ *  measured then. */
 export async function recordTake(page: Page, n = 1) {
   await recordButton(page, n).click()
   await page.getByRole("button", { name: /^Stop/ }).click()
-  await expect(page.locator("[data-take-summary]")).toBeVisible()
+  await expect(closeTakeButton(page)).toBeVisible()
   await settled(page)
 }
 
-/** Names the take on the screen after it, through its pencil and Rename
- *  take, and leaves it up for review. */
+/** Closes the open take with Close take, back to Record: ready to record
+ *  take `n`, when given. */
+export async function closeTake(page: Page, n?: number) {
+  await closeTakeButton(page).click()
+  await expect(recordButton(page, n)).toBeVisible()
+}
+
+/** Renames the open take, through its pencil in the strip and Rename take,
+ *  and leaves it open. */
 export async function nameTake(page: Page, name: string) {
-  await page.locator("[data-take-summary]").getByRole("button", { name: "Rename take" }).click()
+  await page
+    .getByRole("group", { name: "Take strip" })
+    .getByRole("button", { name: /^Rename take/ })
+    .click()
   const dialog = page.getByRole("dialog", { name: "Rename take" })
-  await dialog.locator("#take-name").fill(name)
+  await dialog.locator("#rename-take").fill(name)
   await page.keyboard.press("Enter")
   await expect(dialog).toHaveCount(0)
 }

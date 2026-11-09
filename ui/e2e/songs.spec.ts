@@ -843,10 +843,13 @@ test.describe("Songs in History", () => {
     await openApp(page)
     await startRehearsal(page)
     await recordTake(page)
-    await page.locator("[data-take-summary]").getByRole("button", { name: "Rename take" }).click()
+    await page
+      .getByRole("group", { name: "Take strip" })
+      .getByRole("button", { name: /^Rename take/ })
+      .click()
     const pills = page.getByRole("group", { name: "Take name" }).locator("[data-song-choice]")
     await pills.filter({ hasText: /^Ahoń\s#1$/ }).click()
-    await expect(page.locator("#take-name")).toHaveValue("Ahoń")
+    await expect(page.locator("#rename-take")).toHaveValue("Ahoń")
     expect(await calls(page, "list_songs")).toHaveLength(0)
   })
 

@@ -334,15 +334,12 @@ class Transport(ControlAPI):
                     result = self._remove_selected(parameters.get("target"))
                 elif action == "start":
                     result = self._start()
-                elif action == "stop_review":
-                    self._saving = True
-                    try:
-                        result = self.api.stop_take()
-                        if result.get("ok"):
-                            self.pending_take = result
-                    finally:
-                        self._saving = False
-                elif action == "stop_keep":
+                elif action in ("stop_keep", "stop_review"):
+                    # Stop saves the take at once, from the screen and the
+                    # controller alike. "stop_review" once left it unsaved
+                    # for the screen after a take; it is another name for
+                    # "stop_keep" now, so a controller or a script that sends
+                    # it still works.
                     result = self._stop_keep()
                 elif action == "record_stop":
                     result = self._stop_keep() if self.api._recorder is not None else self._start()
@@ -419,6 +416,12 @@ class Transport(ControlAPI):
             else:
                 result["playback_error"] = reopened.get("error")
         if result.get("ok"):
+            # The next take has started, so the take held after the last
+            # Stop goes. Only once this one records: its sending then waits
+            # for this take to end (Api._sound_busy), and cannot begin in the
+            # moment the card is being opened for it. A Record that fails
+            # leaves the take held, still open on the screen.
+            api._release_take()
             self.recording_name, self.recording_go = name, coming["go"]
             self._keep_name = name
             result = {**result, "take_name": name, "take_go": coming["go"]}
@@ -435,7 +438,19 @@ class Transport(ControlAPI):
             self.pending_take = stopped
             if self._keep_name is None:
                 self._keep_name = stopped.get("suggested_name", "")
-            return self._save_pending()
+            # The take is held from before it is saved (Api._hold_take): the
+            # band listens to it next, and may throw it away. A save that
+            # does not work holds nothing: the take is in Unsaved takes.
+            folder = (self.api._session or {}).get("folder")
+            if folder is not None:
+                self.api._hold_take(folder, stopped["take_number"])
+            result = {}
+            try:
+                result = self._save_pending()
+            finally:
+                if folder is not None and not result.get("ok"):
+                    self.api._release_take(folder, stopped["take_number"])
+            return result
         finally:
             self._saving = False
 

@@ -2,6 +2,7 @@ import {
   badNames,
   colour,
   EDGE,
+  closeTakeButton,
   expect,
   fitted,
   mixed,
@@ -732,7 +733,7 @@ test.describe("recording", () => {
     })
     await expect.poll(count).toBeGreaterThan(5)
     await page.getByRole("button", { name: /^Stop/ }).click()
-    await expect(page.locator("[data-take-summary]")).toBeVisible()
+    await expect(closeTakeButton(page)).toBeVisible()
     const stopped = await count()
     await page.waitForTimeout(600)
     expect(await count()).toBe(stopped)

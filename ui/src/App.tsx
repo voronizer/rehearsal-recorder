@@ -4,7 +4,6 @@ import { Button } from "@/components/ui/button"
 import { Setup } from "@/screens/Setup"
 import { Rehearsal } from "@/screens/Rehearsal"
 import { Recording } from "@/screens/Recording"
-import { Review, type Discarded, type ReviewKept } from "@/screens/Review"
 import { HistoryScreen } from "@/screens/HistoryScreen"
 import { DraftsScreen } from "@/screens/DraftsScreen"
 import { Settings } from "@/screens/Settings"
@@ -14,7 +13,6 @@ import {
   waitForApi,
   type ControlState,
   type Draft,
-  type PendingTake,
   type SessionState,
 } from "@/lib/api"
 import { useDialogFocusKeys } from "@/hooks/useSpacebar"
@@ -22,11 +20,11 @@ import { useUndoKey } from "@/hooks/useUndoKey"
 import { heard } from "@/lib/listening"
 import { notify } from "@/lib/notices"
 import { reportBridgeError } from "@/lib/bridgeErrors"
-import { loadDeletionKind, wentTo } from "@/lib/deletion"
+import { loadDeletionKind } from "@/lib/deletion"
 import { loadKeys } from "@/lib/keys"
 import { loadLabels } from "@/lib/labels"
 import { NO_SONG } from "@/lib/takeText"
-import { draftMovedTo, offerUndo } from "@/lib/trash"
+import { offerUndo } from "@/lib/trash"
 import {
   applyAppearance,
   readCachedAppearance,
@@ -37,9 +35,10 @@ type Screen =
   | { name: "loading" }
   | { name: "drafts"; drafts: Draft[] }
   | { name: "setup" }
-  | { name: "rehearsal" }
-  | { name: "recording"; takeName: string; takeGo: number | null }
-  | { name: "review"; take: PendingTake; kept?: ReviewKept; visit?: number }
+  // `open`: the take Stop has just saved, opened to listen to.
+  | { name: "rehearsal"; open?: number | null }
+  // `takeNumber`: the take recording, which Stop opens once it is saved.
+  | { name: "recording"; takeName: string; takeGo: number | null; takeNumber: number | null }
   | { name: "history"; folder?: string; song?: string | null }
   | { name: "settings" }
 
@@ -78,56 +77,31 @@ export function App() {
     return s
   }, [])
 
-  // A take discarded on the review screen, while its Undo is on offer: Undo
-  // brings the screen back as it was left — the take, its name, its marks,
-  // its cloud answer — which only that screen held. Recording the next take
-  // or finishing the rehearsal ends the offer, and the take goes on to the
-  // Trash: the evening has moved past the screen Undo would bring back.
-  const discardOffer = useRef<() => void>(() => {})
-  const endDiscardOffer = () => {
-    discardOffer.current()
-    discardOffer.current = () => {}
-  }
-  // Each entry to the review screen by an Undo is a screen of its own: one
-  // still up over the discarded take, busy with it, starts afresh.
-  const reviewVisit = useRef(0)
-  const discarded = async (gone: Discarded) => {
-    // Offered before anything else is asked of Python: however the read of
-    // the session goes, the take that went can be had back.
-    let back = false
-    if (gone.undo) {
-      endDiscardOffer()
-      discardOffer.current = offerUndo({
-        text: wentTo(`“${gone.title}”`),
-        token: gone.undo,
-        onUndone: (r) => {
-          back = true
-          discardOffer.current = () => {}
-          const visit = ++reviewVisit.current
-          // From the rehearsal screen, where the take was left for, or from
-          // the review screen still on its way there; the offer ends before
-          // any other could be up. Where Python put it back: a rename of the
-          // rehearsal meanwhile moved it, its files with it.
-          setScreen((s) =>
-            s.name === "rehearsal" || s.name === "review"
-              ? {
-                  name: "review",
-                  take: draftMovedTo(gone.take, r.temp_dir),
-                  kept: gone.kept,
-                  visit,
-                }
-              : s
-          )
-        },
-      })
-    }
-    try {
-      await refreshSession()
-    } catch {
-      // Said on the error bar already (api); the screen moves on all the same.
-    }
-    if (!back) setScreen({ name: "rehearsal" })
-  }
+  // A take Stop could not save: why, and Unsaved takes, where Recover saves
+  // it. With none listed, the rehearsal screen.
+  // The screen's Stop and the controller watcher both see a save that
+  // failed (the screen's Stop is a control command too): one handles it.
+  const failing = useRef(false)
+  const saveFailed = useCallback(
+    async (error: string) => {
+      if (failing.current) return
+      failing.current = true
+      try {
+        notify({ key: "save-take", kind: "warning", text: error })
+        let drafts: Draft[] = []
+        try {
+          drafts = await api().list_drafts()
+          await refreshSession()
+        } catch {
+          // Said on the error bar already (api).
+        }
+        setScreen(drafts.length ? { name: "drafts", drafts } : { name: "rehearsal" })
+      } finally {
+        failing.current = false
+      }
+    },
+    [refreshSession]
+  )
 
   // External transport changes navigate the same screens as UI commands.
   const sessionRef = useRef(session)
@@ -176,18 +150,15 @@ export function App() {
             if (alive && state.state === "recording" && current.name !== "recording" && state.take_number != null) {
               await refreshSession()
               if (alive) setScreen({ name: "recording",
-                takeName: state.take_name ?? NO_SONG, takeGo: state.take_go })
+                takeName: state.take_name ?? NO_SONG, takeGo: state.take_go, takeNumber: state.take_number })
             } else if (alive && current.name === "recording" && state.state === "ready") {
+              // Stopped from the controller: saved, and open to listen to,
+              // as the screen's own Stop leaves it.
               await refreshSession()
-              if (alive) setScreen({ name: "rehearsal" })
+              if (alive) setScreen({ name: "rehearsal", open: current.takeNumber })
             } else if (alive && current.name === "recording" && state.state === "error" &&
-                       state.events.some(e => e.sequence === state.action_sequence && e.action !== "stop_review")) {
-              notify({ key: "save-take", kind: "warning", text: state.error ?? "Could not save the take" })
-              if (state.pending_take) setScreen({ name: "review", take: state.pending_take })
-              else {
-                const drafts = await api().list_drafts()
-                if (alive) setScreen(drafts.length ? { name: "drafts", drafts } : { name: "rehearsal" })
-              }
+                       state.events.some(e => e.sequence === state.action_sequence)) {
+              await saveFailed(state.error ?? "Could not save the take")
             }
           }
         } else {
@@ -200,7 +171,7 @@ export function App() {
     }
     void watch()
     return () => { alive = false; window.clearTimeout(timer) }
-  }, [refreshSession])
+  }, [refreshSession, saveFailed])
 
   // Unsaved takes again, after an Undo brought back one discarded there
   // once the list had closed. Not over a take in hand.
@@ -212,9 +183,7 @@ export function App() {
       console.error("Could not read drafts:", e)
     }
     if (drafts.length === 0) return
-    setScreen((s) =>
-      s.name === "recording" || s.name === "review" ? s : { name: "drafts", drafts }
-    )
+    setScreen((s) => (s.name === "recording" ? s : { name: "drafts", drafts }))
   }, [])
 
   const connect = useCallback(async () => {
@@ -376,58 +345,36 @@ export function App() {
       <Rehearsal
         session={session}
         controlState={controlState}
-        onStartTake={(takeName, takeGo) => {
-          endDiscardOffer()
-          setScreen({ name: "recording", takeName, takeGo })
-        }}
+        openTake={screen.open ?? null}
+        onStartTake={(takeName, takeGo, takeNumber) =>
+          setScreen({ name: "recording", takeName, takeGo, takeNumber })
+        }
         // Straight to the start screen: its Last time is the evening just
         // finished, and bands mostly close the app instead anyway.
-        onFinished={() => {
-          endDiscardOffer()
-          setScreen({ name: "setup" })
-        }}
+        onFinished={() => setScreen({ name: "setup" })}
         onChanged={refreshSession}
       />
     )
   }
 
-  if (screen.name === "recording") {
-    return (
-      <Recording
-        takeName={screen.takeName}
-        takeGo={screen.takeGo}
-        tracks={session.tracks}
-        lastAttempt={session.last_attempt}
-        onStopped={take => setScreen({ name: "review", take })}
-        onSaveFailed={async (error, take) => {
-          notify({ key: "save-take", kind: "warning", text: error })
-          if (take) {
-            setScreen({ name: "review", take })
-          } else {
-            const drafts = await api().list_drafts()
-            await refreshSession()
-            setScreen(drafts.length ? { name: "drafts", drafts } : { name: "rehearsal" })
-          }
-        }}
-      />
-    )
-  }
-
+  const recording = screen
   return (
-    <Review
-      key={screen.visit ?? 0}
-      take={screen.take}
-      kept={screen.kept}
-      rehearsalName={session.name}
-      takes={session.takes}
-      onKept={async () => {
-        await refreshSession()
-        setScreen({ name: "rehearsal" })
+    <Recording
+      takeName={recording.takeName}
+      takeGo={recording.takeGo}
+      tracks={session.tracks}
+      lastAttempt={session.last_attempt}
+      // Stop saved the take: the rehearsal screen opens it, paused, to
+      // listen to.
+      onStopped={async (take) => {
+        try {
+          await refreshSession()
+        } catch {
+          // Said on the error bar already (api); the screen moves on all the same.
+        }
+        setScreen({ name: "rehearsal", open: take?.take_number ?? recording.takeNumber })
       }}
-      onDiscarded={(gone) => void discarded(gone)}
-      onCropped={(take) =>
-        setScreen((s) => (s.name === "review" ? { ...s, take } : s))
-      }
+      onSaveFailed={saveFailed}
     />
   )
 }

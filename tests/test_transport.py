@@ -1,7 +1,9 @@
 """Shared transport integration: real WAV/library work with a fake sound card."""
 import tempfile
 import threading
+import time
 from pathlib import Path
+from unittest import mock
 
 # Reuse the engine suite's fake sounddevice and isolated Api factory. Importing
 # the module does not run its suite or touch the user's recording library.
@@ -181,6 +183,228 @@ def metronome():
             api.shutdown()
 
 
+def _recorder_of(api):
+    """Record from the screen's Record and Stop as the band does, a block of
+    sound in between: the take Stop saved, as session_state lists takes."""
+    def record(stop="stop_keep"):
+        assert api.transport_command("start")["ok"]
+        fake_rtmixer.recorded(api._recorder, np.full((512, 1), 1000, dtype=np.int32), 512, None, None)
+        stopped = api.transport_command(stop)
+        assert stopped["ok"], stopped
+        return stopped["take"]
+    return record
+
+
+def held():
+    """The take saved by Stop is held from sending while the band listens to
+    it (listening-apart spec, Sending): every Stop holds it, from before it is
+    saved; release_take, the next take, ten minutes, its delete, Clear false
+    starts, a renamed rehearsal and Finish end the hold."""
+    with tempfile.TemporaryDirectory() as folder:
+        mod, api = fresh_api(Path(folder))
+        try:
+            assert mod.HOLD_SEC == 600
+            assert api.start_rehearsal("Held", 0, SR, [{"name": "Guitar", "channel": 1}])["ok"]
+            here = Path(api._session["folder"])
+            record = _recorder_of(api)
+
+            def held_take():
+                return api.session_state()["held_take"]
+
+            assert held_take() is None
+            # Held from before it is saved: saving puts the take on its way.
+            seen = []
+            original_keep = api.keep_take
+
+            def watched_keep(*args, **kwargs):
+                seen.append(api._held())
+                return original_keep(*args, **kwargs)
+
+            api.keep_take = watched_keep
+            api.set_next_take_name("Viasna")
+            first = record()
+            api.keep_take = original_keep
+            assert seen == [(here, first["take_number"])], seen
+            assert held_take() == first["take_number"]
+            assert api.transport_state()["state"] == "ready" and api.transport_state()["pending_take"] is None
+            # Closed on the screen, it goes; with nothing held that changes nothing.
+            assert api.release_take() == {"ok": True} and held_take() is None
+            assert api.release_take() == {"ok": True} and held_take() is None
+
+            # stop_review is stop_keep; Record from the controller ends the
+            # hold, and its Stop holds the next.
+            second = record("stop_review")
+            assert held_take() == second["take_number"]
+            assert api.transport_command("record_stop")["ok"]
+            assert held_take() is None
+            fake_rtmixer.recorded(api._recorder, np.full((512, 1), 1000, dtype=np.int32), 512, None, None)
+            third = api.transport_command("record_stop")["take"]
+            assert held_take() == third["take_number"]
+            # A Record that fails starts no take: the take stays held.
+            old_start = api.start_take
+            api.start_take = lambda: {"ok": False, "error": "Input device absent"}
+            try:
+                assert not api.transport_command("start")["ok"]
+            finally:
+                api.start_take = old_start
+            assert held_take() == third["take_number"]
+            # Ten minutes after Stop it goes, with nobody pressing anything.
+            real = time.monotonic
+            with mock.patch.object(mod.time, "monotonic", lambda: real() + mod.HOLD_SEC - 1):
+                assert held_take() == third["take_number"]
+            with mock.patch.object(mod.time, "monotonic", lambda: real() + mod.HOLD_SEC + 1):
+                assert held_take() is None
+            assert api._hold is None and held_take() is None
+
+            # Its trash ends the hold, and so does Clear false starts.
+            fourth = record()
+            gone = api.delete_take(str(here), fourth["take_number"])
+            assert gone["ok"] and held_take() is None and api._held() is None
+            assert api.end_trash(gone["undo"])["ok"]
+            fifth = record()
+            gone = api.delete_takes(str(here), [fifth["take_number"]])
+            assert gone["deleted"] == [fifth["take_number"]] and held_take() is None
+            assert api.end_trash(gone["undo"])["ok"]
+
+            # A save that does not work holds nothing, and Retry neither.
+            api.keep_take = lambda *args, **kwargs: {"ok": False, "error": "Disk refused save"}
+            assert api.transport_command("start")["ok"]
+            fake_rtmixer.recorded(api._recorder, np.full((512, 1), 1000, dtype=np.int32), 512, None, None)
+            assert not api.transport_command("stop_keep")["ok"]
+            assert api._held() is None
+            api.keep_take = original_keep
+            assert api.transport_command("retry_save")["ok"]
+            assert api._held() is None
+
+            # Renaming the rehearsal moves its folder, and ends the hold.
+            sixth = record()
+            assert held_take() == sixth["take_number"]
+            renamed = api.rename_rehearsal(str(here), "Held again")
+            assert renamed["ok"] and Path(renamed["folder"]) != here
+            assert held_take() is None and api._held() is None
+
+            # Finish ends it: the last take of the evening goes.
+            seventh = record()
+            assert held_take() == seventh["take_number"]
+            assert api.transport_command("stop_rehearsal")["ok"]
+            assert api._held() is None
+            print("The take held after Stop: all checks passed.")
+        finally:
+            api.shutdown()
+
+
+def numbers():
+    """The trash on the take held after Stop gives its number back, as
+    Discard on the screen after a take did (listening-apart spec, Numbers):
+    only for that take, and only while the number is still the newest. Its
+    Undo brings it back with its own number, or not at all."""
+    from rehearsal_recorder.store.library import GO_TAKEN
+
+    with tempfile.TemporaryDirectory() as folder:
+        mod, api = fresh_api(Path(folder))
+        try:
+            assert api.start_rehearsal("Numbers", 0, SR, [{"name": "Guitar", "channel": 1}])["ok"]
+            here = str(api._session["folder"])
+            record = _recorder_of(api)
+
+            def held_take():
+                return api.session_state()["held_take"]
+
+            def next_go(song="Viasna"):
+                return api._lib.next_goes()[song]
+
+            # A take of the song before, so the next take is the song's too.
+            api.set_next_take_name("Viasna")
+            zero = record()
+            first = record()
+            go1 = first["go"]
+            assert first["song"] == "Viasna" and go1 == zero["go"] + 1 and next_go() == go1 + 1
+            gone = api.delete_take(here, first["take_number"])
+            assert gone["ok"] and gone["undo"] and held_take() is None
+            assert next_go() == go1 and api.session_state()["next_take_go"] == go1
+            # Its Undo with the number still free brings it back with it, and
+            # the count moves on past it again. It is held no more.
+            back = api.undo_trash(gone["undo"])
+            assert back["ok"], back
+            assert api._lib.take(here, first["take_number"])["go"] == go1
+            assert next_go() == go1 + 1 and held_take() is None
+
+            # Once the next take has the number, its Undo is refused, and the
+            # take waits for the end of its notice as it was.
+            second = record()
+            gone = api.delete_take(here, second["take_number"])
+            third = record()
+            assert third["go"] == second["go"] and third["take_number"] != second["take_number"]
+            assert api.undo_trash(gone["undo"]) == {"ok": False, "error": GO_TAKEN}
+            assert api._lib.take(here, second["take_number"]) is None
+            assert api.end_trash(gone["undo"])["ok"]
+            assert next_go() == third["go"] + 1
+
+            # A take deleted after its hold ended keeps its number given.
+            assert held_take() == third["take_number"]
+            api.release_take()
+            gone = api.delete_take(here, third["take_number"])
+            assert gone["ok"] and next_go() == third["go"] + 1
+            assert api.end_trash(gone["undo"])["ok"]
+
+            # Another take deleted while one is held: no number comes back,
+            # and the held one stays held.
+            fourth = record()
+            gone = api.delete_take(here, first["take_number"])
+            assert gone["ok"] and held_take() == fourth["take_number"]
+            assert next_go() == fourth["go"] + 1
+            assert api.end_trash(gone["undo"])["ok"]
+            # Nor when the held take's go is no longer the song's newest: a
+            # take renamed to the song meanwhile has the next one.
+            assert api.rename_take(here, zero["take_number"], "Palyn")["ok"]
+            assert api.rename_take(here, zero["take_number"], "Viasna")["ok"]
+            assert api._lib.take(here, zero["take_number"])["go"] == fourth["go"] + 1
+            assert held_take() == fourth["take_number"]
+            gone = api.delete_take(here, fourth["take_number"])
+            assert gone["ok"] and held_take() is None and next_go() == fourth["go"] + 2
+            assert api.end_trash(gone["undo"])["ok"]
+
+            # A take with no song gives its go back among the takes with no song.
+            api.set_next_take_name("Take")
+            plain = record()
+            assert plain["song"] is None and held_take() == plain["take_number"]
+            assert api._lib.next_unnamed_go() == plain["go"] + 1
+            gone = api.delete_take(here, plain["take_number"])
+            assert gone["ok"] and api._lib.next_unnamed_go() == plain["go"]
+            assert api.end_trash(gone["undo"])["ok"]
+
+            # The title picked before it is picked again: a false start of a
+            # new song is followed by that song, not by the one before it.
+            before = api.session_state()["next_take_name"]
+            api.set_next_take_name("Kupalle")
+            fresh = record()
+            assert fresh["song"] == "Kupalle" and api._session.get("next_name") is None
+            gone = api.delete_take(here, fresh["take_number"])
+            assert gone["ok"] and api.session_state()["next_take_name"] == "Kupalle", before
+            assert api.session_state()["next_take_go"] == fresh["go"]
+            assert api.end_trash(gone["undo"])["ok"]
+            # A title picked after the take stays.
+            fresh = record()
+            api.set_next_take_name("Palyn")
+            gone = api.delete_take(here, fresh["take_number"])
+            assert gone["ok"] and api.session_state()["next_take_name"] == "Palyn"
+            assert api.end_trash(gone["undo"])["ok"]
+
+            # Clear false starts gives none back.
+            api.set_next_take_name("Take")
+            cleared = record()
+            assert held_take() == cleared["take_number"]
+            gone = api.delete_takes(here, [cleared["take_number"]])
+            assert gone["deleted"] == [cleared["take_number"]]
+            assert api._lib.next_unnamed_go() == cleared["go"] + 1
+            assert api.end_trash(gone["undo"])["ok"]
+            print("The number of the take held after Stop: all checks passed.")
+        finally:
+            api.shutdown()
+
+
 if __name__ == "__main__":
     main()
     metronome()
+    held()
+    numbers()

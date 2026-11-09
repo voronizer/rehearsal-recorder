@@ -310,6 +310,12 @@ class BandService:
             return refused
         row = self._lib.service_row(folder, take_number)
         if row is not None and not row["removed"]:
+            if row["sent"] is None and self.api._is_held(folder, take_number):
+                # The take held after Stop, its box unticked: the service has
+                # never had it, and no pass is sending it, so there is
+                # nothing to put in the service's trash.
+                self._taken_out(row["take_id"])
+                return {"ok": True, "take": self._lib.take(folder, take_number)}
             # The delete first, so the hourly check never reads the take as
             # taken out with no delete on its way and sends it again.
             self._lib.add_service_delete(row["uid"], take["name"])
@@ -652,13 +658,26 @@ class BandService:
             if self._later.get(("delete", d["uid"]), 0) <= now:
                 return self._delete(d)
         rows = self._lib.service_rows()
+        # The take saved by the last Stop waits while it is held (Api._held):
+        # the band may still throw it away. The takes after it go meanwhile.
+        # Asked after the rows are read: Stop holds a take before saving it
+        # adds its row, so a row read here was held already if it is to be.
+        held = self.api._held()
         for row in rows:
-            if row["due"] and self._later.get(row["take_id"], 0) <= now:
+            if (row["due"] and self._later.get(row["take_id"], 0) <= now
+                    and not self._is_held(row, held)):
                 return self._send_take(row)
         for row in rows:
             if row["take_id"] in self._owed and self._later.get(("drift", row["take_id"]), 0) <= now:
                 return self._catch_up(row)
         return False
+
+    @staticmethod
+    def _is_held(row, held):
+        """Whether a row is of the take held after Stop: `held` is what
+        Api._held answered."""
+        return (held is not None and Path(row["folder"]) == held[0]
+                and row["take_number"] == held[1])
 
     def start(self):
         if self._thread is not None:
@@ -673,6 +692,9 @@ class BandService:
         self._wake.set()
         if self._thread is not None:
             self._thread.join(timeout)
+
+    def wake(self):
+        self._wake.set()
 
     def _loop(self):
         while not self._stopping:

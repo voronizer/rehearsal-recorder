@@ -40,7 +40,7 @@ export function HistorySwitch({
         <ToggleGroupItem
           key={v.view}
           value={v.view}
-          // A click lets go of the focus, as Review's cloud box does. Left on
+          // A click lets go of the focus, as the open take's box does. Left on
           // the switch, the focus would send ← and → along it and Space to
           // another view, away from the take playing. A choice made from the
           // keys has no click count (detail 0), and keeps the focus.

@@ -5,6 +5,21 @@ versioning](https://semver.org/): until 1.0 the shape of things can still
 move, though recordings on disk are never left behind — old rehearsals keep
 opening.
 
+## Unreleased
+
+- **Stop saves the take and opens it for listening.** The screen after a
+  take, with **Save take** and **Discard**, is gone: the rehearsal screen
+  comes back with the take open and paused. **Play** (Space) plays it and
+  **Close take** (Esc) stops and closes it, then **Record** and **Finish**
+  come back, with their keys always on them. While a take is open its marks
+  are at the right, and the box at the bottom left says whether it goes to
+  the band service or the cloud. A take you have just recorded is sent only
+  once you close it, start the next one, or 10 minutes after **Stop**, so
+  one you throw away at once never leaves the computer, and it gives its
+  number back. The last take of an evening no longer stays unsaved because
+  nobody pressed **Save take**. The controller's **Record/Stop** opens the
+  take the same way.
+
 ## 0.25.0
 
 - **A take's number stands apart from the song's title.** A take now reads

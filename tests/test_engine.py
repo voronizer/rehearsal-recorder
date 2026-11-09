@@ -5280,13 +5280,16 @@ def main():
     while a45._sending.get("cloud").queue.run_next():
         pass
 
-    # Queued: removing now would be undone the moment the copy runs.
+    # Waiting: taken off the queue, so it is not made at all.
     a45.share_take(str(folder45), n45, "mix")
     waiting_remove = a45.unshare_take(str(folder45), n45)
-    ok("a copy still waiting cannot be removed yet, and says why",
-       waiting_remove["ok"] is False
-       and "copy" in waiting_remove["error"].lower())
-    # Running: the same, asked in the middle of the copy.
+    ok("a copy still waiting is taken off the queue",
+       waiting_remove["ok"] is True
+       and a45._sending.get("cloud").queue.run_next() is False
+       and not a45._lib.take(folder45, n45).get("cloud"))
+    # Running: removing now would be undone the moment the copy finished,
+    # so it is refused, and says why.
+    a45.share_take(str(folder45), n45, "mix")
     during = []
     real_copy45 = a45._copy_to_cloud
 
@@ -5297,8 +5300,8 @@ def main():
     a45._copy_to_cloud = remove_mid_copy
     a45._sending.get("cloud").queue.run_next()
     a45._copy_to_cloud = real_copy45
-    ok("nor one being copied",
-       during and during[0]["ok"] is False)
+    ok("one being copied cannot be removed yet, and says why",
+       during and during[0]["ok"] is False and "copy" in during[0]["error"].lower())
     ok("and once it is done it can be",
        a45.unshare_take(str(folder45), n45)["ok"] is True
        and not a45._lib.take(folder45, n45).get("cloud"))

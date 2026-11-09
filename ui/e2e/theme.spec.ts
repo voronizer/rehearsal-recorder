@@ -1,8 +1,8 @@
 import {
+  closeTakeButton,
   expect,
   openApp,
   openHistory,
-  recordTake,
   startButton,
   startRehearsal,
   style,
@@ -88,24 +88,12 @@ test.describe("a take's bar", () => {
   const corner = (bar: ReturnType<Page["locator"]>) =>
     bar.evaluate((e) => getComputedStyle(e).borderTopLeftRadius)
 
-  test("has 4 px corners after a take, under Last time, in History and on a song (F9)", async ({
-    page,
-  }) => {
+  test("has 4 px corners under Last time, in History and on a song (F9)", async ({ page }) => {
     await openApp(page, { before: "window.__FULL_EVENING__ = true;" })
     const lastTime = page.getByRole("complementary", { name: "Last time" })
     const goes = lastTime.locator("[data-song='Pałyn'] [data-columns] [data-bar]")
     await expect(goes.first()).toBeVisible()
     expect(await corner(goes.first())).toBe("4px")
-
-    // A second go at Viasna tonight, so the screen after it has bars.
-    await openApp(page, {
-      before: "window.__TONIGHT__ = [{name: 'Viasna', duration_sec: 18}];",
-    })
-    await startRehearsal(page, 2)
-    await recordTake(page, 2)
-    const summary = page.locator("header [data-take-figures] [role='img'] [data-bar]")
-    await expect(summary.first()).toBeVisible()
-    expect(await corner(summary.first())).toBe("4px")
 
     await openApp(page)
     const list = await openHistory(page)
@@ -243,7 +231,7 @@ test.describe("motion", () => {
     expect(await animationOf(page, "animate-out")).toBe("none")
 
     await page.getByRole("button", { name: /^Stop/ }).click()
-    await expect(page.locator("[data-take-summary]")).toBeVisible()
+    await expect(closeTakeButton(page)).toBeVisible()
     await expect(html).not.toHaveAttribute("data-recording")
     expect(await animationOf(page, "animate-rise")).toBe("rise")
   })

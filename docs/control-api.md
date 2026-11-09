@@ -32,9 +32,13 @@ The older `transport_command` and `transport_state` remain compatibility methods
 - Rehearsal: `start_rehearsal`, `stop_rehearsal`.
 - Removal: `remove_take`.
 
-Laptop Stop sends `stop_review`, leaving a draft on Review for Save take or Discard.
-The MIDI Record/Stop command sends `record_stop`, which stops and keeps an active
-take. Configuring MIDI does not change the laptop's Stop behaviour.
+Laptop Stop sends `stop_keep`: the take is saved and opens for listening. The
+MIDI Record/Stop command sends `record_stop`, which stops and keeps an active
+take the same way. `stop_review` is another name for `stop_keep`, kept so a
+controller or script that sends it still works. The take a Stop saved is held
+from sending (the band service, the cloud folder) until the screen closes it,
+the next take starts, the rehearsal ends, or 10 minutes pass. Closing it is
+the window's own call (`release_take`), not a control command.
 
 ## Parameters
 
@@ -104,7 +108,7 @@ recovery and discard; adapters do not implement recovery policies. The implement
 or placeholder implementation is included.
 
 `tests/test_control_api.py` exercises JSON bridge calls without MIDI enabled.
-It covers Review versus Keep, state/results, bound selection, volume and overlap.
+It covers Stop and Keep, state/results, bound selection, volume and overlap.
 `tests/test_controller_browse.py` covers a queued MIDI selection followed by a
 recording start before execution. The selection is rejected without opening
 playback. Existing controller tests cover the unchanged MIDI protocol.

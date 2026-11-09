@@ -26,7 +26,10 @@ async function clock(page: Page): Promise<number> {
 test("the hero plays the bridge of Pałyn 2 on repeat", async ({ page }) => {
   await page.goto("/stage#hero")
   await expect.poll(() => scene(page), { timeout: 20_000 }).toBe("hero")
-  await expect(page.getByRole("button", { name: "Pause" })).toBeVisible()
+  // The player's Pause: the footer has one too while a take is open.
+  await expect(
+    page.getByRole("toolbar", { name: "Transport" }).getByRole("button", { name: "Pause" })
+  ).toBeVisible()
   const song = await page.evaluate(() => {
     const s = (window as unknown as { __SONG__: { bridge: number; bar: number } }).__SONG__
     return { from: s.bridge, to: s.bridge + 8 * s.bar }

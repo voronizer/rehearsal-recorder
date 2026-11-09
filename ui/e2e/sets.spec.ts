@@ -3,6 +3,7 @@ import {
   calls,
   colour,
   EDGE,
+  closeTake,
   expect,
   expectedError,
   GIG,
@@ -67,7 +68,7 @@ const titlesOf = (loc: ReturnType<typeof rows>, attr: string) =>
 
 async function keep(page: Page, n: number) {
   await recordTake(page, n)
-  await page.getByRole("button", { name: /Save take/ }).click()
+  await closeTake(page)
   await expect(recordButton(page, n + 1)).toBeVisible()
 }
 

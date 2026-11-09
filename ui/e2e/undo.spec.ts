@@ -1,6 +1,8 @@
 import {
   callCount,
   calls,
+  closeTake,
+  closeTakeButton,
   dragRegion,
   expect,
   expectedError,
@@ -19,9 +21,9 @@ import {
 import type { Locator, Page } from "@playwright/test"
 
 // Removing something happens at once (spec B1): deleting a take or a
-// rehearsal, clearing false starts, discarding a take and cropping one ask
-// nothing, and a notice offers it back for ten seconds, with Undo or Ctrl+Z
-// (Cmd+Z on a Mac). Python keeps what went until the notice ends; the fake
+// rehearsal, clearing false starts and cropping a take ask nothing, and a
+// notice offers it back for ten seconds, with Undo or Ctrl+Z (Cmd+Z on a
+// Mac). Python keeps what went until the notice ends; the fake
 // keeps it in window.__UNDOABLE__, by the token its Undo sends back.
 
 const MAC = "Object.defineProperty(navigator, 'platform', {get: () => 'MacIntel'});"
@@ -75,39 +77,6 @@ async function tonight(page: Page, takes: object[], before = "") {
   const overview = page.locator("[aria-label='Rehearsal overview']")
   await expect(overview).toBeVisible()
   return overview
-}
-
-/** Holds every answer of session_state until releaseSession: the read
- *  App makes after a take is discarded, still on its way. */
-async function holdSession(page: Page) {
-  await page.evaluate(() => {
-    type W = {
-      pywebview: { api: Record<string, (...a: unknown[]) => Promise<unknown>> }
-      __REAL_SESSION__?: (...a: unknown[]) => Promise<unknown>
-      __LET_SESSION_GO__?: () => void
-    }
-    const w = window as unknown as W
-    const real = w.pywebview.api.session_state
-    w.__REAL_SESSION__ = real
-    const gate = new Promise<void>((go) => (w.__LET_SESSION_GO__ = go))
-    w.pywebview.api.session_state = async (...a: unknown[]) => {
-      await gate
-      return real(...a)
-    }
-  })
-}
-
-async function releaseSession(page: Page) {
-  await page.evaluate(() => {
-    type W = {
-      pywebview: { api: Record<string, unknown> }
-      __REAL_SESSION__: unknown
-      __LET_SESSION_GO__: () => void
-    }
-    const w = window as unknown as W
-    w.pywebview.api.session_state = w.__REAL_SESSION__
-    w.__LET_SESSION_GO__()
-  })
 }
 
 const TWO = [
@@ -265,45 +234,44 @@ test("one false start cleared is said as one", async ({ page }) => {
   await expect(said(page, "1 false start went to the Trash.")).toHaveCount(1)
 })
 
-test.describe("on the screen after a take", () => {
-  const title = (page: Page) => page.locator("[data-take-summary]")
+test.describe("on the take Stop opened", () => {
+  const overview = (page: Page) => page.locator("[aria-label='Rehearsal overview']")
+  /** The trash on the open take, in the strip. */
+  const trash = (page: Page, name: string) =>
+    page
+      .getByRole("group", { name: "Take strip" })
+      .getByRole("button", { name: `Delete take ${name}` })
+      .click()
 
-  test("Esc leaves it, and Undo opens it again as it was left", async ({ page }) => {
+  test("its trash asks nothing, and Undo brings the take back as it was left", async ({ page }) => {
     await openApp(page)
     await startRehearsal(page)
     await recordTake(page)
     await nameTake(page, "Sonca")
-    await expect(title(page)).toHaveText("Sonca #1")
     await page.getByRole("button", { name: "Add mark" }).click()
     await page.getByRole("dialog").getByRole("button", { name: "Cancel" }).click()
     await expect(page.getByRole("button", { name: /^Remove mark at/ })).toHaveCount(1)
 
-    await page.keyboard.press("Escape")
-    await expect(title(page)).toHaveCount(0)
+    await trash(page, "Sonca 1")
+    await expect(page.getByRole("dialog")).toHaveCount(0)
+    await expect(closeTakeButton(page)).toHaveCount(0)
     await expect(recordButton(page, 2)).toBeVisible()
-    expect(await callCount(page, "discard_take")).toBe(1)
+    expect((await calls(page, "delete_take")).map((c) => c.args[1])).toEqual([1])
     await said(page, "“Sonca #1” went to the Trash.").getByRole("button", { name: "Undo" }).click()
 
-    await expect(title(page)).toHaveText("Sonca #1")
+    await takeButton(overview(page), "Sonca #1").click()
     await expect(page.getByRole("button", { name: /^Remove mark at/ })).toHaveCount(1)
-    await page.getByRole("button", { name: /Save take/ }).click()
-    await expect.poll(() => callCount(page, "keep_take")).toBe(1)
-    const kept = (await calls(page, "keep_take"))[0].args
-    expect(kept[2]).toBe("Sonca")
-    expect(kept[5]).toHaveLength(1)
   })
 
-  test("Undo after the rehearsal was renamed opens the take where the rename moved it", async ({
+  test("Undo after the rehearsal was renamed brings the take back where the rename moved it", async ({
     page,
   }) => {
-    // The draft is in the rehearsal's own folder, as Python keeps it, and
-    // a rename moves it, its files with it.
-    await openApp(page, { before: "window.__DRAFTS_IN_REHEARSAL__ = true;" })
+    await openApp(page)
     await startRehearsal(page)
     await recordTake(page)
     await nameTake(page, "Sonca")
-    await page.keyboard.press("Escape")
-    await expect(title(page)).toHaveCount(0)
+    await trash(page, "Sonca 1")
+    await expect(closeTakeButton(page)).toHaveCount(0)
     await page.getByRole("button", { name: "Rename rehearsal" }).click()
     const dialog = page.getByRole("dialog", { name: "Rename rehearsal" })
     await dialog.locator("input").fill("Tuesday blues")
@@ -311,44 +279,27 @@ test.describe("on the screen after a take", () => {
     await expect(dialog).toHaveCount(0)
 
     await said(page, "“Sonca #1” went to the Trash.").getByRole("button", { name: "Undo" }).click()
-    await expect(title(page)).toHaveText("Sonca #1")
+    await takeButton(overview(page), "Sonca #1").click()
     // Its tracks are read from where they are now, and play.
-    const play = page.getByRole("button", { name: "Play", exact: true })
+    const transport = page.getByRole("toolbar", { name: "Transport" })
+    const play = transport.getByRole("button", { name: "Play", exact: true })
     await expect(play).toBeEnabled()
     await expect(page.getByText("Track file not found")).toHaveCount(0)
     await play.click()
-    await expect(page.getByRole("button", { name: "Pause", exact: true })).toBeVisible()
+    await expect(transport.getByRole("button", { name: "Pause", exact: true })).toBeVisible()
   })
 
-  test("starting the next take ends the offer, and the take goes on to the Trash", async ({
-    page,
-  }) => {
+  test("its trash's offer stays while the next take records", async ({ page }) => {
     await openApp(page)
     await startRehearsal(page)
     await recordTake(page)
-    await page.getByRole("button", { name: /^Discard/ }).click()
+    await trash(page, "Take 1")
     const notice = said(page, "“Take #1” went to the Trash.")
     await expect(notice).toHaveCount(1)
-    const tokens = await waiting(page)
     await recordButton(page, 2).click()
     await expect(page.getByRole("button", { name: /^Stop/ })).toBeVisible()
-    await expect(notice).toHaveCount(0)
-    await expect
-      .poll(async () => (await calls(page, "end_trash")).map((c) => c.args))
-      .toEqual([tokens])
-  })
-
-  test("finishing the rehearsal ends the offer too", async ({ page }) => {
-    await openApp(page)
-    await startRehearsal(page)
-    await recordTake(page)
-    await page.getByRole("button", { name: /^Discard/ }).click()
-    const notice = said(page, "“Take #1” went to the Trash.")
     await expect(notice).toHaveCount(1)
-    await page.getByRole("button", { name: /^Finish/ }).click()
-    await expect(page.getByRole("button", { name: /Start rehearsal/ })).toBeVisible()
-    await expect(notice).toHaveCount(0)
-    await expect.poll(() => callCount(page, "end_trash")).toBe(1)
+    expect(await callCount(page, "end_trash")).toBe(0)
   })
 
   test("a crop's Undo gives back the take and the marks it cut off", async ({ page }) => {
@@ -371,24 +322,7 @@ test.describe("on the screen after a take", () => {
     await expect(page.getByRole("button", { name: /^Remove mark at/ })).toHaveCount(1)
   })
 
-  test("saving the take ends its crop's offer", async ({ page }) => {
-    await openApp(page)
-    await startRehearsal(page)
-    await recordTake(page)
-    await dragRegion(page, 0.25, 0.75)
-    await page.getByRole("button", { name: "Crop to the region" }).click()
-    const notice = said(page, "“Take #1” is cropped. The uncut take went to the Trash.")
-    await expect(notice).toHaveCount(1)
-    const tokens = await waiting(page)
-    await page.getByRole("button", { name: /Save take/ }).click()
-    await expect(recordButton(page, 2)).toBeVisible()
-    await expect(notice).toHaveCount(0)
-    await expect
-      .poll(async () => (await calls(page, "end_trash")).map((c) => c.args))
-      .toEqual([tokens])
-  })
-
-  test("discarding the take ends its crop's offer", async ({ page }) => {
+  test("its trash ends its crop's offer", async ({ page }) => {
     await openApp(page)
     await startRehearsal(page)
     await recordTake(page)
@@ -397,54 +331,14 @@ test.describe("on the screen after a take", () => {
     const cropped = said(page, "“Take #1” is cropped. The uncut take went to the Trash.")
     await expect(cropped).toHaveCount(1)
     const [crop] = await waiting(page)
-    await page.getByRole("button", { name: /^Discard/ }).click()
+    await trash(page, "Take 1")
     await expect(said(page, "“Take #1” went to the Trash.")).toHaveCount(1)
     await expect(cropped).toHaveCount(0)
-    await expect
-      .poll(async () => (await calls(page, "end_trash")).map((c) => c.args))
-      .toEqual([[crop]])
+    // Python ended it with the take.
+    expect(await waiting(page)).not.toContain(crop)
   })
 
-  test("a save that fails keeps the crop's offer", async ({ page }) => {
-    await openApp(page)
-    await startRehearsal(page)
-    await recordTake(page)
-    await dragRegion(page, 0.25, 0.75)
-    await page.getByRole("button", { name: "Crop to the region" }).click()
-    const cropped = said(page, "“Take #1” is cropped. The uncut take went to the Trash.")
-    await expect(cropped).toHaveCount(1)
-    await page.evaluate(() => {
-      const w = window as unknown as { pywebview: { api: Record<string, unknown> } }
-      w.pywebview.api.keep_take = async () => ({ ok: false, error: "The disk is full" })
-    })
-    await page.getByRole("button", { name: /Save take/ }).click()
-    await expect(notices(page, "error").filter({ hasText: "The disk is full" })).toBeVisible()
-    await expect(cropped.getByRole("button", { name: "Undo" })).toHaveCount(1)
-    expect(await callCount(page, "end_trash")).toBe(0)
-  })
-
-  test("Undo brings back the cloud answer it was left with", async ({ page }) => {
-    await openApp(page, {
-      // The limit at its lowest, so the fake's 6 s take is not a false start.
-      before: `window.__CLOUD_DIR__ = '/cloud'; window.__AUTO_PUBLISH__ = {on: true, what: 'mix'}; window.__FALSE_START__ = 5;`,
-    })
-    await startRehearsal(page)
-    await recordTake(page)
-    const box = page.locator("#send-to-cloud")
-    await expect(box).toBeChecked()
-    await box.uncheck()
-    await page.keyboard.press("Escape")
-    await expect(title(page)).toHaveCount(0)
-    await said(page, "“Take #1” went to the Trash.").getByRole("button", { name: "Undo" }).click()
-    await expect(title(page)).toHaveText("Take #1")
-    await expect(box).not.toBeChecked()
-    await page.getByRole("button", { name: /Save take/ }).click()
-    await expect.poll(() => callCount(page, "keep_take")).toBe(1)
-    // Kept out of the cloud folder, against the setting, as it was left.
-    expect((await calls(page, "keep_take"))[0].args[6]).toBe(false)
-  })
-
-  test("a session that cannot be read after a discard still offers the Undo", async ({
+  test("a session that cannot be read after the trash still offers the Undo", async ({
     page,
     pageErrors,
   }) => {
@@ -460,47 +354,13 @@ test.describe("on the screen after a take", () => {
         throw new Error("the bridge blinked")
       }
     })
-    await page.keyboard.press("Escape")
+    await trash(page, "Take 1")
     const notice = said(page, "“Take #1” went to the Trash.")
     await expect(notice).toHaveCount(1)
     await expect(recordButton(page)).toBeVisible()
     await notice.getByRole("button", { name: "Undo" }).click()
-    await expect(title(page)).toHaveText("Take #1")
+    await expect(takeButton(overview(page), "Take #1")).toBeVisible()
     expectedError(pageErrors, /session_state failed/)
-  })
-
-  test("while the session is read after a discard, the take is not saved", async ({ page }) => {
-    await openApp(page)
-    await startRehearsal(page)
-    await recordTake(page)
-    await holdSession(page)
-    await page.keyboard.press("Escape")
-    await expect(said(page, "“Take #1” went to the Trash.")).toHaveCount(1)
-    await page.keyboard.press("Space")
-    await page.waitForTimeout(200)
-    expect(await callCount(page, "keep_take")).toBe(0)
-    await releaseSession(page)
-    await expect(recordButton(page, 2)).toBeVisible()
-    expect(await callCount(page, "keep_take")).toBe(0)
-  })
-
-  test("an Undo while the session is read after a discard stays on the take", async ({
-    page,
-  }) => {
-    await openApp(page)
-    await startRehearsal(page)
-    await recordTake(page)
-    await nameTake(page, "Sonca")
-    await holdSession(page)
-    await page.keyboard.press("Escape")
-    await said(page, "“Sonca #1” went to the Trash.").getByRole("button", { name: "Undo" }).click()
-    await releaseSession(page)
-    await expect(title(page)).toHaveText("Sonca #1")
-    await page.waitForTimeout(200)
-    await expect(title(page)).toHaveText("Sonca #1")
-    // And it is the screen again, not one left busy: Space saves it.
-    await page.keyboard.press("Space")
-    await expect.poll(() => callCount(page, "keep_take")).toBe(1)
   })
 })
 
@@ -509,7 +369,7 @@ test("a crop asks nothing, and Undo gives back the take's old length", async ({ 
   await startRehearsal(page)
   await recordTake(page)
   await nameTake(page, "Pałyn")
-  await page.getByRole("button", { name: /Save take/ }).click()
+  await closeTake(page)
   await takeButton(page.locator("[aria-label='Rehearsal overview']"), "Pałyn #1").click()
   await expect(page.locator("span", { hasText: "/ 0:06" }).first()).toBeVisible()
   await dragRegion(page, 0.25, 0.75)
@@ -527,7 +387,7 @@ test("a second crop of a take ends the first one's offer", async ({ page }) => {
   await startRehearsal(page)
   await recordTake(page)
   await nameTake(page, "Pałyn")
-  await page.getByRole("button", { name: /Save take/ }).click()
+  await closeTake(page)
   await takeButton(page.locator("[aria-label='Rehearsal overview']"), "Pałyn #1").click()
   await expect(page.locator("span", { hasText: "/ 0:06" }).first()).toBeVisible()
   await dragRegion(page, 0.25, 0.75)

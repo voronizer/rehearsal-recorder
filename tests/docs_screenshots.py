@@ -150,7 +150,7 @@ KIT_ON_BOTH = """
 # so a picture is not half empty.
 HEIGHT = {"unsaved-takes": 420, "setup": 930, "settings": 760, "marks": 420, "sets": 720,
           "rehearsal": 770, "metronome-row": 770, "backing-row": 770,
-          "recording": 720, "review": 1040, "player": 1040, "zoom": 1040,
+          "recording": 720, "listening": 1040, "player": 1040, "zoom": 1040,
           "metronome-master": 1040, "drift-master": 1040, "backing-lane": 1040,
           "history": 820, "history-songs": 1020, "backing-song": 1020, "history-marks": 820,
           "midi-card": 910, "midi-player": 1140}
@@ -299,17 +299,18 @@ def main():
         page.wait_for_timeout(3200)
         shoot(page, "recording", ready=between_clicks)
 
+        # Stop saves the take and opens it, paused, on the rehearsal screen.
         stop.click()
-        page.wait_for_selector("[data-take-summary]")
+        page.get_by_role("button", name="Close take").wait_for()
         page.wait_for_timeout(1200)
-        shoot(page, "review")
+        shoot(page, "listening")
         # Viasna 2 was recorded with its backing track: its Backing track is
         # the last lane, dashed, muted the first time a take of Viasna opens.
         page.locator("[data-plate='Backing']").wait_for()
         page.mouse.move(0, 0)
         shoot(page, "backing-lane",
               around([page.get_by_role("group", name="Take timeline"), page.locator("[data-master-group]")]))
-        page.get_by_role("button", name="Save take").click()
+        page.get_by_role("button", name="Close take").click()
         page.wait_for_selector("button[data-next-take='7']")
 
         page.click(take_button("Pałyn\u00a0#2"))

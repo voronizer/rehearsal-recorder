@@ -69,8 +69,8 @@ export function shortList(titles: string[], lastTake: Map<string, number>): stri
 }
 
 // Whether the list of other songs is opened out, by rehearsal: it stays as
-// it was left for the rest of the evening (R5), past the recording and
-// review screens, which take the rehearsal screen away.
+// it was left for the rest of the evening (R5), past the recording screen,
+// which takes the rehearsal screen away.
 const openLists = new Map<string, boolean>()
 
 export function useListOpen(folder: string): [boolean, (open: boolean) => void] {

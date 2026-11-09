@@ -1,10 +1,10 @@
 import {
   callCount,
   calls,
+  closeTakeButton,
   expect,
   hold,
   letGo,
-  nameTake,
   openApp,
   setFake,
   startButton,
@@ -12,7 +12,6 @@ import {
   style,
   test,
   recordButton,
-  takeButton,
 } from "./app.ts"
 import type { Page } from "@playwright/test"
 
@@ -257,7 +256,7 @@ test.describe("long work shows its progress where it runs", () => {
     await page.mouse.up()
   }
 
-  test("saving a take, and cropping it under review and once saved", async ({ page }) => {
+  test("saving a take, and cropping it once it is open", async ({ page }) => {
     await openApp(page, { before: "window.__ACTIVITY__ = [];" })
     await startRehearsal(page)
     await recordButton(page, 1).click()
@@ -270,22 +269,10 @@ test.describe("long work shows its progress where it runs", () => {
     await running(page, "stop", 0.45, { folder: "/tmp/draft", take_number: 1 })
     await expect(page.getByText("Saving the take… 45%")).toBeVisible()
     await letGo(page, "stop_take")
-    await expect(page.getByRole("button", { name: /Save take/ })).toBeVisible()
-
-    await hold(page, "crop_draft")
-    await drag(page, 0.25, 0.75)
-    await running(page, "crop", 0.4, { folder: "/tmp/draft" })
-    await page.getByRole("button", { name: "Crop to the region" }).click()
-    await expect(page.getByText("Cropping… 40%")).toBeVisible()
-    await letGo(page, "crop_draft")
     await activity(page, [])
-    await expect(page.getByText("Cropping…")).toHaveCount(0)
 
-    // Saved, and cropped again from the rehearsal screen.
-    await nameTake(page, "Pałyn")
-    await page.getByRole("button", { name: /Save take/ }).click()
-    await expect(recordButton(page, 2)).toBeVisible()
-    await takeButton(page.locator("[aria-label='Rehearsal overview']"), "Pałyn #1").click()
+    // Saved, open on the rehearsal screen, and cropped there.
+    await expect(closeTakeButton(page)).toBeVisible()
     await expect(page.getByRole("button", { name: "Mute Guitar" })).toBeVisible()
     await hold(page, "crop_take")
     await drag(page, 0.25, 0.75)
@@ -294,6 +281,8 @@ test.describe("long work shows its progress where it runs", () => {
     await page.getByRole("button", { name: "Crop to the region" }).click()
     await expect(page.getByText("Cropping… 40%")).toBeVisible()
     await letGo(page, "crop_take")
+    await activity(page, [])
+    await expect(page.getByText("Cropping…")).toHaveCount(0)
   })
 
   test("recovering a take, in its row", async ({ page }) => {

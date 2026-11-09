@@ -8,10 +8,10 @@ import { cn } from "@/lib/utils"
   the same chip reads on a page and on a filled button (white on the accent,
   dark on a strong Stop).
 
-  A key on a button saves a line of "Space: save take" under it: there is no
+  A key on a button saves a line of "Space: play" under it: there is no
   distance between the key and what it does. Show it only while the key really
-  does press that button (with a take open on the rehearsal screen Space plays
-  it and Escape closes it, so Record and Finish lose theirs), and mark it
+  does press that button (with a take open on the rehearsal screen the footer's
+  buttons are Close take and Play, and the keys go with them), and mark it
   `aria-hidden`, since the button says its key with `aria-keyshortcuts`. A key
   listed in text is content and stays readable.
 

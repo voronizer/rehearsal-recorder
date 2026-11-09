@@ -21,19 +21,12 @@ const SPACE_ROWS: Row[] = [
       [["Esc"], "finish"],
     ],
   },
-  { screen: "Recording", uses: [[["Space"], "stop the take"]] },
-  {
-    screen: "After a take",
-    uses: [
-      [["Space"], "save the take"],
-      [["Esc"], "discard it"],
-    ],
-  },
+  { screen: "Recording", uses: [[["Space"], "stop and save the take"]] },
   {
     screen: "Listening",
     uses: [
       [["Space"], "play or pause"],
-      [["Esc"], "close the take"],
+      [["Esc"], "stop and close the take"],
     ],
   },
   { screen: "History, Settings", uses: [[["Esc"], "back to the start screen"]] },
@@ -81,7 +74,7 @@ export function KeysSettings() {
       <KeysGroup
         kind="space"
         title="Space and Esc"
-        hint="Start and stop a take, save or discard it, and finish the rehearsal."
+        hint="Start and stop a take, play and close it, and finish the rehearsal."
         rows={SPACE_ROWS}
         rise={1}
       />

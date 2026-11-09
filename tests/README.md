@@ -14,9 +14,9 @@ Interface tests run as unit and browser suites.
 
 ## test_control_api.py: shared controls
 
-Exercises JSON bridge calls without MIDI: laptop Review, explicit Keep,
-semantic results, bound catalog selection, execution-time state checks,
-normalised volume and overlapping calls.
+Exercises JSON bridge calls without MIDI: `stop_review` saving at once as
+`stop_keep` does, explicit Keep, semantic results, bound catalog selection,
+execution-time state checks, normalised volume and overlapping calls.
 
 ## test_controller.py: dedicated remote
 
@@ -29,7 +29,15 @@ ports), disconnect cancellation and shared recording/playback actions.
 Uses the engine suite's fake sound card and temporary libraries to verify
 Start, Stop-and-keep, playback, confirmed state during saving, overlapping UI
 and controller commands, save retry without a second Stop, and preserved drafts
-when finalisation fails. Run with `python tests/test_transport.py`.
+when finalisation fails. Then the take held after Stop: held from before it is
+saved, by `stop_keep`, `stop_review` and the controller's Stop; let go by
+`release_take`, the next take starting (a Record that fails lets go of
+nothing), ten minutes, Finish, its delete, Clear false starts and a renamed
+rehearsal; and a save that fails holds nothing. Its trash gives its number
+back (with a song and without), but not once the hold has ended, not for
+another take, not by Clear false starts, and not when the number is no longer
+the newest; its Undo brings it back with its own number, or is refused once
+another take has it. Run with `python tests/test_transport.py`.
 
 ## test_engine.py: the audio
 
@@ -315,9 +323,16 @@ upload started again; a refusal shown in red and kept, and Retry; a rename
 before and during sending; a crop as a new generation with its cut; a
 deletion and its Undo; Remove from the band service; the close dialog and
 Close anyway; disconnect; the cloud folder sending nothing new while the
-service is chosen; an old РЭХА told to update. The parts are 16 KiB here, so
-a short take has several. Needs `pip install openapi-core==0.23.1`; without
-it the suite stops at once and says so. Run with `python tests/test_sending.py`.
+service is chosen; an old РЭХА told to update; and the take held after Stop,
+by both places: it waits while the takes after it go, counts as still to send
+when the window closes and goes as it closes, goes once released or ten
+minutes after Stop, and unticked while held never goes, nor to the service's
+trash (the cloud folder takes its copy off the queue rather than refusing,
+and a mark after does not send it again); and a copy waiting for the cloud
+folder is written down, so the app opened again makes it. The parts are 16
+KiB here, so a short take has several.
+Needs `pip install openapi-core==0.23.1`; without it the suite stops at once
+and says so. Run with `python tests/test_sending.py`.
 
 ## test_ring.py: sound through rtmixer's rings
 

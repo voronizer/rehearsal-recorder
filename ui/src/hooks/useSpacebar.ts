@@ -115,10 +115,10 @@ let steppedOut: KeyboardEvent | null = null
  * a field stay the field's: that is typing.
  *
  * Leaving rather than acting at once, because a take is named in a field
- * on screens whose Escape does something: the rehearsal screen's finishes
- * the rehearsal, and the screen after a take's throws the take away. Name,
- * Escape, Space records. Blurring is also what a click elsewhere does, so a
- * field that keeps what was typed when it loses focus keeps it here too.
+ * on a screen whose Escape does something: the rehearsal screen's finishes
+ * the rehearsal. Name, Escape, Space records. Blurring is also what a click
+ * elsewhere does, so a field that keeps what was typed when it loses focus
+ * keeps it here too.
  *
  * Called from the window listener above and from useEscape, whichever the
  * keydown reaches first; the second finds it already done.
@@ -232,9 +232,7 @@ export function useSpacebar(handler: () => void, enabled = true) {
  * open take first, then the rehearsal it was in, then the screen itself. It
  * never climbs past a decision — it will not end a rehearsal or stop a
  * recording without asking — because a key pressed by accident should cost
- * nothing that cannot be got back. On the screen after a take it throws the
- * take away at once, as that screen's Discard does: the notice's Undo gets
- * it back, screen and all.
+ * nothing that cannot be got back.
  *
  * With Space and Esc off in Settings › Keys (lib/keys.ts), Escape does
  * nothing to the screen. It still closes a dialog, which the dialog does

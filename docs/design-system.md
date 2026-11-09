@@ -18,9 +18,10 @@ shows the app as it is; the site keeps its own big headings and layout
 
 The foundation is in: the theme values, the shared components, Undo, the
 showcase and the check. Every screen is redone on it: the start screen, the
-rehearsal screen, the recording screen, Review (the screen after Stop),
-History, Drafts (the unsaved takes the app offers at its start), Settings,
-and the big player that Review and History open takes in. Their pieces are
+rehearsal screen (where a take opens for listening after Stop), the
+recording screen, History, Drafts (the unsaved takes the app offers at its
+start), Settings, and the big player that the rehearsal screen and History
+open takes in. Their pieces are
 the shared ones, New set's song list included, which the start screen
 shares with Settings' Sets, and the check's [allow-list](#the-check) is
 empty. Where a rule below says "as each screen is redone", the screens'
@@ -131,7 +132,7 @@ showcase and reha.stream all import. A screen uses the names (`bg-primary`,
   (buttons of every size, fields, selects, menus): `rounded-md`. 12 px for
   groups and dialogs: `rounded-lg` or `rounded-xl`. `rounded-full` for round
   things (play buttons, pills). A take's bar is `rounded-sm` at every size
-  and in every place (after a take, under Last time, in History's strip, on
+  and in every place (under Last time, in History's strip, on
   a song's page and in Marks): one 2 px wide is a pill, since the browser
   cuts a corner down to fit the side it is on. A
   graphic, such as a 1-2 px line or a mark's diamond, keeps its own, with
@@ -217,14 +218,17 @@ the shared one when it is redone.
   2026-11-02): what is marked `data-squeeze="1"` goes first, with the keys'
   letters, then 2, then 3, and the buttons keep their size; the metronome
   shows what went under its gear, and its keys still work. The main one is
-  `footer` (56 px): Start rehearsal, Record, Stop, Save take and
+  `footer` (56 px): Start rehearsal, Record, Stop, Play and Pause, and
   Recover, which is Recover all while more than one take is listed or a run
-  goes on. The ones beside it are `footer-aside`: Finish, Discard and
-  Decide later.
+  goes on. The ones beside it are `footer-aside`: Finish, Close take, the
+  overview's Stop and Decide later. A pair that takes the other's place
+  (Finish and Close take, Record and Play) keeps one width, so nothing
+  moves.
   A take's own Recover in Drafts is `outline`, so the footer's stays the
   screen's one blue button (F2). A line between the two halves
   (`rule`) is for a left half that is a field, as the start screen's name
-  field is. Review's left half is a line of text, and it has no line.
+  field is. With a take open, the rehearsal screen's left half is the send
+  box, and it has no line.
   Every variant has the same weight and the same 1 px border, so
   a toggle that swaps variants never changes width and never moves what is
   beside it; all but `link`, which has no frame: it is bare words, never
@@ -263,8 +267,8 @@ the shared one when it is redone.
   (`hooks/useUndoKey.ts`), except in a text field, which undoes its own
   typing, with a dialog, a menu or a list open, or while a take records.
   What a button could not do is said in a notice of kind `error`, the
-  footer's buttons included (Start rehearsal, Record, Stop, Save take,
-  Discard), as the evening's buttons and Settings say theirs. It stays
+  footer's buttons included (Start rehearsal, Record, Stop), as the
+  evening's buttons and Settings say theirs. It stays
   until it is closed or its screen is left, and a retry puts it away; an
   answer that comes once its screen has gone says nothing
   (`hooks/useErrorNotice.ts`). It is drawn over the screen, so it moves
@@ -304,7 +308,7 @@ the shared one when it is redone.
   (`NotesMute`, owner's pick A, 2026-11-04), and the words the plate used
   to say, "Saved as .mid, not played here", are its tip.
   The fader shows keyboard focus on its thumb, in the shared ring, wherever
-  a player stands (Review, the rehearsal screen, History): the browser's own
+  a player stands (the rehearsal screen, History): the browser's own
   outline would go round the whole track.
   The lanes are one group on the card's fill, with no lines between tracks:
   each lane's picture, a waveform or a lane of notes, sits on a well of its
@@ -348,8 +352,9 @@ the shared one when it is redone.
   (`Toggle` and `ToggleGroup`, with arrow keys inside a group), one list row
   (`Item`, every row reachable by keyboard), warnings (`Alert`), loading
   (`Spinner`), empty states (`Empty`), tooltips (`Tooltip`) and meters
-  (`Meter`); added with Review, checkboxes (`Checkbox`) and a song's takes as
-  columns (`TakeColumns`), which Last time and Review share; added with
+  (`Meter`); added with the screen after a take (gone since), checkboxes
+  (`Checkbox`) and a song's takes as columns (`TakeColumns`), which Last
+  time uses; added with
   History, expanding (`Collapsible`), which opens a rung of a song's ladder.
   Two more of our own live in `components/`. The set card, `SetCard`
   (`components/NextTakeSongs.tsx`), is one piece under Next take and in
@@ -380,8 +385,7 @@ the shared one when it is redone.
   "Pałyn #3", so a title that ends in a number of its own reads apart
   ("Opus 5 #3"). Plain text takes the same form from `lib/takeText.ts`. Only
   the song tabs (`SongTab.tsx`) and the song ladder (`SongLadder.tsx`) still
-  draw the number themselves, alone, as "#3". Review's columns under its
-  header keep the bare number: a column is too narrow for the #. A track
+  draw the number themselves, alone, as "#3". A track
   that records is one tile, `TrackTile` (`components/TrackTile.tsx`), where
   the MIDI tile was a copy of it: its levels, with a narrow column for its
   notes on Both, or with `kind="notes"` a MIDI track's notes alone. Its fill
@@ -570,8 +574,9 @@ The other shared components, each with its stories:
   the 4 px corner of a small thing (F9). Ticked, it is filled in the text's
   colour, never the accent (F2), with the shared focus ring. It is Radix's
   checkbox, a button, so Space on it ticks it; on a screen where Space does
-  the main thing, as Review's does, the box gives up its focus after a
-  change, so the next Space is the screen's. Review's cloud line, Folders'
+  the main thing, as the rehearsal screen's does, the box gives up its
+  focus after a change, so the next Space is the screen's. The open take's
+  send box, Folders'
   **Send saved takes automatically** and Under the hood's **Check for new
   versions** use it.
 - **TakeColumns**, `take-columns.tsx`: a song's takes as columns, C8's
@@ -580,11 +585,9 @@ The other shared components, each with its stories:
   number under its column. The take the screen is about is lit: in the
   text's colour, or full green if it is starred. A starred take that is not
   lit is a paler green, and the rest are grey. Last time lights the take its
-  ▶ plays and Review the take just recorded, so the two screens draw them
-  alike. Last time draws every song to the scale of its longest take
+  ▶ plays, and draws every song to the scale of its longest take
   (`longest`). The columns are a picture, hidden from a screen reader: the
-  screen that uses them says them in words; Review also puts the tip on
-  them.
+  screen that uses them says them in words.
 - **Collapsible**, `collapsible.tsx`: shadcn's, C8's expanding. A part that
   opens and closes under its trigger: `Collapsible`, `CollapsibleTrigger`
   and `CollapsibleContent`. It has no look of its own. The trigger is what
@@ -784,8 +787,8 @@ as the `cn` import.
 
 - **B1. Moving to the Trash happens at once, with Undo.** A question before
   every removal gets answered without being read. Deleting a take or a
-  rehearsal, clearing false starts, discarding a take (on Review and in
-  Drafts) and cropping happen when clicked, and a notice says, for example,
+  rehearsal, clearing false starts, discarding a take in Drafts and
+  cropping happen when clicked, and a notice says, for example,
   "“Pałyn #5” went to the Trash." with **Undo**, also on ⌘Z or Ctrl+Z, for
   10 s. Undo brings it back whole: its name, star, marks, notes and cloud
   copy. `offerUndo()` in `lib/trash.ts` raises the notice. Python keeps what
@@ -829,10 +832,10 @@ as the `cn` import.
   thing at a time (a load error, then Cropping, then the output's warning),
   so the timeline never moves when it fills. On the recording screen the
   disk line holds the room of the longest thing it can say, and a tile's dB
-  figure holds the room of "-100.0", the widest it can read. On Review the
-  cloud line holds its room from the start, before the setting has
-  answered, and the header is as tall with the song's columns as without
-  them: it changes only with the title's lines. Every redone screen's
+  figure holds the room of "-100.0", the widest it can read. With a take
+  open, the rehearsal screen's footer keeps the metronome row's height
+  under the send box, and the footer's buttons keep their widths, so
+  opening and closing a take moves nothing. Every redone screen's
   header (`Shell`'s `air`) is as tall as the 36 px work button, so the
   button arriving in it moves nothing. In Drafts a take being recovered
   shows its progress in the place of its line, both 16 px, so the row keeps
@@ -875,16 +878,9 @@ as the `cn` import.
   and past that it is cut and whole in the tile's tooltip on hover. Short
   names keep 2.25 rem. `TileName` fits it on an unseen copy, and again only
   when its room changes size, so nothing that comes during a take changes
-  it. On Review the take's name is the header's title, on up to two lines
-  and then cut with its number kept, whole in the tooltip, with the pencil
-  after its last word. The song's takes tonight stand beside it as columns,
-  as small as Last time's, and give way to it whole; once they have, the
-  title's tooltip says them, and the 1 px line after them goes too. The
-  subtitle never makes them give way: a long rehearsal name runs on into the
-  room the columns leave, is cut where that ends, and is whole in the
-  tooltip. In History each page has the pane head (`PaneHead`, C8): the
+  it. In History each page has the pane head (`PaneHead`, C8): the
   title on up to two lines, then cut and whole in the tooltip, with the
-  pencil after its last word, as on Review, and on a rehearsal's page the
+  pencil after its last word, and on a rehearsal's page the
   folder button after the pencil. The actions at its right get what the
   title leaves: a rehearsal's figures give way to its name whole, before
   the name takes a second line, and Delete stays. Under the name the date

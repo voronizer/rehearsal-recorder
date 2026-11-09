@@ -1,6 +1,7 @@
 import {
   callCount,
   calls,
+  closeTake,
   expectedError,
   expect,
   openApp,
@@ -312,18 +313,18 @@ test("a page that cannot tell what is left lets the window close", async ({ page
   expectedError(pageErrors, /sending_left failed/)
 })
 
-test("the keep line sends to the band service as its setting says", async ({ page }) => {
+test("the take Stop saves goes to the band service as its setting says", async ({ page }) => {
   // The fake's takes are 6 s, false starts under the 30 s the setting starts
   // at; with the limit at its lowest they are takes like any other.
   await openApp(page, { before: WITH_KEY + "window.__SERVICE_AUTO__ = true; window.__FALSE_START__ = 5;" })
   await startRehearsal(page)
   await recordTake(page)
-  const box = page.getByRole("checkbox", { name: /^Send to the band service/ })
-  await expect(box).toBeChecked()
-  await page.getByRole("button", { name: "Save take" }).click()
-  await expect.poll(() => callCount(page, "keep_take")).toBe(1)
-  // The box as the setting has it: Python follows its own rule.
+  // Stop saved it, with nothing said about sending: Python follows its own
+  // rule, and the open take's box shows what it decided.
+  expect(await callCount(page, "keep_take")).toBe(1)
   expect((await calls(page, "keep_take"))[0].args[6]).toBeNull()
+  await expect(page.getByRole("checkbox", { name: "Send to the band service" })).toBeChecked()
+  await closeTake(page, 2)
   await expect(page.getByText("Waiting for the band service")).toBeVisible()
 })
 

@@ -44,7 +44,7 @@ export function PlayerKeys({ spaceKey, goKeys }: { spaceKey: boolean; goKeys?: b
   const playerRows: [string[], string][] = [
     [["←", "→"], "10 seconds back / forward"],
     [["Home"], "To the start"],
-    // Only where the take strip is: the review screen has one take.
+    // Only where the take strip is, with the song's other takes.
     ...(goKeys
       ? [[["↑", "↓"], "Previous / next take of this song"] as [string[], string]]
       : []),

@@ -1,5 +1,6 @@
 import {
   badNames,
+  closeTake,
   colour,
   drawnLate,
   EDGE,
@@ -40,7 +41,7 @@ async function secondGo(page: Page, song = "Viasna", before = "") {
   await recordButton(page, 1).click()
   await page.getByRole("button", { name: /^Stop/ }).click()
   await nameTake(page, song)
-  await page.getByRole("button", { name: /Save take/ }).click()
+  await closeTake(page, 2)
   await recordButton(page, 2).click()
   await expect(page.getByRole("button", { name: /^Stop/ })).toBeVisible()
   await vocalsAt(page, 50)

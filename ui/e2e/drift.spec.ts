@@ -174,7 +174,7 @@ test("a stop inside a stretch is a gap in its amber too, with one chip", async (
   await expect(line(page).locator("[data-drift-tempo]")).toHaveCount(2)
 })
 
-test("Review right after a take shows its line", async ({ page }) => {
+test("the take Stop opens shows its line", async ({ page }) => {
   await openEvening(page)
   await recordTake(page, 11)
   await expect(line(page)).toBeVisible()

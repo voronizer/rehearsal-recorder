@@ -1,6 +1,7 @@
 import {
   calls,
   colour,
+  closeTakeButton,
   expect,
   openApp,
   openBandApp,
@@ -392,12 +393,12 @@ test("the drift line is asked with the Backing track named as one", async ({ pag
   expect(tracks.find((t) => t.name === "Drums")?.kind).toBeUndefined()
 })
 
-test("Review right after a take shows the same lane, muted the first time", async ({ page }) => {
+test("the take Stop opens shows the same lane, muted the first time", async ({ page }) => {
   await bandRehearsal(page)
   await nameNext(page, "Pałyn")
   await record(page).click()
   await page.getByRole("button", { name: /^Stop/ }).click()
-  await expect(page.locator("[data-take-summary]")).toBeVisible()
+  await expect(closeTakeButton(page)).toBeVisible()
   await expect(lanes(page).last()).toHaveAttribute("data-lane-row", "Backing")
   await expect(page.locator("[data-plate='Backing'] [data-plate-file]")).toHaveAccessibleName("Stereo file")
   await expect(mute(page)).toHaveAttribute("aria-pressed", "true")

@@ -2,6 +2,7 @@ import {
   calls,
   callCount,
   colour,
+  closeTake,
   expect,
   mixed,
   openApp,
@@ -91,7 +92,7 @@ test("a take just saved is starred from the rehearsal's own overview", async ({ 
   await openApp(page)
   await startRehearsal(page)
   await recordTake(page)
-  await page.getByRole("button", { name: /Save take/ }).click()
+  await closeTake(page)
   const overview = page.locator("[aria-label='Rehearsal overview']")
   await expect(overview).toBeVisible()
   const button = overview.getByRole("button", { name: /^Star / })

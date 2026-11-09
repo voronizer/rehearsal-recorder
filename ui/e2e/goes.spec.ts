@@ -2,6 +2,7 @@ import {
   calls,
   callCount,
   dragRegion,
+  closeTake,
   expect,
   hold,
   letGo,
@@ -259,7 +260,7 @@ test("a second ↑ or ↓ before the go has opened carries the first one's place
   expect((await calls(page, "player_seek")).at(-1)!.args[0] as number).toBeCloseTo(30, -1)
 })
 
-test("the keys list says ↑ and ↓ in the player, and the review screen's does not", async ({
+test("the keys list says Up and Down in the player, on the take Stop opened too", async ({
   page,
 }) => {
   await openGo(page)
@@ -273,7 +274,7 @@ test("the keys list says ↑ and ↓ in the player, and the review screen's does
   await recordTake(page, 1)
   await page.getByRole("button", { name: "Player keys" }).click()
   await expect(keys).toContainText("10 seconds back / forward")
-  await expect(keys).not.toContainText("Previous / next take")
+  await expect(keys).toContainText("Previous / next take of this song")
 })
 
 test("the place is not carried by a tab", async ({ page }) => {
@@ -317,9 +318,9 @@ test("the rehearsal screen has the same header", async ({ page }) => {
   await startRehearsal(page)
   await recordTake(page, 1)
   await nameTake(page, "Pałyn")
-  await page.getByRole("button", { name: /Save take/ }).click()
+  await closeTake(page)
   await recordTake(page, 2)
-  await page.getByRole("button", { name: /Save take/ }).click()
+  await closeTake(page)
   await expect(recordButton(page, 3)).toBeVisible()
   await expect(fact(page, "Takes")).toHaveText("2, 1 song")
   await expect(fact(page, "On disk")).toHaveText("96 MB")

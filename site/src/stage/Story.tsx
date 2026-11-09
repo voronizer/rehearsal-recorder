@@ -11,16 +11,13 @@
 import { useSyncExternalStore } from "react"
 import { Setup } from "@/screens/Setup"
 import { Recording } from "@/screens/Recording"
-import { Review } from "@/screens/Review"
 import { HistoryScreen } from "@/screens/HistoryScreen"
 import type { FromStage } from "../frame"
 import {
   api,
   type LastAttempt,
-  type PendingTake,
   type PlacedTrack,
   type SessionState,
-  type Take,
 } from "@/lib/api"
 import { bandCameIn, CLIPS } from "./demo"
 import { Hero } from "./Hero"
@@ -37,7 +34,7 @@ export type Target = { step: number; beat: number | null }
 
 type Scene =
   | { step: "setup" }
-  | { step: "rehearsal"; session: SessionState }
+  | { step: "rehearsal"; session: SessionState; open?: number }
   | {
       step: "record"
       takeName: string
@@ -45,7 +42,6 @@ type Scene =
       tracks: PlacedTrack[]
       lastAttempt: LastAttempt | null
     }
-  | { step: "review"; take: PendingTake; rehearsalName: string; takes: Take[] }
   | { step: "history" }
 
 // The screen on show, outside React so the steps below can change it.
@@ -76,7 +72,6 @@ const MARKS_MS = 1800
 const BEAT_MS = 1500
 /** How long Pałyn 6 loops before ↓ steps on to Pałyn 7. */
 const LOOPING_MS = 2500
-let rehearsalName = NAME
 
 const nothing = () => {}
 
@@ -84,7 +79,6 @@ const nothing = () => {}
 async function showRehearsal() {
   const session = await api().session_state()
   if (!session.active) throw new Error("demo: the rehearsal did not start")
-  rehearsalName = session.name
   show({ step: "rehearsal", session })
 }
 
@@ -101,9 +95,10 @@ export function Story() {
           onOpenSettings={nothing}
         />
       )
-    // The rehearsal screen as the hero has it, with no take open.
+    // The rehearsal screen as the hero has it: with no take open, or with
+    // the take Stop has just saved open for listening.
     case "rehearsal":
-      return <Hero initial={now.session} />
+      return <Hero initial={now.session} openTake={now.open} />
     case "record":
       return (
         <Recording
@@ -112,25 +107,10 @@ export function Story() {
           tracks={now.tracks}
           lastAttempt={now.lastAttempt}
           onStopped={async (take) => {
-            // The screen after a take draws the song's takes tonight as columns.
+            // Stop has saved it: back on the rehearsal screen, with it open.
             const session = await api().session_state()
-            show({ step: "review", take, rehearsalName, takes: session.active ? session.takes : [] })
+            if (session.active) show({ step: "rehearsal", session, open: take?.take_number })
           }}
-        />
-      )
-    case "review":
-      return (
-        <Review
-          take={now.take}
-          rehearsalName={now.rehearsalName}
-          takes={now.takes}
-          onKept={async () => {
-            // Back on the rehearsal screen, with the take just kept on it.
-            const session = await api().session_state()
-            if (session.active) show({ step: "rehearsal", session })
-          }}
-          onDiscarded={nothing}
-          onCropped={(take) => show({ ...now, take })}
         />
       )
     case "history":
@@ -222,15 +202,16 @@ const FORWARD: Record<(typeof STORY)[number], (tell: Telling) => Promise<void>> 
     await waitFor(() => since() >= LEAST_TAKE_MS)
     await beat(2)
   },
-  // Stop, save it, and back on the rehearsal screen the take nobody named
-  // gets its song with one click; the false start is grey, and the
-  // evening's two buttons are over the takes.
+  // Stop: the take is saved and open on the rehearsal screen, paused. Close
+  // take, and among the evening's takes the take nobody named gets its song
+  // with one click; the false start is grey, and the evening's two buttons
+  // are over the takes.
   async after({ beat, linger }) {
     await press("Stop", { exact: true })
-    await waitFor(() => document.querySelector("[data-take-summary]"))
+    await waitFor(() => button("Close take"))
     await beat(0)
     await linger(BEAT_MS)
-    await press("Save take")
+    await press("Close take")
     const pill = await waitFor(() =>
       document.querySelector<HTMLButtonElement>("[data-name-pills='4'] [data-song-choice='Sonca']")
     )

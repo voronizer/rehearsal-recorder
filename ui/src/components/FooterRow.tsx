@@ -6,8 +6,8 @@ import { cn } from "@/lib/utils"
 /**
  * A screen's footer as one row: what the screen has to say on the left, its
  * buttons on the right, the main one rightmost, so that it is in the same
- * place on every screen. Stacked with the name field and its songs, the
- * review screen's footer came to about 270 px; in a row, 183.
+ * place on every screen. Stacked with the name field and its songs, a
+ * footer came to about 270 px; in a row, 183.
  *
  * `rule` draws a line between the two halves, where the left one holds a
  * field: the start screen's rehearsal name.

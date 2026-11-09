@@ -4,6 +4,7 @@ import {
   colour,
   DASH,
   EDGE,
+  closeTake,
   expect,
   expectedError,
   hold,
@@ -1721,7 +1722,7 @@ test("the share dialog says the same about the original tracks", async ({ page }
   await startRehearsal(page)
   await recordTake(page, 1)
   await nameTake(page, "Verse")
-  await page.getByRole("button", { name: /Save take/ }).click()
+  await closeTake(page)
   await expect(recordButton(page, 2)).toBeVisible()
   await takeButton(page.locator("[aria-label='Rehearsal overview']"), "Verse #1").click()
   await page.getByRole("button", { name: "Copy Verse 1 to the cloud" }).click()

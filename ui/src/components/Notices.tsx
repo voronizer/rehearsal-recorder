@@ -48,7 +48,7 @@ const LOOK: Record<Notice["kind"], { box: string; icon: React.ReactNode }> = {
  *
  * It stands on the footer rather than in the corner: Shell publishes the
  * footer's height as --footer-h, and a notice that stays must never sit on
- * Start, Stop or Save take.
+ * Start, Record or Stop.
  */
 export function Notices() {
   const notices = useNotices()

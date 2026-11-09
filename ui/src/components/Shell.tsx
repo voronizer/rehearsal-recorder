@@ -15,15 +15,12 @@ import { cn } from "@/lib/utils"
  */
 export function Shell({
   title,
-  titleFits = false,
-  titleLeast,
   subtitle,
   onBack,
   backKey = false,
   backKeyRoom = false,
   headerAction,
   facts,
-  factsGone = false,
   footer,
   aside,
   children,
@@ -33,13 +30,6 @@ export function Shell({
   air = false,
 }: {
   title?: ReactNode
-  /** The title fits itself to its lines and cuts itself (Review's take,
-   *  components/TakeTitle), so it is never cut here. */
-  titleFits?: boolean
-  /** How tall the subtitle and title are at least, as a class: Review's
-   *  hold the room of the columns beside them, so a rename that brings them
-   *  or takes them away moves nothing under the header (B4). */
-  titleLeast?: string
   subtitle?: ReactNode
   onBack?: () => void
   /** Escape goes back right now, so the back button can say so, while
@@ -50,12 +40,8 @@ export function Shell({
   backKeyRoom?: boolean
   headerAction?: ReactNode
   /** What there is to know about what is on screen, right of its title:
-   *  the rehearsal's figures (components/EveningFacts), or Review's columns
-   *  (components/TakeSummary). */
+   *  the rehearsal's figures (components/EveningFacts). */
   facts?: ReactNode
-  /** The facts have all given way to the title just now, so they show
-   *  nothing, and the line after them is unseen too. */
-  factsGone?: boolean
   footer?: ReactNode
   /** A panel right of the scrollable middle, from the header down to the
    *  footer, scrolling on its own: the rehearsal screen's Next take. */
@@ -78,8 +64,8 @@ export function Shell({
   const escBack = useKeysOn("space") && backKey
   const backChip = escBack || (backKey && backKeyRoom)
 
-  // Notices stack above the footer, never on it: the footer holds Start, Stop
-  // and Save take, and at a larger scale or in a narrow window its button
+  // Notices stack above the footer, never on it: the footer holds Start,
+  // Record and Stop, and at a larger scale or in a narrow window its button
   // reaches the corner. So its height is published for components/Notices,
   // and taken back to nothing when this screen goes.
   const footerRef = useRef<HTMLElement>(null)
@@ -132,19 +118,15 @@ export function Shell({
           )}
           {/* With facts beside it the name keeps its width and the facts give
               way to it (components/EveningFacts); one longer than the whole
-              row wraps to a second line rather than being cut. A title that
-              fits itself to its lines, as Review's take does, is never cut
-              here either. With a least height the words sit in its middle. */}
+              row wraps to a second line rather than being cut. */}
           <div
             className={cn(
               "min-w-0",
               facts ? "flex-[0_1_auto]" : "flex-1",
-              (air || titleLeast) && "flex flex-col justify-center",
               // On a redone screen the header is as tall as a 36 px button,
-              // so the work button coming into it moves nothing (B4).
-              // Before titleLeast, so Review's taller box wins.
-              air && "min-h-9",
-              titleLeast
+              // so the work button coming into it moves nothing (B4), with
+              // the words in its middle.
+              air && "flex min-h-9 flex-col justify-center"
             )}
           >
             {subtitle && (
@@ -156,7 +138,7 @@ export function Shell({
               <h1
                 className={cn(
                   "text-xl leading-tight font-semibold",
-                  facts || titleFits ? "break-words" : "truncate"
+                  facts ? "break-words" : "truncate"
                 )}
               >
                 {title}
@@ -164,14 +146,7 @@ export function Shell({
             )}
           </div>
           {facts}
-          {/* Unseen rather than gone with the facts: its room stays, or the
-              facts would get it back, fit again and loop. */}
-          {facts && (
-            <span
-              aria-hidden
-              className={cn("ml-2 h-8 w-px shrink-0 bg-border", factsGone && "invisible")}
-            />
-          )}
+          {facts && <span aria-hidden className="ml-2 h-8 w-px shrink-0 bg-border" />}
           <ActivityButton />
           {playback && <ListeningVolume />}
           {headerAction}
