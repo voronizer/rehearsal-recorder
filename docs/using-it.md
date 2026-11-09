@@ -168,6 +168,12 @@ rehearsal. **New set** under the list makes another. ✕ beside a song in the
 set takes it out at once. For 10 seconds, **Undo** in the notice that says
 so, or ⌘Z on a Mac (Ctrl+Z elsewhere), puts it back where it was.
 
+With a band service, the sets are the same there: a set made or changed on
+one side is on the other too (see [Sets on both sides](#sets-on-both-sides)).
+**Check the band service**, at the bottom of the menu of sets, asks the
+service at once, so a set someone changed on their phone is here before you
+press **Start rehearsal**.
+
 ## Recording takes
 
 ### The rehearsal screen
@@ -921,7 +927,25 @@ in РЭХА is put back, with the reason in its line in the list.
 
 The rest of a song stays on its own side. Its status, key, notes and files
 are the service's, and nothing of them comes to РЭХА. Its backing track is
-РЭХА's only. Sets are kept apart.
+РЭХА's only.
+
+### Sets on both sides
+
+A set is the same set in РЭХА and in the band service. Make one, rename it,
+or add, take out and move its songs on either side, and the other side
+follows: the service at once, РЭХА when it next asks. **Delete set** on one
+side deletes it on the other too. In the service it goes to the **Trash**,
+and **Restore** there brings it back to РЭХА as well.
+
+РЭХА asks when it starts, every hour, when a rehearsal starts, and when you
+press **Check the band service** in the menu of sets beside **Start
+rehearsal**. The notice counts sets with songs: “Ivan changed 4 songs and 1
+set in the band service”. If nothing changed, it says “Nothing new in the
+band service.” A set changed on both sides before РЭХА could ask keeps
+РЭХА's change. A song typed into a set that nobody has played yet becomes a
+song, so the service can show it.
+
+A set's length, **On stage** and **Print** are in the band service only.
 
 ### Following the sending
 
