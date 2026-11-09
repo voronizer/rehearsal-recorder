@@ -5,7 +5,7 @@ versioning](https://semver.org/): until 1.0 the shape of things can still
 move, though recordings on disk are never left behind — old rehearsals keep
 opening.
 
-## Unreleased
+## 0.26.0
 
 - **Sets for a gig in the band service.** **Sets**, after **Songs**, lists
   the band's sets, and **New set** makes one and opens it. Add the songs in
