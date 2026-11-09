@@ -18,8 +18,8 @@ import { cn } from "@/lib/utils"
  * only on the lines drawn, never on what it was last fitted to, and the
  * screen round it, which is fitted to it in turn, comes to rest (Recording).
  *
- * `start` sets it at the start of its lines, as Review's header has it.
- * `after` is a button that follows the last word, such as Review's pencil: the
+ * `start` sets it at the start of its lines, as a page's head has it.
+ * `after` is a button that follows the last word, such as the head's pencil: the
  * title keeps room for it on its last line, held to the last word so it never
  * starts a line alone, and it is fitted with that room counted, so on two
  * lines it sits after the last word and not at the box's edge. The button is
@@ -32,13 +32,11 @@ function TwoLines({
   go,
   start = false,
   after,
-  figures,
 }: {
   title: string
   go: number | null | undefined
   start?: boolean
   after?: ReactNode
-  figures?: ReactNode
 }) {
   const probe = useRef<HTMLSpanElement>(null)
   const box = useRef<HTMLSpanElement>(null)
@@ -158,7 +156,7 @@ function TwoLines({
           {suffix}
         </span>
       )}
-      <WholeTip cut={fit.cut} text={title} figures={figures}>
+      <WholeTip cut={fit.cut} text={title}>
         <span
           data-go-title
           data-lines={fit.lines}
@@ -210,7 +208,7 @@ function TwoLines({
  * go stays whole: it is what tells goes at a song apart. The wrapper is a
  * flex box that takes the room it is given, so give it a width to cut at.
  * With `lines={2}` as well, the title wraps to a second line before it is
- * cut (TwoLines), and can take `start`, `after` and `figures`.
+ * cut (TwoLines), and can take `start` and `after`.
  */
 export function GoTitle({
   title,
@@ -219,7 +217,6 @@ export function GoTitle({
   lines = 1,
   start = false,
   after,
-  figures,
 }: {
   title: string
   go: number | null | undefined
@@ -230,9 +227,6 @@ export function GoTitle({
   start?: boolean
   /** With two lines, a button right after the last word (TwoLines). */
   after?: ReactNode
-  /** With two lines, figures beside the title that have given way to it:
-   *  its tip says them under it (WholeTip). */
-  figures?: ReactNode
 }) {
   const number =
     go != null ? (
@@ -249,7 +243,7 @@ export function GoTitle({
       </>
     )
   if (lines === 2)
-    return <TwoLines title={title} go={go} start={start} after={after} figures={figures} />
+    return <TwoLines title={title} go={go} start={start} after={after} />
   return (
     <span className="flex max-w-full min-w-0">
       <span data-go-title className="truncate">{title}</span>
