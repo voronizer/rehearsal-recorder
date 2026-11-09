@@ -42,7 +42,7 @@ export async function playTheBridge(): Promise<void> {
   document.documentElement.dataset.scene = "hero"
 }
 
-export function Hero({ initial }: { initial: SessionState }) {
+export function Hero({ initial, openTake }: { initial: SessionState; openTake?: number }) {
   const [session, setSession] = useState(initial)
   // The screen awaits the fresh state: a crop's Undo finds the uncut take in it.
   const refresh = useCallback(async () => {
@@ -52,6 +52,12 @@ export function Hero({ initial }: { initial: SessionState }) {
   }, [])
   if (!session.active) return null
   return (
-    <Rehearsal session={session} onStartTake={() => {}} onFinished={() => {}} onChanged={refresh} />
+    <Rehearsal
+      session={session}
+      openTake={openTake}
+      onStartTake={() => {}}
+      onFinished={() => {}}
+      onChanged={refresh}
+    />
   )
 }

@@ -4,8 +4,8 @@ This contribution adds a shared control API and a MIDI adapter. The GUI and MIDI
 use the same recorder action gate. Other adapters can call the Python interface
 without depending on MIDI ports or message formats.
 
-The GUI retains Record → Stop → Review → Save take/Discard. Controller Record/Stop
-starts recording or stops and keeps a take. Playback, volume, selection, rehearsal
+The GUI and the controller both stop and keep a take: Stop saves it and opens it
+for listening. Controller Record/Stop starts recording or stops and keeps a take. Playback, volume, selection, rehearsal
 lifecycle and confirmed take removal use semantic commands. State feedback
 includes recovery information. MIDI disconnect does not stop recording or saving.
 

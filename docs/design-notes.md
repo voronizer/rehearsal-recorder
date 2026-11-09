@@ -527,17 +527,20 @@ does, it did not run dry once.
 **History measures a rehearsal's size by walking its folder**, not from the
 durations, so it is the number the file manager gives.
 
-**A key is shown on a button only while the key presses it.** With a take
-open, Space plays the take rather than recording, so Record stops
-showing it; Escape closes the take first, so Finish does too.
+**A key is shown on a button only while the key presses it, and a key
+always has a button.** With a take open, Space plays it and Escape closes
+it, so the footer's buttons become **Play** and **Close take**, with the
+keys on them, in place of **Record** and **Finish**. Hiding the keys and
+keeping the buttons left Space and Escape doing things nobody could see
+(Alex, 8 Nov 2026).
 
 **Where Escape's next step is a decision, it asks.** Finishing a rehearsal
 that has takes asks, because doing it by accident puts the rest of the
 evening in a second folder; an empty rehearsal does not, since there is
-nothing to protect and Python removes its folder anyway. Discarding a take on
-the review screen, by its button or by Escape, does not ask: it happens at
-once, and **Undo** brings the take back for 10 seconds (B1 in
-`docs/design-system.md`). The buttons themselves do not ask, because
+nothing to protect and Python removes its folder anyway. Throwing a take
+away does not ask: it happens at once, and **Undo** brings the take back
+for 10 seconds (B1 in `docs/design-system.md`). The buttons themselves do
+not ask, because
 pressing a labelled button is not an accident. Escape never stops a recording.
 
 ## Theme and scale

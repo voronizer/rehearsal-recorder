@@ -324,57 +324,51 @@ once the take is written, they apply again.
 Every track is written to disk while you play, so there is nothing to save
 during a take. Press **Stop**, or Space, when the song is over.
 
-### Keep the take or not
+### Listening to a take
 
-![After stopping: the take's name at the top, the song's takes tonight as columns at the right, the player under them, then Discard and Save take](screenshots/review.png)
+![After stopping: the take open in the player, its marks at the right, Close take and Play at the bottom](screenshots/listening.png)
 
-After you stop, the take opens straight away. Listen to it, then press
-**Save take** (Space) to keep it or **Discard** (Esc) to throw it away. A
-discarded take goes to the Trash at once. **Undo**, or ⌘Z on a Mac (Ctrl+Z
-elsewhere), brings it back to this screen as you left it, with its name,
-its marks and whether it goes to the cloud. See [Undo](#undo). If the take
-cannot be saved, a red notice says why and stays until you close it. The
-take is still here, so press **Save take** again.
+When you press **Stop**, the take is saved, and the rehearsal screen comes
+back with the take open in the player, paused at the start. Press **Play**,
+or Space, to hear it. Everything in [Listening back](#listening-back) works
+here: marks, Repeat, crop, the ★ and the pencil that renames it.
 
-The take's name is at the top: the song and its number after a #,
-“Viasna #2”. A long name takes a second line, and one longer than that is
-cut with its number kept; point at it to read it whole. The small line over
-it gives the rehearsal's name, “Thursday”; a long one is cut, and shows whole
-when you point at it. A take nobody named says “Take #7”, in grey. How long
-the take ran is in the player, “0:00 / 2:31”.
+While a take is open, the bottom of the screen is for listening: **Close
+take** (Esc) and **Play** (Space). **Close take** stops the take and closes
+it, and **Finish** and **Record** come back. To record the next take
+straight away, press Esc and then Space.
 
-At the right of the name are the song's takes tonight as columns, the last
-ten of them. Each is as tall as that take ran, with the take's number under
-it. This take's column is in the colour of the text, the starred takes (★)
-are pale green and the others grey. Point at the columns to read them as
-times: “Viasna #1: 2:31, Viasna #2: 2:41”. A song's first take tonight has no
-columns, and nor does a take nobody named. In a narrow window the columns go
-first, to leave the name its room; point at the name to read them then.
+At the right, in place of the next take and the songs, are the take's
+marks in the order they come. Click one to go there. Point at it, and a
+pencil and a cross beside it change it or remove it. The metronome and the
+backing track are set for the next take, so they wait until you close this
+one.
 
-Check the name before you save. It is filled in for you: after a take called
-“Pałyn”, the next one is “Pałyn #2”. The pencil right after the name opens
-**Rename take**. The songs you have played are listed under its field, this
-rehearsal's first, then the others, most recent first: click one, or type a
-name, and press Enter. The title and the columns follow. ✕ in the field puts
-back the name the take would have had if none had been picked before
-recording. While **Rename take** is open, Space types and Esc closes it. See
-[Names and songs](#names-and-songs).
+The take is named as the **Next take** field said when you pressed
+**Record**: “Viasna #2”. Its name is in the strip above the player, beside
+the song's other takes tonight with their lengths and stars. To change it,
+press the pencil on its line (see [Names and songs](#names-and-songs)).
 
-The bottom left says whether this take goes to your cloud folder: “Send to
-the cloud: the mix, FLAC”, with a box in front. The line names what would be
-sent and in which format, as you set them (see [Sending takes to the
-cloud](#sending-takes-to-the-cloud)), and the box starts ticked when **Send
-saved takes automatically** is on. A false start's box starts unticked (a
-take shorter than 30 seconds with no ★ and no marks), and a ★ or a mark ticks
-it. Tick it to send this take, or untick it to leave it on this computer; the
-setting stays as it is. The box lets go of
-the keyboard as soon as you change it, so Space still saves the take. With
-no cloud folder, the line says “Stays on this computer: no cloud folder is
-set”. With the band service chosen, it says “Send to the band service” (see
-[Sending takes to a band service](#sending-takes-to-a-band-service)).
+A bad take goes in the trash on its line. Thrown away before it was sent,
+it gives its number back: after a bad “Viasna #2”, the next take is
+“Viasna #2” again. **Undo** brings the take back (see [Undo](#undo)).
 
-You can listen, add marks and crop the take here, before you save it (see
-[Listening back](#listening-back)). The marks are saved with the take.
+The bottom left says whether this take goes to the band: “Send to the band
+service”, or “Send to the cloud”, with a box in front. Ticked, it goes. A
+false start's box starts unticked (a take shorter than 30 seconds with no ★
+and no marks), and a ★ or a mark ticks it. Tick it to send this take
+anyway, or untick it to keep it on this computer; the setting stays as it
+is.
+
+A take you have just recorded waits while it is open, so one you throw away
+at once never leaves the computer. It goes once you close it, open another
+take, start the next one or finish the rehearsal, or 10 minutes after
+**Stop**. See [Sending takes to the cloud](#sending-takes-to-the-cloud) and
+[Sending takes to a band service](#sending-takes-to-a-band-service).
+
+If the take cannot be saved, a red notice says why, and *Unsaved takes
+found* opens with the take in it. Press **Recover** there to try again (see
+[The app closed during a take](#the-app-closed-during-a-take)).
 
 ## Listening back
 
@@ -729,10 +723,11 @@ There are three ways to send takes:
   is not in the cloud folder yet and not already waiting to be sent. When
   there is nothing to send, pointing at it says why.
 - Automatically: tick **Send saved takes automatically** in **Settings ›
-  Folders**. Every take is then copied after you save it, apart from false
-  starts: a take shorter than 30 seconds with no ★ and no marks stays on this
-  computer unless you tick its box on the screen after the take (see [Keep
-  the take or not](#keep-the-take-or-not)). No copy starts while a take is
+  Folders**. Every take is then copied once you have closed it after
+  recording, or 10 minutes after **Stop**, apart from false starts: a take
+  shorter than 30 seconds with no ★ and no marks stays on this computer
+  unless you tick its box while it is open (see [Listening to a
+  take](#listening-to-a-take)). No copy starts while a take is
   recording or anything plays: a take, a backing track or the click. This
   setting needs a cloud folder, and it turns off if you remove the folder.
 
@@ -869,9 +864,10 @@ Takes are sent the same three ways as to the cloud folder:
 - The starred ones: **Send starred** sends every ★ take of the rehearsal that
   is not in the band service yet.
 - Automatically: **Send saved takes automatically**, in the band service's
-  panel, sends every take you save, while nothing records or plays. False
-  starts stay on this computer unless you tick their box on the screen after
-  the take.
+  panel, sends every take you record once you have closed it, or 10 minutes
+  after **Stop**, while nothing records or plays. False starts stay on this
+  computer unless you tick their box while the take is open (see [Listening
+  to a take](#listening-to-a-take)).
 
 On a take that is in the band service, the cloud button opens a dialog,
 *“Viasna #12” in the band service*. It lists each track with what of it is up,
@@ -1565,8 +1561,8 @@ them.
 ## Keys
 
 Space does the main thing on each screen: start the rehearsal, start a take,
-stop recording, save the take, or play and pause while listening. The button
-it presses shows the key.
+stop recording, or play and pause while listening. The button it presses
+shows the key, and so does the button Esc presses.
 
 While listening:
 
@@ -1589,11 +1585,10 @@ In History, with no take open, ↑ and ↓ go through the rehearsals, the
 songs in the Songs view, or the labels in the Marks view.
 
 Esc goes one step back. It closes a dialog first, then the strip's columns,
-then the open take, then a take playing in the list of takes, then the
-screen. On the rehearsal screen it finishes the rehearsal, and asks first if
-there are takes in it; the start screen comes next. On the screen after a
-take, it discards the take, and **Undo** brings it back. Esc never stops a
-recording; press **Stop** for that.
+then the open take, stopping it, then a take playing in the list of takes,
+then the screen. On the rehearsal screen it finishes the rehearsal, and
+asks first if there are takes in it; the start screen comes next. Esc never
+stops a recording; press **Stop** for that.
 
 ⌘Z on a Mac, Ctrl+Z elsewhere, is **Undo** for the last thing deleted,
 discarded or cropped, the last old name forgotten on a song's page, or the
@@ -1640,9 +1635,10 @@ Switch the controller on, and РЭХА connects to it by itself: it tries every
 
 From the controller:
 
-- **Record/Stop** starts a take. Pressed again, it stops the take and keeps
-  it. The laptop's **Stop** is different: it opens the screen where you save
-  or discard the take.
+- **Record/Stop** starts a take. Pressed again, it stops the take: the take
+  is saved and opens on the laptop for listening, as after the laptop's
+  **Stop**. Pressed while a take is open, it closes that take and starts
+  the next.
 - With the metronome's click on, **Record/Stop** counts the band in as
   **Record** does on the laptop, at the tempo in the metronome's row
   (see [Recording to the click](#recording-to-the-click)). The controller's
@@ -1661,14 +1657,16 @@ controller drops out during a take, the take keeps recording.
 
 ## Undo
 
-Deleting a take or a rehearsal, clearing false starts, discarding a take
-and cropping one happen at once, without a question first. A notice in the
+Deleting a take or a rehearsal, clearing false starts, discarding an
+unsaved take and cropping one happen at once, without a question first. A notice in the
 corner says what went, for example *“Pałyn #5” went to the Trash.*, with an
 **Undo** button. For 10 seconds, **Undo** or ⌘Z on a Mac (Ctrl+Z
 elsewhere) puts it back where it was: a take with its star, marks and cloud
 copy, a rehearsal with all its takes, a cropped take as it was before the
-crop, a discarded take on the screen after it with the name and marks it
-had. Holding the mouse over the notice keeps it up.
+crop, a discarded unsaved take in *Unsaved takes found*. A take thrown away
+straight after recording comes back with its number, unless another take
+has taken that number since; then **Undo** says so. Holding the mouse over
+the notice keeps it up.
 
 Forgetting a song's old name on its page in History works the same way: the
 notice says *“Palyn” was forgotten.*, and **Undo** gives the name back to
@@ -1688,10 +1686,8 @@ them all.
 
 When the notice goes, what went moves on to the Trash, or the `_deleted`
 folder on a computer without one, where you can still get it back by hand.
-Starting the next take, or finishing the rehearsal, ends the notice for a
-discarded take. Saving or discarding a take ends the notice for a crop made
-on the screen after it. If the app closes before the notice goes, what went
-moves to the Trash then.
+If the app closes before the notice goes, what went moves to the Trash
+then.
 
 ## When something goes wrong
 
@@ -1822,8 +1818,8 @@ The number at the start of a take's folder is its place in the rehearsal, so
 the folders sort in the order you played. The app shows this number nowhere
 else.
 
-While a take records, it is written to `_drafts`. **Save take** moves it into
-its own folder, and **Discard** moves it to the Trash.
+While a take records, it is written to `_drafts`. **Stop** moves it into its
+own folder.
 
 A track that records MIDI leaves a `.mid` beside the WAVs, with the same
 name. See [Where the .mid files are](#where-the-mid-files-are).
