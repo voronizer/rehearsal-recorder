@@ -38,6 +38,9 @@ REHEARSAL_GONE = "Its rehearsal is gone."
 TAKE_GONE = "Its take is gone."
 # A take's place in its rehearsal is held by a take recorded since.
 PLACE_TAKEN = "A take recorded since has taken its place."
+# A take's go, given back when it was deleted (give_go_back), is another
+# take's now.
+GO_TAKEN = "Another take has taken its number."
 
 # The tempo a song or a take may have, by time signature: whole clicks a minute,
 # quarters in x/4 and eighths in 6/8 (the metronome spec, "Words"), 30 to 300 and
@@ -430,7 +433,9 @@ class Library:
     # takes: one with none keeps its title and its count of goes given
     # (Song.last_go), so a number is never given twice. The takes with no
     # song are counted the same way, in one count of their own
-    # (Counter.last_unnamed_go).
+    # (Counter.last_unnamed_go). The one go that comes back is that of the
+    # take held after Stop, deleted while the band listened to it
+    # (give_go_back).
     #
     # A title a song leaves, renamed or merged into another, stays a way to
     # name it: an old name (models.SongName). Old names are unique
@@ -498,9 +503,10 @@ class Library:
 
         The go is the app's: one past the song's count of goes given
         (Song.last_go), so a number is never given twice, even after its take
-        is deleted. A take already a go at the song keeps its go ("Polyn 2"
-        renamed to Polyn stays Polyn 2); and when it is the song's only take,
-        a name differing from the title only in case respells the song.
+        is deleted (but for the take held after Stop: give_go_back). A take
+        already a go at the song keeps its go ("Polyn 2" renamed to Polyn
+        stays Polyn 2); and when it is the song's only take, a name differing
+        from the title only in case respells the song.
 
         No song is counted the same way, across the library: one past the
         goes given to takes with no song (Counter.last_unnamed_go), whatever
@@ -556,6 +562,59 @@ class Library:
             song.title = title
         song.last_go = max(song.last_go or 0, go)
         return song
+
+    def give_go_back(self, song_id, go):
+        """
+        A go given back: the take saved by the last Stop was deleted while it
+        was still held (Api._held), and its number comes back, as it did when
+        Discard threw a take away before it was saved (listening-apart spec,
+        Numbers). Only while `go` is still the newest given at the song
+        `song_id` (Song.last_go), or with `song_id` None among the takes with
+        no song (Counter.last_unnamed_go), and no take there has it: the next
+        take there is that go again. Every other go stays given for good
+        (_resolve). Returns whether it was given back.
+        """
+        if go is None:
+            return False
+        go = int(go)
+        with self._session.begin() as db:
+            if song_id is None:
+                count = db.get(Counter, 1)
+                if count is None or count.last_unnamed_go != go:
+                    return False
+                there = Take.song_id.is_(None)
+            else:
+                song = db.get(Song, song_id)
+                if song is None or song.last_go != go:
+                    return False
+                there = Take.song_id == song_id
+            if db.scalars(select(Take.id).where(there, Take.go == go).limit(1)).first() is not None:
+                return False
+            if song_id is None:
+                count.last_unnamed_go = go - 1
+            else:
+                song.last_go = go - 1
+            return True
+
+    def go_taken(self, record):
+        """Whether another take has the go a take's record (take_record)
+        holds: a take of the song the record would come back to
+        (_recorded_song), or with no song, a take with no song. A go given
+        back (give_go_back) can be given again."""
+        go = (record.get("take") or {}).get("go")
+        if go is None:
+            return False
+        with self._session() as db:
+            recorded = record.get("song")
+            if recorded is None:
+                there = Take.song_id.is_(None)
+            else:
+                song = self._recorded_song(db, recorded)
+                if song is None:
+                    return False
+                there = Take.song_id == song.id
+            return db.scalars(
+                select(Take.id).where(there, Take.go == int(go)).limit(1)).first() is not None
 
     def resolve_name(self, folder, name, take_number):
         """
@@ -1793,17 +1852,7 @@ class Library:
             self._count_unnamed(db, go)
             return None, go
         title = recorded["title"]
-        key = title.casefold()
-        song = db.get(Song, recorded.get("id")) if recorded.get("id") is not None else None
-        if song is not None and song.title.casefold() != key and not any(
-                n.name.casefold() == key
-                for n in db.scalars(select(SongName).where(SongName.song_id == song.id))):
-            song = None
-        if song is None:
-            song = self._songs_by_key(db).get(key)
-        if song is None:
-            old = self._names_by_key(db).get(key)
-            song = db.get(Song, old.song_id) if old is not None else None
+        song = self._recorded_song(db, recorded)
         if song is None:
             song = Song(title=title, last_go=0)
             db.add(song)
@@ -1816,6 +1865,24 @@ class Library:
             go = (song.last_go or 0) + 1
         song.last_go = max(song.last_go or 0, go)
         return song, go
+
+    def _recorded_song(self, db, recorded):
+        """The Song a take's record names (`recorded`, {"id", "title"}) is now:
+        the song of the recorded id while that is still the song (its title
+        or an old name is the recorded title); else the song that title
+        leads to now, as an old name too; else None."""
+        key = recorded["title"].casefold()
+        song = db.get(Song, recorded.get("id")) if recorded.get("id") is not None else None
+        if song is not None and song.title.casefold() != key and not any(
+                n.name.casefold() == key
+                for n in db.scalars(select(SongName).where(SongName.song_id == song.id))):
+            song = None
+        if song is None:
+            song = self._songs_by_key(db).get(key)
+        if song is None:
+            old = self._names_by_key(db).get(key)
+            song = db.get(Song, old.song_id) if old is not None else None
+        return song
 
     def rehearsal_record(self, folder):
         """The rehearsal's rows as a record for restore_rehearsal: every

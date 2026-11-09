@@ -23,7 +23,7 @@ things to be true:
 
     test_transport.py  shared UI/controller commands, automatic keep, overlap
                        rejection, confirmed state and failed-save recovery,
-                       and the take held after Stop.
+                       and the take held after Stop, with its number.
 
     test_engine.py     the audio itself — mixing, seeking, disk safety,
                        crash recovery (a crashed take's notes included), both

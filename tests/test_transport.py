@@ -293,7 +293,101 @@ def held():
             api.shutdown()
 
 
+def numbers():
+    """The trash on the take held after Stop gives its number back, as
+    Discard on the screen after a take did (listening-apart spec, Numbers):
+    only for that take, and only while the number is still the newest. Its
+    Undo brings it back with its own number, or not at all."""
+    from rehearsal_recorder.store.library import GO_TAKEN
+
+    with tempfile.TemporaryDirectory() as folder:
+        mod, api = fresh_api(Path(folder))
+        try:
+            assert api.start_rehearsal("Numbers", 0, SR, [{"name": "Guitar", "channel": 1}])["ok"]
+            here = str(api._session["folder"])
+            record = _recorder_of(api)
+
+            def held_take():
+                return api.session_state()["held_take"]
+
+            def next_go(song="Viasna"):
+                return api._lib.next_goes()[song]
+
+            # A take of the song before, so the next take is the song's too.
+            api.set_next_take_name("Viasna")
+            zero = record()
+            first = record()
+            go1 = first["go"]
+            assert first["song"] == "Viasna" and go1 == zero["go"] + 1 and next_go() == go1 + 1
+            gone = api.delete_take(here, first["take_number"])
+            assert gone["ok"] and gone["undo"] and held_take() is None
+            assert next_go() == go1 and api.session_state()["next_take_go"] == go1
+            # Its Undo with the number still free brings it back with it, and
+            # the count moves on past it again. It is held no more.
+            back = api.undo_trash(gone["undo"])
+            assert back["ok"], back
+            assert api._lib.take(here, first["take_number"])["go"] == go1
+            assert next_go() == go1 + 1 and held_take() is None
+
+            # Once the next take has the number, its Undo is refused, and the
+            # take waits for the end of its notice as it was.
+            second = record()
+            gone = api.delete_take(here, second["take_number"])
+            third = record()
+            assert third["go"] == second["go"] and third["take_number"] != second["take_number"]
+            assert api.undo_trash(gone["undo"]) == {"ok": False, "error": GO_TAKEN}
+            assert api._lib.take(here, second["take_number"]) is None
+            assert api.end_trash(gone["undo"])["ok"]
+            assert next_go() == third["go"] + 1
+
+            # A take deleted after its hold ended keeps its number given.
+            assert held_take() == third["take_number"]
+            api.release_take()
+            gone = api.delete_take(here, third["take_number"])
+            assert gone["ok"] and next_go() == third["go"] + 1
+            assert api.end_trash(gone["undo"])["ok"]
+
+            # Another take deleted while one is held: no number comes back,
+            # and the held one stays held.
+            fourth = record()
+            gone = api.delete_take(here, first["take_number"])
+            assert gone["ok"] and held_take() == fourth["take_number"]
+            assert next_go() == fourth["go"] + 1
+            assert api.end_trash(gone["undo"])["ok"]
+            # Nor when the held take's go is no longer the song's newest: a
+            # take renamed to the song meanwhile has the next one.
+            assert api.rename_take(here, zero["take_number"], "Palyn")["ok"]
+            assert api.rename_take(here, zero["take_number"], "Viasna")["ok"]
+            assert api._lib.take(here, zero["take_number"])["go"] == fourth["go"] + 1
+            assert held_take() == fourth["take_number"]
+            gone = api.delete_take(here, fourth["take_number"])
+            assert gone["ok"] and held_take() is None and next_go() == fourth["go"] + 2
+            assert api.end_trash(gone["undo"])["ok"]
+
+            # A take with no song gives its go back among the takes with no song.
+            api.set_next_take_name("Take")
+            plain = record()
+            assert plain["song"] is None and held_take() == plain["take_number"]
+            assert api._lib.next_unnamed_go() == plain["go"] + 1
+            gone = api.delete_take(here, plain["take_number"])
+            assert gone["ok"] and api._lib.next_unnamed_go() == plain["go"]
+            assert api.end_trash(gone["undo"])["ok"]
+
+            # Clear false starts gives none back.
+            api.set_next_take_name("Take")
+            cleared = record()
+            assert held_take() == cleared["take_number"]
+            gone = api.delete_takes(here, [cleared["take_number"]])
+            assert gone["deleted"] == [cleared["take_number"]]
+            assert api._lib.next_unnamed_go() == cleared["go"] + 1
+            assert api.end_trash(gone["undo"])["ok"]
+            print("The number of the take held after Stop: all checks passed.")
+        finally:
+            api.shutdown()
+
+
 if __name__ == "__main__":
     main()
     metronome()
     held()
+    numbers()

@@ -119,7 +119,7 @@ from rehearsal_recorder.midi.smf import NO_METER, crop_mid, meter_of
 from rehearsal_recorder.store.db import LibraryUnavailable
 from rehearsal_recorder.store.importer import import_all, read_text
 from rehearsal_recorder.store.library import (
-    PLACE_TAKEN, REHEARSAL_GONE, TAKE_GONE, LabelRefused, Library, SetRefused, SongRefused,
+    GO_TAKEN, PLACE_TAKEN, REHEARSAL_GONE, TAKE_GONE, LabelRefused, Library, SetRefused, SongRefused,
     as_marker, as_tempo, paths_overlap,
 )
 from rehearsal_recorder.store.db import DB_NAME
@@ -5920,15 +5920,19 @@ class Api:
         the interface's Undo sends back (undo_trash); the take reaches the
         Trash when that notice ends (end_trash), and its copy in the cloud
         folder leaves with it then. {"ok": False, "error"} leaves the take,
-        rows and files, as it was. The take held after Stop (_held) is held
-        no longer.
+        rows and files, as it was.
+
+        The take held after Stop (_held) is held no longer, and gives its go
+        back to its song, as Discard on the screen after a take did: after a
+        bad "Viasna #2" the next take is "Viasna #2" again (_give_go_back).
         """
         folder = Path(folder)
         if not self._inside_recordings(folder):
             return {"ok": False, "error": "Folder is outside the recordings directory"}
 
         with self._files_lock:
-            if self._lib.take(folder, take_number) is None:
+            take = self._lib.take(folder, take_number)
+            if take is None:
                 if not self._lib.has(folder):
                     return {"ok": False, "error": "Rehearsal not found"}
                 return {"ok": False, "error": "Take not found"}
@@ -5942,8 +5946,34 @@ class Api:
                         "ended": held["ended"]}
             if was_held:
                 self._release_take(folder, take_number)
+                self._give_go_back(held["undo"], take)
             return {"ok": True, "undo": held["undo"], "takes_left": held["takes_left"],
                     "ended": held["ended"]}
+
+    def _give_go_back(self, token, take):
+        """
+        The go of the take held after Stop, deleted a moment ago (its entry
+        `token`), given back to its song or to the takes with no song, when
+        it is still the newest given there (Library.give_go_back). Its
+        removal's record then says so ("go_back"), and its Undo is refused
+        while another take has that go (_undo_refused). Never raises: the
+        take is deleted whatever becomes of its number.
+        """
+        try:
+            if not self._lib.give_go_back(take.get("song_id"), take.get("go")):
+                return
+        except Exception:
+            log.exception("The deleted take's number could not be given back")
+            return
+        record = (holding.read(self._recordings_dir, token) or {}).get("record")
+        if not isinstance(record, dict):
+            return
+        try:
+            holding.update(self._recordings_dir, token, {**record, "go_back": True})
+        except OSError as e:
+            # Its Undo then gives it the next go if its own is taken, as it
+            # does for any take.
+            log.error("removal %s: could not record that its number was given back: %s", token, e)
 
     @_follows
     def delete_takes(self, folder, take_numbers):
@@ -5968,7 +5998,8 @@ class Api:
                                   else "Rehearsal not found")
             held = (self._hold_takes(folder, found, "takes") if found
                     else {"undo": None, "deleted": [], "failed": [], "ended": []})
-            # The take held after Stop among them is held no longer.
+            # The take held after Stop among them is held no longer. Its go
+            # stays given: only its own trash gives it back (delete_take).
             held_now = self._held()
             if held_now is not None and held_now[0] == folder and held_now[1] in held["deleted"]:
                 self._release_take(folder, held_now[1])
@@ -6498,6 +6529,11 @@ class Api:
                 n = int(take["take"]["take_number"])
                 if self._lib.take(folder, n) is not None:
                     return PLACE_TAKEN
+                # The take held after Stop gave its go back as it went
+                # (_give_go_back), and the next take may have it now. It comes
+                # back with its own go or not at all.
+                if record.get("go_back") and self._lib.go_taken(take):
+                    return GO_TAKEN
             return None
         if not items:
             raise holding.Gone()  # nothing of it is waiting: it has gone on

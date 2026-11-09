@@ -33,8 +33,11 @@ when finalisation fails. Then the take held after Stop: held from before it is
 saved, by `stop_keep`, `stop_review` and the controller's Stop; let go by
 `release_take`, the next take starting (a Record that fails lets go of
 nothing), ten minutes, Finish, its delete, Clear false starts and a renamed
-rehearsal; and a save that fails holds nothing. Run with
-`python tests/test_transport.py`.
+rehearsal; and a save that fails holds nothing. Its trash gives its number
+back (with a song and without), but not once the hold has ended, not for
+another take, not by Clear false starts, and not when the number is no longer
+the newest; its Undo brings it back with its own number, or is refused once
+another take has it. Run with `python tests/test_transport.py`.
 
 ## test_engine.py: the audio
 
