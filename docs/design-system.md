@@ -132,7 +132,7 @@ showcase and reha.stream all import. A screen uses the names (`bg-primary`,
   (buttons of every size, fields, selects, menus): `rounded-md`. 12 px for
   groups and dialogs: `rounded-lg` or `rounded-xl`. `rounded-full` for round
   things (play buttons, pills). A take's bar is `rounded-sm` at every size
-  and in every place (after a take, under Last time, in History's strip, on
+  and in every place (under Last time, in History's strip, on
   a song's page and in Marks): one 2 px wide is a pill, since the browser
   cuts a corner down to fit the side it is on. A
   graphic, such as a 1-2 px line or a mark's diamond, keeps its own, with
