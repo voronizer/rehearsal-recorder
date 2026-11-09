@@ -109,7 +109,7 @@ export function Story() {
           onStopped={async (take) => {
             // Stop has saved it: back on the rehearsal screen, with it open.
             const session = await api().session_state()
-            if (session.active) show({ step: "rehearsal", session, open: take.take_number })
+            if (session.active) show({ step: "rehearsal", session, open: take?.take_number })
           }}
         />
       )
