@@ -3,6 +3,8 @@ import {
   calls,
   colour,
   dragRegion,
+  closeTake,
+  closeTakeButton,
   expect,
   notices,
   openApp,
@@ -517,7 +519,7 @@ test.describe("the row on the rehearsal screen", () => {
     await expect(page.getByRole("button", { name: /^Stop/ })).toBeVisible()
     await expect.poll(async () => (await metronome(page)).phase).not.toBe("preview")
     await page.getByRole("button", { name: /^Stop/ }).click()
-    await page.getByRole("button", { name: /Save take/ }).click()
+    await closeTake(page)
     await expect(play(page)).toBeVisible()
     expect((await metronome(page)).phase).toBe("idle")
   })
@@ -668,11 +670,9 @@ test.describe("the row on the rehearsal screen", () => {
       await takeButton(page.locator("[aria-label='Rehearsal overview']"), "Pałyn #1").click()
       await expect(page.getByRole("group", { name: "Take timeline" })).toBeVisible()
       await settled(page)
-      const inView = await lanes()
-      expect(inView, "lanes in view").toBe(LANES_AT_960)
-      await nameNext(page, "Pałyn")
-      await expect(status(page)).toHaveText("The song's tempo.")
-      expect(await lanes(), "lanes in view after a song is picked").toBe(inView)
+      // The row waits unseen while the take is open, as tall as it was with
+      // the longest line above.
+      expect(await lanes(), "lanes in view").toBe(LANES_AT_960)
     })
   }
 })
@@ -1442,29 +1442,29 @@ test("a cropped click take says where it starts", async ({ page }) => {
   await expect(
     said(page, "“Pałyn #2” is cropped. It now starts on the bar at 0:01. The uncut take went to the Trash.")
   ).toHaveCount(1)
-  // The same notice for a take still on the review screen.
+  // The same notice for the take Stop has just opened.
   await page.keyboard.press("Escape")
   await nameNext(page, "Pałyn")
   await recordButton(page, 11).click()
   await page.getByRole("button", { name: /^Stop/ }).click()
-  await expect(page.locator("[data-take-summary]")).toBeVisible()
+  await expect(closeTakeButton(page)).toBeVisible()
   await settled(page)
   await dragRegion(page, 0.4, 0.9)
   await page.getByRole("button", { name: "Crop to the region" }).click()
-  await expect.poll(() => callCount(page, "crop_draft")).toBe(1)
+  await expect.poll(() => callCount(page, "crop_take")).toBe(2)
   await expect(
     said(page, "“Pałyn #5” is cropped. It now starts on the bar at 0:01. The uncut take went to the Trash.")
   ).toHaveCount(1)
 })
 
-test("review moves its marks by where the take was cut", async ({ page }) => {
-  // A click take at 128 in 4/4: a bar is 1.875 s, and the fake's draft is
+test("the take Stop opened moves its marks by where it was cut", async ({ page }) => {
+  // A click take at 128 in 4/4: a bar is 1.875 s, and the fake's take is
   // six seconds long.
   await openEvening(page, "window.__CROP_ON_GRID__ = true;")
   await nameNext(page, "Pałyn")
   await recordButton(page, 11).click()
   await page.getByRole("button", { name: /^Stop/ }).click()
-  await expect(page.locator("[data-take-summary]")).toBeVisible()
+  await expect(closeTakeButton(page)).toBeVisible()
   await settled(page)
   // A mark at about 2 s: after the bar line at 1.875, before the region's
   // start at 2.4.
@@ -1480,7 +1480,7 @@ test("review moves its marks by where the take was cut", async ({ page }) => {
   expect(at).toBeLessThan(2.4)
   await dragRegion(page, 0.4, 0.9)
   await page.getByRole("button", { name: "Crop to the region" }).click()
-  await expect.poll(() => callCount(page, "crop_draft")).toBe(1)
+  await expect.poll(() => callCount(page, "crop_take")).toBe(1)
   // Cut from the bar line, the mark is kept and moved by that, not by the
   // region's start, which would have left it out.
   await expect.poll(marks).toEqual([Math.round((at - 1.875) * 100) / 100])

@@ -2,6 +2,7 @@ import type { Locator, Page } from "@playwright/test"
 import {
   callCount,
   calls,
+  closeTake,
   expect,
   literally,
   notices,
@@ -291,7 +292,7 @@ test.describe("the header", () => {
 })
 
 test.describe("the footer", () => {
-  test("Finish and Record keep their boxes with a take in hand", async ({ page }) => {
+  test("the footer's buttons keep their boxes and their keys with a take in hand", async ({ page }) => {
     const overview = await openEvening(page)
     await settled(page)
     const row = overview.locator('[data-take="1"]')
@@ -299,26 +300,31 @@ test.describe("the footer", () => {
     // round the footer moves either.
     const bar = row.getByRole("button", { name: /^Pałyn #1(,|$)/ })
     const field = page.locator("#next-take-name")
+    const buttons = page.locator("footer [data-footer-actions] button")
+    const [aside, main] = [buttons.nth(0), buttons.nth(1)]
+    await expect(aside).toHaveAccessibleName("Finish")
+    await expect(main).toHaveAccessibleName("Record")
     const was = {
-      finish: await box(finish(page)),
-      record: await box(record(page)),
+      aside: await box(aside),
+      main: await box(main),
       bar: await box(bar),
       field: await box(field),
     }
-    // Finish's and Record's: the metronome's T is in the footer too.
+    // Esc on the left one and Space on the right, whatever is in hand (D1).
     const chips = page.locator("footer [data-footer-actions] kbd")
-    const hidden = async () =>
-      chips.evaluateAll((all) => all.map((k) => getComputedStyle(k).visibility))
-    expect(await hidden()).toEqual(["visible", "visible"])
+    const shown = async () =>
+      chips.evaluateAll((all) => all.map((k) => `${k.textContent} ${getComputedStyle(k).visibility}`))
+    expect(await shown()).toEqual(["Esc visible", "Space visible"])
 
-    // A take playing where it is: both keys are the take's now, and the
-    // buttons keep the room the chips take.
+    // A take playing where it is: Stop and Pause, in the same boxes.
     await row.getByRole("button", { name: /^Play / }).click()
     await expect(row.getByRole("button", { name: /^Pause / })).toBeVisible()
     await settled(page)
-    expect(await hidden()).toEqual(["hidden", "hidden"])
-    expectSame(await box(finish(page)), was.finish, "Finish while it plays")
-    expectSame(await box(record(page)), was.record, "Record while it plays")
+    await expect(aside).toHaveAccessibleName("Stop")
+    await expect(main).toHaveAccessibleName("Pause")
+    expect(await shown()).toEqual(["Esc visible", "Space visible"])
+    expectSame(await box(aside), was.aside, "Stop while it plays")
+    expectSame(await box(main), was.main, "Pause while it plays")
     expectSame(await box(field), was.field, "the Next take field while it plays")
     const playing = await box(bar)
     expect(Math.abs(playing.width - was.bar.width), "the bar's width while it plays").toBeLessThan(0.25)
@@ -329,23 +335,29 @@ test.describe("the footer", () => {
     await expect(page.getByRole("group", { name: "Take timeline" })).toBeVisible()
     await settled(page)
     expect(await callCount(page, "player_toggle")).toBe(toggles)
-    expect(await hidden()).toEqual(["hidden", "hidden"])
-    expectSame(await box(finish(page)), was.finish, "Finish with the take open")
-    expectSame(await box(record(page)), was.record, "Record with the take open")
-    expectSame(await box(field), was.field, "the Next take field with the take open")
+    await expect(aside).toHaveAccessibleName("Close take")
+    await expect(main).toHaveAccessibleName("Pause")
+    expect(await shown()).toEqual(["Esc visible", "Space visible"])
+    expectSame(await box(aside), was.aside, "Close take with the take open")
+    expectSame(await box(main), was.main, "Pause with the take open")
 
-    // Space is the take's: it plays or pauses, and records nothing.
+    // Space is the take's: it pauses, and records nothing.
     await page.keyboard.press("Space")
     await expect.poll(() => callCount(page, "player_toggle")).toBe(toggles + 1)
+    await expect(main).toHaveAccessibleName("Play")
+    expectSame(await box(main), was.main, "Play with the take open")
     expect(await callCount(page, "start_take")).toBe(0)
 
-    // Escape puts the take away, the keys come back, and nothing has moved.
+    // Escape closes the take, Finish and Record come back, and nothing has
+    // moved.
     await page.keyboard.press("Escape")
     await expect(page.getByRole("group", { name: "Take timeline" })).toHaveCount(0)
     await settled(page)
-    expect(await hidden()).toEqual(["visible", "visible"])
-    expectSame(await box(finish(page)), was.finish, "Finish after Escape")
-    expectSame(await box(record(page)), was.record, "Record after Escape")
+    await expect(aside).toHaveAccessibleName("Finish")
+    await expect(main).toHaveAccessibleName("Record")
+    expect(await shown()).toEqual(["Esc visible", "Space visible"])
+    expectSame(await box(finish(page)), was.aside, "Finish after Escape")
+    expectSame(await box(record(page)), was.main, "Record after Escape")
     expectSame(await box(field), was.field, "the Next take field after Escape")
     expect(Math.abs((await box(bar)).width - was.bar.width), "the bar's width after Escape").toBeLessThan(0.25)
   })
@@ -360,7 +372,7 @@ test.describe("the footer", () => {
     await expect(record(page)).not.toContainText(/\d/)
 
     await recordTake(page, 9)
-    await page.getByRole("button", { name: /Save take/ }).click()
+    await closeTake(page)
     await expect(recordButton(page, 10)).toHaveAccessibleName("Record")
     await settled(page)
     expectSame(await box(record(page)), was.record, "Record at take 10")

@@ -155,7 +155,7 @@ test("a failure stays until it is closed, and is one notice however often it hap
   await expect(notices(page, "error")).toHaveCount(1)
 
   // The corner is clear of a footer's buttons only in a wide window at 100%.
-  // A notice that stays must never sit on Start, Stop or Save take, so it
+  // A notice that stays must never sit on Start, Record or Stop, so it
   // goes above the footer.
   await page.setViewportSize({ width: 960, height: 680 })
   await expect

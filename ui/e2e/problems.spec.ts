@@ -1,5 +1,7 @@
 import {
   callCount,
+  closeTake,
+  closeTakeButton,
   expect,
   expectedError,
   notices,
@@ -18,26 +20,36 @@ test("a call that fails in Python says what failed, and leaves the screen usable
   page,
   pageErrors,
 }) => {
-  // Save take on Windows raised inside Python; the promise rejected, no
-  // screen caught it, and the button just dimmed and stayed dimmed.
-  await openApp(page, {
-    before: `window.__FAIL__ = {keep_take: "'charmap' codec can't encode characters"};`,
-  })
+  // Saving a take on Windows raised inside Python; the promise rejected, no
+  // screen caught it, and the button just dimmed and stayed dimmed. Stop
+  // saves the take now, through the transport, so that is the call that
+  // fails here, once the take is recording.
+  await openApp(page)
   await startRehearsal(page)
-  await recordTake(page)
-  await page.getByRole("button", { name: /Save take/ }).click()
+  await recordButton(page, 1).click()
+  const stop = page.getByRole("button", { name: /^Stop/ })
+  await expect(stop).toBeVisible()
+  await page.evaluate(() => {
+    const w = window as unknown as { pywebview: { api: Record<string, unknown> } }
+    w.pywebview.api.control_command = async () => {
+      const e = new Error("'charmap' codec can't encode characters")
+      e.name = "UnicodeEncodeError"
+      throw e
+    }
+  })
+  await stop.click()
   const bar = problemBar(page)
   await expect(bar).toContainText("charmap")
   await expect(bar).toContainText("UnicodeEncodeError")
   // And where the whole of it is written down.
   await expect(bar).toContainText("crash.log")
-  // The screen gets an answer, so Save take is not left dimmed, and it says
-  // it could not save in its own place too.
-  await expect(page.getByRole("button", { name: /Save take/ })).toBeEnabled()
+  // The screen gets an answer, so Stop is not left dimmed, and it says it
+  // could not save in its own place too.
+  await expect(stop).toBeEnabled()
   expect(await page.getByText("charmap").count()).toBeGreaterThanOrEqual(2)
   await page.getByRole("button", { name: "Dismiss" }).click()
   await expect(bar).toHaveCount(0)
-  expectedError(pageErrors, /keep_take failed/)
+  expectedError(pageErrors, /control_command failed/)
 })
 
 test("a problem while starting is shown in the same bar, and asked for once", async ({
@@ -137,9 +149,9 @@ test("a card that goes away mid-take stops it, and says why", async ({ page }) =
     "__IFACE_GONE__",
     "Recording stopped: no sound has come from the audio interface for 3 seconds."
   )
-  await expect(page.getByRole("button", { name: /Save take/ })).toBeVisible()
+  await expect(closeTakeButton(page)).toBeVisible()
   // Stopped without anyone pressing Stop, and the reason stays on screen
-  // once the take is up for review.
+  // once the take is saved and open.
   expect(await callCount(page, "stop_take")).toBe(1)
   const said = notices(page, "warning")
   await expect(said).toHaveCount(1)
@@ -148,7 +160,7 @@ test("a card that goes away mid-take stops it, and says why", async ({ page }) =
   // Plugged back in, the next take starts clean: "Recording stopped" in the
   // corner over a take that is recording would be a lie.
   await setFake(page, "__IFACE_GONE__", null)
-  await page.getByRole("button", { name: /Save take/ }).click()
+  await closeTake(page, 2)
   await recordButton(page, 2).click()
   await expect(page.getByRole("button", { name: /^Stop/ })).toBeVisible()
   await expect(said).toHaveCount(0)
@@ -186,7 +198,7 @@ test("a laptop that went to sleep ends the take, and says when", async ({ page }
     "The laptop went to sleep at 21:14, so the take ends there. " +
       "Everything up to that moment is saved."
   )
-  await expect(page.getByRole("button", { name: /Save take/ })).toBeVisible()
+  await expect(closeTakeButton(page)).toBeVisible()
   expect(await callCount(page, "stop_take")).toBe(1)
   const said = notices(page, "warning")
   await expect(said).toHaveCount(1)
@@ -223,8 +235,8 @@ test("a card gone quiet during playback pauses the take, and play tries it again
   await openApp(page)
   await startRehearsal(page)
   await recordTake(page)
-  const play = page.getByRole("button", { name: "Play", exact: true })
-  const pause = page.getByRole("button", { name: "Pause", exact: true })
+  const play = page.getByRole("toolbar", { name: "Transport" }).getByRole("button", { name: "Play", exact: true })
+  const pause = page.getByRole("toolbar", { name: "Transport" }).getByRole("button", { name: "Pause", exact: true })
   await play.click()
   await expect(pause).toBeVisible()
   await setFake(
@@ -245,16 +257,19 @@ test("a screen that cannot open keeps the window, says why on the bar, and can t
   page,
   pageErrors,
 }) => {
-  // A take whose length cannot be read: the screen after it cannot be
-  // drawn. Before, the whole window went blank, the bar with it.
+  // A take whose length cannot be read: the screen Stop opens it on cannot
+  // be drawn. Before, the whole window went blank, the bar with it. The
+  // session spoils its takes while __SPOIL__ is set.
   await openApp(page, {
     after:
-      "const api = window.pywebview.api; const stop = api.stop_take;" +
-      " api.stop_take = async (...a) => { const t = await stop(...a);" +
-      " Object.defineProperty(t, 'duration_sec', { get() { throw new Error('no length') } }); return t; };",
+      "const api = window.pywebview.api; const read = api.session_state;" +
+      " api.session_state = async (...a) => { const s = await read(...a);" +
+      " for (const t of (window.__SPOIL__ && s.takes) || [])" +
+      " Object.defineProperty(t, 'duration_sec', { get() { throw new Error('no length') } }); return s; };",
   })
   await startRehearsal(page)
   await recordButton(page, 1).click()
+  await setFake(page, "__SPOIL__", true)
   await page.getByRole("button", { name: /^Stop/ }).click()
   const guard = page.locator("[data-crash-guard]")
   await expect(guard).toContainText("This screen could not open.")
@@ -264,6 +279,7 @@ test("a screen that cannot open keeps the window, says why on the bar, and can t
   // The details went to crash.log too.
   expect(await callCount(page, "log_problem")).toBe(1)
   // Try again draws the app anew.
+  await setFake(page, "__SPOIL__", false)
   await guard.getByRole("button", { name: "Try again" }).click()
   await expect(guard).toHaveCount(0)
   expectedError(pageErrors, /this screen failed/)

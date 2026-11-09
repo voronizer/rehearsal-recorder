@@ -3,6 +3,7 @@ import {
   calls,
   colour,
   EDGE,
+  closeTake,
   expect,
   hold,
   keyOn,
@@ -33,7 +34,7 @@ test("finishing a rehearsal with takes in it asks, and is answered from the keyb
   await startRehearsal(page)
   await recordTake(page, 1)
   await nameTake(page, "Pałyn")
-  await page.getByRole("button", { name: /Save take/ }).click()
+  await closeTake(page)
   await takeButton(page.locator("[aria-label='Rehearsal overview']"), "Pałyn #1").click()
   const timeline = page.getByRole("group", { name: "Take timeline" })
   await expect(timeline).toBeVisible()

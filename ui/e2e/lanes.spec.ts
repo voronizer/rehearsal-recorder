@@ -51,8 +51,8 @@ const BOTH = {
     window.__BAND_ICONS__ = {Drums: 'drums', Gtr: 'guitar-electric', Keys: 'keys'};`,
 }
 
-/** The first take of a band up for review. */
-async function review(page: Page, setup: { before?: string; after?: string }, theme = "") {
+/** The first take of a band, stopped: saved, and open in the player. */
+async function stopped(page: Page, setup: { before?: string; after?: string }, theme = "") {
   await openApp(page, { before: theme + (setup.before ?? ""), after: setup.after })
   await startRehearsal(page)
   await recordTake(page, 1)
@@ -239,7 +239,7 @@ const rgbOf = (page: Page, css: string) =>
 
 test.describe("track lanes", () => {
   test("every audio lane and its plate are 56 px tall", async ({ page }) => {
-    await review(page, band(4))
+    await stopped(page, band(4))
     for (const name of NAMES.slice(0, 4)) {
       expect((await box(plate(page, name))).height).toBeCloseTo(56, 0)
       expect((await box(cell(page, name))).height).toBeCloseTo(56, 0)
@@ -255,7 +255,7 @@ test.describe("track lanes", () => {
   })
 
   test("M and S are 20 by 20 and 6 px apart", async ({ page }) => {
-    await review(page, band(4))
+    await stopped(page, band(4))
     for (const name of NAMES.slice(0, 4)) {
       const m = await box(plate(page, name).getByRole("button", { name: `Mute ${name}` }))
       const s = await box(plate(page, name).getByRole("button", { name: `Solo ${name}` }))
@@ -276,7 +276,7 @@ test.describe("track lanes", () => {
     test(`at the Appearance scale ${scale} a lane grows with it and a plate holds all it has`, async ({
       page,
     }) => {
-      await review(page, band(4), scaled(scale))
+      await stopped(page, band(4), scaled(scale))
       const rem = 16 * scale
       expect(
         parseFloat(await page.evaluate(() => getComputedStyle(document.documentElement).fontSize))
@@ -319,7 +319,7 @@ test.describe("track lanes", () => {
     test(`at the Appearance scale ${scale} the notes plate keeps its text and its drum rows are named`, async ({
       page,
     }) => {
-      await review(page, BOTH, scaled(scale))
+      await stopped(page, BOTH, scaled(scale))
       await settled(page)
       const midi = notesPlate(page, "Drums")
       const at = await box(midi)
@@ -343,7 +343,7 @@ test.describe("track lanes", () => {
     test(`at the Appearance scale ${scale} a MIDI-only notes plate keeps its text and its lane its well`, async ({
       page,
     }) => {
-      await review(page, BOTH, scaled(scale))
+      await stopped(page, BOTH, scaled(scale))
       await settled(page)
       const keys = notesPlate(page, "Keys")
       const at = await box(keys)
@@ -364,7 +364,7 @@ test.describe("track lanes", () => {
     test(`the lanes are one group with the card's fill and no frame, in the ${theme} theme`, async ({
       page,
     }) => {
-      await review(page, band(4), themed(theme))
+      await stopped(page, band(4), themed(theme))
       expect(await page.evaluate(() => document.documentElement.classList.contains("dark"))).toBe(
         theme === "dark"
       )
@@ -445,7 +445,7 @@ test.describe("track lanes", () => {
   test("the lanes touch with no line between them, and each waveform sits on its well 3 px in", async ({
     page,
   }) => {
-    await review(page, band(4))
+    await stopped(page, band(4))
     await settled(page)
     await expectWells(page)
     // A lane is 56 px and its waveform 50, whatever the window did: a canvas
@@ -471,7 +471,7 @@ test.describe("track lanes", () => {
   })
 
   test("the plate has no Mono or Stereo line, whatever the file", async ({ page }) => {
-    await review(page, band(2, "Bass"))
+    await stopped(page, band(2, "Bass"))
     for (const name of ["Drums", "Bass"]) {
       await expect(plate(page, name)).not.toContainText("Mono")
       await expect(plate(page, name)).not.toContainText("Stereo")
@@ -487,7 +487,7 @@ test.describe("track lanes", () => {
     test(`a Both track's audio and notes share one well split by a 1 px line, in the ${theme} theme`, async ({
       page,
     }) => {
-      await review(page, BOTH, themed(theme))
+      await stopped(page, BOTH, themed(theme))
       expect(await page.evaluate(() => document.documentElement.classList.contains("dark"))).toBe(
         theme === "dark"
       )
@@ -574,7 +574,7 @@ test.describe("track lanes", () => {
   // the side panel's colour, in both themes.
   for (const theme of ["dark", "light"] as const) {
     test(`the rehearsal screen's wells are --well, in the ${theme} theme`, async ({ page }) => {
-      await review(page, BOTH, themed(theme))
+      await stopped(page, BOTH, themed(theme))
       await settled(page)
       const well = await colour(page, "--well")
       expect(well, "the theme has a well").not.toBe("rgba(0, 0, 0, 0)")
@@ -594,7 +594,7 @@ test.describe("track lanes", () => {
   }
 
   test("a MIDI-only lane is a row of the group on a well of its own", async ({ page }) => {
-    await review(page, BOTH)
+    await stopped(page, BOTH)
     await settled(page)
     const keys = notesLane(page, "Keys")
     const row = page.locator("[data-lane-row='Keys']")
@@ -635,7 +635,7 @@ test.describe("track lanes", () => {
   })
 
   test("the time axis is one line from the map down through every lane", async ({ page }) => {
-    await review(page, band(4))
+    await stopped(page, band(4))
     await settled(page)
     const g = await box(group(page))
     // 200 px of plates and 12 of gap before it, and the group's 12 after it.
@@ -668,7 +668,7 @@ test.describe("track lanes", () => {
   test("a loop drawn across two lanes runs from the ruler's foot to the group's foot", async ({
     page,
   }) => {
-    await review(page, band(4))
+    await stopped(page, band(4))
     await settled(page)
     const t = await box(timeline(page))
     const from = t.x + t.width * 0.3
@@ -689,9 +689,11 @@ test.describe("track lanes", () => {
   })
 
   test("the master is its own group in a band as wide as the lanes", async ({ page }) => {
-    await review(page, band(4))
+    // Four tracks in a window of 960, under the take's strip: the band lies
+    // in the flow, not stuck.
+    await page.setViewportSize({ width: 1180, height: 960 })
+    await stopped(page, band(4))
     await settled(page)
-    // Four tracks in a window of 820: the band lies in the flow, not stuck.
     expect(await above(page)).toBeGreaterThan(8)
     const g = await box(group(page))
     const p = await box(masterPlate(page))
@@ -721,7 +723,7 @@ test.describe("track lanes", () => {
 
   test("stuck, the master's band covers the lanes under it", async ({ page }) => {
     await page.setViewportSize({ width: 1180, height: 600 })
-    await review(page, band(8))
+    await stopped(page, band(8))
     await settled(page)
     expect(Math.abs(await above(page)), "the band is stuck").toBeLessThan(1)
     const b = await box(masterBand(page))
@@ -738,7 +740,7 @@ test.describe("track lanes", () => {
     page,
   }) => {
     await page.setViewportSize({ width: 1180, height: 600 })
-    await review(page, band(8))
+    await stopped(page, band(8))
     const main = page.locator("main")
     await expect(strip(page)).toBeVisible()
     const scrolls = await main.evaluate((el) => el.scrollHeight - el.clientHeight)
@@ -762,9 +764,9 @@ test.describe("track lanes", () => {
 
   test("the master's edge follows the screen's padding", async ({ page }) => {
     await page.setViewportSize({ width: 1180, height: 600 })
-    await review(page, band(8))
+    await stopped(page, band(8))
     const main = page.locator("main")
-    // Review has the other screens' air, 32 px, as its own value of the token.
+    // The rehearsal screen has the other screens' air, 32 px, as its own value of the token.
     expect(
       await main.evaluate((el) => getComputedStyle(el).getPropertyValue("--screen-pad-y").trim())
     ).toBe("2rem")
@@ -845,7 +847,7 @@ test.describe("M and S at the fader", () => {
 
   for (const theme of ["dark", "light"] as const) {
     test(`a pressed M is the accent blue and a pressed S amber, in the ${theme} theme`, async ({ page }) => {
-      await review(page, band(2), themed(theme))
+      await stopped(page, band(2), themed(theme))
       const tones = [
         ["Mute", await colour(page, "--primary"), await colour(page, "--primary-foreground")],
         ["Solo", await colour(page, "--warn"), await colour(page, "--warn-foreground")],
@@ -870,7 +872,7 @@ test.describe("M and S at the fader", () => {
     // does not answer for: so it is read where it is drawn. A fader at its top
     // has its thumb at the right end.
     test(`the fader thumbs are in the text colour, in the ${theme} theme`, async ({ page }) => {
-      await review(page, band(2), themed(theme))
+      await stopped(page, band(2), themed(theme))
       const text = await colour(page, "--foreground")
       for (const name of ["Drums volume", "Master volume"]) {
         const fader = await box(page.getByRole("slider", { name }))
@@ -884,7 +886,7 @@ test.describe("M and S at the fader", () => {
   }
 
   test("the master's figure sits after its fader, under the name", async ({ page }) => {
-    await review(page, band(2))
+    await stopped(page, band(2))
     const master = strip(page)
     const fader = await box(master.getByRole("slider", { name: "Master volume" }))
     const figure = await box(master.getByText(/^\d+%$/))

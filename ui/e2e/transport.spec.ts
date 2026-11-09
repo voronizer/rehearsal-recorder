@@ -10,6 +10,7 @@ import {
   mixed,
   openApp,
   openEvening,
+  openHistory,
   recordTake,
   setFake,
   settled,
@@ -17,7 +18,6 @@ import {
   style,
   test,
   TONIGHT,
-  recordButton,
 } from "./app.ts"
 
 // The player's transport, and the one line it keeps for what it has to say
@@ -28,7 +28,7 @@ import {
 const transport = (page: Page) => page.getByRole("toolbar", { name: "Transport" })
 const timeline = (page: Page) => page.getByRole("group", { name: "Take timeline" })
 const line = (page: Page) => page.locator("[data-player-line]")
-const play = (page: Page) => page.getByRole("button", { name: "Play", exact: true })
+const play = (page: Page) => transport(page).getByRole("button", { name: "Play", exact: true })
 /** The map above the ruler, as a row. */
 const mapRow = (page: Page) =>
   page.getByRole("scrollbar", { name: "Part of the take on screen" }).locator("xpath=..")
@@ -43,6 +43,18 @@ const QUIET =
 async function openTonight(page: Page, take: string, before = "", tonight: object[] = TONIGHT) {
   const overview = await openEvening(page, before, tonight)
   await takeButton(overview, take).click()
+  await expect(timeline(page)).toBeVisible()
+  await expect(play(page)).toBeEnabled()
+  await settled(page)
+}
+
+/** Viasna #1 of Tuesday jam open in History, where a take's marks are chips
+ *  under its lanes: one at 0:40. The rehearsal screen lists them in its
+ *  right panel instead (listening.spec.ts). */
+async function openPastTake(page: Page, before = "") {
+  await openApp(page, { before: `window.__FULL_EVENING__ = true; ${before}` })
+  await openHistory(page)
+  await takeButton(page.locator("[aria-label='Rehearsal overview']"), "Viasna #1").click()
   await expect(timeline(page)).toBeVisible()
   await expect(play(page)).toBeEnabled()
   await settled(page)
@@ -81,7 +93,7 @@ async function croppingTake(page: Page, fraction = 0.4) {
 /** The playback device going quiet while a take plays, as Python says it. */
 async function goQuiet(page: Page, what = QUIET) {
   await play(page).click()
-  await expect(page.getByRole("button", { name: "Pause", exact: true })).toBeVisible()
+  await expect(transport(page).getByRole("button", { name: "Pause", exact: true })).toBeVisible()
   await setFake(page, "__OUTPUT_QUIET__", what)
   await expect(line(page).getByRole("alert")).toContainText("Playback stopped")
 }
@@ -465,14 +477,10 @@ test.describe("the marker's kind", () => {
     await expect(kinds.nth(0)).toHaveAttribute("aria-checked", "false")
     await expect(dialog).toHaveCount(1)
 
-    // And Save keeps the marker with it, Note, whose id is 1: held on this
-    // screen until Save take hands the take's marks over.
+    // And Save keeps the marker with it, Note, whose id is 1.
     await dialog.getByRole("button", { name: "Save", exact: true }).click()
     await expect(dialog).toHaveCount(0)
-    await page.getByRole("button", { name: /Save take/ }).click()
-    await expect(recordButton(page, 2)).toBeVisible()
-    const kept = (await calls(page, "keep_take")).at(-1)!.args
-    expect((kept[5] as { label_id: number }[]).map((m) => m.label_id)).toEqual([1])
+    expect((await calls(page, "update_take_marker")).at(-1)!.args[4]).toBe(1)
   })
 
   test("a kind other than the first, chosen, is the one the Tab key comes to", async ({ page }) => {
@@ -615,8 +623,8 @@ test.describe("the share dialog", () => {
 
 test.describe("the marks and the region", () => {
   test("a mark chip's time and words are buttons with the shared focus ring", async ({ page }) => {
-    await openTonight(page, "Viasna #1")
-    const time = page.getByRole("button", { name: "0:04", exact: true })
+    await openPastTake(page)
+    const time = player(page).getByRole("button", { name: "0:40", exact: true })
     const words = time.locator("xpath=following-sibling::button[1]")
     await expect(time).toHaveCount(1)
     await expect(words).toHaveCount(1)
@@ -628,7 +636,7 @@ test.describe("the marks and the region", () => {
     await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur())
     const focused = (el: Locator) => el.evaluate((e) => e === document.activeElement)
     let tabs = 0
-    while (!(await focused(time)) && tabs++ < 120) await page.keyboard.press("Tab")
+    while (!(await focused(time)) && tabs++ < 200) await page.keyboard.press("Tab")
     expect(await focused(time), "Tab reaches the time").toBe(true)
     expect(await ring(time), "the time's focus ring").not.toBe("none")
     await page.keyboard.press("Tab")
@@ -639,11 +647,10 @@ test.describe("the marks and the region", () => {
   test("a mark chip is 30 px high, and the marks are 24 px under the master", async ({
     page,
   }) => {
-    // The page is settled by openTonight: a box read while the groups rise is
-    // up to 12 px off.
-    await openTonight(page, "Viasna #1")
-    await settled(page)
-    const chip = page.getByRole("button", { name: "0:04", exact: true }).locator("xpath=..")
+    // The page is settled by openPastTake: a box read while the groups rise
+    // is up to 12 px off.
+    await openPastTake(page)
+    const chip = player(page).getByRole("button", { name: "0:40", exact: true }).locator("xpath=..")
     const row = chip.locator("xpath=..")
     await expect(row).toContainText("Marks")
     expect((await chip.boundingBox())!.height).toBeCloseTo(30, 0)
@@ -659,11 +666,8 @@ test.describe("the marks and the region", () => {
       "the second chorus drifts flat against the bass line and the drums rush it again " +
       "after the bridge, and nobody noticed until we listened back to the whole take"
     await page.setViewportSize({ width: 960, height: 820 })
-    await openTonight(page, "Viasna #1", "", [
-      ...TONIGHT.slice(0, 2),
-      { name: "Viasna", duration_sec: 12, markers: [{ at: 4, note: long, label_id: 1 }] },
-    ])
-    const time = page.getByRole("button", { name: "0:04", exact: true })
+    await openPastTake(page, `window.__OLD_MARK_NOTE__ = ${JSON.stringify(long)};`)
+    const time = player(page).getByRole("button", { name: "0:40", exact: true })
     const words = time.locator("xpath=following-sibling::button[1]")
     await expect(words).toContainText("the second chorus")
     await expect(words).not.toHaveAttribute("title")

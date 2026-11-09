@@ -117,8 +117,8 @@ test("says the app's name with its logo, and fills the band in from last time", 
       })
     )
     .toBe(true)
-  // A title is cut at the end of its row, never wrapped, unless the screen
-  // says it fits itself to its lines (Review's take).
+  // A title is cut at the end of its row, never wrapped, unless a
+  // rehearsal's figures stand beside it.
   expect(await style(page.locator("header h1"), "white-space", "text-overflow")).toEqual({
     "white-space": "nowrap",
     "text-overflow": "ellipsis",

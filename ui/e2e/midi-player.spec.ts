@@ -2,6 +2,7 @@ import {
   TAKE_SECONDS,
   callCount,
   calls,
+  closeTake,
   dragRegion,
   expect,
   openApp,
@@ -9,7 +10,6 @@ import {
   recordTake,
   startRehearsal,
   test,
-  recordButton,
   takeButton,
 } from "./app.ts"
 import type { Locator, Page } from "@playwright/test"
@@ -55,8 +55,8 @@ async function layout(page: Page) {
     )
 }
 
-/** The first take of that band, stopped and up for review. */
-async function review(page: Page, before = "") {
+/** The first take of that band, stopped: saved, and open in the player. */
+async function stopped(page: Page, before = "") {
   await openApp(page, { before: BAND + before })
   await startRehearsal(page)
   await recordTake(page, 1)
@@ -125,7 +125,7 @@ test.describe("notes in the player", () => {
   test("puts a Both track's notes right under its audio, sharing its audio's well under a line", async ({
     page,
   }) => {
-    await review(page)
+    await stopped(page)
     const audio = plate(page, "Drums")
     const midi = notesPlate(page, "Drums")
     await expect(midi).toContainText("MIDI")
@@ -180,7 +180,7 @@ test.describe("notes in the player", () => {
   test("gives a MIDI-only track a lane of its own in band order, with its icon", async ({
     page,
   }) => {
-    await review(page)
+    await stopped(page)
     const keys = notesPlate(page, "Keys")
     await expect(keys.locator("[data-icon]")).toHaveAttribute("data-icon", "keys")
     await expect(keys).toContainText("Keys")
@@ -214,7 +214,7 @@ test.describe("notes in the player", () => {
   test("draws the icons the take was recorded with, whatever the band has now", async ({ page }) => {
     // The band's icons gone since the take: the take keeps its own, and its
     // lanes are drawn with them (lineups spec, Part 3).
-    await review(page, "window.__BAND_ICONS__ = {};")
+    await stopped(page, "window.__BAND_ICONS__ = {};")
     await expect(plate(page, "Drums").locator("[data-icon]")).toHaveAttribute("data-icon", "drums")
     await expect(notesPlate(page, "Keys").locator("[data-icon]")).toHaveAttribute("data-icon", "keys")
     const asked = (await calls(page, "take_notes"))[0].args[0] as { name: string; icon?: string }[]
@@ -248,7 +248,7 @@ test.describe("notes in the player", () => {
   })
 
   test("says so when a track's port never appeared in the take", async ({ page }) => {
-    await review(page, "window.__MIDI_GONE__ = ['Launchkey Mini MK3'];")
+    await stopped(page, "window.__MIDI_GONE__ = ['Launchkey Mini MK3'];")
     await expect(notesLane(page, "Keys")).toContainText("No notes in this take")
     const keys = notesPlate(page, "Keys")
     await expect(lockedM(keys, GONE)).toHaveAttribute("aria-pressed", "true")
@@ -257,10 +257,11 @@ test.describe("notes in the player", () => {
     // Its icon comes from the same call as the notes: one, for the take.
     await expect(keys.locator("[data-icon]")).toHaveAttribute("data-icon", "keys")
     expect(await callCount(page, "take_notes")).toBe(1)
-    // Each with the icon the take keeps for it.
+    // Each with the icon the take keeps for it. It keeps none for a track it
+    // has no file of: take_notes gives that one the band's.
     expect((await calls(page, "take_notes"))[0].args[0]).toEqual([
       { name: "Drums", file: "/rec/Drums.mid", icon: "drums" },
-      { name: "Keys", file: null, icon: "keys" },
+      { name: "Keys", file: null },
     ])
     // The drums' notes are there all the same.
     await expect(notesLane(page, "Drums")).not.toContainText("No notes")
@@ -270,7 +271,7 @@ test.describe("notes in the player", () => {
   test("a Both track whose port never appeared keeps its sound, and its notes row says so", async ({
     page,
   }) => {
-    await review(page, "window.__MIDI_GONE__ = ['TD-17'];")
+    await stopped(page, "window.__MIDI_GONE__ = ['TD-17'];")
     // The audio row is as it always is, its waveform drawn.
     await expect(plate(page, "Drums").getByRole("button", { name: "Mute Drums" })).toBeVisible()
     expect((await box(audioLane(page, "Drums"))).height).toBeCloseTo(56, 0)
@@ -296,14 +297,14 @@ test.describe("notes in the player", () => {
     expect(Math.abs((await box(notesLane(page, "Drums"))).y - (w.y + w.height))).toBeLessThan(1)
     expect((await calls(page, "take_notes"))[0].args[0]).toEqual([
       { name: "Keys", file: "/rec/Keys.mid", icon: "keys" },
-      { name: "Drums", file: null, icon: "drums" },
+      { name: "Drums", file: null },
     ])
   })
 
   test("a track's notes go pale with its sound, and notes alone under another track's S", async ({
     page,
   }) => {
-    await review(page)
+    await stopped(page)
     await expect(notesLane(page, "Drums")).not.toHaveAttribute("data-dimmed")
     await expect(notesLane(page, "Keys")).not.toHaveAttribute("data-dimmed")
 
@@ -337,14 +338,14 @@ test.describe("notes in the player", () => {
     await expect(notesLane(page, "Keys")).not.toContainText("Notes file")
     await expect(notesLane(page, "Keys")).not.toContainText("No notes")
     await expect(lockedM(notesPlate(page, "Keys"), SAVED)).toBeVisible()
-    await page.getByRole("button", { name: "Play", exact: true }).click()
+    await page.getByRole("toolbar", { name: "Transport" }).getByRole("button", { name: "Play", exact: true }).click()
     await expect.poll(() => callCount(page, "player_toggle")).toBe(1)
   })
 
   test("asks for a take's notes once, not again to zoom, play or mark a region", async ({
     page,
   }) => {
-    await review(page)
+    await stopped(page)
     await expect(notesLane(page, "Keys")).toBeVisible()
     await expect.poll(() => callCount(page, "take_notes")).toBe(1)
     expect((await calls(page, "take_notes"))[0].args[0]).toEqual([
@@ -358,9 +359,9 @@ test.describe("notes in the player", () => {
     await page.keyboard.up("Control")
     await expect(page.getByRole("button", { name: "Whole take" })).toBeVisible()
     await dragRegion(page, 0.2, 0.6)
-    await page.getByRole("button", { name: "Play", exact: true }).click()
-    await expect(page.getByRole("button", { name: "Pause", exact: true })).toBeVisible()
-    await page.getByRole("button", { name: "Pause", exact: true }).click()
+    await page.getByRole("toolbar", { name: "Transport" }).getByRole("button", { name: "Play", exact: true }).click()
+    await expect(page.getByRole("toolbar", { name: "Transport" }).getByRole("button", { name: "Pause", exact: true })).toBeVisible()
+    await page.getByRole("toolbar", { name: "Transport" }).getByRole("button", { name: "Pause", exact: true }).click()
     await page.setViewportSize({ width: 1000, height: 700 })
     await page.getByRole("button", { name: "Whole take" }).click()
     await page.waitForTimeout(300)
@@ -409,7 +410,7 @@ test.describe("notes in the player", () => {
     page,
   }) => {
     await page.setViewportSize({ width: 1280, height: 1000 })
-    await review(page)
+    await stopped(page)
     const drums = notesLane(page, "Drums")
     // The fake kit's crash, once, a quarter of a second in.
     const crash = await rowMiddle(drums, 0)
@@ -460,7 +461,7 @@ test.describe("notes in the player", () => {
 
   test("the part before the playhead is in the accent, the rest grey", async ({ page }) => {
     await page.setViewportSize({ width: 1280, height: 1000 })
-    await review(page)
+    await stopped(page)
     const drums = notesLane(page, "Drums")
     // The hi-hat plays every quarter of a second.
     const hats = await rowMiddle(drums, 2)
@@ -528,7 +529,7 @@ test.describe("notes in the player", () => {
     const name = "Keys and the old Juno 106 that has lived in the corner of the rehearsal room since 1990"
     const port = "Launchkey Mini MK3 MIDI Port, the one on the left of the desk"
     await page.setViewportSize({ width: 960, height: 1000 })
-    await review(
+    await stopped(
       page,
       `window.__SESSION_TRACKS__[2].name = ${JSON.stringify(name)};
        window.__SESSION_TRACKS__[2].midi_port = {name: ${JSON.stringify(port)}};
@@ -571,36 +572,29 @@ test.describe("notes in the player", () => {
     await expect(notesLane(page, "Drums").getByText("Kick", { exact: true })).toBeVisible()
   })
 
-  test("the review screen hands the take's notes to crop_draft and keep_take", async ({
+  test("Stop keeps the take's notes, and a crop cuts them with the audio", async ({
     page,
   }) => {
-    await review(page)
+    await stopped(page)
+    // Kept with the icons the take has, as stop_take gave them.
+    const ICONS: Record<string, string> = { Drums: "drums", Keys: "keys" }
+    expect((await calls(page, "keep_take"))[0].args[7]).toEqual(
+      NOTES.map((n) => ({ ...n, icon: ICONS[n.name] }))
+    )
     await expect.poll(() => callCount(page, "take_notes")).toBe(1)
     await dragRegion(page, 0.25, 0.75)
     await page.getByRole("button", { name: "Crop to the region" }).click()
-    await expect.poll(() => callCount(page, "crop_draft")).toBe(1)
-    // With the icons the take keeps, as stop_take gave them.
-    const ICONS: Record<string, string> = { Drums: "drums", Keys: "keys" }
-    expect((await calls(page, "crop_draft"))[0].args[4]).toEqual(
-      NOTES.map((n) => ({ ...n, icon: ICONS[n.name] }))
-    )
+    await expect.poll(() => callCount(page, "crop_take")).toBe(1)
     // The cut take is a take opened again: its notes are asked for anew.
     await expect.poll(() => callCount(page, "take_notes")).toBe(2)
     const cut = (await calls(page, "take_notes"))[1].args[0] as { file: string }[]
     expect(cut.every((f) => /\.mid#\d+$/.test(f.file))).toBe(true)
     await expect(notesPlate(page, "Drums")).toBeVisible()
-
-    await page.getByRole("button", { name: /Save take/ }).click()
-    await expect.poll(() => callCount(page, "keep_take")).toBe(1)
-    const kept = (await calls(page, "keep_take"))[0].args[7] as { name: string; file: string }[]
-    expect(kept.map((n) => n.name)).toEqual(["Drums", "Keys"])
-    expect(kept.map((n) => n.file)).toEqual(cut.map((f) => f.file))
   })
 
   test("a saved take opens with its notes", async ({ page }) => {
-    await review(page)
-    await page.getByRole("button", { name: /Save take/ }).click()
-    await expect(recordButton(page, 2)).toBeVisible()
+    await stopped(page)
+    await closeTake(page, 2)
     await takeButton(page, "Take #1").first().click()
     await expect(notesPlate(page, "Drums")).toContainText("TD-17")
     await expect(notesPlate(page, "Keys")).toContainText("Launchkey Mini MK3")

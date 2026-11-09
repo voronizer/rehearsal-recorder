@@ -11,7 +11,6 @@ import {
   startRehearsal,
   style,
   test,
-  recordButton,
 } from "./app.ts"
 import type { Locator, Page } from "@playwright/test"
 
@@ -59,8 +58,8 @@ test("the marker dialog's buttons are the labels, in their order, the first chos
     before:
       "window.__LABELS__ = [{id:7, name:'Solo', colour:'violet'}, {id:1, name:'Note', colour:'grey'}, {id:3, name:'Went wrong', colour:'red'}];",
   })
-  // On the review screen, where a mark is held until Save take: the
-  // interface gives it the first label itself.
+  // On the take Stop has just opened: Python gives a new mark the first
+  // label, and the dialog shows it chosen.
   await startRehearsal(page)
   await recordTake(page)
   await page.getByRole("button", { name: "Add mark" }).click()
@@ -74,10 +73,8 @@ test("the marker dialog's buttons are the labels, in their order, the first chos
   await expect(dialog.getByRole("radio", { name: "Solo" })).toHaveAttribute("aria-checked", "true")
   await dialog.getByRole("radio", { name: "Went wrong" }).click()
   await dialog.getByRole("button", { name: "Save", exact: true }).click()
-  await page.getByRole("button", { name: /Save take/ }).click()
-  await expect(recordButton(page, 2)).toBeVisible()
-  const kept = (await calls(page, "keep_take")).at(-1)!.args
-  expect((kept[5] as { label_id: number }[])[0].label_id).toBe(3)
+  await expect(dialog).toHaveCount(0)
+  expect((await calls(page, "update_take_marker")).at(-1)!.args[4]).toBe(3)
 })
 
 // Settings › Marks: the labels made, named, coloured, ordered and deleted.

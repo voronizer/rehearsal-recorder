@@ -3,6 +3,7 @@ import {
   calls,
   colour,
   DASH,
+  closeTake,
   expect,
   nameTake,
   notices,
@@ -35,7 +36,7 @@ async function openShare(page: Page, justBefore?: () => Promise<unknown>) {
   await startRehearsal(page)
   await recordTake(page, 1)
   await nameTake(page, "Pałyn")
-  await page.getByRole("button", { name: /Save take/ }).click()
+  await closeTake(page)
   await expect(recordButton(page, 2)).toBeVisible()
   await takeButton(page.locator("[aria-label='Rehearsal overview']"), "Pałyn #1").click()
   await justBefore?.()
@@ -45,14 +46,7 @@ async function openShare(page: Page, justBefore?: () => Promise<unknown>) {
   return dialog
 }
 
-/** What the last saved take was told about the cloud: false kept out, null
- *  left to the setting. */
-async function sentAs(page: Page) {
-  const args = (await calls(page, "keep_take")).at(-1)?.args ?? []
-  return args.length > 6 ? args[6] : null
-}
-
-test("saving a take says whether it goes to the cloud, take by take", async ({ page }) => {
+test("the open take's box says whether it goes to the cloud, take by take", async ({ page }) => {
   await openApp(page, {
     // The limit at its lowest, so the fake's 6 s takes are not false starts.
     before: `window.__CLOUD_DIR__ = '/Users/alex/Google Drive/Band';
@@ -60,23 +54,22 @@ test("saving a take says whether it goes to the cloud, take by take", async ({ p
   })
   await startRehearsal(page)
   await recordTake(page, 1)
-  const box = page.locator("#send-to-cloud")
+  // Stop saved it with nothing said about the cloud: the setting decides.
+  expect((await calls(page, "keep_take"))[0].args[6]).toBeNull()
+  const box = page.getByRole("checkbox", { name: "Send to the cloud" })
   await expect(box).toBeChecked()
-  const label = page.locator("label[for='send-to-cloud']")
-  await expect(label).toContainText("the mix")
-  await expect(label).toContainText("WAV")
   await box.uncheck()
-  // Space right after clicking the box must still save, not tick it again.
+  await expect(box).not.toBeChecked()
+  expect((await calls(page, "unshare_take"))[0].args.slice(1)).toEqual([1])
+  // Space right after clicking the box plays the take, not ticks it again.
   await page.keyboard.press("Space")
-  await expect.poll(() => sentAs(page)).toBe(false)
+  await expect(page.locator("footer").getByRole("button", { name: "Pause", exact: true })).toBeVisible()
+  await expect(box).not.toBeChecked()
 
-  // The next take starts from the setting again, not from the last one, and
-  // left alone it simply follows the setting.
+  // The next take starts from the setting again, not from the last one.
+  await closeTake(page, 2)
   await recordTake(page, 2)
   await expect(box).toBeChecked()
-  await page.getByRole("button", { name: /Save take/ }).click()
-  await expect.poll(async () => (await calls(page, "keep_take")).length).toBe(2)
-  expect(await sentAs(page)).toBeNull()
 })
 
 test("a take is copied to the cloud from its row, and taken back out again", async ({ page }) => {
@@ -84,7 +77,7 @@ test("a take is copied to the cloud from its row, and taken back out again", asy
   await startRehearsal(page)
   await recordTake(page, 1)
   await nameTake(page, "Pałyn")
-  await page.getByRole("button", { name: /Save take/ }).click()
+  await closeTake(page)
   await expect(recordButton(page, 2)).toBeVisible()
   await takeButton(page.locator("[aria-label='Rehearsal overview']"), "Pałyn #1").click()
   await expect(page.getByRole("button", { name: "Mute Guitar" })).toBeVisible()
@@ -126,7 +119,7 @@ test("a share option is named by its title and described by its hint", async ({ 
   await startRehearsal(page)
   await recordTake(page, 1)
   await nameTake(page, "Pałyn")
-  await page.getByRole("button", { name: /Save take/ }).click()
+  await closeTake(page)
   await expect(recordButton(page, 2)).toBeVisible()
   await takeButton(page.locator("[aria-label='Rehearsal overview']"), "Pałyn #1").click()
   await page.getByRole("button", { name: "Copy Pałyn 1 to the cloud" }).click()

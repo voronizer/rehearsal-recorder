@@ -1,6 +1,7 @@
 import {
   callCount,
   calls,
+  closeTake,
   expect,
   GIG,
   openApp,
@@ -100,9 +101,9 @@ test("with a take open the arrows step through the takes and leave the next take
   await startRehearsal(page)
   // Two goes at Pałyn: the strip's ↓ goes from one to the other.
   await recordTake(page, 1)
-  await page.getByRole("button", { name: /Save take/ }).click()
+  await closeTake(page)
   await recordTake(page, 2)
-  await page.getByRole("button", { name: /Save take/ }).click()
+  await closeTake(page)
   await setRow(page, "Viasna").click()
   await expect(field(page)).toHaveValue("Viasna")
   await takeButton(page.locator("[aria-label='Rehearsal overview']"), "Pałyn #1").click()
@@ -111,6 +112,8 @@ test("with a take open the arrows step through the takes and leave the next take
   const sent = await callCount(page, "set_next_take_name")
   await page.keyboard.press("ArrowDown")
   await expect.poll(() => callCount(page, "player_open")).toBeGreaterThan(opens)
+  // Closed, the next take is still the one picked.
+  await closeTake(page)
   await expect(field(page)).toHaveValue("Viasna")
   expect(await callCount(page, "set_next_take_name")).toBe(sent)
 })
@@ -170,7 +173,7 @@ test("the first click selects the whole name, a second places the caret, leaving
   await expect(field(page)).toHaveValue("Dym")
 })
 
-test("the arrow keys hint sits beside the label and is hidden while a take is open", async ({
+test("the arrow keys hint sits beside the label, and goes with its panel while a take is open", async ({
   page,
 }) => {
   await openApp(page)
@@ -186,14 +189,20 @@ test("the arrow keys hint sits beside the label and is hidden while a take is op
   expect(Math.abs(at.y + at.height / 2 - (label.y + label.height / 2))).toBeLessThan(3)
 
   await recordTake(page, 1)
-  await page.getByRole("button", { name: /Save take/ }).click()
+  await closeTake(page, 2)
   // The panel rises in again with the screen, and a box is measured after.
   await settled(page)
   const fieldAt = (await field(page).boundingBox())!
   await takeButton(page.locator("[aria-label='Rehearsal overview']"), "Take #1").click()
   await expect(page.getByRole("group", { name: "Take timeline" })).toBeVisible()
+  // The take's marks have the panel while it is open, and the arrows are
+  // the strip's.
+  await expect(page.getByRole("complementary", { name: "Marks" })).toBeVisible()
   await expect(hint).toBeHidden()
-  // Gone without moving the field.
+  // Back with the panel once the take is closed, the field where it was.
+  await closeTake(page, 2)
+  await expect(hint).toBeVisible()
+  await settled(page)
   expect((await field(page).boundingBox())!.y).toBeCloseTo(fieldAt.y, 0)
 })
 
@@ -201,7 +210,7 @@ test("the arrows do nothing while a dialog is open", async ({ page }) => {
   await openApp(page, { before: withSet(["Pałyn", "Viasna"]) })
   await startRehearsal(page)
   await recordTake(page, 1)
-  await page.getByRole("button", { name: /Save take/ }).click()
+  await closeTake(page)
   await page.hover("[data-take='1']")
   await page.getByRole("button", { name: "Rename take Pałyn 1" }).click()
   const dialog = page.getByRole("dialog")
@@ -222,7 +231,7 @@ test("the arrows do nothing to the next take while Rename take has its field", a
   await openApp(page, { before: withSet(["Pałyn", "Viasna"]) })
   await startRehearsal(page)
   await recordTake(page, 1)
-  await page.getByRole("button", { name: /Save take/ }).click()
+  await closeTake(page)
   await page.hover("[data-take='1']")
   await page.getByRole("button", { name: "Rename take Pałyn 1" }).click()
   const dialog = page.getByRole("dialog")

@@ -2,6 +2,7 @@ import type { Locator, Page } from "@playwright/test"
 import {
   callCount,
   calls,
+  closeTakeButton,
   expect,
   openApp,
   openHistory,
@@ -92,7 +93,7 @@ test.describe("Playback volume in the header", () => {
     await expect(page.getByRole("button", { name: /^Stop/ })).toBeVisible()
     await expect(headerVolume(page)).toHaveCount(0)
     await page.getByRole("button", { name: /^Stop/ }).click()
-    await expect(page.locator("[data-take-summary]")).toBeVisible()
+    await expect(closeTakeButton(page)).toBeVisible()
     await expect(headerVolume(page)).toBeVisible()
   })
 
@@ -199,7 +200,7 @@ test.describe("Playback volume in the header", () => {
     await expect(page.getByRole("button", { name: "Pause Viasna" })).toBeVisible()
   })
 
-  test("on the review screen too, with the take just recorded", async ({ page }) => {
+  test("on the take Stop has just opened too", async ({ page }) => {
     await openApp(page)
     await startRehearsal(page)
     await recordTake(page)
