@@ -19,6 +19,12 @@ opening.
   number back. The last take of an evening no longer stays unsaved because
   nobody pressed **Save take**. The controller's **Record/Stop** opens the
   take the same way.
+- **A song arriving twice at once is made once.** When two takes of a song
+  the band service did not have yet came in at the same moment, from two
+  laptops say, the second take failed and РЭХА sent it again half a minute
+  later. Both now go into the one song straight away. When two people make
+  the same song on the site at once, the second is told there is already a
+  song called that.
 
 ## 0.25.0
 

@@ -226,7 +226,9 @@ export const takeRoutes = newApp()
         const other = await findSong(db, to.new_song)
         if (other?.trashedAt) return fail(c, 409, `“${other.title}” is in the Trash: restore it to move the take there.`)
         if (other) return fail(c, 409, `“${other.title}” is already a song: pick it in the list.`)
-        id = await makeSong(db, to.new_song, { tempo: null, signature: null }, me)
+        const made = await makeSong(db, to.new_song, { tempo: null, signature: null }, me)
+        if (made === null) return fail(c, 409, `“${(await findSong(db, to.new_song))!.title}” is already a song: pick it in the list.`)
+        id = made
       }
       const [s] = await db.select({ title: song.title }).from(song).where(eq(song.id, id)).limit(1)
       await db.update(take).set({ songId: id, name: s.title, movedBy: me, updatedAt: iso() }).where(eq(take.uid, uid))
