@@ -1941,6 +1941,18 @@ class Library:
             row.cloud_copy = self._cloud_row(shared, cloud_dir)
             return True
 
+    def set_cloud_choice(self, folder, take_number, *, skip):
+        """The take's own answer to sending on its own, set after it was kept:
+        skip=True is "not this one", as unticking its box says; False leaves
+        it to the setting again. A "send this one" goes with either."""
+        with self._session.begin() as db:
+            row = self._find_take(db, folder, take_number)
+            if row is None:
+                return False
+            row.cloud_skip = bool(skip)
+            row.cloud_send = False
+            return True
+
     @staticmethod
     def _cloud_row(shared, cloud_dir):
         if not shared:

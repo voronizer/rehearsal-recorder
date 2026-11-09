@@ -3441,12 +3441,18 @@ class Api:
                 self._hold = None
         self._sending.wake()
 
-    def release_take(self):
+    def release_take(self, folder=None, take_number=None):
         """The rehearsal screen closed the take open after Stop, opened
-        another, or was left: whatever is held goes now. {"ok": True}, with
-        nothing held too."""
-        self._release_take()
+        another, or was left: that take goes now, if it is the one held
+        (whatever is held, with none named). {"ok": True}, with nothing held
+        too."""
+        self._release_take(folder, take_number)
         return {"ok": True}
+
+    def _cloud_jobs_path(self):
+        """Where the cloud folder keeps the copies still to make, so the app
+        closed or stopped before they are made makes them when it opens."""
+        return CONFIG_PATH.with_name("cloud-waiting.json")
 
     @serialised
     def keep_take(

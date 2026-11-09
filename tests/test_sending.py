@@ -10,6 +10,7 @@ worker's loop is never started: each check drives `run_next` itself, so
 nothing races it.
 """
 
+import json
 import sys
 import tempfile
 import threading
@@ -1222,6 +1223,9 @@ def held_after_stop(api, fake, service, drain, entries, keep, uid_of, take, fold
     ok("a held take unticked never goes, once released too",
        res["ok"] and calls(uid_out) == [] and take(n_out)["service"] is None
        and api.session_state()["service_queue"] == {})
+    ok("nor goes to the service's trash, which never had it",
+       not [o for o in fake.order if uid_out in o]
+       and not [e for e in entries() if "band service trash" in e["title"]])
 
     n_false = hold(keep("Palyn", seconds=2.0, band=["Drums"]))
     ok("a held false start stays at home", uid_of(n_false) is None)
@@ -1255,19 +1259,37 @@ def held_after_stop(api, fake, service, drain, entries, keep, uid_of, take, fold
     res = api.unshare_take(folder(), n_c)
     ok("unticking a held take takes its copy off the queue, and is not refused",
        res["ok"] and api.session_state()["cloud_queue"] == {} and waiting_cloud(n_c) == [])
+    api.add_take_marker(folder(), n_c, 1.0)
+    api.set_take_star(folder(), n_c, True)
+    ok("a mark or a star after does not tick it again",
+       api.session_state()["cloud_queue"] == {} and take(n_c)["cloud_skip"])
     api.release_take()
     ok("and it stays at home once released", cloud.queue.run_next() is False and not take(n_c)["cloud"])
+    sent = api.share_take(folder(), n_c)
+    ok("ticked again by hand, it goes, and is left to the setting after",
+       sent["ok"] and cloud.queue.run_next() is True and take(n_c)["cloud"]
+       and not take(n_c)["cloud_skip"])
     n_c3 = keep("Viasna", band=["Drums"])
     res = api.unshare_take(folder(), n_c3)
-    ok("a take not held is still not taken out while its copy waits",
-       res["ok"] is False and api.session_state()["cloud_queue"] == {n_c3: "queued"})
+    ok("a copy of a take not held is taken off the queue too while it waits",
+       res["ok"] and api.session_state()["cloud_queue"] == {} and not take(n_c3)["cloud"])
     while cloud.queue.run_next():
         pass
     n_c4 = hold(keep("Viasna", band=["Drums"]))
     ok("held, a copy waits", cloud.queue.run_next() is False and not take(n_c4)["cloud"])
-    api.release_take()
+    jobs = json.loads(api._cloud_jobs_path().read_text(encoding="utf-8"))
+    ok("and is written down while it waits", [str(folder()), n_c4, None] in jobs)
+    from rehearsal_recorder.sending.cloud_folder import CloudFolder
+    again = CloudFolder(api)
+    again.resume()
+    ok("the app opened again queues it again",
+       again.queue.states(str(folder())) == {n_c4: "queued"})
+    api.release_take(str(folder()), n_c4 + 1)
+    ok("release_take of another take leaves it held", api.session_state()["held_take"] == n_c4)
+    api.release_take(str(folder()), n_c4)
     ok("released, it is made", cloud.queue.run_next() is True
        and Path(take(n_c4)["cloud"].get("mix", "")).exists())
+    ok("and nothing is left written down", not api._cloud_jobs_path().exists())
     api.set_send_to("service")
 
 

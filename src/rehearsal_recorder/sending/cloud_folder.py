@@ -20,6 +20,8 @@ nothing behind it, and a fingerprint that cannot be disproved would suppress
 its own repair.
 """
 
+import json
+import os
 import sys
 import threading
 from pathlib import Path
@@ -158,12 +160,16 @@ class PublishQueue:
     `held()` names the take whose job waits however long it is queued, as
     (folder, take number), or None: the take saved by the last Stop, while
     the band listens to it (Api._held). The jobs after it go meanwhile.
+
+    `changed()` is called, outside the lock, whenever the jobs still to do
+    (`waiting`) may have changed: CloudFolder writes them down.
     """
 
-    def __init__(self, step, paused, held=lambda: None):
+    def __init__(self, step, paused, held=lambda: None, changed=lambda: None):
         self._step = step
         self._paused = paused
         self._held = held
+        self._changed = changed
         # [folder, take_number, what]: what is None for an automatic job,
         # "mix"/"tracks"/"both" for one asked for by hand.
         self._jobs = []
@@ -199,7 +205,15 @@ class PublishQueue:
                         self._rerun_what = what
                 else:
                     self._jobs.append([folder, take_number, what])
+        self._changed()
         self._wake.set()
+
+    def waiting(self):
+        """Every job not done yet, the one being done first, as [folder,
+        take number, what]."""
+        with self._lock:
+            active = [list(self._active)] if self._active is not None else []
+            return active + [list(job) for job in self._jobs]
 
     def states(self, folder):
         """What this rehearsal's takes are doing, by take number."""
@@ -220,11 +234,14 @@ class PublishQueue:
         A copy being made is not stopped."""
         folder, take_number = Path(folder), int(take_number)
         with self._lock:
-            for i, job in enumerate(self._jobs):
-                if Path(job[0]) == folder and job[1] == take_number:
-                    del self._jobs[i]
-                    return True
-        return False
+            at = next((i for i, job in enumerate(self._jobs)
+                       if Path(job[0]) == folder and job[1] == take_number), None)
+            if at is not None:
+                del self._jobs[at]
+        if at is None:
+            return False
+        self._changed()
+        return True
 
     def wake(self):
         """The worker looks at the queue now, rather than at its next turn."""
@@ -257,6 +274,7 @@ class PublishQueue:
                     self._rerun_active = False
                     self._rerun_what = None
                 self._active = None
+            self._changed()
         return True
 
     def start(self):
@@ -313,12 +331,13 @@ class CloudFolder:
         self.api = api
         self.queue = PublishQueue(
             step=self._publish_step, paused=lambda: api._sound_busy() is not None,
-            held=lambda: api._held(),
+            held=lambda: api._held(), changed=self._keep_jobs,
         )
         # The journal entry of each take waiting to be copied, by (folder,
         # take number): one however many times it is asked for.
         self.entries = {}
         self._lock = threading.Lock()
+        self._keeping = threading.Lock()
 
     # ---------- the settings ----------
 
@@ -613,6 +632,9 @@ class CloudFolder:
             return {"ok": False, "error": "Take not found"}
         if not any(Path(t.get("file", "")).exists() for t in take["tracks"]):
             return {"ok": False, "error": "The take has no files left on disk"}
+        if take.get("cloud_skip"):
+            # Its box ticked again after it was unticked (remove).
+            api._lib.set_cloud_choice(folder, take_number, skip=False)
         self._queue_copy(folder, take_number, what, take)
         return {"ok": True, "queued": True, "take": take}
 
@@ -668,10 +690,9 @@ class CloudFolder:
                 return {"ok": False, "error": "Rehearsal not found"}
             return {"ok": False, "error": "Take not found"}
         # A copy on its way would put back what is removed now the moment it
-        # finished — the file in the band's folder, and its record. The take
-        # held after Stop has not started on its way: its box unticked, its
-        # copy is not made at all.
-        if api._is_held(folder, take_number) and self.queue.drop(folder, take_number):
+        # finished — the file in the band's folder, and its record. One still
+        # waiting, the take held after Stop's among them, is not made at all.
+        if self.queue.drop(folder, take_number):
             with self._lock:
                 entry = self.entries.pop((str(folder), int(take_number)), None)
             if entry is not None:
@@ -686,6 +707,9 @@ class CloudFolder:
         others = api._lib.others_cloud_paths(folder, take_number)
         result = api._remove_shared(api._unused(take.get("cloud"), others))
         api._lib.set_cloud_copy(folder, take_number, None, None)
+        # "Not this one" from now on: a mark, a ★ or a rename later must not
+        # send it again on its own (_copy_due).
+        api._lib.set_cloud_choice(folder, take_number, skip=True)
         return {"ok": True, **result}
 
     # ---------- the worker ----------
@@ -700,10 +724,56 @@ class CloudFolder:
         return {"takes": 0, "bytes": 0}
 
     def start(self):
+        self.resume()
         self.queue.start()
 
     def stop(self, timeout=2.0):
         self.queue.stop(timeout)
+
+    # ---------- the copies still to make, kept between runs ----------
+
+    def _keep_jobs(self):
+        """Writes down the copies still to make, so that the app closed (Close
+        anyway asks nothing for the cloud folder) or stopped before they are
+        made makes them the next time it opens (resume). The take held after
+        Stop is among them while it is held. Never raises: a copy not
+        written down is only not made again after a restart."""
+        path = self.api._cloud_jobs_path()
+        with self._keeping:
+            jobs = self.queue.waiting()
+            try:
+                if not jobs:
+                    path.unlink(missing_ok=True)
+                    return
+                path.parent.mkdir(parents=True, exist_ok=True)
+                writing = path.with_name(path.name + ".writing")
+                writing.write_text(json.dumps(jobs, ensure_ascii=False), encoding="utf-8")
+                os.replace(writing, path)
+            except OSError as e:
+                print(f"Cloud copies to make could not be written down: {e}", file=sys.stderr)
+
+    def resume(self):
+        """The copies still to make when the app last closed, queued again:
+        each as it was asked for, by hand or on its own. One sending on its
+        own asks again whether it is to go (saved), since the settings may
+        have changed meanwhile. A take no longer there is left out."""
+        path = self.api._cloud_jobs_path()
+        try:
+            jobs = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            return
+        for job in jobs if isinstance(jobs, list) else []:
+            try:
+                folder, take_number, what = job
+                take = self._take_in(folder, int(take_number))
+            except (TypeError, ValueError):
+                continue
+            if take is None:
+                continue
+            if what is None:
+                self.saved(folder, int(take_number), take=take)
+            elif what in ("mix", "tracks", "both"):
+                self._queue_copy(folder, int(take_number), what, take)
 
     def wake(self):
         self.queue.wake()

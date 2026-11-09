@@ -85,7 +85,13 @@ The hold ends, and the take goes as the setting or its box says, when:
 A held take thrown away never leaves the computer. Closing the window ends
 the hold too. A take for the band service then counts among the takes still
 to send, so the closing question asks as it does now (`api.py:7109`);
-**Close anyway** sends it next time.
+**Close anyway** sends it next time. A copy for the cloud folder still to be
+made is written down (`cloud-waiting.json` beside the settings) and made
+when the app opens again.
+
+Unticking a take's box for the cloud folder is kept on the take, as "not
+this one": a mark, a ★ or a rename later does not send it after all.
+Ticking it again sends it.
 
 ## Numbers
 
@@ -129,7 +135,8 @@ has left the hold.
 | The song's takes tonight as columns | The take strip above the player: the song's takes with their lengths and ★ |
 
 `Review.tsx` and its `"review"` screen in `App.tsx` go, with what only they
-use (`crop_draft`, the discard offer). **Unsaved takes** stays: a crash or
+use (the discard offer; `crop_draft` and `discard_take` leave the
+interface, and Python keeps them with their tests for now). **Unsaved takes** stays: a crash or
 a failed save still leaves a draft.
 
 ## Words and tests
@@ -166,3 +173,10 @@ Claude decided these alone:
 - **An Undo during the next recording** brings the take back; the take
   being recorded then gets the next number when it is saved, not the one
   its screen showed.
+- **The trash on the held take gives its name back too**: the title picked
+  for the next take before it was recorded is picked again, so a false
+  start of a new song is followed by that song.
+- **Unticking takes out any copy still waiting** for the cloud folder, not
+  only the held take's; a copy being made is still refused.
+- **The click between takes and the backing track's ▶ stop** when a take
+  opens, since their row is hidden while it is open.

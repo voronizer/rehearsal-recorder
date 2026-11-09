@@ -310,6 +310,12 @@ class BandService:
             return refused
         row = self._lib.service_row(folder, take_number)
         if row is not None and not row["removed"]:
+            if row["sent"] is None and self.api._is_held(folder, take_number):
+                # The take held after Stop, its box unticked: the service has
+                # never had it, and no pass is sending it, so there is
+                # nothing to put in the service's trash.
+                self._taken_out(row["take_id"])
+                return {"ok": True, "take": self._lib.take(folder, take_number)}
             # The delete first, so the hourly check never reads the take as
             # taken out with no delete on its way and sends it again.
             self._lib.add_service_delete(row["uid"], take["name"])
