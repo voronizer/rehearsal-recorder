@@ -1,10 +1,10 @@
-import { and, eq, isNotNull, lt, notExists } from "drizzle-orm"
+import { and, eq, isNotNull, lt, notExists, sql } from "drizzle-orm"
 import { database } from "../shared/db"
 import type { Bindings } from "../shared/env"
-import { song, songFile, take } from "../shared/schema"
+import { bandSet, setSong, song, songFile, take } from "../shared/schema"
 import { iso, now } from "../shared/time"
 
-/** A take or a song stays in the trash 30 days. */
+/** A take, a song or a set stays in the trash 30 days. */
 const TRASH_DAYS = 30
 /** Takes and songs deleted in one day's run. Each is a few calls to the
  *  files and the database, and one run of a Worker may make only so many;
@@ -27,8 +27,9 @@ export async function deleteFiles(env: Bindings, prefix: string, drop: (key: str
  * Once a day, from the Cron Trigger: takes in the trash for more than 30
  * days are deleted for good, with their files, comments and stars, the
  * longest there first and 20 at most. Then songs 30 days in the trash go
- * the same way with their files, once none of their takes is left.
- * Answers how many takes and songs went.
+ * the same way with their files, once none of their takes is left, and
+ * leave their sets. Sets 30 days in the trash go too, all at once: they
+ * have no files. Answers how many takes, songs and sets went.
  */
 export async function purgeTrash(env: Bindings): Promise<number> {
   const db = database(env)
@@ -53,7 +54,16 @@ export async function purgeTrash(env: Bindings): Promise<number> {
     .limit(PER_RUN - old.length)
   for (const { id } of songs) {
     await deleteFiles(env, `songs/${id}/`)
-    await db.batch([db.delete(songFile).where(eq(songFile.songId, id)), db.delete(song).where(eq(song.id, id))])
+    await db.batch([
+      db.delete(songFile).where(eq(songFile.songId, id)),
+      db.delete(setSong).where(eq(setSong.songId, id)),
+      db.delete(song).where(eq(song.id, id)),
+    ])
   }
-  return old.length + songs.length
+  const oldSet = and(isNotNull(bandSet.trashedAt), lt(bandSet.trashedAt, before))
+  const [, sets] = await db.batch([
+    db.delete(setSong).where(sql`${setSong.setId} IN (SELECT ${bandSet.id} FROM ${bandSet} WHERE ${oldSet})`),
+    db.delete(bandSet).where(oldSet).returning({ id: bandSet.id }),
+  ])
+  return old.length + songs.length + sets.length
 }
