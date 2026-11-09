@@ -80,6 +80,19 @@ test("a new song: its title once in any case, the first status, and its own pane
   })
 })
 
+test("one song made by two members at once is made once; the other hears it is there", async () => {
+  const owner = await signInOwner()
+  const ira = await member(owner, "ira@example.com")
+  const sent = await Promise.all([
+    answer(post("/api/songs", { title: "Kupalle" }, owner)),
+    answer(post("/api/songs", { title: "kupalle" }, ira.cookie)),
+  ])
+  expect(sent.map((s) => s.status).sort()).toEqual([200, 409])
+  const made = (await song(owner, sent.find((s) => s.status === 200)!.body.id)).song
+  expect(sent.find((s) => s.status === 409)!.body).toEqual({ error: `There is already a song called “${made.title}”.` })
+  expect((await songs(owner)).songs.filter((s) => s.title.toLowerCase() === "kupalle")).toHaveLength(1)
+})
+
 test("any member sets a song's status, key and notes; a key is one of the 24", async () => {
   const owner = await signInOwner()
   const ira = (await member(owner, "ira@example.com")).cookie

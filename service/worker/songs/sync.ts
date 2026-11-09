@@ -27,13 +27,28 @@ export async function findSong(db: Database, title: string, except?: number) {
 /** Why a title cannot be a song's, or null. */
 export const titleRefused = (title: string) => (TAKE_NAME.test(title) ? `${title} is what a take with no song is called.` : null)
 
-/** A new song, with the first status; `by` the member who made it here, null for РЭХА. */
-export async function makeSong(db: Database, title: string, meter: SongMeter, by: string | null): Promise<number> {
+/**
+ * A new song, with the first status; `by` the member who made it here, null
+ * for РЭХА. Null when a request running at the same time made a song of that
+ * title a moment before.
+ */
+export async function makeSong(db: Database, title: string, meter: SongMeter, by: string | null): Promise<number | null> {
   const [made] = await db
     .insert(song)
     .values({ title, statusId: await firstStatus(db), createdAt: iso(), ...meter, madeBy: by })
+    .onConflictDoNothing()
     .returning({ id: song.id })
-  return made.id
+  return made?.id ?? null
+}
+
+/**
+ * A song for РЭХА when the band has none of that title: a new one, or the
+ * one a request running at the same time made a moment before, as
+ * `findSong` finds it.
+ */
+export async function songFor(db: Database, title: string, meter: SongMeter) {
+  const id = await makeSong(db, title, meter, null)
+  return id === null ? (await findSong(db, title))! : { id, title, trashedAt: null }
 }
 
 /**
@@ -122,7 +137,12 @@ export async function linkSongs(env: Bindings, songs: RehaSong[]): Promise<numbe
     } else if (before.length) {
       id = before.shift()!.id
       await renameSong(db, id, s.title, null)
-    } else id = await makeSong(db, s.title, { tempo: s.tempo, signature: s.signature }, null)
+    } else {
+      const made = await songFor(db, s.title, { tempo: s.tempo, signature: s.signature })
+      id = made.id
+      // One made a moment before by a request running at the same time may differ in capitals.
+      if (made.title !== s.title) await renameSong(db, id, s.title, null)
+    }
     for (const x of before) await mergeSong(env, x.id, id)
     if (s.tempo !== null) await setMeter(db, id, { tempo: s.tempo, signature: s.signature }, null)
     ids.push(id)

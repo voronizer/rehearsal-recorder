@@ -73,8 +73,13 @@ export const rehaSongRoutes = newApp()
       const { title, tempo, signature } = c.req.valid("json")
       const refused = titleRefused(title)
       if (refused) return fail(c, 400, refused)
-      const found = await findSong(db, title)
-      if (!found) return c.json({ id: await makeSong(db, title, { tempo, signature } as SongMeter, null) }, 200)
+      let found = await findSong(db, title)
+      if (!found) {
+        const id = await makeSong(db, title, { tempo, signature } as SongMeter, null)
+        if (id !== null) return c.json({ id }, 200)
+        // A request running at the same time made it a moment before: it is that song.
+        found = (await findSong(db, title))!
+      }
       if (found.trashedAt) await db.batch([...songBack(db, found.id)] as never)
       if (found.title !== title) await renameSong(db, found.id, title, null)
       if (tempo !== null) await setMeter(db, found.id, { tempo, signature } as SongMeter, null)

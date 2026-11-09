@@ -138,7 +138,9 @@ export const songRoutes = newApp()
       const clash = await findSong(db, title)
       if (clash?.trashedAt) return fail(c, 409, `“${clash.title}” is in the Trash. Restore it there.`)
       if (clash) return fail(c, 409, `There is already a song called “${clash.title}”.`)
-      return c.json({ id: await makeSong(db, title, { tempo: null, signature: null }, c.var.member.id) }, 200)
+      const id = await makeSong(db, title, { tempo: null, signature: null }, c.var.member.id)
+      if (id === null) return fail(c, 409, `There is already a song called “${(await findSong(db, title))!.title}”.`)
+      return c.json({ id }, 200)
     }
   )
   .openapi(

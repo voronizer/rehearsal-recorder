@@ -91,6 +91,17 @@ test("first check: a title in any case is that song, one renamed in РЭХА kee
   expect(again.body.ids).toEqual(linked.body.ids)
 })
 
+test("first check sent twice at once: a new song is made once, with one number", async () => {
+  const { alex, r } = await band()
+  const sent = { songs: [{ title: "Zorka", old_names: [], tempo: 198, signature: "6/8" }] }
+  const linked = await Promise.all([answer(r.post("/api/reha/songs/link", sent)), answer(r.post("/api/reha/songs/link", sent))])
+  expect(linked.map((l) => l.status)).toEqual([200, 200])
+  expect(linked[1].body.ids).toEqual(linked[0].body.ids)
+  expect((await songs(alex)).songs.filter((s) => s.title === "Zorka")).toEqual([
+    expect.objectContaining({ id: linked[0].body.ids[0], tempo: 198, signature: "6/8" }),
+  ])
+})
+
 test("first check: a song left empty by a rename in РЭХА is merged into the one it became, notes, key and files", async () => {
   const { alex, r } = await band()
   await shownTake({ song: "Pałyn", number: 3, name: "Pałyn 1" })
@@ -138,6 +149,19 @@ test("a song made in РЭХА gets its number; a title the band has is that song
   expect((await r.post("/api/reha/songs", { title: "Take #4", tempo: null, signature: null })).status).toBe(400)
   expect((await r.post("/api/reha/songs", { title: "Kupalle", tempo: 128, signature: null })).status).toBe(400)
   expect((await r.post("/api/reha/songs", { title: "Kupalle", tempo: 400, signature: "4/4" })).status).toBe(400)
+})
+
+test("a song made in REHA and sent twice at once is made once; both get its number", async () => {
+  const { alex, r } = await band()
+  const sent = await Promise.all([
+    answer(r.post("/api/reha/songs", { title: "Zorka", tempo: 128, signature: "4/4" })),
+    answer(r.post("/api/reha/songs", { title: "ZORKA", tempo: 128, signature: "4/4" })),
+  ])
+  expect(sent.map((s) => s.status)).toEqual([200, 200])
+  expect(sent[1].body).toEqual(sent[0].body)
+  expect((await songs(alex)).songs.filter((s) => s.title.toLowerCase() === "zorka")).toEqual([
+    expect.objectContaining({ id: sent[0].body.id, tempo: 128, signature: "4/4" }),
+  ])
 })
 
 test("a change from РЭХА: the title with its takes' names, the tempo with its signature; another song's title is turned down", async () => {
@@ -309,6 +333,19 @@ test("a take moves to a new song made here; a title the band has is turned down"
   const listed = (await answer(r.get("/api/reha/songs"))).body as Listed
   expect(listed.songs.find((s) => s.id === zorka.id)).toMatchObject({ made_by: "Ivan" })
   expect((await patch(`/api/takes/${uid}`, { song: 9999 }, ivan)).status).toBe(404)
+})
+
+test("two takes moved to one new song at once: the song is made once, the other move is turned down", async () => {
+  const { alex, ivan } = await band()
+  const one = await shownTake({ song: null, number: 14, name: "Take 14" })
+  const two = await shownTake({ song: null, number: 15, name: "Take 15" })
+  const sent = await Promise.all([
+    answer(patch(`/api/takes/${one}`, { new_song: "Zorka" }, ivan)),
+    answer(patch(`/api/takes/${two}`, { new_song: "Zorka" }, alex)),
+  ])
+  expect(sent.map((s) => s.status).sort()).toEqual([200, 409])
+  expect(sent.find((s) => s.status === 409)!.body).toEqual({ error: "“Zorka” is already a song: pick it in the list." })
+  expect((await songs(alex)).songs.filter((s) => s.title === "Zorka")).toHaveLength(1)
 })
 
 test("РЭХА reads every song with who changed what here", async () => {

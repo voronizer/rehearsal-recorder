@@ -3,7 +3,7 @@ import { tellChat } from "../chat/tell"
 import { database, type Database } from "../shared/db"
 import type { Bindings } from "../shared/env"
 import { labelsFor } from "../labels/match"
-import { findSong, makeSong } from "../songs/sync"
+import { findSong, songFor } from "../songs/sync"
 import { comment, rehearsal, song, take } from "../shared/schema"
 import { iso } from "../shared/time"
 import type { Drift, TakeMeta } from "./meta"
@@ -28,7 +28,7 @@ async function songOf(env: Bindings, meta: TakeMeta): Promise<number | null | un
   if (meta.song === undefined) return undefined
   if (meta.song === null) return null
   const found = await findSong(db, meta.song)
-  return found ? found.id : makeSong(db, meta.song, { tempo: null, signature: null }, null)
+  return (found ?? (await songFor(db, meta.song, { tempo: null, signature: null }))).id
 }
 
 /**

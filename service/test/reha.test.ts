@@ -316,7 +316,7 @@ test("a mark under a label the band has not got adds it at the end, in REHA's co
   expect(await labelOf("No label")).toEqual({ name: "Note", colour: "grey" })
 })
 
-test("two takes sent at once under a new label make it once, and both marks get it", async () => {
+test("two takes sent at once under a new song and a new label make each once, and both get them", async () => {
   const r = await reha()
   const one = crypto.randomUUID()
   const marks = (note: string) => [{ at: 10, label: "Count in", colour: "teal", note }]
@@ -328,6 +328,9 @@ test("two takes sent at once under a new label make it once, and both marks get 
   expect((await labels()).filter((l) => l.name === "Count in")).toHaveLength(1)
   expect(await labelOf("Sticks")).toEqual({ name: "Count in", colour: "teal" })
   expect(await labelOf("Clicks")).toEqual({ name: "Count in", colour: "teal" })
+  const songs = await env.DB.prepare("SELECT DISTINCT song_id FROM take WHERE uid IN (?, ?)").bind(TAKE, one).all()
+  expect(songs.results).toHaveLength(1)
+  expect((await env.DB.prepare("SELECT COUNT(*) AS n FROM song").first<{ n: number }>())!.n).toBe(1)
 })
 
 test("a song made by a take gets the first status", async () => {
