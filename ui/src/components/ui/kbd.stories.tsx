@@ -36,12 +36,12 @@ export const OnAButton: Story = {
         Record
         <Kbd aria-hidden>Space</Kbd>
       </Button>
-      <Button size="footer-aside" aria-keyshortcuts="Space">
-        Save take
+      <Button size="footer" aria-keyshortcuts="Space">
+        Play
         <Kbd aria-hidden>Space</Kbd>
       </Button>
       <Button size="footer-aside" variant="outline" aria-keyshortcuts="Escape">
-        Discard
+        Close take
         <Kbd aria-hidden>Esc</Kbd>
       </Button>
     </div>

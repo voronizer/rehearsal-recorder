@@ -1,4 +1,4 @@
-import { useEffect, useState, type CSSProperties, type ReactNode } from "react"
+import { useEffect, useState, type ReactNode } from "react"
 import {
   CircleAlert,
   Flag,
@@ -29,7 +29,6 @@ import { cn } from "@/lib/utils"
 import { useKeysOn } from "@/lib/keys"
 import { formatMMSS } from "@/lib/format"
 import { labelLook, labelOf, markText, useLabels } from "@/lib/labels"
-import { rise } from "@/lib/motion"
 import { playLabel, SPINNER_AFTER_MS } from "@/lib/playLook"
 import type { Marker, MissingNotes, NotesFile, TakeNotes } from "@/lib/api"
 import type { MultitrackPlayer } from "@/hooks/useMultitrackPlayer"
@@ -95,7 +94,7 @@ function useTakeNotes(read: PlayerSound["notes"], notes?: NotesFile[], missing?:
  * The take player: shared transport, A–B repeat, listening markers, and the
  * `Timeline` beneath them — the ruler, the per-track lanes with their
  * waveform/volume/M-S, and the loop band all live there now. The same
- * component right after recording and when listening back to old takes.
+ * component on the rehearsal screen, in History and in the band service.
  */
 export function TakePlayer({
   player,
@@ -112,8 +111,8 @@ export function TakePlayer({
   canCrop = true,
   spaceKey = false,
   goKeys = false,
+  markChips = true,
   status,
-  rising = false,
   click = true,
   drift: given,
 }: {
@@ -155,15 +154,13 @@ export function TakePlayer({
    *  along it is. Set only while there is something to say: a line that
    *  is there but empty would keep the warning from being heard. */
   status?: React.ReactNode
-  /** Space plays and pauses on this screen. On the review screen it saves
-   *  the take instead, and Play must not claim it. */
+  /** Space plays and pauses on this screen, and Play says so. */
   spaceKey?: boolean
   /** ↑ and ↓ go to the song's other goes: the take strip is above. */
   goKeys?: boolean
-  /** Its groups rise in as the screen comes up, the transport and then the
-   *  take, 40 ms apart (F10): on Review, which opens on the player. Where a
-   *  take is opened in a screen already up, it is simply there. */
-  rising?: boolean
+  /** The marks as chips under the lanes. The rehearsal screen lists them
+   *  in its right panel instead. */
+  markChips?: boolean
 }) {
   const notesRead = useTakeNotes(player.readNotes, notes, notesMissing)
   const asked = useTakeDrift(given ? null : take)
@@ -188,18 +185,13 @@ export function TakePlayer({
         markers={markers}
         onAddMarker={onAddMarker}
         onEditMarker={onEditMarker}
-        className={cn(rising && "animate-rise")}
-        style={rising ? rise(0) : undefined}
       />
 
       <PlayerLine error={player.loadError} status={status} warning={player.outputWarning} />
 
       {/* The take is one group, 24 px apart inside it. The line above holds
           that room itself, so it has no gap round it. */}
-      <div
-        className={cn("flex min-h-0 flex-1 flex-col gap-6", rising && "animate-rise")}
-        style={rising ? rise(1) : undefined}
-      >
+      <div className="flex min-h-0 flex-1 flex-col gap-6">
         <Timeline
           player={player}
           underMaster={underMaster}
@@ -230,7 +222,7 @@ export function TakePlayer({
           }
         />
 
-        {markers.length > 0 && (
+        {markChips && markers.length > 0 && (
           <div className="flex flex-wrap items-center gap-2">
             <span className="text-xs text-muted-foreground">Marks</span>
             {/* In the band's service two people can mark the same second. */}
@@ -409,8 +401,6 @@ function Transport({
   onEditMarker,
   spaceKey,
   goKeys,
-  className,
-  style,
 }: {
   player: MultitrackPlayer
   spaceKey: boolean
@@ -418,8 +408,6 @@ function Transport({
   markers: Marker[]
   onAddMarker?: (seconds: number) => void
   onEditMarker?: (marker: Marker) => void
-  className?: string
-  style?: CSSProperties
 }) {
   const { looping, position, duration } = player
 
@@ -444,8 +432,7 @@ function Transport({
     <div
       role="toolbar"
       aria-label="Transport"
-      className={cn("flex flex-wrap items-center gap-3 rounded-xl bg-card px-6 py-4", className)}
-      style={style}
+      className="flex flex-wrap items-center gap-3 rounded-xl bg-card px-6 py-4"
     >
       <Tooltip>
         <TooltipTrigger asChild>

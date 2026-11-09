@@ -65,6 +65,7 @@ export function MetronomeRowView({
   onTapError,
   settings,
   hold = true,
+  keys = true,
 }: {
   state: MetronomeState | null
   lit: number | null
@@ -88,6 +89,8 @@ export function MetronomeRowView({
    *  longer one moves nothing (B4). A still picture of the row, with
    *  nothing to keep still for, ends under its words. */
   hold?: boolean
+  /** Whether Tap hears T: not while the row waits unseen. */
+  keys?: boolean
 }) {
   const tempo = state?.tempo ?? null
   const signature = state?.signature ?? "4/4"
@@ -149,7 +152,7 @@ export function MetronomeRowView({
         />
         {/* Hidden, not taken out: T is heard while the button is there. */}
         <span data-squeeze="2" className="contents">
-          {tapButton(true)}
+          {tapButton(keys)}
         </span>
         <span data-squeeze="3" className="contents">
           {playButton}
@@ -225,8 +228,9 @@ type Answer = { ok: boolean; error?: string }
  * change, and its ▶ plays the next take's song's file alone. That stops at
  * ■, at Record, when another song is picked (Python sees to those three)
  * and when the screen is left. `name` is the next take's name as typed.
+ * Without `keys`, T taps nothing: the row waits unseen while a take is open.
  */
-export function MetronomeRow({ name = "" }: { name?: string }) {
+export function MetronomeRow({ name = "", keys = true }: { name?: string; keys?: boolean }) {
   const metronome = useMetronome()
   const { refresh } = metronome
   const sayError = useErrorNotice(SAID)
@@ -378,6 +382,7 @@ export function MetronomeRow({ name = "" }: { name?: string }) {
       onLink={(action) => void onLink(action)}
       onTapError={sayError}
       settings={<ClickSettings />}
+      keys={keys}
     />
   )
 }

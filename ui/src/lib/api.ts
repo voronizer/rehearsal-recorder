@@ -122,7 +122,7 @@ export type NotesFile = {
  *  is. */
 export type MissingNotes = {
   name: string
-  /** The icon its track had, on a take under review; a saved take keeps
+  /** The icon its track had, in what stop_take answers; a saved take keeps
    *  none for a lane with no file. */
   icon?: string
   port: string
@@ -291,7 +291,8 @@ export type TransportResult = Ok<{
  *  other, the region as it was asked. */
 export type CutAt = { start_sec?: number; end_sec?: number }
 
-/** A take that was just stopped — still a draft, still unnamed. */
+/** A take that was just stopped, still a draft: what stop_take answers,
+ *  and what the transport holds of a take whose save failed. */
 export type PendingTake = {
   ok: true
   take_number: number
@@ -299,12 +300,11 @@ export type PendingTake = {
   duration_sec: number
   tracks: TrackFile[]
   /** The .mid files stop_take made, and the tracks that have none: keep_take
-   *  and crop_draft are handed the first again. */
+   *  is handed the first again. */
   notes?: NotesFile[]
   notes_missing?: MissingNotes[]
   suggested_name?: string
-  /** The name it would have had with none picked before recording: what ✕
-   *  in the review screen's name field puts back. */
+  /** The name it would have had with none picked before recording. */
   default_name?: string
   /** The take's tempo, signature and whether it clicked, as a kept take
    *  has them. */
@@ -368,6 +368,10 @@ export type SessionState =
       service_queue?: Record<number, "queued" | "working">
       /** The takes on their way to the band service whose MP3s are up. */
       service_up?: number[]
+      /** The take the last Stop saved, while it is held: neither the band
+       *  service nor the cloud folder sends it until it is closed, another
+       *  take is opened or recorded, the rehearsal ends, or 10 minutes pass. */
+      held_take?: number | null
       /** How much of the disk the rehearsal's folder uses, for the header. */
       disk_bytes?: number
     }
@@ -1261,7 +1265,9 @@ type PyApi = {
     /** The .mid files stop_take made, to be kept beside the audio. */
     notes?: NotesFile[]
   ): Promise<Ok<{ take?: Take; ended?: string[] }>>
-  discard_take(tempDir: string): Promise<DeleteResult>
+  /** Ends the hold on the take the last Stop saved (`held_take`): it goes
+   *  now, as the setting or its box says. Safe with nothing held. */
+  release_take(): Promise<Ok>
   /**
    * Keep only [startSec, endSec) of a saved take. The take as it was waits
    * for the crop's Undo (`undo`, as a removal's). `error` can be set even
@@ -1283,25 +1289,6 @@ type PyApi = {
       } & CutAt
     >
   >
-  /** The same, for a take that is still on the review screen. */
-  crop_draft(
-    tempDir: string,
-    tracks: TrackFile[],
-    startSec: number,
-    endSec: number,
-    /** The draft's .mid files, cropped with the audio. */
-    notes?: NotesFile[]
-  ): Promise<
-    Ok<{
-      tracks?: TrackFile[]
-      /** The notes again, cut to the same part. */
-      notes?: NotesFile[]
-      duration_sec?: number
-      undo?: string | null
-      ended?: string[]
-    } & CutAt>
-  >
-
   list_rehearsals(): Promise<RehearsalSummary[]>
   get_rehearsal(folder: string): Promise<RehearsalDetail>
   last_time(): Promise<LastTime>

@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from "@storybook/react-vite"
-import { Circle, PlayIcon, Square } from "lucide-react"
+import { Circle, Play, PlayIcon, Square, X } from "lucide-react"
 import { Button } from "./button"
 import { Kbd } from "./kbd"
 
@@ -65,12 +65,14 @@ export const WithKbd: Story = {
         Record
         <Kbd aria-hidden>Space</Kbd>
       </Button>
-      <Button {...args} size="footer-aside" variant="default" aria-keyshortcuts="Space">
-        Save take
+      <Button {...args} size="footer" variant="default" aria-keyshortcuts="Space">
+        <Play className="fill-current" />
+        Play
         <Kbd aria-hidden>Space</Kbd>
       </Button>
       <Button {...args} size="footer-aside" variant="outline" aria-keyshortcuts="Escape">
-        Discard
+        <X />
+        Close take
         <Kbd aria-hidden>Esc</Kbd>
       </Button>
       <Button {...args} size="row" variant="ghost" aria-keyshortcuts="Escape">

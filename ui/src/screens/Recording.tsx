@@ -20,9 +20,9 @@ import {
   type LastAttempt,
   type MetronomeState,
   type MidiActivity,
-  type PendingTake,
   type RecordingHealth,
   type PlacedTrack,
+  type Take,
 } from "@/lib/api"
 import { takeSentence } from "@/lib/backing"
 import { formatClock, formatDate, formatMMSS } from "@/lib/format"
@@ -137,8 +137,10 @@ export function Recording({
   tracks: PlacedTrack[]
   /** The last go at this take's song, to measure this one against. */
   lastAttempt?: LastAttempt | null
-  onSaveFailed?: (error: string, take: PendingTake | null) => Promise<void>
-  onStopped: (take: PendingTake) => void
+  /** Stop could not save the take: why. It waits in Unsaved takes. */
+  onSaveFailed?: (error: string) => Promise<void>
+  /** Stop saved the take: the take as it is now saved. */
+  onStopped: (take?: Take) => void
 }) {
   const [elapsed, setElapsed] = useState(0)
   const [levels, setLevels] = useState<Record<string, number[]>>({})
@@ -281,15 +283,17 @@ export function Recording({
     if (stopping) return
     setStopping(true)
     dismiss(ERROR)
-    const res = await watching(api().control_command("stop_review"))
+    // Stop saves the take as it stops it, and the rehearsal screen opens
+    // it to listen to.
+    const res = await watching(api().control_command("stop_keep"))
     if (!res.ok) {
       setStopping(false)
       const message = res.error || "Could not save the take"
-      if (res.transport?.state === "error" && onSaveFailed) await onSaveFailed(message, res.transport.pending_take)
+      if (res.transport?.state === "error" && onSaveFailed) await onSaveFailed(message)
       else sayError(message)
       return
     }
-    onStopped(res as unknown as PendingTake)
+    onStopped(res.take)
   }
   stopRef.current = stop
 

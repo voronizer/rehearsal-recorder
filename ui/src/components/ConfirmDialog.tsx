@@ -186,70 +186,39 @@ export function PromptDialog({
   )
 }
 
-/** What the Rename take dialog is about, from a kept take or the draft. */
-type Renaming = {
-  key: number | string
-  name: string
-  fallback: string
-  id: string
-  note: string | null
-  draft: boolean
-}
-
 /**
- * Rename take: the take's name in the field it was named in before and after
+ * Rename take: the take's name in the field it was named in before
  * recording, at the dialog's size, with the songs under it. ✕ puts back the
- * name it has now; Enter renames, as Rename does.
- *
- * A take kept already (`take`) has a folder on disk, renamed with it. The
- * take on the screen after it (`draft`, issue #12 step 8, A4) has none yet,
- * and its ✕ puts back the name it would have had; closed, the keyboard goes
- * back to that screen, whose Space saves the take.
+ * name it has now; Enter renames, as Rename does. The take's folder on disk
+ * is renamed with it.
  */
 export function RenameTakeDialog({
   take,
-  draft,
   choices,
   onOpenChange,
   onSubmit,
 }: {
-  take?: Take | null
-  draft?: { name: string; fallback: string } | null
+  take: Take | null
   choices: SongChoices | null
   onOpenChange: (open: boolean) => void
   onSubmit: (name: string) => void
 }) {
-  const renaming: Renaming | null = take
-    ? {
-        key: take.take_number,
-        name: take.song ?? take.name,
-        fallback: take.song ?? take.name,
-        id: "rename-take",
-        note: "The folder on disk is renamed too.",
-        draft: false,
-      }
-    : draft
-      ? { key: "draft", name: draft.name, fallback: draft.fallback, id: "take-name", note: null, draft: true }
-      : null
-  // What it shows while it closes, with `take` and `draft` already gone.
-  const shown = useHeld(renaming, null)
+  // What it shows while it closes, with `take` already gone.
+  const shown = useHeld(take, null)
   return (
-    <Dialog open={renaming !== null} onOpenChange={onOpenChange}>
-      <DialogContent
-        {...(shown?.note ? {} : { "aria-describedby": undefined })}
-        onCloseAutoFocus={shown?.draft ? (e) => e.preventDefault() : undefined}
-      >
+    <Dialog open={take !== null} onOpenChange={onOpenChange}>
+      <DialogContent>
         <DialogHeader>
           <DialogTitle>Rename take</DialogTitle>
-          {shown?.note && <DialogDescription>{shown.note}</DialogDescription>}
+          <DialogDescription>The folder on disk is renamed too.</DialogDescription>
         </DialogHeader>
         {/* Keyed by the take, so a second take opened starts from its own name. */}
         {shown && (
           <RenameTakeForm
-            key={shown.key}
-            id={shown.id}
-            name={shown.name}
-            fallback={shown.fallback}
+            key={shown.take_number}
+            id="rename-take"
+            name={shown.song ?? shown.name}
+            fallback={shown.song ?? shown.name}
             choices={choices}
             onSubmit={(name) => {
               onSubmit(name)

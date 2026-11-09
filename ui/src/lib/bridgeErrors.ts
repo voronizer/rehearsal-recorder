@@ -4,7 +4,7 @@ import { useSyncExternalStore } from "react"
  * Calls into Python that raised instead of answering.
  *
  * pywebview turns an exception in a Python method into a rejected promise,
- * and no screen was written to expect one: Save take and renaming both
+ * and no screen was written to expect one: saving a take and renaming both
  * failed on Windows by the button dimming and nothing else happening. `api()`
  * now reports every such failure here, and so does the start, one report per
  * problem it met; `ErrorBar` shows them all. A problem raised in the page

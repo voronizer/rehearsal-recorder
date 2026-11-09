@@ -1,4 +1,4 @@
-import { api, type CutAt, type PendingTake, type UndoResult } from "@/lib/api"
+import { api, type CutAt, type UndoResult } from "@/lib/api"
 import { reportPageError } from "@/lib/bridgeErrors"
 import { croppedText, goneText, startsOnBar, trashName } from "@/lib/deletion"
 import { dismiss, getNotices, notify } from "@/lib/notices"
@@ -158,29 +158,6 @@ export function offerCropUndo(
           ? `“${name}” is cropped, but the uncut take could not be moved out of the way, so the crop cannot be undone: ${res.error}.`
           : `“${name}” is cropped. ${startsOnBar(from)} The uncut take could not be moved out of the way, so the crop cannot be undone: ${res.error}.`,
     })
-  }
-}
-
-/**
- * A discarded take as its Undo brought it back: under `dir`, the folder
- * Python put the draft back in (undo_trash's `temp_dir`), which is not where
- * it went from once its rehearsal was renamed meanwhile. Its audio and notes
- * are moved there with it, so the review screen plays what is on disk.
- */
-export function draftMovedTo<T extends PendingTake>(take: T, dir: string | undefined): T {
-  const from = take.temp_dir
-  if (!dir || dir === from) return take
-  const moved = <F extends { file: string }>(f: F): F => {
-    const rest = f.file.slice(from.length)
-    return f.file.startsWith(from) && (rest[0] === "/" || rest[0] === "\\")
-      ? { ...f, file: dir + rest }
-      : f
-  }
-  return {
-    ...take,
-    temp_dir: dir,
-    tracks: take.tracks.map(moved),
-    notes: take.notes?.map(moved),
   }
 }
 

@@ -47,17 +47,6 @@ export function isFalseStart(
   )
 }
 
-/** Whether sending on its own sends this take, left to the setting: the
- *  setting is on and the take is not a false start, as Python decides it
- *  (sending/__init__.py). */
-export function sendsOnItsOwn(
-  take: Pick<Take, "duration_sec" | "starred" | "markers">,
-  auto: boolean,
-  limitSec: number
-): boolean {
-  return auto && !isFalseStart(take, limitSec)
-}
-
 /** The evening's false starts, in the order they were played. */
 export function falseStarts(takes: Take[], limitSec: number): Take[] {
   return takes.filter((t) => isFalseStart(t, limitSec))

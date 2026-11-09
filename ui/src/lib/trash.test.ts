@@ -12,7 +12,6 @@ import { setDeletionKind } from "@/lib/deletion"
 import { setSystem } from "@/lib/platform"
 import {
   endEveryOffer,
-  draftMovedTo,
   endedByPython,
   keptText,
   offerCropUndo,
@@ -379,53 +378,6 @@ describe("endEveryOffer", () => {
     await settle()
     expect(offered()).toEqual(["rehearsal", "undo:old"])
     expect(ended()).toEqual(["old", "take-5"])
-  })
-})
-
-describe("draftMovedTo", () => {
-  const take = {
-    ok: true as const,
-    take_number: 3,
-    temp_dir: "/rec/Jam/_drafts/take 3",
-    duration_sec: 4,
-    tracks: [{ name: "Gtr", file: "/rec/Jam/_drafts/take 3/Gtr.wav" }],
-    notes: [{ name: "Keys", file: "/rec/Jam/_drafts/take 3/Keys.mid", port: "K", after: null }],
-  }
-
-  it("moves the take's files to the folder its Undo put it back in", () => {
-    const moved = draftMovedTo(take, "/rec/Jam renamed/_drafts/take 3")
-    expect(moved.temp_dir).toBe("/rec/Jam renamed/_drafts/take 3")
-    expect(moved.tracks).toEqual([{ name: "Gtr", file: "/rec/Jam renamed/_drafts/take 3/Gtr.wav" }])
-    expect(moved.notes?.[0].file).toBe("/rec/Jam renamed/_drafts/take 3/Keys.mid")
-    expect(moved.notes?.[0].port).toBe("K")
-  })
-
-  it("follows Windows paths as Python spells them", () => {
-    const win = {
-      ...take,
-      temp_dir: "C:\\rec\\Jam\\_drafts\\take 3",
-      tracks: [{ name: "Gtr", file: "C:\\rec\\Jam\\_drafts\\take 3\\Gtr.wav" }],
-      notes: undefined,
-    }
-    const moved = draftMovedTo(win, "C:\\rec\\Jam renamed\\_drafts\\take 3")
-    expect(moved.tracks[0].file).toBe("C:\\rec\\Jam renamed\\_drafts\\take 3\\Gtr.wav")
-    expect(moved.notes).toBeUndefined()
-  })
-
-  it("leaves the take as it was when it came back where it went from, or nothing says where", () => {
-    expect(draftMovedTo(take, take.temp_dir)).toEqual(take)
-    expect(draftMovedTo(take, undefined)).toEqual(take)
-  })
-
-  it("leaves a file that is not in the take's folder, and one whose folder only starts the same", () => {
-    const odd = {
-      ...take,
-      tracks: [
-        { name: "Gtr", file: "/elsewhere/Gtr.wav" },
-        { name: "Bass", file: "/rec/Jam/_drafts/take 3b/Bass.wav" },
-      ],
-    }
-    expect(draftMovedTo(odd, "/rec/New/_drafts/take 3").tracks).toEqual(odd.tracks)
   })
 })
 

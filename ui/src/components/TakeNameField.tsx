@@ -30,10 +30,9 @@ const LINE_BREAKS = /\s*[\r\n]+\s*/g
 export type TakeNameFieldHandle = { put: (name: string) => void }
 
 /**
- * A take's name, in one field: over Record before the take, over Save take
- * after it, and in the Rename take dialog. Naming the take is what is most
- * easily forgotten at a rehearsal, so it is big, and it is in the same
- * place before recording and after.
+ * A take's name, in one field: in the Next take panel before the take, and
+ * in the Rename take dialog after it. Naming the take is what is most
+ * easily forgotten at a rehearsal, so it is big.
  *
  * It shows `value`, the name as settled, except while somebody types in
  * it. The name settled on goes to `onCommit`: a song clicked under it, ✕,

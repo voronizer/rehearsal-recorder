@@ -1,7 +1,9 @@
-import { useEffect, useRef, useState } from "react"
-import { Circle, Pencil } from "lucide-react"
+import { useEffect, useRef, useState, type ReactNode } from "react"
+import { Circle, Cloud, Pause, Pencil, Play, Square, X } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { Checkbox } from "@/components/ui/checkbox"
 import { Kbd } from "@/components/ui/kbd"
+import { MarkLine } from "@/components/ui/mark"
 import { FooterRow } from "@/components/FooterRow"
 import { MetronomeRow } from "@/components/metronome/MetronomeRow"
 import { Shell } from "@/components/Shell"
@@ -27,19 +29,22 @@ import {
   api,
   poll,
   type ControlState,
+  type Label,
   type Marker,
   type SendingQueue,
   type SessionState,
   type Take,
 } from "@/lib/api"
-import { savedLine } from "@/lib/format"
+import { formatMMSS, savedLine } from "@/lib/format"
 import { goFor } from "@/lib/goes"
 import { cn } from "@/lib/utils"
 import { useKeysOn } from "@/lib/keys"
+import { labelOf, useLabels } from "@/lib/labels"
+import { isIn } from "@/lib/sending"
 import { rise } from "@/lib/motion"
 import { useWide } from "@/lib/wide"
 import { useRunning, watching } from "@/lib/activity"
-import { dismiss } from "@/lib/notices"
+import { dismiss, notify } from "@/lib/notices"
 import { wentTo } from "@/lib/deletion"
 import { takeText } from "@/lib/takeText"
 import { endedByPython, offerCropUndo, offerUndo } from "@/lib/trash"
@@ -51,17 +56,22 @@ const ERROR = "rehearsal-error"
 
 /**
  * The rehearsal hub: what has been recorded, and a big button to record more.
- * Any saved take plays right here, in the player below the strip of takes.
+ * Any saved take plays right here, in the player below the strip of takes,
+ * and the take Stop has just saved opens here to listen to.
  */
 export function Rehearsal({
   session,
+  openTake = null,
   onStartTake,
   onFinished,
   controlState,
   onChanged,
 }: {
   session: Extract<SessionState, { active: true }>
-  onStartTake: (takeName: string, takeGo: number | null) => void
+  /** The take Stop has just saved: opened, paused at its start, once the
+   *  session has it. */
+  openTake?: number | null
+  onStartTake: (takeName: string, takeGo: number | null, takeNumber: number) => void
   controlState?: ControlState | null
   onFinished: () => void
   /** Reads the session again, and answers it as it now is. */
@@ -73,7 +83,7 @@ export function Rehearsal({
     expanded,
     setExpanded,
     select,
-    uncue,
+    close,
     reselect,
     forget,
     openAt,
@@ -92,6 +102,38 @@ export function Rehearsal({
   }, [controlState, session.takes, session.next_take_name, selected, cued, select, onChanged])
 
   const inHand = selected !== null || cued !== null
+
+  // The take Stop has just saved opens, paused at its start: once, as soon
+  // as the session has it.
+  const opened = useRef(false)
+  useEffect(() => {
+    if (opened.current || openTake === null) return
+    const take = session.takes.find((t) => t.take_number === openTake)
+    if (!take) return
+    opened.current = true
+    select(take)
+  }, [openTake, session.takes, select])
+
+  // The take the last Stop saved is held: nothing sends it while it is open
+  // here. Once it is not the open take any more (closed, another one opened,
+  // the screen left for a take or another screen), Python lets it go, as the
+  // setting or its box says. Python ends the hold itself at Record, at
+  // Finish and after 10 minutes.
+  const holding = useRef<number | null>(null)
+  const openNumber = selected?.take_number ?? null
+  useEffect(() => {
+    if (openNumber !== null && openNumber === session.held_take) holding.current = openNumber
+    else if (holding.current !== null && openNumber !== holding.current) {
+      holding.current = null
+      void api().release_take()
+    }
+  }, [openNumber, session.held_take])
+  useEffect(
+    () => () => {
+      if (holding.current !== null) void api().release_take()
+    },
+    []
+  )
   const cropping = useRunning(
     "crop",
     (e) => e.folder === session.folder && e.take_number === selected?.take_number
@@ -117,6 +159,7 @@ export function Rehearsal({
   const sendTo = evening?.sendTo ?? "cloud"
   const sendStates = sendTo === "service" ? session.service_queue : session.cloud_queue
   const sending = useTakeSending<Take>(sendTo, () => session.folder, () => onChanged())
+  const labels = useLabels()
 
   // The next take's name as the field last settled on it, against the
   // session's name at the time: once Python has it, the session says the
@@ -263,14 +306,14 @@ export function Rehearsal({
     }
     const name = res.take_name ?? nextNameRef.current
     const known = res.take_go ?? knownGoRef.current
-    onStartTake(name, known !== undefined ? known : goFor(name, nextChoices))
+    onStartTake(name, known !== undefined ? known : goFor(name, nextChoices), res.take_number)
   }
 
   // With a take in hand, Space plays it back rather than starting a new one;
   // Escape below is what points Space at recording again.
   useSpacebar(inHand ? player.toggle : startTake, !busy)
   usePlayerKeys(player.skip, inHand)
-  // Off in Settings › Keys, Finish and Record have no chips, and keep no
+  // Off in Settings › Keys, the footer's buttons have no chips, and keep no
   // room for them.
   const spaceKeys = useKeysOn("space")
   const finish = async () => {
@@ -285,18 +328,47 @@ export function Rehearsal({
   }
 
   // Escape climbs the same ladder here as everywhere: the strip's columns,
-  // the open take, then a take playing in the overview, and then the
-  // rehearsal itself, because finishing is the only way up from this screen.
-  // It asks once there are takes in the rehearsal — ending it by accident
+  // the open take or a take playing in the overview, and then the rehearsal
+  // itself, because finishing is the only way up from this screen. A take
+  // put away stops: it does not play on in the overview (D2). Finishing
+  // asks once there are takes in the rehearsal — ending it by accident
   // would leave the rest of the evening in a second folder — but an empty
   // one has nothing to protect, and Python takes its folder with it.
   useEscape(() => {
     if (selected && expanded) setExpanded(false)
-    else if (selected) select(null)
-    else if (cued) uncue()
+    else if (inHand) close()
     else if (session.takes.length === 0) void finish()
     else setFinishing(true)
   }, !busy)
+
+  // The open take's box at the footer's left: ticked, it goes to where takes
+  // go; unticked, it stays here (D5). Ticked while it is there or on its
+  // way. A tick sends it, a false start too: to the band service at once,
+  // to the cloud folder through the take's cloud button's dialog. Unticking
+  // takes it out: Remove from the band service, or the cloud copies'
+  // removal.
+  const open = liveTake(session.takes, selected)
+  const ticked = open !== null && (isIn(open, sendTo) || Boolean(sendStates?.[open.take_number]))
+  const tick = async (take: Take, on: boolean) => {
+    if (on && sendTo === "cloud") {
+      sending.share(take)
+      return
+    }
+    const slot = `send-box:${session.folder}:${take.take_number}`
+    dismiss(slot)
+    const res = on
+      ? await api().share_take(session.folder, take.take_number, "mix")
+      : await api().unshare_take(session.folder, take.take_number)
+    if (!res.ok) {
+      const what = on ? "send" : "take out"
+      notify({
+        key: slot,
+        kind: "error",
+        text: `Could not ${what} ${takeText(take)}: ${res.error ?? "it was refused"}`,
+      })
+    }
+    void onChanged()
+  }
 
   // While takes are being copied the only thing that changes is on the Python
   // side, so ask — but only until the queue drains, and only for the takes on
@@ -336,7 +408,9 @@ export function Rehearsal({
       return
     }
     forget(take)
-    onChanged()
+    // A session that cannot be read is said on the error bar already (api),
+    // and the Undo is offered all the same.
+    onChanged().catch(() => {})
     if (res.undo) {
       offerUndo({
         text: wentTo(`“${takeText(take)}”`),
@@ -440,6 +514,15 @@ export function Rehearsal({
   // The panel is wider from 1100 px, which follows the Appearance scale.
   const wide = useWide()
 
+  // The open take waiting to go says so in its box and in the count at the
+  // top, not in the strip as well (D6); a refusal still shows there.
+  const stripStates =
+    open && sendStates?.[open.take_number] === "queued"
+      ? Object.fromEntries(
+          Object.entries(sendStates).filter(([n]) => Number(n) !== open.take_number)
+        )
+      : sendStates
+
   // The name wraps when it is longer than its row, never cut (B6). The last
   // word goes to the next line whole, never split at a hyphen the way a date
   // would be; only a word wider than the whole box (one with no spaces in it)
@@ -486,8 +569,19 @@ export function Rehearsal({
       // The next take's name, the set and the band's other songs, in a panel
       // of their own on the setup screen's panel colour (issue #12 steps 6
       // and 8): one group, the field at its head and the rest under a line
-      // across the panel (owner, Q1).
+      // across the panel (owner, Q1). While a take is open, its marks are
+      // there instead (D3).
       aside={
+        open ? (
+          <TakeMarks
+            take={open}
+            wide={wide}
+            labels={labels}
+            onSeek={player.seek}
+            onEdit={(marker) => setMarkerEdit({ take: open, marker })}
+            onRemove={(at) => void removeMarker(open, at)}
+          />
+        ) : (
         <aside
           aria-label="Next take"
           data-next-take-panel
@@ -520,7 +614,7 @@ export function Rehearsal({
                 onArrow={arrowWhileTyping}
                 highlighted={() => highlight}
                 selectOnClick
-                labelAside={<SongKeys hidden={selected !== null} />}
+                labelAside={<SongKeys />}
               />
               {session.set && (
                 <SetCard
@@ -550,47 +644,107 @@ export function Rehearsal({
             </PanelParts>
           </div>
         </aside>
+        )
       }
       footer={
-        <FooterRow squeeze={3} left={<MetronomeRow name={nextName} />}>
+        <FooterRow
+          squeeze={3}
+          left={
+            // While a take is open, its box in the metronome's place: the
+            // row is set for the next take, so it waits unseen and keeps the
+            // footer as tall as it was (D4). Nothing in it eases while it
+            // waits: a button's transition-all eases visibility too, and
+            // would leave the row's buttons over the box for 150 ms.
+            <div className="grid">
+              <div className={cn("col-start-1 row-start-1", open && "invisible [&_*]:transition-none")}>
+                <MetronomeRow name={nextName} keys={!open} />
+              </div>
+              {open && (
+                <label className="col-start-1 row-start-1 flex min-w-0 cursor-pointer items-center gap-2 self-center text-sm text-muted-foreground">
+                  <Checkbox
+                    checked={ticked}
+                    onCheckedChange={(on) => void tick(open, on === true)}
+                    // Left on the box, the next Space would tick it again
+                    // rather than play.
+                    onClick={(e) => e.currentTarget.blur()}
+                  />
+                  <Cloud className="size-4 shrink-0" />
+                  <span className="truncate">
+                    {sendTo === "service" ? "Send to the band service" : "Send to the cloud"}
+                  </span>
+                </label>
+              )}
+            </div>
+          }
+        >
+          {/* Two buttons whatever is in hand, each as wide as the widest
+              thing it says, so nothing beside them moves as a take opens,
+              plays or closes (B4). Each shows its key while Settings › Keys
+              has them on (D1): Esc on the left one, Space on the right. */}
           <div className="flex items-center gap-3">
-            {/* Escape finishes only with no take in hand; with one, it puts
-                the take away — see useEscape above. */}
             <Button
               variant="outline"
               size="footer-aside"
-              onClick={finish}
-              aria-keyshortcuts={spaceKeys && !inHand ? "Escape" : undefined}
+              className="px-6"
+              onClick={inHand ? close : finish}
+              aria-keyshortcuts={spaceKeys ? "Escape" : undefined}
             >
-              Finish
-              {/* Kept unseen while Esc is the take's, so Finish keeps its
-                  width and nothing beside it moves (B4). */}
-              {spaceKeys && (
-                <Kbd aria-hidden className={cn(inHand && "invisible")}>
-                  Esc
-                </Kbd>
-              )}
+              <OneOf
+                shown={selected ? "close" : cued ? "stop" : "finish"}
+                says={{
+                  finish: "Finish",
+                  close: (
+                    <>
+                      <X />
+                      Close take
+                    </>
+                  ),
+                  stop: (
+                    <>
+                      <Square className="fill-current" />
+                      Stop
+                    </>
+                  ),
+                }}
+              />
+              {spaceKeys && <Kbd aria-hidden>Esc</Kbd>}
             </Button>
             <Button
               size="footer"
-              variant="destructive"
-              onClick={startTake}
-              disabled={busy}
-              aria-keyshortcuts={spaceKeys && !inHand ? "Space" : undefined}
+              variant={inHand ? "default" : "destructive"}
+              className="px-8"
+              onClick={inHand ? player.toggle : startTake}
+              disabled={inHand ? player.loading : busy}
+              aria-keyshortcuts={spaceKeys ? "Space" : undefined}
               // The take's place in the rehearsal is not for a person to
               // read: the Next take field says what the take will be. The
               // tests wait on it here for the take they mean to record.
               data-next-take={session.next_take_number}
             >
-              <Circle className="fill-current" />
-              Record
-              {/* With a take in hand Space plays it, and the key is on Play;
-                  the chip keeps its room. */}
-              {spaceKeys && (
-                <Kbd aria-hidden className={cn(inHand && "invisible")}>
-                  Space
-                </Kbd>
-              )}
+              <OneOf
+                shown={!inHand ? "record" : player.playing ? "pause" : "play"}
+                says={{
+                  record: (
+                    <>
+                      <Circle className="fill-current" />
+                      Record
+                    </>
+                  ),
+                  play: (
+                    <>
+                      <Play className="fill-current" />
+                      Play
+                    </>
+                  ),
+                  pause: (
+                    <>
+                      <Pause className="fill-current" />
+                      Pause
+                    </>
+                  ),
+                }}
+              />
+              {spaceKeys && <Kbd aria-hidden>Space</Kbd>}
             </Button>
           </div>
         </FooterRow>
@@ -612,7 +766,7 @@ export function Rehearsal({
           onShare={sending.share}
           onDelete={(take) => void deleteTake(take)}
           onStar={starTake}
-          cloudStates={sendStates}
+          cloudStates={stripStates}
           sendTo={sendTo}
           emptyHint={`Press Record${spaceKeys ? " or Space" : ""}. Each take shows up here, ready to play.`}
         />
@@ -621,8 +775,8 @@ export function Rehearsal({
         {selected ? (
           <TakePlayer
             player={player}
-            take={liveTake(session.takes, selected)}
-            markers={liveTake(session.takes, selected)?.markers ?? []}
+            take={open}
+            markers={open?.markers ?? []}
             notes={selected.notes} notesMissing={selected.notes_missing}
             onAddMarker={(sec) => addMarker(selected, sec)}
             onEditMarker={(marker) => setMarkerEdit({ take: selected, marker })}
@@ -632,6 +786,8 @@ export function Rehearsal({
             status={cropping && <RunningLine entry={cropping} label="Cropping" />}
             spaceKey
             goKeys
+            // The marks are listed in the panel at the right.
+            markChips={false}
           />
         ) : (
           session.takes.length > 0 && (
@@ -725,6 +881,104 @@ export function Rehearsal({
     </Shell>
   )
 }
+
+/** Words a button says one of, all in one place, so that it is as wide as
+ *  the widest of them whichever it says (B4). The others are unseen and not
+ *  read out. */
+function OneOf<K extends string>({ shown, says }: { shown: K; says: Record<K, ReactNode> }) {
+  return (
+    <span className="grid">
+      {(Object.keys(says) as K[]).map((k) => (
+        <span
+          key={k}
+          aria-hidden={k !== shown || undefined}
+          className={cn(
+            "col-start-1 row-start-1 inline-flex items-center justify-center gap-2",
+            k !== shown && "invisible"
+          )}
+        >
+          {says[k]}
+        </span>
+      ))}
+    </span>
+  )
+}
+
+/**
+ * The open take's marks, in the right panel where the next take's name is
+ * while no take is open (D3): one line each, in time order. A line moves the
+ * take there; a pencil and a cross, shown on hover and on focus, edit and
+ * remove it. A take with no marks has the heading and nothing under it.
+ */
+function TakeMarks({
+  take,
+  wide,
+  labels,
+  onSeek,
+  onEdit,
+  onRemove,
+}: {
+  take: Take
+  wide: boolean
+  labels: Label[]
+  onSeek: (at: number) => void
+  onEdit: (marker: Marker) => void
+  onRemove: (at: number) => void
+}) {
+  const marks = [...(take.markers ?? [])].sort((a, b) => a.at - b.at)
+  return (
+    <aside
+      aria-label="Marks"
+      data-marks-panel
+      className={cn(
+        "shrink-0 overflow-y-auto border-l bg-panel px-8 py-8",
+        wide ? "w-[26rem]" : "w-[22.5rem] max-w-[40vw]"
+      )}
+    >
+      <h2 className="flex min-h-8 items-center px-2 text-sm font-semibold">Marks</h2>
+      <ul className="mt-2 flex flex-col">
+        {marks.map((m) => (
+          <li key={m.at} className="group flex items-center gap-1">
+            <Button
+              type="button"
+              variant="ghost"
+              size="row"
+              onClick={() => onSeek(m.at)}
+              className="min-w-0 flex-1 justify-start px-2 text-left"
+            >
+              <MarkLine label={labelOf(labels, m.label_id)} at={m.at} note={m.note} opens className="text-sm" />
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-row"
+              aria-label={`Edit mark at ${formatMMSS(m.at)}`}
+              onClick={() => onEdit(m)}
+              className={cn(HOVER, "hover:text-foreground")}
+            >
+              <Pencil />
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-row"
+              aria-label={`Remove mark at ${formatMMSS(m.at)}`}
+              onClick={() => onRemove(m.at)}
+              className={cn(HOVER, "hover:text-destructive")}
+            >
+              <X />
+            </Button>
+          </li>
+        ))}
+      </ul>
+    </aside>
+  )
+}
+
+/** A mark's pencil and cross: there to the pointer over its line and to the
+ *  keys, unseen otherwise. */
+const HOVER =
+  "text-muted-foreground opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 focus-visible:opacity-100"
 
 /** The takes on their way, as one string to compare: a take number's key
  *  reads the same however Python ordered it, as the parsed answer orders

@@ -13,11 +13,10 @@ import { cn } from "@/lib/utils"
  * under it, and what can be done with it at the right.
  *
  * The title takes up to two lines, then is cut, whole in the shared tooltip,
- * with the pencil right after its last word, as Review's take name has it
- * (TakeName), and a rehearsal's folder button after the pencil. With
- * `actions` beside it the title has its room first and the actions get what
- * it leaves: the figures among them give way to it whole, before it takes a
- * second line. The heading is named by the whole title, cut or not, and the
+ * with the pencil right after its last word, and a rehearsal's folder
+ * button after the pencil. With `actions` beside it the title has its room
+ * first and the actions get what it leaves: the figures among them give way
+ * to it whole, before it takes a second line. The heading is named by the whole title, cut or not, and the
  * pencil by its own name. `muted` is a title in grey, such as Not named.
  * Anything else given goes on the header, such as a `data-` mark for a test.
  */
