@@ -15,8 +15,9 @@ import { addMember, as, BASE, confirm, HEADERS, signIn, STATE, type Band } from 
     Ira      stars Pałyn 3, which nobody else stars.
     Dzima    marks Pałyn 9, and comments on, closes and opens again
              Ira's mark on Kupalle 2.
-    Alex     the owner's pages, labels, songs, the trash, and pages only
-             looked at.
+    Alex     the owner's pages, labels, songs, the trash, the sets, and
+             pages only looked at. The band has two sets: Club gig, with
+             the three songs, and Vik's birthday, deleted and put back.
 */
 
 const REHEARSALS = {
@@ -244,7 +245,15 @@ export default async function seed() {
 
   const list = (await (await owner.get("/api/songs")).json()) as { songs: { id: number; title: string }[] }
   const songs = Object.fromEntries(list.songs.map((s) => [s.title, s.id]))
+  const sets: Band["sets"] = {}
+  for (const [name, titles] of [
+    ["Club gig", ["Viasna", "Pałyn", "Kupalle"]],
+    ["Vik's birthday", ["Kupalle", "Viasna"]],
+  ] as const) {
+    sets[name] = (await ok(await owner.post("/api/sets", { data: { name } }))).id
+    await ok(await owner.patch(`/api/sets/${sets[name]}`, { data: { songs: titles.map((t) => songs[t]) } }))
+  }
   const rehearsals = { first: REHEARSALS.first.uid, second: REHEARSALS.second.uid }
-  writeFileSync(new URL("band.json", STATE), JSON.stringify({ takes, songs, rehearsals } satisfies Band, null, 2))
+  writeFileSync(new URL("band.json", STATE), JSON.stringify({ takes, songs, sets, rehearsals } satisfies Band, null, 2))
   for (const api of [owner, dzima, ira, paulik]) await api.dispose()
 }

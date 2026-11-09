@@ -8,7 +8,7 @@ const fits = (page: Page) => page.evaluate(() => document.documentElement.scroll
 test("the frame has its sections, and a panel closes with its X, Esc and another section", async ({ page }) => {
   await page.goto("/")
   const sections = page.getByRole("navigation", { name: "Sections" })
-  await expect(sections.getByRole("link")).toHaveText(["Home", "Rehearsals", "Songs", /^Marks\s*\d+$/, "Members", "Trash"])
+  await expect(sections.getByRole("link")).toHaveText(["Home", "Rehearsals", "Songs", "Sets", /^Marks\s*\d+$/, "Members", "Trash"])
   await expect(page.getByLabel("Player")).toBeVisible()
 
   const favourite = page.getByRole("region", { name: "The band's favourites" }).getByRole("button", { name: "Viasna 11", exact: true })
@@ -99,7 +99,7 @@ test("a computer's windows fit every section", async ({ page }) => {
     [960, 680],
   ]) {
     await page.setViewportSize({ width, height })
-    for (const path of ["/", "/rehearsals", "/songs", "/marks", "/members", "/trash"]) {
+    for (const path of ["/", "/rehearsals", "/songs", "/sets", "/marks", "/members", "/trash"]) {
       await page.goto(path)
       await expect(page.getByRole("heading", { level: 1 })).toBeVisible()
       expect(await fits(page), `${path} at ${width}`).toBe(true)
@@ -116,7 +116,7 @@ test("a phone keeps the sections behind the menu", async ({ page }) => {
   await sections.getByRole("link", { name: "Songs" }).click()
   await expect(sections).toHaveCount(0)
   await expect(page.getByRole("heading", { level: 1 })).toContainText("Songs")
-  for (const path of ["/", "/rehearsals", "/songs", "/marks", "/members", "/trash", `/takes/${band().takes["Viasna 12"]}`]) {
+  for (const path of ["/", "/rehearsals", "/songs", "/sets", "/marks", "/members", "/trash", `/takes/${band().takes["Viasna 12"]}`]) {
     await page.goto(path)
     await expect(page.getByRole("heading", { level: 1 })).toBeVisible()
     expect(await fits(page), path).toBe(true)

@@ -1,5 +1,5 @@
 import { Link, useLocation, useNavigate } from "@tanstack/react-router"
-import { CalendarDays, Diamond, Ellipsis, House, Music, Trash2, Users, type LucideIcon } from "lucide-react"
+import { CalendarDays, Diamond, Ellipsis, House, ListMusic, Music, Trash2, Users, type LucideIcon } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { cn } from "@/lib/utils"
@@ -8,12 +8,13 @@ import { authClient } from "../auth"
 import { Avatar, Logo } from "./parts"
 import { count } from "./words"
 
-type To = "/" | "/rehearsals" | "/songs" | "/marks" | "/members" | "/trash"
+type To = "/" | "/rehearsals" | "/songs" | "/sets" | "/marks" | "/members" | "/trash"
 
 const SECTIONS: [To, string, LucideIcon][] = [
   ["/", "Home", House],
   ["/rehearsals", "Rehearsals", CalendarDays],
   ["/songs", "Songs", Music],
+  ["/sets", "Sets", ListMusic],
   ["/marks", "Marks", Diamond],
   ["/members", "Members", Users],
   ["/trash", "Trash", Trash2],

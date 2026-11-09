@@ -21,3 +21,25 @@ body {
   /* A web page: words can be copied, the key for РЭХА above all. */
   user-select: text;
 }
+
+/* A set's printed sheet (sets/Print.tsx): not on the screen; printed, on A4, the only thing on the paper. */
+.print-sheet {
+  display: none;
+}
+@media print {
+  @page {
+    size: A4;
+    margin: 56px 64px;
+  }
+  html:has(> body > .print-sheet),
+  body:has(> .print-sheet) {
+    height: auto;
+    background: white;
+  }
+  body:has(> .print-sheet) > :not(.print-sheet) {
+    display: none !important;
+  }
+  .print-sheet {
+    display: block;
+  }
+}
