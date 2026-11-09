@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react"
-import { ChevronDown, ListMusic, Plus } from "lucide-react"
+import { ChevronDown, ListMusic, Plus, RefreshCw } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -33,20 +33,24 @@ import { focusIsLeftover } from "@/hooks/useSpacebar"
 /**
  * The button left of Start rehearsal, as tall as it: the set Start plays
  * by, or *No set*. Its menu opens over it: *No set: play freely*, each set
- * with its songs counted, and *New set…*. A long name is cut, on the button
- * and in the menu, and shown whole in the shared tip on hover and on
- * keyboard focus (B6); more sets than fit scroll.
+ * with its songs counted, *New set…*, and *Check the band service* under it
+ * when `onCheck` is given, while takes go to the band service. A long name
+ * is cut, on the button and in the menu, and shown whole in the shared tip
+ * on hover and on keyboard focus (B6); more sets than fit scroll.
  */
 export function SetPicker({
   sets,
   chosen,
   onChoose,
   onNew,
+  onCheck,
 }: {
   sets: SongSet[]
   chosen: number | null
   onChoose: (id: number | null) => void
   onNew: () => void
+  /** Check the band service: what the band changed there comes at once. */
+  onCheck?: () => void
 }) {
   const name = sets.find((s) => s.id === chosen)?.name ?? null
   const [nameRef, cut] = useCut<HTMLSpanElement>()
@@ -118,6 +122,12 @@ export function SetPicker({
           <Plus />
           New set…
         </DropdownMenuItem>
+        {onCheck && (
+          <DropdownMenuItem onSelect={onCheck}>
+            <RefreshCw />
+            Check the band service
+          </DropdownMenuItem>
+        )}
       </DropdownMenuContent>
     </DropdownMenu>
   )

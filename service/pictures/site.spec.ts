@@ -69,6 +69,8 @@ const SHOTS: Record<string, Shot> = {
       await page.getByRole("dialog").waitFor()
     },
   },
+  // On the computer, where the band makes the set for a gig.
+  sets: { who: "ivan", path: () => "/sets", on: COMPUTER },
   "sign-in": {
     who: null,
     path: () => "/signin",

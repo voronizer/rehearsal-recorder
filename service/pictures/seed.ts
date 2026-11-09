@@ -282,8 +282,32 @@ export default async function seed() {
   await mark(owner, "Viasna 12", 231, "Do again", "Let's end all together on four.")
   for (const api of [vik, ivan, owner]) await star(api, "Viasna 12")
 
+  // Eight more songs the band plays, with no take yet. Five have a length
+  // typed in for the club gig's set; Kryły, Zorka and Kalina have none.
+  const more: [string, string, number, number | null][] = [
+    ["Ranica", "G major", 96, 228],
+    ["Dožd", "C minor", 132, 197],
+    ["Daroha", "B minor", 140, 183],
+    ["Mora", "F♯ minor", 84, 270],
+    ["Viečar", "E major", 100, 241],
+    ["Kryły", "D minor", 126, null],
+    ["Zorka", "A major", 110, null],
+    ["Kalina", "C major", 150, null],
+  ]
+  for (const [title, key, tempo, typed_length] of more) {
+    const { id } = await ok(await owner.post("/api/songs", { data: { title } }))
+    await ok(await owner.patch(`/api/songs/${id}`, { data: { key, tempo, signature: "4/4", typed_length } }))
+  }
   const list = (await (await owner.get("/api/songs")).json()) as { songs: { id: number; title: string }[] }
   const songs = Object.fromEntries(list.songs.map((s) => [s.title, s.id]))
+  // The songs with takes get their key and tempo, as the band gave them.
+  for (const [title, key] of [["Viasna", "E minor"], ["Pałyn", "A minor"], ["Kupalle", "D major"]])
+    await ok(await owner.patch(`/api/songs/${songs[title]}`, { data: { key, tempo: 120, signature: "4/4" } }))
+  const gig = ["Ranica", "Viasna", "Dožd", "Pałyn", "Daroha", "Mora", "Viečar", "Kryły", "Kupalle"]
+  const set = await ok(await owner.post("/api/sets", { data: { name: "Club gig, 13 December" } }))
+  await ok(await owner.patch(`/api/sets/${set.id}`, { data: { songs: gig.map((t) => songs[t]) } }))
+  const birthday = await ok(await owner.post("/api/sets", { data: { name: "Vik's birthday" } }))
+  await ok(await owner.patch(`/api/sets/${birthday.id}`, { data: { songs: ["Kupalle", "Viasna", "Ranica"].map((t) => songs[t]) } }))
   writeFileSync(new URL("band.json", STATE), JSON.stringify({ takes, songs } satisfies Pictured, null, 2))
   for (const api of band) await api.dispose()
 }

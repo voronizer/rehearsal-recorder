@@ -22,6 +22,8 @@ import { levelRoutes } from "./levels/routes"
 import { markRoutes } from "./marks/routes"
 import { rehearsalRoutes } from "./rehearsals/routes"
 import { songFileRoutes } from "./songs/files"
+import { rehaSetRoutes } from "./sets/reha-routes"
+import { setRoutes } from "./sets/routes"
 import { rehaSongRoutes } from "./songs/reha-routes"
 import { songRoutes } from "./songs/routes"
 import { fileRoutes } from "./files/routes"
@@ -90,12 +92,14 @@ const routes = app
   .route("/", memberRoutes)
   .route("/", rehaRoutes)
   .route("/", rehaSongRoutes)
+  .route("/", rehaSetRoutes)
   .route("/", uploadRoutes)
   .route("/", bandRoutes)
   .route("/", homeRoutes)
   .route("/", rehearsalRoutes)
   .route("/", songRoutes)
   .route("/", songFileRoutes)
+  .route("/", setRoutes)
   .route("/", labelRoutes)
   .route("/", levelRoutes)
   .route("/", markRoutes)

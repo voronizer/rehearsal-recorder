@@ -23,7 +23,7 @@ from rehearsal_recorder.midi import rules
 from rehearsal_recorder.store.db import MIGRATIONS, open_engine
 from rehearsal_recorder.store.models import (
     AUDIO_FILE, BACKING_FILE, NOTES_FILE, CloudCopy, Counter, Label, Marker, Rehearsal, ServiceCopy, ServiceDelete,
-    ServiceFile, ServiceSong, ServiceSongMerge, Song, SongName, SongSet, Take, TakeFile, Track,
+    ServiceFile, ServiceSet, ServiceSong, ServiceSongMerge, Song, SongName, SongSet, Take, TakeFile, Track,
 )
 from rehearsal_recorder.store.names import UNNAMED_TAKE, legacy_song, split_go, take_name
 
@@ -2110,7 +2110,7 @@ class Library:
         """Everything the band service's sending kept: the key was taken
         away, and what it still had to send goes with it."""
         with self._session.begin() as db:
-            for model in (ServiceFile, ServiceCopy, ServiceDelete, ServiceSong, ServiceSongMerge):
+            for model in (ServiceFile, ServiceCopy, ServiceDelete, ServiceSong, ServiceSongMerge, ServiceSet):
                 db.execute(model.__table__.delete())
 
     def requeue_service_refusals(self, words):
@@ -2220,10 +2220,12 @@ class Library:
     def remove_song(self, song_id):
         """
         A song deleted in the band service that has no takes on this
-        computer goes from here too: its row, its old names and its number.
-        Returns {"title", "backing"}, the copy of its backing track for the
-        Trash, or None for none; None when no song has the id. Refused
-        (SongRefused) for a song with takes, which stays.
+        computer goes from here too: its row, its old names and its number,
+        and its place in every set, here and in what the sets last agreed on
+        with the service, so no set makes it again. Returns {"title",
+        "backing"}, the copy of its backing track for the Trash, or None for
+        none; None when no song has the id. Refused (SongRefused) for a song
+        with takes, which stays.
         """
         with self._session.begin() as db:
             song = db.get(Song, song_id)
@@ -2233,11 +2235,59 @@ class Library:
                 raise SongRefused("It has takes on this computer")
             backing = None if song.backing_file is None else self._backing_path(song.backing_file)
             title = song.title
+            # Before its old names go: a set may name it by one.
+            self._drop_from_sets(db, song)
             for model in (SongName, ServiceSong, ServiceSongMerge):
                 column = model.into_song_id if model is ServiceSongMerge else model.song_id
                 db.execute(model.__table__.delete().where(column == song.id))
             db.delete(song)
         return {"title": title, "backing": backing}
+
+    # ---------- sets in the band service ----------
+    #
+    # Each set's number there and what the two sides last agreed on for it
+    # (models.ServiceSet); sending/service_sets.py reads them against what
+    # each side has now.
+
+    def service_sets(self):
+        """[{"sid", "set_id", "name", "songs"}]: every set with a number,
+        with what was agreed, its songs as the service's numbers. "set_id"
+        is None for a set deleted here whose delete has not gone yet."""
+        with self._session() as db:
+            return [self._columns(r) for r in db.scalars(select(ServiceSet).order_by(ServiceSet.sid))]
+
+    def link_service_set(self, set_id, sid, name, songs):
+        """Set `set_id` is number `sid` in the service, with what the two
+        sides agree on for it now. A row another set had under `sid` goes,
+        and with it that set's number: the service says the two are one set
+        there. False when the set is gone, deleted here while its number was
+        on its way: the number stays with no set, a delete still to send,
+        unless another set here has it."""
+        with self._session.begin() as db:
+            if db.get(SongSet, set_id) is None:
+                if db.get(ServiceSet, int(sid)) is None:
+                    db.add(ServiceSet(sid=int(sid), set_id=None, name=name, songs=list(songs)))
+                return False
+            db.execute(ServiceSet.__table__.delete().where(
+                or_(ServiceSet.sid == sid, ServiceSet.set_id == set_id)))
+            db.add(ServiceSet(sid=int(sid), set_id=set_id, name=name, songs=list(songs)))
+            return True
+
+    def agree_service_set(self, sid, **fields):
+        """What the two sides agree on for a set now: "name", "songs" or both."""
+        with self._session.begin() as db:
+            row = db.get(ServiceSet, sid)
+            if row is not None:
+                for key, value in fields.items():
+                    setattr(row, key, list(value) if key == "songs" else value)
+
+    def drop_service_set(self, sid):
+        """The set's number is forgotten: its delete has gone, or the
+        service has no such set."""
+        with self._session.begin() as db:
+            row = db.get(ServiceSet, sid)
+            if row is not None:
+                db.delete(row)
 
     # ---------- sets ----------
     #
@@ -2358,15 +2408,33 @@ class Library:
         return self.sets()
 
     def delete_set(self, set_id):
-        """Deletes the set. Rehearsals played by it keep their copy."""
+        """Deletes the set. Rehearsals played by it keep their copy. Its
+        number in the band service stays, with no set, until the service
+        has the delete."""
         with self._session.begin() as db:
             sets = self._ordered_sets(db)
             st = self._set_in(sets, set_id)
             sets.remove(st)
+            db.execute(update(ServiceSet).where(ServiceSet.set_id == st.id).values(set_id=None))
             db.delete(st)
             for position, other in enumerate(sets):
                 other.position = position
         return self.sets()
+
+    def _drop_from_sets(self, db, song):
+        """Song `song` out of every set, however a set names it, and its
+        number out of what each set last agreed on with the band service."""
+        titles = self._titles_of(db)
+        key = song.title.casefold()
+        for st in self._ordered_sets(db):
+            kept = [t for t in st.songs or [] if titles(t)["title"].casefold() != key]
+            if len(kept) != len(st.songs or []):
+                st.songs = kept
+        number = db.get(ServiceSong, song.id)
+        if number is not None:
+            for row in db.scalars(select(ServiceSet)):
+                if number.sid in row.songs:
+                    row.songs = [s for s in row.songs if s != number.sid]
 
     # ---------- labels ----------
     #

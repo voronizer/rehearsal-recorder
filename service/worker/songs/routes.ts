@@ -21,6 +21,7 @@ const TITLE = "A song's title is 1 to 100 characters"
 const STATUS = "A status's name is 1 to 40 characters"
 const NO_SONG = "No such song"
 const NO_STATUS = "No such status"
+const LENGTH = "A length is a whole number of seconds, from 1 to 3599"
 
 const Id = z.object({ id: z.coerce.number().int().min(1) })
 const Status = z.object({ id: z.number(), name: z.string(), position: z.number(), songs: z.number() }).openapi("Status")
@@ -39,6 +40,8 @@ export const SongItem = z
     last_date: z.string().nullable(),
     /** The best take's length. */
     length: z.number().nullable(),
+    /** The length in seconds someone typed for its sets, or null to go by the best take's. */
+    typed_length: z.number().nullable(),
     best: TakeRow.nullable(),
     best_why: z.enum(["most stars", "latest"]).nullable(),
     created_at: z.string().nullable(),
@@ -61,6 +64,7 @@ function item(s: SongRowDb, rows: Loaded[], first: number): z.infer<typeof SongI
     rehearsals: new Set(rows.map((r) => r.rehearsal_uid)).size,
     last_date: rows[0]?.date ?? null,
     length: top?.duration_sec ?? null,
+    typed_length: s.typedLength,
     best: top && bare(top),
     best_why: bestWhy(top),
     created_at: s.createdAt,
@@ -196,8 +200,9 @@ export const songRoutes = newApp()
       method: "patch",
       path: "/api/songs/{id}",
       description:
-        "A song's title, tempo and signature, status, key and notes. The title, tempo and signature reach РЭХА at its " +
-        "next check; a title another song has is turned down, as songs are merged in РЭХА.",
+        "A song's title, tempo and signature, status, key, notes and typed length. The title, tempo and signature " +
+        "reach РЭХА at its next check; a title another song has is turned down, as songs are merged in РЭХА. The " +
+        "typed length is the service's only, for the song's sets.",
       middleware: [needMember] as const,
       request: {
         params: Id,
@@ -210,6 +215,8 @@ export const songRoutes = newApp()
             status_id: z.int().optional(),
             key: z.enum(KEYS as [string, ...string[]], { error: "A key is one of the 24, such as “E minor”" }).nullable().optional(),
             notes: z.string().max(10_000, { error: "Notes are up to 10,000 characters" }).optional(),
+            /** Whole seconds; null goes back to the best take's length. */
+            typed_length: z.int({ error: LENGTH }).min(1, { error: LENGTH }).max(3599, { error: LENGTH }).nullable().optional(),
           })
         ),
       },
@@ -218,7 +225,7 @@ export const songRoutes = newApp()
     async (c) => {
       const db = database(c.env)
       const { id } = c.req.valid("param")
-      const { title, tempo, signature, status_id, key, notes } = c.req.valid("json")
+      const { title, tempo, signature, status_id, key, notes, typed_length } = c.req.valid("json")
       const s = await liveSong(db, id)
       if (!s) return fail(c, 404, NO_SONG)
       if (status_id !== undefined && !(await db.select().from(status).where(eq(status.id, status_id))).length)
@@ -243,6 +250,7 @@ export const songRoutes = newApp()
         ...(status_id !== undefined && { statusId: status_id }),
         ...(key !== undefined && { key }),
         ...(notes !== undefined && { notes: notes.trim() }),
+        ...(typed_length !== undefined && { typedLength: typed_length }),
       }
       if (Object.keys(change).length) await db.update(song).set(change).where(eq(song.id, id))
       return c.json({ ok: true as const }, 200)

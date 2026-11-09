@@ -76,6 +76,8 @@ export type Key = InferResponseType<typeof client.api.keys.$get, 200>[number]
 export type TrashList = InferResponseType<typeof client.api.trash.$get, 200>
 export type Trashed = TrashList["takes"][number]
 export type TrashedSong = TrashList["songs"][number]
+export type TrashedSet = TrashList["sets"][number]
+export type BandSet = InferResponseType<typeof client.api.sets.$get, 200>["sets"][number]
 export type Show = "open" | "closed" | "all"
 
 /** Where the page goes when the session is gone; set by routes.tsx. */
@@ -119,6 +121,8 @@ export const useMarks = (show: Show) =>
 export const useLabels = () => useQuery({ queryKey: ["labels"], queryFn: () => data(client.api.labels.$get()) })
 export const usePeople = () => useQuery({ queryKey: ["people"], queryFn: () => data(client.api.people.$get()) })
 export const useTrash = () => useQuery({ queryKey: ["trash"], queryFn: () => data(client.api.trash.$get()) })
+/** The band's sets in their order, each with its songs' numbers; a song in the Trash is left out until it is back. */
+export const useSets = () => useQuery({ queryKey: ["sets"], queryFn: () => data(client.api.sets.$get()) })
 export const useMembers = () => useQuery({ queryKey: ["members"], queryFn: () => data(client.api.members.$get()) })
 export const useKeys = () => useQuery({ queryKey: ["keys"], queryFn: () => data(client.api.keys.$get()) })
 
@@ -188,11 +192,14 @@ export const usePeaks = (path: string) => useQuery(peaksQuery(path))
 /**
  * A change to the band: once the service has it, every page of the band is
  * read again (not who you are, and not the waveforms, which never change).
+ * Changes with the same `scope` go one after another, so a later one cannot
+ * reach the service before an earlier one.
  */
-export function useChange<T, R = unknown>(call: (arg: T) => Promise<R>) {
+export function useChange<T, R = unknown>(call: (arg: T) => Promise<R>, scope?: string) {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: call,
+    ...(scope && { scope: { id: scope } }),
     onSuccess: () => qc.invalidateQueries({ predicate: (q) => !["me", "peaks"].includes(String(q.queryKey[0])) }),
   })
 }
@@ -245,6 +252,11 @@ export type SongChange = {
 }
 export const useChangeSong = () =>
   useChange(({ id: n, ...json }: SongChange) => data(client.api.songs[":id"].$patch({ param: id(n), json })))
+/** A song's length typed for its sets, in seconds; null goes back to the best take's. */
+export const useTypeLength = () =>
+  useChange(({ id: n, length }: { id: number; length: number | null }) =>
+    data(client.api.songs[":id"].$patch({ param: id(n), json: { typed_length: length } }))
+  )
 export const useAddStatus = () => useChange((name: string) => data(client.api.statuses.$post({ json: { name } })))
 export const useChangeStatus = () =>
   useChange(({ id: n, name }: { id: number; name: string }) => data(client.api.statuses[":id"].$patch({ param: id(n), json: { name } })))
@@ -269,6 +281,17 @@ export const useDeleteFile = () =>
 export const useNameBand = () => useChange((name: string) => data(client.api.band.$put({ json: { name } })))
 export const useBandPicture = () =>
   useChange((file: File | null) => (file ? send("/api/band/picture", "PUT", file) : data(client.api.band.picture.$delete())))
+
+/** **New set**, at the end of the list, with no songs; its number. */
+export const useMakeSet = () => useChange((name: string) => data(client.api.sets.$post({ json: { name } })), "sets")
+/** A set's new name, its songs in their new order, or both. One at a time, so the last order pressed is the one kept. */
+export const useChangeSet = () =>
+  useChange(
+    ({ id: n, ...json }: { id: number; name?: string; songs?: number[] }) => data(client.api.sets[":id"].$patch({ param: id(n), json })),
+    "sets"
+  )
+export const useDeleteSet = () => useChange((n: number) => data(client.api.sets[":id"].$delete({ param: id(n) })), "sets")
+export const useRestoreSet = () => useChange((n: number) => data(client.api.trash.sets[":id"].restore.$post({ param: id(n) })), "sets")
 
 export const useRestore = () => useChange((uid: string) => data(client.api.trash[":uid"].restore.$post({ param: { uid } })))
 export const useRestoreSong = () => useChange((n: number) => data(client.api.trash.songs[":id"].restore.$post({ param: id(n) })))

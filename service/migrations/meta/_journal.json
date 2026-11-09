@@ -57,6 +57,13 @@
       "when": 1793886382505,
       "tag": "0007_song_sync",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "6",
+      "when": 1794259084541,
+      "tag": "0008_sets",
+      "breakpoints": true
     }
   ]
 }

@@ -255,9 +255,54 @@ export const song = sqliteTable(
     titleBy: text("title_by").references(() => user.id),
     meterBy: text("meter_by").references(() => user.id),
     madeBy: text("made_by").references(() => user.id),
+    /** The length in seconds someone typed for it, 1 to 3600, for its sets;
+     *  null goes by its best take's. The service's only: РЭХА has none. */
+    typedLength: integer("typed_length"),
   },
   // Songs match by title whatever its case.
   (table) => [uniqueIndex("song_title_nocase").on(sql`${table.title} COLLATE NOCASE`)]
+)
+
+/**
+ * A set: a name and songs in an order, for a gig or a rehearsal. Its
+ * number is the same in РЭХА (sets/store.ts). The by-columns are the
+ * members who made it, last changed it and deleted it here; null when
+ * РЭХА did.
+ */
+export const bandSet = sqliteTable(
+  "band_set",
+  {
+    id: integer("id").primaryKey(),
+    name: text("name").notNull(),
+    position: integer("position").notNull(),
+    createdAt: text("created_at").notNull(),
+    madeBy: text("made_by").references(() => user.id),
+    changedBy: text("changed_by").references(() => user.id),
+    trashedAt: text("trashed_at"),
+    trashedBy: text("trashed_by").references(() => user.id),
+  },
+  // Two sets in use never share a name, whatever its case; one in the trash
+  // may, until it is restored.
+  (table) => [
+    uniqueIndex("band_set_name_nocase")
+      .on(sql`${table.name} COLLATE NOCASE`)
+      .where(sql`${table.trashedAt} IS NULL`),
+  ]
+)
+
+/** A set's songs, each once, at its place. A song deleted for good leaves its sets. */
+export const setSong = sqliteTable(
+  "set_song",
+  {
+    setId: integer("set_id")
+      .notNull()
+      .references(() => bandSet.id, { onDelete: "cascade" }),
+    songId: integer("song_id")
+      .notNull()
+      .references(() => song.id, { onDelete: "cascade" }),
+    position: integer("position").notNull(),
+  },
+  (table) => [primaryKey({ columns: [table.setId, table.songId] }), index("set_song_song_idx").on(table.songId)]
 )
 
 /** A song's file in R2, at songs/<song id>/<file id>. */

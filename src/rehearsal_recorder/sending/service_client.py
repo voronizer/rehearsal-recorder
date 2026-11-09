@@ -176,6 +176,48 @@ class ServiceClient:
             raise Refused("The band service's list of songs made no sense")
         return answer
 
+    # ---------- sets (sending/service_sets.py) ----------
+
+    def link_sets(self, sets):
+        """The first check with this service: each of РЭХА's sets, as
+        {"name", "songs"} (the songs' numbers there), gets its number there,
+        in the same order. A set there with the name is that set."""
+        answer = self._call("POST", "/api/reha/sets/link", {"sets": sets})
+        ids = answer.get("ids") if isinstance(answer, dict) else None
+        if not isinstance(ids, list) or len(ids) != len(sets) or not all(isinstance(i, int) for i in ids):
+            raise Refused("The band service's numbers for the sets made no sense")
+        return ids
+
+    def add_set(self, name, songs):
+        """A set made in РЭХА: its number. A name a set there has is that set."""
+        answer = self._call("POST", "/api/reha/sets", {"name": name, "songs": songs})
+        if not isinstance(answer, dict) or not isinstance(answer.get("id"), int):
+            raise Refused("The band service's number for the set made no sense")
+        return answer["id"]
+
+    def change_set(self, sid, **fields):
+        """A change made in РЭХА: "name", "songs" (the numbers in order), or both."""
+        return self._call("PATCH", f"/api/reha/sets/{int(sid)}", fields)
+
+    def delete_set(self, sid):
+        return self._call("DELETE", f"/api/reha/sets/{int(sid)}")
+
+    def sets(self):
+        """{"sets": every set with its "id", "name", "songs" (numbers, the
+        songs in the Trash left out), whether it is "trashed", and who made
+        it, last changed it and deleted it ("made_by", "changed_by",
+        "trashed_by": a name, or None for РЭХА)}. An answer not in that
+        shape is refused, so a stray page is never read as "the band
+        deleted every set"."""
+        answer = self._call("GET", "/api/reha/sets")
+        sets = answer.get("sets") if isinstance(answer, dict) else None
+        if not isinstance(sets, list) or not all(
+                isinstance(s, dict) and isinstance(s.get("id"), int) and isinstance(s.get("name"), str)
+                and isinstance(s.get("songs"), list) and all(isinstance(x, int) for x in s["songs"])
+                for s in sets):
+            raise Refused("The band service's list of sets made no sense")
+        return answer
+
     def _call(self, method, path, body=None, raw=None):
         # A name of its own: Cloudflare's Browser Integrity Check, on by
         # default, turns away urllib's "Python-urllib/3.x" with a 403.

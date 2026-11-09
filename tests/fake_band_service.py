@@ -19,6 +19,10 @@ which neither keeps a take's tempo nor says which it has.
 It keeps songs by number as the service does (service/worker/songs/sync.ts),
 and a test can rename one, give it a tempo, make one, delete one or move a
 take to another, as someone in the band does there.
+
+It keeps sets by number as the service does (service/worker/sets/store.ts),
+and a test can make one, rename it, give it songs, delete it and press
+Restore on it, as someone in the band does there.
 """
 
 import json
@@ -99,6 +103,11 @@ class FakeBandService:
         # uid: {"song_id", "by"}, a take moved to another song here and not
         # numbered by РЭХА yet.
         self.moved = {}
+        # id: {"id", "name", "songs", "trashed", "made_by", "changed_by",
+        # "trashed_by"}, in the order made. "songs" holds songs in the Trash
+        # too, in their places; GET /api/reha/sets leaves them out.
+        self.sets = {}
+        self._next_set = 1
         self._server = None
 
     # ---------- running it ----------
@@ -221,6 +230,98 @@ class FakeBandService:
             self.takes[uid].update(song_id=song["id"], song=song["title"], name=song["title"])
             self.moved[uid] = {"song_id": song["id"], "by": by}
 
+    # ---------- sets, as the band changes them there ----------
+
+    def set_called(self, name):
+        """The set in use with this name, whatever its case, or None."""
+        with self._lock:
+            return self._set_in_use(name)
+
+    def _set_in_use(self, name, but=None):
+        key = (name or "").strip().casefold()
+        return next((s for s in self.sets.values()
+                     if not s["trashed"] and s["id"] != but and s["name"].casefold() == key), None)
+
+    def _make_set(self, name, songs, by=None):
+        made = {"id": self._next_set, "name": name, "songs": list(dict.fromkeys(songs)), "trashed": False,
+                "made_by": by, "changed_by": by, "trashed_by": None}
+        self._next_set += 1
+        self.sets[made["id"]] = made
+        return made
+
+    def _set_songs(self, s, wanted):
+        """As the service gives a set new songs (store.ts newSongs): one in
+        the Trash that `wanted` leaves out keeps its place among the others.
+        Whether they changed."""
+        wanted = list(dict.fromkeys(wanted))
+        hidden = {x for x in s["songs"] if self.songs[x]["trashed"] and x not in wanted}
+        queue, out = list(wanted), []
+        for x in s["songs"]:
+            if x in hidden:
+                out.append(x)
+            elif queue:
+                out.append(queue.pop(0))
+        out += queue
+        if out == s["songs"]:
+            return False
+        s["songs"] = out
+        return True
+
+    def _change_set(self, s, name, songs, by):
+        """As store.ts changeSet: a rename, new songs or both, by `by`; who
+        changed it last stays when nothing changed. A name another set in
+        use has is turned down whole: the service's words for that, or
+        None. Never a set in the Trash: the route answers 404 for one."""
+        renamed = name is not None and name != s["name"]
+        if renamed:
+            other = self._set_in_use(name, but=s["id"])
+            if other is not None:
+                return f"There is already a set called {other['name']}."
+        changed = songs is not None and self._set_songs(s, songs)
+        if renamed:
+            s["name"] = name
+        if renamed or changed:
+            s["changed_by"] = by
+        return None
+
+    def _ids(self, titles):
+        return [self._find_song(t)["id"] for t in titles]
+
+    def new_set_in_service(self, name, titles=(), by="Ivan"):
+        """New set, then songs added to it."""
+        with self._lock:
+            return self._make_set(name, self._ids(titles), by)["id"]
+
+    def change_set_in_service(self, name, to=None, titles=None, by="Ivan"):
+        """A rename, songs added, taken out or moved, or both. ValueError,
+        with the service's words, for a name another set has."""
+        with self._lock:
+            refused = self._change_set(self._set_in_use(name), to,
+                                       None if titles is None else self._ids(titles), by)
+            if refused:
+                raise ValueError(refused)
+
+    def delete_set_in_service(self, name, by="Ira"):
+        with self._lock:
+            self._set_in_use(name).update(trashed=True, trashed_by=by)
+
+    def restore_set_in_service(self, sid):
+        """Restore in the Trash. ValueError, with the service's words, while
+        a set in use has its name."""
+        with self._lock:
+            other = self._set_in_use(self.sets[sid]["name"])
+            if other is not None:
+                raise ValueError(f"There is already a set called {other['name']}.")
+            self.sets[sid].update(trashed=False, trashed_by=None)
+
+    def songs_of_set(self, name):
+        """The titles of a set in use, as the band sees them: songs in the
+        Trash left out."""
+        with self._lock:
+            s = self._set_in_use(name)
+            return None if s is None else [self.songs[x]["title"] for x in s["songs"]
+                                           if not self.songs[x]["trashed"]]
+
     # ---------- answering ----------
 
     def _answer(self, h):
@@ -270,6 +371,8 @@ class FakeBandService:
             return 200, {"ok": True}
         if parts[:1] == ["songs"]:
             return self._songs_route(method, parts[1:], body)
+        if parts[:1] == ["sets"]:
+            return self._sets_route(method, parts[1:], body)
         if method == "GET" and parts == ["takes"]:
             with self._lock:
                 listed = [{"uid": uid, "trashed": t["trashed"], "mp3_gen": self.gens.get(uid, {}).get("mp3"),
@@ -439,10 +542,68 @@ class FakeBandService:
                             t.update(song_id=into["id"], song=into["title"])
                     if into["tempo"] is None:
                         into.update(tempo=song["tempo"], signature=song["signature"])
+                    # As sync.ts mergeSong: in a set that has both, `into`
+                    # keeps its place; in one that has only `song`, `into`
+                    # takes its place.
+                    for st in self.sets.values():
+                        if into["id"] in st["songs"]:
+                            st["songs"] = [x for x in st["songs"] if x != song["id"]]
+                        else:
+                            st["songs"] = [into["id"] if x == song["id"] else x for x in st["songs"]]
                     del self.songs[song["id"]]
                 self.order.append(f"merge into {into['title']}")
                 return 200, {"ok": True}
         return 404, {"error": "No such call"}
+
+    def _sets_route(self, method, rest, body):
+        data = json.loads(body) if body else {}
+        with self._lock:
+            if method == "GET" and not rest:
+                self.order.append("sets")
+                return 200, {"sets": [{**s, "songs": [x for x in s["songs"] if not self.songs[x]["trashed"]]}
+                                      for s in self.sets.values()]}
+            sent = data.get("sets", [data]) if method == "POST" else [data]
+            unknown = next((x for s in sent for x in s.get("songs") or [] if x not in self.songs), None)
+            if unknown is not None:
+                return 400, {"error": f"No such song: {unknown}"}
+            if method == "POST" and rest == ["link"]:
+                names = [s["name"].casefold() for s in data["sets"]]
+                twice = next((s["name"] for i, s in enumerate(data["sets"]) if s["name"].casefold() in names[i + 1:]),
+                             None)
+                if twice is not None:
+                    return 400, {"error": f"Two of the sets are called {twice}"}
+                ids = [self._reha_set(s) for s in data["sets"]]
+                self.order.append(f"link sets {len(ids)}")
+                return 200, {"ids": ids}
+            if method == "POST" and not rest:
+                sid = self._reha_set(data)
+                self.order.append(f"set {data['name']}")
+                return 200, {"id": sid}
+            s = self.sets.get(int(rest[0])) if len(rest) == 1 and rest[0].isdigit() else None
+            if (method in ("PATCH", "DELETE") and s is None) or (method == "PATCH" and s["trashed"]):
+                # A change to a set in the Trash: РЭХА's came later, so it makes the set again.
+                return 404, {"error": "No such set"}
+            if method == "PATCH":
+                refused = self._change_set(s, data.get("name"), data.get("songs"), None)
+                if refused:
+                    return 409, {"error": refused}
+                self.order.append(f"change set {s['name']}")
+                return 200, {"ok": True}
+            if method == "DELETE":
+                if not s["trashed"]:
+                    s.update(trashed=True, trashed_by=None)
+                self.order.append(f"delete set {s['name']}")
+                return 200, {"ok": True}
+        return 404, {"error": "No such call"}
+
+    def _reha_set(self, sent):
+        """A set РЭХА made: the set in use with its name, which takes its
+        spelling and songs, or a new one."""
+        s = self._set_in_use(sent["name"])
+        if s is None:
+            return self._make_set(sent["name"], sent["songs"])["id"]
+        self._change_set(s, sent["name"], sent["songs"], None)
+        return s["id"]
 
     def _drift_gen(self, uid):
         """The generation whose tempo the service has, as it says it; a

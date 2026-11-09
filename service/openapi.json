@@ -1085,6 +1085,12 @@
               "null"
             ]
           },
+          "typed_length": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
           "best": {
             "allOf": [
               {
@@ -1127,6 +1133,7 @@
           "rehearsals",
           "last_date",
           "length",
+          "typed_length",
           "best",
           "best_why",
           "created_at"
@@ -1174,6 +1181,28 @@
           "added_by",
           "created_at",
           "url"
+        ]
+      },
+      "Set": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "number"
+          },
+          "name": {
+            "type": "string"
+          },
+          "songs": {
+            "type": "array",
+            "items": {
+              "type": "number"
+            }
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "songs"
         ]
       },
       "Label": {
@@ -1543,11 +1572,45 @@
                 }
               ]
             }
+          },
+          "sets": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "number"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "songs": {
+                  "type": "number"
+                },
+                "trashed_at": {
+                  "type": "string"
+                },
+                "by": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                }
+              },
+              "required": [
+                "id",
+                "name",
+                "songs",
+                "trashed_at",
+                "by"
+              ]
+            }
           }
         },
         "required": [
           "songs",
-          "takes"
+          "takes",
+          "sets"
         ]
       }
     },
@@ -3273,6 +3336,514 @@
         }
       }
     },
+    "/api/reha/sets/link": {
+      "post": {
+        "description": "РЭХА's first check with this service for sets: each of its sets, with its songs' numbers, gets its number, in the same order. A set here with the name, whatever its case, is that set, and takes РЭХА's spelling and songs; one that matches nothing is made. A set in the trash is left there. Asked again, it gives the same numbers. A song the service does not have turns the whole of it down.",
+        "security": [
+          {
+            "rehaKey": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "example": "0.17.0"
+            },
+            "required": true,
+            "name": "x-reha-version",
+            "in": "header"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "sets": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "name": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 40
+                        },
+                        "songs": {
+                          "type": "array",
+                          "items": {
+                            "type": "integer",
+                            "minimum": 1
+                          },
+                          "maxItems": 1000
+                        }
+                      },
+                      "required": [
+                        "name",
+                        "songs"
+                      ]
+                    },
+                    "maxItems": 1000
+                  }
+                },
+                "required": [
+                  "sets"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Done",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ids": {
+                      "type": "array",
+                      "items": {
+                        "type": "number"
+                      }
+                    }
+                  },
+                  "required": [
+                    "ids"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Not as the service expects",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in, or the key does not work",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "426": {
+            "description": "РЭХА is too old for the service",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/reha/sets": {
+      "post": {
+        "description": "A set made in РЭХА: its number. A name a set here has, whatever its case, is that set, which takes РЭХА's spelling and songs; otherwise a new set at the end of the list.",
+        "security": [
+          {
+            "rehaKey": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "example": "0.17.0"
+            },
+            "required": true,
+            "name": "x-reha-version",
+            "in": "header"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 40
+                  },
+                  "songs": {
+                    "type": "array",
+                    "items": {
+                      "type": "integer",
+                      "minimum": 1
+                    },
+                    "maxItems": 1000
+                  }
+                },
+                "required": [
+                  "name",
+                  "songs"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Done",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "number"
+                    }
+                  },
+                  "required": [
+                    "id"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Not as the service expects",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in, or the key does not work",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "426": {
+            "description": "РЭХА is too old for the service",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "description": "Every set in its order, with its number, name, songs' numbers, whether it is in the trash, and who made it, last changed it and deleted it here, by name (null for РЭХА). A song in the trash is left out of its sets. РЭХА asks at its check.",
+        "security": [
+          {
+            "rehaKey": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "example": "0.17.0"
+            },
+            "required": true,
+            "name": "x-reha-version",
+            "in": "header"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Done",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "sets": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "number"
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "songs": {
+                            "type": "array",
+                            "items": {
+                              "type": "number"
+                            }
+                          },
+                          "trashed": {
+                            "type": "boolean"
+                          },
+                          "made_by": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "changed_by": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "trashed_by": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "name",
+                          "songs",
+                          "trashed",
+                          "made_by",
+                          "changed_by",
+                          "trashed_by"
+                        ]
+                      }
+                    }
+                  },
+                  "required": [
+                    "sets"
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in, or the key does not work",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "426": {
+            "description": "РЭХА is too old for the service",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/reha/sets/{id}": {
+      "patch": {
+        "description": "A change made in РЭХА: the name, the songs in their new order, or both. A name another set here has is turned down whole, saying so: РЭХА then gives its set another name and sends that. A set in the trash is not found: РЭХА's change came after the band's delete, so РЭХА makes the set again and its change wins.",
+        "security": [
+          {
+            "rehaKey": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "example": "0.17.0"
+            },
+            "required": true,
+            "name": "x-reha-version",
+            "in": "header"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 40
+                  },
+                  "songs": {
+                    "type": "array",
+                    "items": {
+                      "type": "integer",
+                      "minimum": 1
+                    },
+                    "maxItems": 1000
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Done",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Ok"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Not as the service expects",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in, or the key does not work",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not there",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Already there",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "426": {
+            "description": "РЭХА is too old for the service",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "description": "A set deleted in РЭХА: to the trash here, where the band can put it back for 30 days.",
+        "security": [
+          {
+            "rehaKey": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "example": "0.17.0"
+            },
+            "required": true,
+            "name": "x-reha-version",
+            "in": "header"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Done",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Ok"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in, or the key does not work",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not there",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "426": {
+            "description": "РЭХА is too old for the service",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/reha/takes/{uid}/files": {
       "post": {
         "security": [
@@ -4236,7 +4807,7 @@
         }
       },
       "patch": {
-        "description": "A song's title, tempo and signature, status, key and notes. The title, tempo and signature reach РЭХА at its next check; a title another song has is turned down, as songs are merged in РЭХА.",
+        "description": "A song's title, tempo and signature, status, key, notes and typed length. The title, tempo and signature reach РЭХА at its next check; a title another song has is turned down, as songs are merged in РЭХА. The typed length is the service's only, for the song's sets.",
         "parameters": [
           {
             "schema": {
@@ -4318,6 +4889,14 @@
                   "notes": {
                     "type": "string",
                     "maxLength": 10000
+                  },
+                  "typed_length": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 1,
+                    "maximum": 3599
                   }
                 }
               }
@@ -4871,6 +5450,256 @@
                 "schema": {
                   "type": "string",
                   "format": "binary"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in, or the key does not work",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not there",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/sets": {
+      "get": {
+        "description": "The sets in their order, each with its songs' numbers in order. A song in the trash is left out until it is back.",
+        "responses": {
+          "200": {
+            "description": "Done",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "sets": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Set"
+                      }
+                    }
+                  },
+                  "required": [
+                    "sets"
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in, or the key does not work",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "description": "**New set**, at the end of the list, with no songs. A name another set has is turned down. It reaches РЭХА at its next check.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 40
+                  }
+                },
+                "required": [
+                  "name"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Done",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "number"
+                    }
+                  },
+                  "required": [
+                    "id"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Not as the service expects",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in, or the key does not work",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Already there",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/sets/{id}": {
+      "patch": {
+        "description": "A set's new name, its songs in their new order, or both. A name another set has is turned down whole. It reaches РЭХА at its next check.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 40
+                  },
+                  "songs": {
+                    "type": "array",
+                    "items": {
+                      "type": "integer",
+                      "minimum": 1
+                    },
+                    "maxItems": 1000
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Done",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Ok"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Not as the service expects",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in, or the key does not work",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not there",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Already there",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "description": "**Delete set**: to the trash, where anyone in the band can put it back for 30 days. Its songs stay as they are. It goes from РЭХА at its next check.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Done",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Ok"
                 }
               }
             }
@@ -6132,7 +6961,7 @@
     },
     "/api/trash": {
       "get": {
-        "description": "The trash, newest first: songs deleted with their takes, and takes on their own. A take that went with its song has no line of its own while the song is there.",
+        "description": "The trash, newest first: songs deleted with their takes, takes on their own, and sets. A take that went with its song has no line of its own while the song is there.",
         "responses": {
           "200": {
             "description": "Done",
@@ -6242,6 +7071,64 @@
           },
           "404": {
             "description": "Not there",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/trash/sets/{id}/restore": {
+      "post": {
+        "description": "**Restore** on a set: it is back in its place in the list, with its songs. A name another set took meanwhile is turned down, saying so. It comes back to РЭХА at its next check.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Done",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Ok"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in, or the key does not work",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not there",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Already there",
             "content": {
               "application/json": {
                 "schema": {

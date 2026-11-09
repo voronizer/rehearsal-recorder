@@ -1,12 +1,13 @@
 import { createRoute, z } from "@hono/zod-openapi"
-import { and, eq, isNotNull, isNull } from "drizzle-orm"
+import { and, count, eq, isNotNull, isNull } from "drizzle-orm"
 import { database } from "../shared/db"
 import { fail } from "../shared/errors"
 import { body, errors, json, newApp, Ok } from "../shared/openapi"
 import { iso } from "../shared/time"
 import { findSong, makeSong, titleRefused } from "../songs/sync"
 import { loadMarks, MarkView } from "../marks/view"
-import { rehearsal, song, star, take, user } from "../shared/schema"
+import { bandSet, rehearsal, setSong, song, star, take, user } from "../shared/schema"
+import { restoreSet } from "../sets/store"
 import { needMember } from "../signin/guards"
 import { Drift, Meter } from "./meta"
 import { bare, initial, shownName, takeRows, TakeRow, waits, type Loaded } from "./rows"
@@ -75,6 +76,17 @@ const Trash = z
     ),
     /** `by` is null for a take removed in РЭХА. */
     takes: z.array(TakeRow.extend({ trashed_at: z.string(), by: z.string().nullable() })),
+    sets: z.array(
+      z.object({
+        id: z.number(),
+        name: z.string(),
+        /** Its songs, but those in the trash. */
+        songs: z.number(),
+        trashed_at: z.string(),
+        /** Who deleted it; null for a set deleted in РЭХА. */
+        by: z.string().nullable(),
+      })
+    ),
   })
   .openapi("Trash")
 
@@ -288,14 +300,14 @@ export const takeRoutes = newApp()
       method: "get",
       path: "/api/trash",
       description:
-        "The trash, newest first: songs deleted with their takes, and takes on their own. " +
+        "The trash, newest first: songs deleted with their takes, takes on their own, and sets. " +
         "A take that went with its song has no line of its own while the song is there.",
       middleware: [needMember] as const,
       responses: { 200: json(Trash), ...errors(401) },
     }),
     async (c) => {
       const db = database(c.env)
-      const [rows, takes, songs] = await Promise.all([
+      const [rows, takes, songs, sets, sizes] = await Promise.all([
         takeRows(c.env, isNotNull(take.trashedAt)),
         db
           .select({ uid: take.uid, withSong: take.withSong, name: user.name, email: user.email })
@@ -307,6 +319,18 @@ export const takeRoutes = newApp()
           .from(song)
           .leftJoin(user, eq(song.trashedBy, user.id))
           .where(isNotNull(song.trashedAt)),
+        db
+          .select({ id: bandSet.id, setName: bandSet.name, trashedAt: bandSet.trashedAt, name: user.name, email: user.email })
+          .from(bandSet)
+          .leftJoin(user, eq(bandSet.trashedBy, user.id))
+          .where(isNotNull(bandSet.trashedAt)),
+        db
+          .select({ id: setSong.setId, n: count() })
+          .from(setSong)
+          .innerJoin(bandSet, eq(setSong.setId, bandSet.id))
+          .innerJoin(song, eq(setSong.songId, song.id))
+          .where(and(isNotNull(bandSet.trashedAt), isNull(song.trashedAt)))
+          .groupBy(setSong.setId),
       ])
       // A take put back between the two reads is in one and not the other.
       const nobody = { withSong: false, name: null, email: null }
@@ -327,6 +351,15 @@ export const takeRoutes = newApp()
             .filter((r) => !inSong(r))
             .sort((a, b) => b.trashed_at!.localeCompare(a.trashed_at!))
             .map((r) => ({ ...bare(r), trashed_at: r.trashed_at!, by: who(of(r.uid)) })),
+          sets: sets
+            .map((s) => ({
+              id: s.id,
+              name: s.setName,
+              songs: sizes.find((n) => n.id === s.id)?.n ?? 0,
+              trashed_at: s.trashedAt!,
+              by: who(s),
+            }))
+            .sort((a, b) => b.trashed_at.localeCompare(a.trashed_at)),
         },
         200
       )
@@ -383,6 +416,23 @@ export const takeRoutes = newApp()
           .set({ trashedAt: null, trashedBy: null, withSong: false })
           .where(and(eq(take.songId, id), eq(take.withSong, true), isNotNull(take.trashedAt))),
       ])
+      return c.json({ ok: true as const }, 200)
+    }
+  )
+  .openapi(
+    createRoute({
+      method: "post",
+      path: "/api/trash/sets/{id}/restore",
+      description:
+        "**Restore** on a set: it is back in its place in the list, with its songs. A name another set took " +
+        "meanwhile is turned down, saying so. It comes back to РЭХА at its next check.",
+      middleware: [needMember] as const,
+      request: { params: z.object({ id: z.coerce.number().int().min(1) }) },
+      responses: { 200: json(Ok), ...errors(401, 404, 409) },
+    }),
+    async (c) => {
+      const refused = await restoreSet(database(c.env), c.req.valid("param").id)
+      if (refused) return fail(c, refused.code, refused.words)
       return c.json({ ok: true as const }, 200)
     }
   )

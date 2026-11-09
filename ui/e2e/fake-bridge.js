@@ -2986,6 +2986,22 @@ window.__MAKE_API__ = () => ({
     for (const t of session ? session.takes : []) t.service = null;
     return {ok:true};
   }),
+  // Check the band service (BandService.check_soon): the check is over at
+  // once, and says what it brought as every check does, through
+  // window.__NEWS__. window.__CHECK__ = {sets: [{name, songs}], text} is what
+  // the band changed there; with none it brought nothing.
+  check_band_service: track('check_band_service', async () => {
+    if (!serviceKey) return {ok:false, error:'No band service key'};
+    const brought = window.__CHECK__;
+    for (const st of (brought && brought.sets) || [])
+      sets.push({id: nextSetId++, name: st.name, songs: setSongs(st.songs)});
+    keepSets();
+    const id = ((window.__NEWS__ && window.__NEWS__.id) || 0) + 1;
+    window.__NEWS__ = brought ? {id, text: brought.text}
+      : {id, text: 'Nothing new in the band service.', see: false};
+    window.__CHECK__ = null;
+    return {ok:true};
+  }),
   set_service_auto_publish: track('set_service_auto_publish', async (on) => {
     serviceAuto = Boolean(on);
     return {ok:true, auto_publish:serviceAuto};

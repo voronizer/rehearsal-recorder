@@ -255,7 +255,7 @@ export function Props({ rows }: { rows: [string, ReactNode][] }) {
   )
 }
 
-type BackTo = { to: "/rehearsals" } | { to: "/songs" } | { to: "/songs/$id"; params: { id: string } }
+type BackTo = { to: "/rehearsals" } | { to: "/songs" } | { to: "/sets" } | { to: "/songs/$id"; params: { id: string } }
 
 /** Back to where the page belongs: “‹ Songs”. */
 export function Back({ label, ...to }: BackTo & { label: string }) {

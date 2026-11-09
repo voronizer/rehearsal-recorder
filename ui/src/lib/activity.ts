@@ -32,8 +32,10 @@ const listeners = new Set<() => void>()
 const settledListeners = new Set<(e: ActivityEntry) => void>()
 const namesListeners = new Set<(e: ActivityEntry) => void>()
 const openListeners = new Set<() => void>()
-// The news about songs this page has said. Python keeps news only while it
-// runs, so news in the first answer is this run's and is said all the same.
+const bandListeners = new Set<() => void>()
+// The news about songs and sets this page has said. Python keeps news only
+// while it runs, so news in the first answer is this run's and is said all
+// the same.
 let saidNews = 0
 
 function emit() {
@@ -51,8 +53,11 @@ function busy() {
 /** A cloud copy that finished says so in the corner; the operations that run
  *  in place say it on their own screen. A names pass that finished, or
  *  stopped part way, tells the screens holding takes' paths
- *  (useNamesSettled). */
+ *  (useNamesSettled). Whether a line of the band service with no folder
+ *  finished: a line about songs or sets, which may have changed the sets
+ *  here (onBandChanges), or a take's delete, which costs a needless read. */
 function announce(next: ActivityEntry[]) {
+  let bandLine = false
   for (const e of next) {
     const before = known.get(e.id)
     known.set(e.id, e.state)
@@ -60,6 +65,9 @@ function announce(next: ActivityEntry[]) {
     if (before === undefined && !primed) continue
     if (e.kind === "names" && (e.state === "done" || e.state === "failed")) {
       for (const l of namesListeners) l(e)
+    }
+    if (e.kind === "service" && e.folder === null && (e.state === "done" || e.state === "failed")) {
+      bandLine = true
     }
     if (e.kind !== "cloud") continue
     if (e.state === "done" || e.state === "failed") {
@@ -73,23 +81,39 @@ function announce(next: ActivityEntry[]) {
       notify({ key, kind: "error", text: `Could not copy ${name} to the cloud: ${e.error ?? "it failed"}` })
     }
   }
+  return bandLine
 }
 
-/** A check that brought the band's changes to songs says so once, with See
- *  for the list where each change is a line (sending/service_songs.py). It
- *  waits while a take records: Recording has no list for See to open. With
- *  the list open it says nothing, the lines being there to see. */
+/** A check that brought the band's changes to songs and sets says so once,
+ *  with See for the list where each change is a line
+ *  (sending/band_service.py). Check the band service with nothing new says
+ *  so too, with no See: there is no line to see. It waits while a take
+ *  records: Recording has no list for See to open. With the list open it
+ *  says nothing, the lines being there to see. Whether it was said. */
 function announceNews(next: Activity) {
   const news = next.news
-  if (!news || news.id === saidNews || next.recording) return
+  if (!news || news.id === saidNews || next.recording) return false
   saidNews = news.id
-  if (listOpen) return
+  if (listOpen) return true
   notify({
     key: "songs",
     kind: "done",
     text: news.text,
-    action: { label: "See", run: openList, undo: false },
+    ...(news.see === false ? {} : { action: { label: "See", run: openList, undo: false } }),
   })
+  return true
+}
+
+/** Calls `heard`, once a poll at most, each time the band service may have
+ *  changed the sets here: a check's notice is said, or a line about songs
+ *  or sets finishes in the list (a set renamed “Club 2” because the
+ *  service has a “Club”, say). For a screen that shows the sets. */
+export function onBandChanges(heard: () => void) {
+  ensureStarted()
+  bandListeners.add(heard)
+  return () => {
+    bandListeners.delete(heard)
+  }
 }
 
 /** Opens the list of background work, as pressing its button does. */
@@ -110,9 +134,11 @@ async function tick() {
   inFlight = true
   try {
     const next = await poll("activity")
-    announce(next.entries)
+    const bandLine = announce(next.entries)
     primed = true
-    announceNews(next)
+    if (announceNews(next) || bandLine) {
+      for (const l of bandListeners) l()
+    }
     // Most answers are the one before: waking every screen that reads the
     // store — each a whole screen, waveforms and all — for nothing, several
     // times a second while a copy runs, is what this saves.

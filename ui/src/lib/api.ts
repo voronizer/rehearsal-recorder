@@ -873,10 +873,13 @@ export type Activity = {
   entries: ActivityEntry[]
   /** A take is being recorded: cloud copies wait until it stops. */
   recording: boolean
-  /** The last check of the band service that brought changes to songs,
-   *  said once in a notice: “Ivan changed 4 songs in the band service”.
-   *  A new check with changes gives a new id (sending/service_songs.py). */
-  news?: { id: number; text: string }
+  /** The last check of the band service that brought changes to songs or
+   *  sets, said once in a notice: “Ivan changed 4 songs and 1 set in the
+   *  band service”. A new check with changes gives a new id
+   *  (sending/band_service.py). One from Check the band service that
+   *  brought none says “Nothing new in the band service.”, with `see`
+   *  false: there are no lines to see. */
+  news?: { id: number; text: string; see?: boolean }
 }
 
 /** Whether the card is still sending while the signal is checked. */
@@ -1390,6 +1393,10 @@ type PyApi = {
   set_service_key(key: string): Promise<Ok<{ address?: string; unchecked?: boolean }>>
   /** The key forgotten, and what was still to send there. */
   disconnect_service(): Promise<Ok>
+  /** Check the band service, in the menu of sets: the check of songs, sets
+   *  and takes runs at once, or right after a take that records or plays.
+   *  Its notice comes with the activity, as every check's does. */
+  check_band_service(): Promise<Ok>
   set_service_auto_publish(on: boolean): Promise<Ok<{ auto_publish?: boolean }>>
   /** Settings › Folders' switch. The service needs its key first. */
   set_send_to(which: SendTo): Promise<Ok<{ send_to?: SendTo }>>

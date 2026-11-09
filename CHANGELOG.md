@@ -5,8 +5,18 @@ versioning](https://semver.org/): until 1.0 the shape of things can still
 move, though recordings on disk are never left behind — old rehearsals keep
 opening.
 
-## Unreleased
+## 0.26.0
 
+- **Sets for a gig in the band service.** **Sets**, after **Songs**, lists
+  the band's sets, and **New set** makes one and opens it. Add the songs in
+  the order you play them: the set adds up the length of each song's best
+  take, so you see whether it fits the club's minutes, and pressing a
+  song's length lets you type your own. **Print** puts the set on A4 in big
+  letters with each song's key and tempo. **On stage** shows the set on a
+  phone one song at a time, with its notes and files. The sets are the same
+  as РЭХА's, both ways: **Check the band service**, in the menu of sets
+  beside **Start rehearsal**, asks the service at once, as РЭХА already does
+  when it starts and every hour.
 - **Stop saves the take and opens it for listening.** The screen after a
   take, with **Save take** and **Discard**, is gone: the rehearsal screen
   comes back with the take open and paused. **Play** (Space) plays it and

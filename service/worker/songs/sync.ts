@@ -1,9 +1,9 @@
-import { and, eq, isNull } from "drizzle-orm"
+import { and, eq, isNull, sql } from "drizzle-orm"
 import { firstStatus } from "../labels/match"
 import { database, type Database } from "../shared/db"
 import type { Bindings } from "../shared/env"
 import { fold, same, TAKE_NAME } from "../shared/names"
-import { song, songFile, take } from "../shared/schema"
+import { setSong, song, songFile, take } from "../shared/schema"
 import { iso } from "../shared/time"
 import type { Signature } from "../takes/meta"
 import { songBack } from "../takes/store"
@@ -74,11 +74,12 @@ export async function setMeter(db: Database, id: number, meter: SongMeter, by: s
 
 /**
  * Song `from` merged into song `into`, as РЭХА merged them: its takes move
- * across, `into` keeps its status, and its key, tempo and signature, or
- * takes the merged song's where it has none; the notes go one under the
- * other; the files go with them, copied to `into`'s place in R2, since R2
- * has no move. `from` goes. A take of `from` the band hears brings `into`
- * out of the trash.
+ * across, `into` keeps its status, and its key, tempo, signature and typed
+ * length, or takes the merged song's where it has none; the notes go one
+ * under the other; the files go with them, copied to `into`'s place in R2,
+ * since R2 has no move. In a set that has both, `into` keeps its place; in
+ * one that has only `from`, `into` takes its place. `from` goes. A take of
+ * `from` the band hears brings `into` out of the trash.
  */
 export async function mergeSong(env: Bindings, from: number, into: number) {
   const db = database(env)
@@ -99,8 +100,17 @@ export async function mergeSong(env: Bindings, from: number, into: number) {
     db.update(take).set({ songId: into }).where(eq(take.songId, from)),
     db.update(songFile).set({ songId: into }).where(eq(songFile.songId, from)),
     db
+      .delete(setSong)
+      .where(
+        and(
+          eq(setSong.songId, from),
+          sql`${setSong.setId} IN (SELECT ${setSong.setId} FROM ${setSong} WHERE ${setSong.songId} = ${into})`
+        )
+      ),
+    db.update(setSong).set({ songId: into }).where(eq(setSong.songId, from)),
+    db
       .update(song)
-      .set({ key: b.key ?? a.key, notes: [b.notes, a.notes].filter((n) => n.trim()).join("\n\n"), ...meter })
+      .set({ key: b.key ?? a.key, typedLength: b.typedLength ?? a.typedLength, notes: [b.notes, a.notes].filter((n) => n.trim()).join("\n\n"), ...meter })
       .where(eq(song.id, into)),
     db.delete(song).where(eq(song.id, from)),
     ...(live ? songBack(db, into) : []),

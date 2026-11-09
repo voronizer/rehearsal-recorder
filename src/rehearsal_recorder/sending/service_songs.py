@@ -16,7 +16,10 @@ carries its song's number. The check (when РЭХА starts, when a rehearsal
 starts, and every hour) also reads the service's songs and does here what
 the band did there: a rename, a tempo, a new song, a song deleted, a take
 moved to another song or out of its song. Each is a line in the list of
-background work, and a check that brought any shows one notice (`news`).
+background work, and a check that brought any shows one notice, which
+counts the sets' changes too (BandService._tell). A song the check removes
+here leaves its sets with it (Library.remove_song), so no set makes it
+again.
 """
 
 import sys
@@ -54,13 +57,15 @@ def _as_read(song):
     return song
 
 
-def news_text(names, songs):
+def news_text(names, songs, sets=0):
     """The notice for a check that brought changes: “Ivan changed 4 songs
-    in the band service”; two people are “Ivan and Vik”, more (or nobody
-    named) “The band”."""
+    and 1 set in the band service”, with only what changed; two people are
+    “Ivan and Vik”, more (or nobody named) “The band”."""
     who = list(dict.fromkeys(n for n in names if n))
     said = who[0] if len(who) == 1 else f"{who[0]} and {who[1]}" if len(who) == 2 else "The band"
-    return f"{said} changed {songs} {'song' if songs == 1 else 'songs'} in the band service"
+    counted = " and ".join(f"{n} {word if n == 1 else word + 's'}"
+                           for n, word in ((songs, "song"), (sets, "set")) if n)
+    return f"{said} changed {counted} in the band service"
 
 
 def _by(name, done, alone):
@@ -76,9 +81,9 @@ class ServiceSongs:
     def __init__(self, service):
         self.service = service
         self._lock = threading.Lock()
-        # The notice of the last check that brought changes: {"id", "text"}.
-        self.news = None
-        self._news_id = 0
+        # The numbers of the songs in the service's Trash at the last check:
+        # its sets leave them out while they are there (service_sets.py).
+        self.in_trash = set()
         # What was owed when a push left it owed (a merge whose song has no
         # number, say): not tried again until it changes, or the next check.
         self._stuck = None
@@ -95,10 +100,10 @@ class ServiceSongs:
         return self.service.api._lib
 
     def forget(self):
-        """A key to another service: nothing of the old one is owed or said."""
+        """A key to another service: nothing of the old one is owed."""
         with self._lock:
-            self.news = None
             self._stuck = None
+            self.in_trash = set()
 
     # ---------- what РЭХА owes the service ----------
 
@@ -236,14 +241,16 @@ class ServiceSongs:
 
     def check(self, client):
         """РЭХА's changes go, then the service's are done here: songs
-        deleted there, renamed, given a tempo, new, and takes moved. Offline
-        and Refused for the whole call are the caller's."""
+        deleted there, renamed, given a tempo, new, and takes moved.
+        [(who, ("song", number))] for each change the band made. Offline and
+        Refused for the whole call are the caller's."""
         with self._lock:
             self._stuck = None
         self._number(client)
         self._merges(client)
         listed = client.songs()
         there = {s["id"]: _as_read(s) for s in listed["songs"]}
+        self.in_trash = {i for i, s in there.items() if s.get("trashed")}
         done = []  # (who, song key) for each change the band made there
         for r in self._lib.service_songs():
             s = there.get(r["sid"])
@@ -263,16 +270,15 @@ class ServiceSongs:
         if done:
             # The metronome's row follows a song renamed or given a tempo.
             self._api._follow_next()
-            with self._lock:
-                self._news_id += 1
-                self.news = {"id": self._news_id,
-                             "text": news_text([w for w, _ in done], len({k for _, k in done}))}
         print(f"Band service: songs checked, changes from the band service: {len(done)}", file=sys.stderr)
+        return done
 
     def _gone(self, r, s, done):
         """A song in the service's Trash, or gone from it: with no takes on
-        this computer it goes here too, its backing track to the Trash; with
-        takes it stays, and a take sent again brings it back there."""
+        this computer it goes here too, its backing track to the Trash, and
+        out of every set (Library.remove_song), so the sets' next push does
+        not make it again; with takes it stays, and a take sent again brings
+        it back there."""
         if r["now"]["takes"]:
             if s is None:
                 self._lib.service_song_gone(r["song_id"])

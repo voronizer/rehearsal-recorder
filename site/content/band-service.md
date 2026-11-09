@@ -69,6 +69,14 @@ If a track recorded MIDI too, the notes an electronic kit or keyboard sends, the
 
 ![A take's page on a computer with the Download window open over РЭХА's own player: the mix, the tracks in MP3, and the tracks in FLAC, the full-quality files РЭХА recorded, with the kit's notes as MIDI](downloads)
 
+## Make the set for a gig
+
+Under **Sets**, press **New set** and add the gig's songs in the order you play them. The set adds up the length of each song's best take, so you see whether it fits the club's minutes. If you play a song shorter on stage, press its length and type yours.
+
+The same sets are in РЭХА, to rehearse them in order: a set changed on one side is on the other too. **Print** puts the list on paper in big letters, to tape to the floor by your feet.
+
+![The club set on Ivan's computer: nine songs in order with their keys, tempos and lengths, 31:15 in all, and Kryły, which has no length yet](sets)
+
 ## How to start
 
 1. Whoever set up the band's service adds your email address. A letter comes asking you to confirm it: press the button in it. You do this once.
