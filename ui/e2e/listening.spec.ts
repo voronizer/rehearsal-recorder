@@ -349,6 +349,20 @@ test("the trash on the take just stopped gives its number back", async ({ page }
   await expect(tab(page, "Viasna", 2)).toBeVisible()
 })
 
+test("the trash on the first take of a song picks that song again", async ({ page }) => {
+  await openApp(page, { before: "window.__TONIGHT__ = [{name: 'Viasna', duration_sec: 200}];" })
+  await startRehearsal(page, 2)
+  const field = page.getByRole("textbox", { name: "Next take" })
+  await field.fill("Sonca")
+  await page.keyboard.press("Enter")
+  await recordTake(page, 2)
+  await expect(tab(page, "Sonca", 1)).toBeVisible()
+  await strip(page).getByRole("button", { name: /^Delete take/ }).click()
+  await expect(recordButton(page, 3)).toBeVisible()
+  // Not Viasna, the song of the take before it.
+  await expect(field).toHaveValue("Sonca")
+})
+
 test("the controller's Stop saves the take and opens it, paused", async ({ page }) => {
   await openApp(page, { before: "window.__CONTROLLER_ENABLED__ = true;" })
   await startRehearsal(page)

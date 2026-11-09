@@ -27,6 +27,7 @@ let takeCounter = 0;
 // nowhere until it is let go. Held in memory only, as Python holds it.
 let heldTake = null;
 let nextName = null;            // api.set_next_take_name, until a take is kept
+let nameUsed = null;            // the name that take used up, for its trash to give back
 let drafts = window.__DRAFTS__ || [];
 let cloudDir = window.__CLOUD_DIR__ || null;
 let cloudFormat = window.__CLOUD_FORMAT__ || 'wav';
@@ -2029,6 +2030,7 @@ window.__MAKE_API__ = () => ({
     midiTake = null;
     takeCounter = tonight.length;
     nextName = null;
+    nameUsed = null;
     return {ok:true, folder:session.folder};
   }),
   // What session_state would say of the takes on their way, without
@@ -2226,7 +2228,7 @@ window.__MAKE_API__ = () => ({
       Object.assign(take, {notes: notes || [],
         notes_missing: notesOfTake(session.tracks, tracks, (notes || []).map(x => x.name)).notes_missing});
     session.takes.push(take);
-    if (n === takeCounter) nextName = null;
+    if (n === takeCounter) { nameUsed = {n, name: nextName}; nextName = null; }
     metroFollow();
     // Where it goes, as Python's modules decide (sending/): the band
     // service's automatic sending leaves a false start behind.
@@ -2605,9 +2607,13 @@ window.__MAKE_API__ = () => ({
   // Out of the live rehearsal too, as Python takes it out of the library.
   // The held take ends its hold, and its number comes back: the mock counts
   // goes from the takes there are, so the next take has it again (Python
-  // gives back only the held take's).
+  // gives back only the held take's), with the name picked before it
+  // (Api._give_name_back).
   delete_take: track('delete_take', async (folder, n) => {
-    if (session && folder === session.folder && n === heldTake) heldTake = null;
+    if (session && folder === session.folder && n === heldTake) {
+      heldTake = null;
+      if (!nextName && nameUsed && nameUsed.n === n) nextName = nameUsed.name;
+    }
     const ended = endHeld(folder, [n]);
     const key = `${folder}#${n}`;
     deleted.add(key);

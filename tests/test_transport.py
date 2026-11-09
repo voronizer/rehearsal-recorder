@@ -373,6 +373,23 @@ def numbers():
             assert gone["ok"] and api._lib.next_unnamed_go() == plain["go"]
             assert api.end_trash(gone["undo"])["ok"]
 
+            # The title picked before it is picked again: a false start of a
+            # new song is followed by that song, not by the one before it.
+            before = api.session_state()["next_take_name"]
+            api.set_next_take_name("Kupalle")
+            fresh = record()
+            assert fresh["song"] == "Kupalle" and api._session.get("next_name") is None
+            gone = api.delete_take(here, fresh["take_number"])
+            assert gone["ok"] and api.session_state()["next_take_name"] == "Kupalle", before
+            assert api.session_state()["next_take_go"] == fresh["go"]
+            assert api.end_trash(gone["undo"])["ok"]
+            # A title picked after the take stays.
+            fresh = record()
+            api.set_next_take_name("Palyn")
+            gone = api.delete_take(here, fresh["take_number"])
+            assert gone["ok"] and api.session_state()["next_take_name"] == "Palyn"
+            assert api.end_trash(gone["undo"])["ok"]
+
             # Clear false starts gives none back.
             api.set_next_take_name("Take")
             cleared = record()

@@ -2754,11 +2754,12 @@ class Api:
         """
         Names the take recorded next, picked on the rehearsal screen before
         it is: the band has moved on to another song, and the recording
-        screen should already say which, and the review screen have nothing
-        to retype. Blank goes back to the name it would have had anyway.
+        screen should already say which. Blank goes back to the name it
+        would have had anyway.
 
-        It holds until a take is kept, not merely recorded: a take thrown
-        away is usually played again straight after, as the same song.
+        It holds until a take is saved. The trash on the take held after
+        Stop picks it again (_give_name_back): a take thrown away is usually
+        played again straight after, as the same song.
         """
         if self._session is None:
             return {"ok": False, "error": "No rehearsal in progress"}
@@ -3534,9 +3535,10 @@ class Api:
         if kept is None:
             return {"ok": False, "error": "Rehearsal not found", "ended": ended}
         # The name picked for this take is used up; the next one follows on
-        # from it. A draft rescued from an earlier take leaves it alone.
+        # from it. A draft rescued from an earlier take leaves it alone. It is
+        # kept aside, for the trash on this take to give back (delete_take).
         if take_number == s["take_counter"]:
-            s.pop("next_name", None)
+            s["name_used"] = (take_number, s.pop("next_name", None))
         self._meters.pop(self._draft_key(temp_dir), None)
 
         shutil.rmtree(temp_dir, ignore_errors=True)
@@ -5947,6 +5949,7 @@ class Api:
             if was_held:
                 self._release_take(folder, take_number)
                 self._give_go_back(held["undo"], take)
+                self._give_name_back(folder, take_number)
             return {"ok": True, "undo": held["undo"], "takes_left": held["takes_left"],
                     "ended": held["ended"]}
 
@@ -5974,6 +5977,19 @@ class Api:
             # Its Undo then gives it the next go if its own is taken, as it
             # does for any take.
             log.error("removal %s: could not record that its number was given back: %s", token, e)
+
+    def _give_name_back(self, folder, take_number):
+        """The title picked for the next take before the held take was
+        recorded is picked again once that take is deleted, as it stayed
+        picked after Discard on the screen after a take: a false start of a
+        new song is followed by that song, not the one before it. A title
+        picked since stays."""
+        s = self._session
+        if s is None or not _same_folder(s["folder"], folder) or s.get("next_name"):
+            return
+        number, name = s.get("name_used") or (None, None)
+        if number == take_number and name:
+            s["next_name"] = name
 
     @_follows
     def delete_takes(self, folder, take_numbers):
