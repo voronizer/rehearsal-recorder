@@ -1,6 +1,6 @@
 // The link picture's page: what scripts/og.mjs photographs into og.png. The
 // words are the page's own, from site/content/hero.md, and the app is the
-// same frame the page's top shows. No analytics: nobody visits it.
+// page's top with a take playing. No analytics: nobody visits it.
 import { StrictMode } from "react"
 import { createRoot } from "react-dom/client"
 import "./og.css"
@@ -20,7 +20,7 @@ function Og() {
         <p className="og-eyebrow">{hero.eyebrow}</p>
       </div>
       <div className="og-shot">
-        <iframe src="/stage.html#hero" title="РЭХА playing a take" tabIndex={-1} />
+        <iframe src="/stage.html#playing" title="РЭХА playing a take" tabIndex={-1} />
       </div>
     </>
   )

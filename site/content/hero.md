@@ -13,8 +13,8 @@ Open source · Nothing else to install
 
 ## caption
 
-**This is the app itself.** Drag across the timeline to repeat a part. Silent
-here.
+**This is the app itself.** Press Record, then Stop, and the take opens.
+Silent here.
 
 ## caption on a phone
 

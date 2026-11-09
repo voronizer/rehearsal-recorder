@@ -13,14 +13,14 @@ test("og.html shows the page's words beside the app", async ({ page }) => {
     .poll(
       () =>
         page
-          .locator('iframe[src$="#hero"]')
+          .locator('iframe[src$="#playing"]')
           .contentFrame()
           .locator("html")
           .getAttribute("data-scene")
           .catch(() => null),
       { timeout: 20_000 }
     )
-    .toBe("hero")
+    .toBe("playing")
   await expect(page.locator('meta[name="robots"]')).toHaveAttribute("content", "noindex")
   await expect(page.locator("html")).toHaveAttribute("data-og", "ready")
 })

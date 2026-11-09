@@ -1,7 +1,9 @@
 // A frame of the site: one live piece of the app, on the fake Python side.
-// #hero is the rehearsal screen, playing; #story goes through the steps the
-// page tells it to, and #story-<step> or #story-<step>.<beat> starts it
-// walking to that place. See ../frame.ts for what the page says.
+// #hero is the rehearsal screen before a take, for the visitor to record
+// one; #playing the same screen with a take playing, for the link picture;
+// #story goes through the steps the page tells it to, and #story-<step> or
+// #story-<step>.<beat> starts it walking to that place. See ../frame.ts for
+// what the page says.
 import type { ReactNode } from "react"
 import { createRoot } from "react-dom/client"
 import "./stage.css"
@@ -13,7 +15,8 @@ import { loadLabels } from "@/lib/labels"
 import { isToStage, type FromStage } from "../frame"
 import { createHold, type HoldWindow } from "./hold"
 import { installDemo } from "./demo"
-import { Hero, playTheBridge, startHeroRehearsal } from "./Hero"
+import { waitFor } from "./drive"
+import { Hero, playTheBridge, RehearsalScreen, startHeroRehearsal, startPlayingRehearsal } from "./Hero"
 import { Story, startStory, type Target } from "./Story"
 
 // First, before anything sets a timer: the fake's own ones are held too.
@@ -57,6 +60,11 @@ async function boot() {
   const hash = location.hash.slice(1)
   if (hash === "hero") {
     app.render(screen(<Hero initial={await startHeroRehearsal()} />))
+    void waitFor(() => document.getElementById("next-take-name"))
+      .then(() => (root.dataset.scene = "hero"))
+      .catch((e) => console.warn(e))
+  } else if (hash === "playing") {
+    app.render(screen(<RehearsalScreen initial={await startPlayingRehearsal()} />))
     void playTheBridge().catch((e) => console.warn(e))
   } else if (hash === "story" || hash.startsWith("story-")) {
     app.render(screen(<Story />))

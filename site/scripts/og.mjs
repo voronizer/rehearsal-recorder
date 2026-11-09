@@ -21,8 +21,8 @@ try {
   browser = await chromium.launch()
   const page = await browser.newPage({ viewport: { width: 1200, height: 630 } })
   await page.goto(`http://127.0.0.1:${port}/og.html`)
-  const app = page.frameLocator('iframe[src$="#hero"]')
-  await app.locator('html[data-scene="hero"]').waitFor({ state: "attached", timeout: 30_000 })
+  const app = page.frameLocator('iframe[src$="#playing"]')
+  await app.locator('html[data-scene="playing"]').waitFor({ state: "attached", timeout: 30_000 })
   await app.locator("html").evaluate(() => document.fonts.ready)
   // The page says whether its font came (src/og/main.tsx).
   await page.locator("html[data-og]").waitFor({ state: "attached", timeout: 30_000 })

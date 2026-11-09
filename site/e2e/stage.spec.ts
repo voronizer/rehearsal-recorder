@@ -23,9 +23,44 @@ async function clock(page: Page): Promise<number> {
   return m * 60 + s
 }
 
-test("the hero plays the bridge of Pałyn 2 on repeat", async ({ page }) => {
+// The hero, for the visitor to use: Record, then Stop, and the take opens to
+// listen to; Close take is back on the rehearsal, Sonca the next take again.
+test("the hero records a take, and Stop opens it", async ({ page }) => {
   await page.goto("/stage#hero")
   await expect.poll(() => scene(page), { timeout: 20_000 }).toBe("hero")
+  await expect(page.locator("#next-take-name")).toHaveValue(/^Sonca/)
+  await page.getByRole("button", { name: /^Record/ }).click()
+  await expect(page.locator("h1")).toContainText(/Sonca\s*#1/)
+  await expect(page.getByRole("timer", { name: "Take time" })).toHaveText(/0:01/, { timeout: 5_000 })
+  await page.getByRole("button", { name: /^Stop/ }).click()
+  await expect(page.getByRole("button", { name: /^Close take/ })).toBeVisible()
+  await expect(
+    page.getByRole("toolbar", { name: "Transport" }).getByRole("button", { name: "Play", exact: true })
+  ).toBeVisible()
+  await page.getByRole("button", { name: /^Close take/ }).click()
+  await expect(page.getByRole("button", { name: /^Record/ })).toBeVisible()
+  await expect(page.locator("#next-take-name")).toHaveValue(/^Sonca/)
+})
+
+test("held, the hero's take stands still, and goes on when let go", async ({ page }) => {
+  await page.goto("/stage#hero")
+  await expect.poll(() => scene(page), { timeout: 20_000 }).toBe("hero")
+  await page.getByRole("button", { name: /^Record/ }).click()
+  const time = page.getByRole("timer", { name: "Take time" })
+  await expect(time).toHaveText(/0:01/, { timeout: 5_000 })
+  await post(page, { type: "rr-hold", hold: true })
+  await expect.poll(() => page.evaluate(() => document.documentElement.dataset.held)).toBe("true")
+  const at = await time.innerText()
+  await page.waitForTimeout(2_000)
+  expect(await time.innerText()).toBe(at)
+  await post(page, { type: "rr-hold", hold: false })
+  await expect.poll(() => time.innerText(), { timeout: 3_000 }).not.toBe(at)
+})
+
+// The link picture's app (scripts/og.mjs).
+test("the link picture's take plays its bridge on repeat", async ({ page }) => {
+  await page.goto("/stage#playing")
+  await expect.poll(() => scene(page), { timeout: 20_000 }).toBe("playing")
   // The player's Pause: the footer has one too while a take is open.
   await expect(
     page.getByRole("toolbar", { name: "Transport" }).getByRole("button", { name: "Pause" })
@@ -42,18 +77,6 @@ test("the hero plays the bridge of Pałyn 2 on repeat", async ({ page }) => {
     expect(at).toBeLessThanOrEqual(Math.ceil(song.to) + 1)
     await page.waitForTimeout(400)
   }
-})
-
-test("held, the hero stands still, and goes on when let go", async ({ page }) => {
-  await page.goto("/stage#hero")
-  await expect.poll(() => scene(page), { timeout: 20_000 }).toBe("hero")
-  await post(page, { type: "rr-hold", hold: true })
-  await expect.poll(() => page.evaluate(() => document.documentElement.dataset.held)).toBe("true")
-  const at = await clock(page)
-  await page.waitForTimeout(1_500)
-  expect(await clock(page)).toBe(at)
-  await post(page, { type: "rr-hold", hold: false })
-  await expect.poll(() => clock(page), { timeout: 2_000 }).not.toBe(at)
 })
 
 test("the story goes through its four steps", async ({ page }) => {
