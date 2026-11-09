@@ -1266,8 +1266,9 @@ type PyApi = {
     notes?: NotesFile[]
   ): Promise<Ok<{ take?: Take; ended?: string[] }>>
   /** Ends the hold on the take the last Stop saved (`held_take`): it goes
-   *  now, as the setting or its box says. Safe with nothing held. */
-  release_take(): Promise<Ok>
+   *  now, as the setting or its box says. Only if that take is the one
+   *  named; safe with nothing held. */
+  release_take(folder: string, takeNumber: number): Promise<Ok>
   /**
    * Keep only [startSec, endSec) of a saved take. The take as it was waits
    * for the crop's Undo (`undo`, as a removal's). `error` can be set even

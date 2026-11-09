@@ -349,8 +349,8 @@ The take is named as the **Next take** field said when you pressed
 the song's other takes tonight with their lengths and stars. To change it,
 press the pencil on its line (see [Names and songs](#names-and-songs)).
 
-A bad take goes in the trash on its line. Thrown away before it was sent,
-it gives its number back: after a bad “Viasna #2”, the next take is
+A bad take goes in the trash on its line. Thrown away while it is still
+open after **Stop**, it gives its number back: after a bad “Viasna #2”, the next take is
 “Viasna #2” again. **Undo** brings the take back (see [Undo](#undo)).
 
 The bottom left says whether this take goes to the band: “Send to the band

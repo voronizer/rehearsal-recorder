@@ -1567,3 +1567,20 @@ test("stripes sit on the demo band's beats", async ({ page }) => {
   // And every stripe in view on a hit: the count-in's sticks, then the one.
   for (const x of stripes) expect(Math.min(...onsets.map((t) => Math.abs(xOf(t) - x)))).toBeLessThanOrEqual(2)
 })
+
+test("opening a take stops the click between takes, and closing it shows it stopped", async ({
+  page,
+}) => {
+  await openEvening(page)
+  await settled(page)
+  await nameNext(page, "Pałyn")
+  await play(page).click()
+  await expect(stopClick(page)).toBeVisible()
+  const stops = await callCount(page, "metronome_stop")
+  await takeButton(page.locator("[aria-label='Rehearsal overview']"), "Pałyn #1").click()
+  await expect(closeTakeButton(page)).toBeVisible()
+  // No click while listening (D4), though the row only waits unseen.
+  await expect.poll(() => callCount(page, "metronome_stop")).toBe(stops + 1)
+  await closeTakeButton(page).click()
+  await expect(play(page)).toBeVisible()
+})

@@ -36,8 +36,9 @@ Laptop Stop sends `stop_keep`: the take is saved and opens for listening. The
 MIDI Record/Stop command sends `record_stop`, which stops and keeps an active
 take the same way. `stop_review` is another name for `stop_keep`, kept so a
 controller or script that sends it still works. The take a Stop saved is held
-from sending (the band service, the cloud folder) until it is closed, the next
-take starts, the rehearsal ends, `release_take` is called, or 10 minutes pass.
+from sending (the band service, the cloud folder) until the screen closes it,
+the next take starts, the rehearsal ends, or 10 minutes pass. Closing it is
+the window's own call (`release_take`), not a control command.
 
 ## Parameters
 

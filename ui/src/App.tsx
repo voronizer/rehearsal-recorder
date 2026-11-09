@@ -79,17 +79,26 @@ export function App() {
 
   // A take Stop could not save: why, and Unsaved takes, where Recover saves
   // it. With none listed, the rehearsal screen.
+  // The screen's Stop and the controller watcher both see a save that
+  // failed (the screen's Stop is a control command too): one handles it.
+  const failing = useRef(false)
   const saveFailed = useCallback(
     async (error: string) => {
-      notify({ key: "save-take", kind: "warning", text: error })
-      let drafts: Draft[] = []
+      if (failing.current) return
+      failing.current = true
       try {
-        drafts = await api().list_drafts()
-        await refreshSession()
-      } catch {
-        // Said on the error bar already (api).
+        notify({ key: "save-take", kind: "warning", text: error })
+        let drafts: Draft[] = []
+        try {
+          drafts = await api().list_drafts()
+          await refreshSession()
+        } catch {
+          // Said on the error bar already (api).
+        }
+        setScreen(drafts.length ? { name: "drafts", drafts } : { name: "rehearsal" })
+      } finally {
+        failing.current = false
       }
-      setScreen(drafts.length ? { name: "drafts", drafts } : { name: "rehearsal" })
     },
     [refreshSession]
   )

@@ -343,8 +343,7 @@ ceiling and the split between two playback modes.
   screen.
 - The mix is made in Python too, on the card's thread, a block every 21 ms
   or so, and Python runs one thread at a time. A long loop in Python beside
-  it made the take click: the drift count, which starts as the review screen
-  opens a take. So Python hands its thread over every 1 ms, not its own 5
+  it made the take click: the drift count, which starts as a take opens. So Python hands its thread over every 1 ms, not its own 5
   (`SWITCH_INTERVAL_SEC` in `app.py`), and a take's drift is counted in a
   second process (`count_apart` in `audio/drift.py`). It starts as the app
   opens and is kept: Windows shows a busy cursor for two seconds each time a
@@ -365,11 +364,6 @@ than that is detail nobody looks for, and the gesture turns twitchy.
 
 **Nothing is open when a rehearsal opens.** No audio file is read until
 someone picks a take; until then the space shows the overview.
-
-**Marks on a take that has no folder yet.** The review screen offers
-marks, but the take is still a draft with nowhere on disk to write them.
-They are held in the screen and passed along when the take is saved, and
-dropped with it when it is discarded.
 
 **Crop is refused** for a region under a second, which is far more likely a
 slip of the mouse than an intention, and for one covering the whole take.

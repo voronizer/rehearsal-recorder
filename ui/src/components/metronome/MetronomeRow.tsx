@@ -228,7 +228,8 @@ type Answer = { ok: boolean; error?: string }
  * change, and its ▶ plays the next take's song's file alone. That stops at
  * ■, at Record, when another song is picked (Python sees to those three)
  * and when the screen is left. `name` is the next take's name as typed.
- * Without `keys`, T taps nothing: the row waits unseen while a take is open.
+ * Without `keys`, the row waits unseen while a take is open: T taps
+ * nothing, and the click and the ▶ stop, as they do with the screen (D4).
  */
 export function MetronomeRow({ name = "", keys = true }: { name?: string; keys?: boolean }) {
   const metronome = useMetronome()
@@ -282,6 +283,14 @@ export function MetronomeRow({ name = "", keys = true }: { name?: string; keys?:
     },
     []
   )
+  useEffect(() => {
+    if (keys) return
+    const stops = [
+      phase.current === "preview" && api().metronome_stop(),
+      backingPlays.current && api().backing_stop(),
+    ].filter((stop) => stop !== false)
+    if (stops.length) void Promise.allSettled(stops).then(() => refresh())
+  }, [keys, refresh])
 
   /** Sends a change, says a refusal, and asks Python again. */
   const send = async (call: () => Promise<Answer>, fallback: string) => {

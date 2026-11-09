@@ -2239,14 +2239,16 @@ window.__MAKE_API__ = () => ({
     } else cloudQueue = {...cloudQueue, [n]: 'queued'};
     return {ok:true, take, ended};
   }),
-  // The take the last Stop saved goes now, whatever is held.
+  // The take the last Stop saved goes now, if it is the one named (Python
+  // lets whatever is held go when none is).
   // Its cloud job runs once the hold ends, and here it is done at once: the
   // screen's next sending_queue finds the queue changed and reads it again.
-  release_take: track('release_take', async () => {
-    if (heldTake !== null) {
-      const {[heldTake]: _done, ...left} = cloudQueue;
-      cloudQueue = left;
-    }
+  release_take: track('release_take', async (folder, n) => {
+    if (heldTake === null) return {ok:true};
+    if (folder !== undefined && !(session && folder === session.folder && n === heldTake))
+      return {ok:true};
+    const {[heldTake]: _done, ...left} = cloudQueue;
+    cloudQueue = left;
     heldTake = null;
     return {ok:true};
   }),

@@ -119,18 +119,22 @@ export function Rehearsal({
   // the screen left for a take or another screen), Python lets it go, as the
   // setting or its box says. Python ends the hold itself at Record, at
   // Finish and after 10 minutes.
-  const holding = useRef<number | null>(null)
+  // Named, so a take held after it is not let go in its place.
+  const holding = useRef<{ folder: string; take: number } | null>(null)
   const openNumber = selected?.take_number ?? null
   useEffect(() => {
-    if (openNumber !== null && openNumber === session.held_take) holding.current = openNumber
-    else if (holding.current !== null && openNumber !== holding.current) {
+    if (openNumber !== null && openNumber === session.held_take)
+      holding.current = { folder: session.folder, take: openNumber }
+    else if (holding.current !== null && openNumber !== holding.current.take) {
+      const { folder, take } = holding.current
       holding.current = null
-      void api().release_take()
+      void api().release_take(folder, take)
     }
-  }, [openNumber, session.held_take])
+  }, [openNumber, session.held_take, session.folder])
   useEffect(
     () => () => {
-      if (holding.current !== null) void api().release_take()
+      if (holding.current !== null)
+        void api().release_take(holding.current.folder, holding.current.take)
     },
     []
   )
@@ -937,8 +941,8 @@ function TakeMarks({
     >
       <h2 className="flex min-h-8 items-center px-2 text-sm font-semibold">Marks</h2>
       <ul className="mt-2 flex flex-col">
-        {marks.map((m) => (
-          <li key={m.at} className="group flex items-center gap-1">
+        {marks.map((m, i) => (
+          <li key={`${m.at}:${i}`} className="group flex items-center gap-1">
             <Button
               type="button"
               variant="ghost"
