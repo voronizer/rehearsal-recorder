@@ -58,7 +58,8 @@ export const rehaSetRoutes = newApp()
       path: "/api/reha/sets/{id}",
       description:
         "A change made in РЭХА: the name, the songs in their new order, or both. A name another set here has is " +
-        "turned down whole, saying so: РЭХА then gives its set another name and sends that.",
+        "turned down whole, saying so: РЭХА then gives its set another name and sends that. A set in the trash is " +
+        "not found: РЭХА's change came after the band's delete, so РЭХА makes the set again and its change wins.",
       middleware: [needKey] as const,
       security: rehaKey,
       request: { headers: RehaHeaders, params: Id, body: body(z.object({ name: SetName.optional(), songs: SetSongs.optional() })) },
@@ -67,7 +68,7 @@ export const rehaSetRoutes = newApp()
     async (c) => {
       const db = database(c.env)
       const s = await findSet(db, c.req.valid("param").id)
-      if (!s) return fail(c, 404, NO_SET)
+      if (!s || s.trashedAt) return fail(c, 404, NO_SET)
       const refused = await changeSet(db, s, c.req.valid("json"), null)
       if (refused) return fail(c, refused.code, refused.words)
       return c.json({ ok: true as const }, 200)

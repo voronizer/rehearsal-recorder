@@ -270,10 +270,10 @@ class FakeBandService:
     def _change_set(self, s, name, songs, by):
         """As store.ts changeSet: a rename, new songs or both, by `by`; who
         changed it last stays when nothing changed. A name another set in
-        use has is turned down whole, unless the set is in the Trash: the
-        service's words for that, or None."""
+        use has is turned down whole: the service's words for that, or
+        None. Never a set in the Trash: the route answers 404 for one."""
         renamed = name is not None and name != s["name"]
-        if renamed and not s["trashed"]:
+        if renamed:
             other = self._set_in_use(name, but=s["id"])
             if other is not None:
                 return f"There is already a set called {other['name']}."
@@ -580,7 +580,8 @@ class FakeBandService:
                 self.order.append(f"set {data['name']}")
                 return 200, {"id": sid}
             s = self.sets.get(int(rest[0])) if len(rest) == 1 and rest[0].isdigit() else None
-            if method in ("PATCH", "DELETE") and s is None:
+            if (method in ("PATCH", "DELETE") and s is None) or (method == "PATCH" and s["trashed"]):
+                # A change to a set in the Trash: РЭХА's came later, so it makes the set again.
                 return 404, {"error": "No such set"}
             if method == "PATCH":
                 refused = self._change_set(s, data.get("name"), data.get("songs"), None)

@@ -305,6 +305,17 @@ test("reha: the list says who changed what by name, and what is in the trash", a
   expect((await answer(r.get("/api/reha/sets"))).body.sets[0]).toMatchObject({ songs: [b], made_by: "Ivan", changed_by: null })
 })
 
+test("reha: a change to a set in the Trash is not found, so РЭХА makes the set again", async () => {
+  const { alex, ivan, r, a, b } = await band()
+  const gig = (await answer<{ id: number }>(r.post("/api/reha/sets", { name: "Club gig", songs: [a] }))).body.id
+  expect((await del(`/api/sets/${gig}`, ivan)).status).toBe(200)
+  expect((await r.patch(`/api/reha/sets/${gig}`, { songs: [a, b] })).status).toBe(404)
+  // The name is free while the old one is in the Trash.
+  const again = (await answer<{ id: number }>(r.post("/api/reha/sets", { name: "Club gig", songs: [a, b] }))).body.id
+  expect(again).not.toBe(gig)
+  expect(await sets(alex)).toEqual([{ id: again, name: "Club gig", songs: [a, b] }])
+})
+
 test("reha: an unknown song number is turned down", async () => {
   const { alex, r, a } = await band()
   const unknown = { status: 400, body: { error: "No such song: 9999" } }

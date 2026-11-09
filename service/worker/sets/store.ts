@@ -138,8 +138,8 @@ export async function makeBandSet(db: Database, name: string, by: string): Promi
 /**
  * Set `s` renamed, given new songs, or both; `by` the member, null for
  * РЭХА. Turned down whole when either part cannot be: a song the service
- * does not have, or a name another set in use has. A set in the trash
- * takes the change and stays there; its name is looked at on Restore.
+ * does not have, or a name another set in use has. Neither route sends a
+ * set in the trash here: both answer that there is no such set.
  */
 export async function changeSet(
   db: Database,
@@ -150,7 +150,7 @@ export async function changeSet(
   const refused = change.songs ? await songsRefused(db, change.songs) : null
   if (refused) return refused
   const renamed = change.name !== undefined && change.name !== s.name
-  const clash = renamed && s.trashedAt === null ? await inUse(db, change.name!, s.id) : undefined
+  const clash = renamed ? await inUse(db, change.name!, s.id) : undefined
   if (clash) return { code: 409, words: taken(clash.name) }
   const songs = change.songs ? await newSongs(db, s.id, change.songs) : null
   if (!renamed && !songs) return null

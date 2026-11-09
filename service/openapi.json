@@ -3659,7 +3659,7 @@
     },
     "/api/reha/sets/{id}": {
       "patch": {
-        "description": "A change made in РЭХА: the name, the songs in their new order, or both. A name another set here has is turned down whole, saying so: РЭХА then gives its set another name and sends that.",
+        "description": "A change made in РЭХА: the name, the songs in their new order, or both. A name another set here has is turned down whole, saying so: РЭХА then gives its set another name and sends that. A set in the trash is not found: РЭХА's change came after the band's delete, so РЭХА makes the set again and its change wins.",
         "security": [
           {
             "rehaKey": []

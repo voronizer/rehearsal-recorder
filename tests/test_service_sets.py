@@ -429,16 +429,27 @@ def run(tmp, fake):
        fake.songs_of_set("Wedding gig, final") == ["Dym nad vadoj", "Ahoń i vada"]
        and row("Wedding gig, final")["sid"] == fake.set_called("Wedding gig, final")["id"] != old
        and fake.sets[old]["trashed"])
-    try:
-        fake.restore_set_in_service(old)
-        refused = False
-    except ValueError:
-        refused = True
-    ok("Restore there is turned down while a set in use has its name", refused and fake.sets[old]["trashed"])
+    ok("the one in the Trash keeps the band's last version, to Restore if someone wants it",
+       fake.sets[old]["name"] == "Wedding gig"
+       and [fake.songs[x]["title"] for x in fake.sets[old]["songs"]] == ["Dym nad vadoj"])
     calls = fake.count("set ") + fake.count("change set")
     check()
     ok("nothing loops", fake.count("set ") + fake.count("change set") == calls
        and here("Wedding gig, final") == ["Dym nad vadoj", "Ahoń i vada"])
+    # The same when the change goes at once, between two checks: the
+    # service does not take a change to a set in its Trash.
+    api.add_set("Encore", ["Dym nad vadoj"])
+    drain()
+    old = row("Encore")["sid"]
+    fake.delete_set_in_service("Encore", by="Ira")
+    api.update_set(set_id("Encore"), "Encore", ["Dym nad vadoj", "Ahoń i vada"])
+    drain()
+    check()
+    ok("changed here after the band deleted it, between checks: it stays here and lives again there",
+       here("Encore") == ["Dym nad vadoj", "Ahoń i vada"]
+       and fake.songs_of_set("Encore") == ["Dym nad vadoj", "Ahoń i vada"]
+       and row("Encore")["sid"] == fake.set_called("Encore")["id"] != old
+       and fake.sets[old]["trashed"])
 
     print("\n[16] test_set_changed_here_during_a_check_is_kept")
     api.add_set("Tour", ["Dym nad vadoj", "Ahoń i vada"])
