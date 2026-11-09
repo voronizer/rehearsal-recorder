@@ -6,8 +6,8 @@ import { clock, count } from "../shell/words"
   the same in every set, and stays in the service.
 */
 
-/** What the service takes for a typed length, in whole seconds. */
-const LONGEST = 3600
+/** What the service takes for a typed length, in whole seconds: 59:59, as the clock shows an hour as 1:00:00. */
+const LONGEST = 3599
 
 /** What a length is read from: a SongItem, or only these parts of one. */
 type Timed = { title: string; length: number | null; typed_length: number | null }

@@ -101,7 +101,7 @@ list.
   turned down, saying so.
 - `GET /api/trash` lists sets too.
 - `PATCH /api/songs/{id}` also takes `typed_length`, whole seconds from 1
-  to 3600, or null to go back to the best take's. `SongItem` gets
+  to 3599 (59:59), or null to go back to the best take's. `SongItem` gets
   `typed_length`.
 
 ### What РЭХА calls

@@ -179,13 +179,13 @@ test("a typed length is kept on the song and null goes back", async () => {
   expect(await answer(patch(`/api/songs/${a}`, { typed_length: 245 }, ivan))).toEqual({ status: 200, body: { ok: true } })
   expect(await songItem(alex, a)).toMatchObject({ typed_length: 245, length: null })
   expect((await read(`/api/songs/${a}`, alex)).song).toMatchObject({ typed_length: 245 })
-  for (const bad of [0, 3601, 12.5, -60, "4:05"])
+  for (const bad of [0, 3600, 12.5, -60, "4:05"])
     expect(await answer(patch(`/api/songs/${a}`, { typed_length: bad }, ivan))).toEqual({
       status: 400,
-      body: { error: "A length is a whole number of seconds, from 1 to 3600" },
+      body: { error: "A length is a whole number of seconds, from 1 to 3599" },
     })
-  expect((await patch(`/api/songs/${a}`, { typed_length: 3600 }, ivan)).status).toBe(200)
-  expect(await songItem(alex, a)).toMatchObject({ typed_length: 3600 })
+  expect((await patch(`/api/songs/${a}`, { typed_length: 3599 }, ivan)).status).toBe(200)
+  expect(await songItem(alex, a)).toMatchObject({ typed_length: 3599 })
 
   expect((await patch(`/api/songs/${a}`, { typed_length: null }, ivan)).status).toBe(200)
   expect(await songItem(alex, a)).toMatchObject({ typed_length: null })
@@ -326,6 +326,17 @@ test("a merge keeps the target in its place and drops the merged song", async ()
   const gig = await makeSet(alex, "Club gig", [a, b, c])
   expect((await r.post(`/api/reha/songs/${a}/merge`, { into: c })).status).toBe(200)
   expect(await sets(alex)).toEqual([{ id: gig, name: "Club gig", songs: [b, c] }])
+})
+
+test("a merge keeps the merged song's typed length when the target has none", async () => {
+  const { alex, ivan, r, a, b, c } = await band()
+  expect((await patch(`/api/songs/${a}`, { typed_length: 245 }, ivan)).status).toBe(200)
+  expect((await r.post(`/api/reha/songs/${a}/merge`, { into: c })).status).toBe(200)
+  expect(await songItem(alex, c)).toMatchObject({ typed_length: 245 })
+  // The target's own typed length stays.
+  expect((await patch(`/api/songs/${b}`, { typed_length: 200 }, ivan)).status).toBe(200)
+  expect((await r.post(`/api/reha/songs/${c}/merge`, { into: b })).status).toBe(200)
+  expect(await songItem(alex, b)).toMatchObject({ typed_length: 200 })
 })
 
 test("a merge puts the target in the merged song's place when the set lacks it", async () => {

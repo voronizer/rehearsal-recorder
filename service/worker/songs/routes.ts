@@ -21,7 +21,7 @@ const TITLE = "A song's title is 1 to 100 characters"
 const STATUS = "A status's name is 1 to 40 characters"
 const NO_SONG = "No such song"
 const NO_STATUS = "No such status"
-const LENGTH = "A length is a whole number of seconds, from 1 to 3600"
+const LENGTH = "A length is a whole number of seconds, from 1 to 3599"
 
 const Id = z.object({ id: z.coerce.number().int().min(1) })
 const Status = z.object({ id: z.number(), name: z.string(), position: z.number(), songs: z.number() }).openapi("Status")
@@ -216,7 +216,7 @@ export const songRoutes = newApp()
             key: z.enum(KEYS as [string, ...string[]], { error: "A key is one of the 24, such as “E minor”" }).nullable().optional(),
             notes: z.string().max(10_000, { error: "Notes are up to 10,000 characters" }).optional(),
             /** Whole seconds; null goes back to the best take's length. */
-            typed_length: z.int({ error: LENGTH }).min(1, { error: LENGTH }).max(3600, { error: LENGTH }).nullable().optional(),
+            typed_length: z.int({ error: LENGTH }).min(1, { error: LENGTH }).max(3599, { error: LENGTH }).nullable().optional(),
           })
         ),
       },

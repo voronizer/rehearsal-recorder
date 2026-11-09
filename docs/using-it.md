@@ -940,10 +940,12 @@ and **Restore** there brings it back to РЭХА as well.
 РЭХА asks when it starts, every hour, when a rehearsal starts, and when you
 press **Check the band service** in the menu of sets beside **Start
 rehearsal**. The notice counts sets with songs: “Ivan changed 4 songs and 1
-set in the band service”. If nothing changed, it says “Nothing new in the
-band service.” A set changed on both sides before РЭХА could ask keeps
-РЭХА's change. A song typed into a set that nobody has played yet becomes a
-song, so the service can show it.
+set in the band service”. When you pressed the button and nothing changed,
+it says “Nothing new in the band service.” A set changed on both sides
+before РЭХА could ask keeps РЭХА's change. If the band deleted it meanwhile,
+it goes here too, and your change waits in the service's **Trash** in case
+someone presses **Restore**. A song typed into a set that nobody has played
+yet becomes a song, so the service can show it.
 
 A set's length, **On stage** and **Print** are in the band service only.
 

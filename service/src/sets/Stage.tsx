@@ -129,7 +129,7 @@ export function Stage() {
         </div>
       </div>
     )
-  const at = Math.min(Math.max((Number(n) || 1) - 1, 0), songs.length - 1)
+  const at = Math.min(Math.max((Math.trunc(Number(n)) || 1) - 1, 0), songs.length - 1)
   const song = songs[at]
   const before = songs[at - 1]
   const after = songs[at + 1]

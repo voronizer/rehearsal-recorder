@@ -6,7 +6,7 @@ describe("parseLength", () => {
     expect(parseLength("4:05")).toBe(245)
     expect(parseLength("12:30")).toBe(750)
     expect(parseLength(" 0:45 ")).toBe(45)
-    expect(parseLength("60:00")).toBe(3600)
+    expect(parseLength("59:59")).toBe(3599)
   })
 
   test("a full stop does for the colon, as a phone's keypad has one", () => {
@@ -19,7 +19,7 @@ describe("parseLength", () => {
   })
 
   test("anything else is turned down", () => {
-    for (const t of ["4:5", "4:65", "abc", "-1:00", "61:00", "0:00", "245", "4:05:00", "1:2:3"]) expect(parseLength(t), t).toBe("bad")
+    for (const t of ["4:5", "4:65", "abc", "-1:00", "60:00", "61:00", "0:00", "245", "4:05:00", "1:2:3"]) expect(parseLength(t), t).toBe("bad")
   })
 })
 

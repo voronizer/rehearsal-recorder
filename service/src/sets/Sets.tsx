@@ -67,6 +67,8 @@ export function Sets() {
               madeNow(made.id)
               void navigate({ to: "/sets/$id", params: { id: String(made.id) } })
             },
+            // A name taken meanwhile, by РЭХА say: the next press picks from the sets as they are now.
+            onError: () => void sets.refetch(),
           })
         }
       >
