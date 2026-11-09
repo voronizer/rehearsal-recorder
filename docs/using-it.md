@@ -326,7 +326,7 @@ during a take. Press **Stop**, or Space, when the song is over.
 
 ### Listening to a take
 
-![After stopping: the take open in the player, its marks at the right, Close take and Play at the bottom](screenshots/listening.png)
+![After stopping: the take open in the player, paused, with Close take and Play at the bottom](screenshots/listening.png)
 
 When you press **Stop**, the take is saved, and the rehearsal screen comes
 back with the take open in the player, paused at the start. Press **Play**,
