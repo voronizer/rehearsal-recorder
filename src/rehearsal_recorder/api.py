@@ -7236,7 +7236,12 @@ class Api:
 
     def window_closing(self):
         """pywebview's closing handler (app.py): True lets the window
-        close. With takes still to send, the interface asks first."""
+        close. With takes still to send, the interface asks first.
+
+        A take held after Stop goes now: nobody listens to it with the
+        window going, and waiting for the sending would otherwise wait out
+        its ten minutes."""
+        self._release_take()
         return self._sending.get("service").window_closing(self.sending_left())
 
     def open_service_help(self):

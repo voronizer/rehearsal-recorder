@@ -325,7 +325,7 @@ deletion and its Undo; Remove from the band service; the close dialog and
 Close anyway; disconnect; the cloud folder sending nothing new while the
 service is chosen; an old РЭХА told to update; and the take held after Stop,
 by both places: it waits while the takes after it go, counts as still to send
-when the window closes, goes once released or ten minutes after Stop, and
+when the window closes and goes as it closes, goes once released or ten minutes after Stop, and
 unticked while held never goes (the cloud folder takes its copy off the queue
 rather than refusing). The parts are 16 KiB here, so a short take has several.
 Needs `pip install openapi-core==0.23.1`; without it the suite stops at once

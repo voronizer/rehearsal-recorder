@@ -1197,14 +1197,13 @@ def held_after_stop(api, fake, service, drain, entries, keep, uid_of, take, fold
     window = Window()
     api._window = window
     service()._closing_anyway = False
-    ok("so closing the window asks first",
-       api.window_closing() is False and window.asked.wait(5))
-
-    ok("release_take answers ok", api.release_take() == {"ok": True}
+    ok("so closing the window asks first, and lets the held take go",
+       api.window_closing() is False and window.asked.wait(5)
        and api.session_state()["held_take"] is None)
     drain()
     ok("released, it goes", take(n_held)["service"] == up
        and api.sending_left() == {"takes": 0, "bytes": 0} and api.window_closing() is True)
+    ok("release_take with nothing held answers ok", api.release_take() == {"ok": True})
 
     n_late = hold(keep("Viasna", band=["Drums"]))
     drain()

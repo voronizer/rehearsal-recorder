@@ -82,10 +82,10 @@ The hold ends, and the take goes as the setting or its box says, when:
 - 10 minutes have passed since Stop;
 - the app starts again (the hold lives in memory only).
 
-A held take thrown away never leaves the computer. Closing the window with
-a held take counts it among the takes still to send, so the closing
-question asks as it does now (`api.py:7109`); **Close anyway** sends it
-next time.
+A held take thrown away never leaves the computer. Closing the window ends
+the hold too. A take for the band service then counts among the takes still
+to send, so the closing question asks as it does now (`api.py:7109`);
+**Close anyway** sends it next time.
 
 ## Numbers
 
