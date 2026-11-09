@@ -250,17 +250,39 @@ class FakeBandService:
         return made
 
     def _set_songs(self, s, wanted):
-        """As the service gives a set new songs: one in the Trash that
-        `wanted` leaves out keeps its place among the others."""
+        """As the service gives a set new songs (store.ts newSongs): one in
+        the Trash that `wanted` leaves out keeps its place among the others.
+        Whether they changed."""
         wanted = list(dict.fromkeys(wanted))
-        hidden = {x for x in s["songs"] if self.songs.get(x, {}).get("trashed") and x not in wanted}
+        hidden = {x for x in s["songs"] if self.songs[x]["trashed"] and x not in wanted}
         queue, out = list(wanted), []
         for x in s["songs"]:
             if x in hidden:
                 out.append(x)
             elif queue:
                 out.append(queue.pop(0))
-        s["songs"] = out + queue
+        out += queue
+        if out == s["songs"]:
+            return False
+        s["songs"] = out
+        return True
+
+    def _change_set(self, s, name, songs, by):
+        """As store.ts changeSet: a rename, new songs or both, by `by`; who
+        changed it last stays when nothing changed. A name another set in
+        use has is turned down whole, unless the set is in the Trash: the
+        service's words for that, or None."""
+        renamed = name is not None and name != s["name"]
+        if renamed and not s["trashed"]:
+            other = self._set_in_use(name, but=s["id"])
+            if other is not None:
+                return f"There is already a set called {other['name']}."
+        changed = songs is not None and self._set_songs(s, songs)
+        if renamed:
+            s["name"] = name
+        if renamed or changed:
+            s["changed_by"] = by
+        return None
 
     def _ids(self, titles):
         return [self._find_song(t)["id"] for t in titles]
@@ -271,21 +293,25 @@ class FakeBandService:
             return self._make_set(name, self._ids(titles), by)["id"]
 
     def change_set_in_service(self, name, to=None, titles=None, by="Ivan"):
-        """A rename, songs added, taken out or moved, or both."""
+        """A rename, songs added, taken out or moved, or both. ValueError,
+        with the service's words, for a name another set has."""
         with self._lock:
-            s = self._set_in_use(name)
-            if to is not None:
-                s["name"] = to
-            if titles is not None:
-                self._set_songs(s, self._ids(titles))
-            s["changed_by"] = by
+            refused = self._change_set(self._set_in_use(name), to,
+                                       None if titles is None else self._ids(titles), by)
+            if refused:
+                raise ValueError(refused)
 
     def delete_set_in_service(self, name, by="Ira"):
         with self._lock:
             self._set_in_use(name).update(trashed=True, trashed_by=by)
 
     def restore_set_in_service(self, sid):
+        """Restore in the Trash. ValueError, with the service's words, while
+        a set in use has its name."""
         with self._lock:
+            other = self._set_in_use(self.sets[sid]["name"])
+            if other is not None:
+                raise ValueError(f"There is already a set called {other['name']}.")
             self.sets[sid].update(trashed=False, trashed_by=None)
 
     def songs_of_set(self, name):
@@ -516,6 +542,14 @@ class FakeBandService:
                             t.update(song_id=into["id"], song=into["title"])
                     if into["tempo"] is None:
                         into.update(tempo=song["tempo"], signature=song["signature"])
+                    # As sync.ts mergeSong: in a set that has both, `into`
+                    # keeps its place; in one that has only `song`, `into`
+                    # takes its place.
+                    for st in self.sets.values():
+                        if into["id"] in st["songs"]:
+                            st["songs"] = [x for x in st["songs"] if x != song["id"]]
+                        else:
+                            st["songs"] = [into["id"] if x == song["id"] else x for x in st["songs"]]
                     del self.songs[song["id"]]
                 self.order.append(f"merge into {into['title']}")
                 return 200, {"ok": True}
@@ -549,15 +583,9 @@ class FakeBandService:
             if method in ("PATCH", "DELETE") and s is None:
                 return 404, {"error": "No such set"}
             if method == "PATCH":
-                if "name" in data and data["name"] != s["name"] and not s["trashed"]:
-                    other = self._set_in_use(data["name"], but=s["id"])
-                    if other is not None:
-                        return 409, {"error": f"There is already a set called {other['name']}."}
-                if "name" in data:
-                    s["name"] = data["name"]
-                if "songs" in data:
-                    self._set_songs(s, data["songs"])
-                s["changed_by"] = None
+                refused = self._change_set(s, data.get("name"), data.get("songs"), None)
+                if refused:
+                    return 409, {"error": refused}
                 self.order.append(f"change set {s['name']}")
                 return 200, {"ok": True}
             if method == "DELETE":
@@ -573,9 +601,7 @@ class FakeBandService:
         s = self._set_in_use(sent["name"])
         if s is None:
             return self._make_set(sent["name"], sent["songs"])["id"]
-        s["name"] = sent["name"]
-        self._set_songs(s, sent["songs"])
-        s["changed_by"] = None
+        self._change_set(s, sent["name"], sent["songs"], None)
         return s["id"]
 
     def _drift_gen(self, uid):

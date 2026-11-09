@@ -75,6 +75,10 @@ class ServiceSets:
     def __init__(self, service):
         self.service = service
         self._lock = threading.Lock()
+        # Held while the sending writes to a set what it read of it a moment
+        # before, and by Api._sets_changed around a change from the
+        # interface: one made meanwhile is neither lost nor taken as agreed.
+        self.writing = threading.Lock()
         # What was owed when a push left it owed (a title that cannot be a
         # song, say): not tried again until it changes, or the next check.
         self._stuck = None
@@ -146,17 +150,29 @@ class ServiceSets:
         none yet, the deletes, each set's name and songs, then numbers for
         the sets that have none (the first time, every set at once). The
         changes before the new sets: a set renamed here frees its old name
-        there for one made here with it. Offline and Refused for the whole
-        call are the caller's."""
+        there for one made here with it. A change turned down for a name
+        another set still has there waits until the others have gone, since
+        one of them may free it (names passed along with no internet), and
+        only then takes a free name. Offline and Refused for the whole call
+        are the caller's."""
         before = self.owed()
         self._make_songs(client)
         self._deletes(client)
         numbers = self._numbers()
         here = {st["id"]: st for st in self._lib.sets()}
-        for r in self._lib.service_sets():
-            st = here.get(r["set_id"])
-            if st is not None:
-                self._send_change(client, r, st, numbers)
+        waiting = [(r, here[r["set_id"]]) for r in self._lib.service_sets() if r["set_id"] in here]
+        while waiting:
+            went, still = False, []
+            for r, st in waiting:
+                done = self._send_change(client, r, st, numbers, wait=True)
+                went = went or done == "sent"
+                if done == "waits":
+                    still.append((r, st))
+            waiting = still
+            if not went:
+                break
+        for r, st in waiting:
+            self._send_change(client, r, st, numbers, refused={st["name"].casefold()})
         self._number(client, numbers)
         if before is not None and self.owed() == before:
             with self._lock:
@@ -197,10 +213,13 @@ class ServiceSets:
                     continue
             self._lib.drop_service_set(r["sid"])
 
-    def _send_change(self, client, r, st, numbers):
-        """The set's name and songs where РЭХА changed them, in one call. A
-        name another set has there is turned down: the set here is renamed
-        with 2 after its name (3, … if that is taken too), and that goes."""
+    def _send_change(self, client, r, st, numbers, wait=False, refused=()):
+        """The set's name and songs where РЭХА changed them, in one call:
+        "sent" when the service took it. A name another set has there is
+        turned down: with `wait`, the change "waits" for the push's others;
+        otherwise the set here is renamed with 2 after its name (3, … if
+        that is taken too), and that goes. `refused`: names (casefolded)
+        the service turned down already, which go no more."""
         songs = self._sids(self._entries(st, numbers))
         fields = {}
         if st["name"] != r["name"]:
@@ -208,9 +227,14 @@ class ServiceSets:
         if songs != r["songs"]:
             fields["songs"] = songs
         if not fields:
-            return
-        refused = set()
+            return None
+        refused = set(refused)
         for _ in range(TRIES):
+            if "name" in fields and fields["name"].casefold() in refused:
+                name = free_name(st["name"], self._names_here(st["id"]) | refused)
+                if not self._rename_here(st, fields["name"], name):
+                    return None
+                fields["name"] = name
             try:
                 client.change_set(r["sid"], **fields)
             except Refused as e:
@@ -219,27 +243,41 @@ class ServiceSets:
                     print(f"Band service: {st['name']} is gone from the band service: it goes there again",
                           file=sys.stderr)
                     self._lib.drop_service_set(r["sid"])
-                    return
+                    return None
                 if e.status == 409 and "name" in fields:
                     refused.add(fields["name"].casefold())
-                    name = free_name(st["name"], self._names_here(st["id"]) | refused)
-                    print(f"Band service: {fields['name']} is another set's name there: {name} here",
-                          file=sys.stderr)
-                    try:
-                        self._lib.update_set(st["id"], name=name)
-                    except SetRefused as e2:
-                        print(f"Band service: {st['name']} could not be renamed {name}: {e2}", file=sys.stderr)
-                        return
-                    fields["name"] = name
+                    if wait:
+                        return "waits"
                     continue
                 if e.status not in ANSWERS:
                     raise  # the key, the version: nothing was said about this change
                 # Not agreed: each side keeps its own, and the next check tries again.
                 print(f"Band service: a change to {st['name']} was turned down: {e.words}", file=sys.stderr)
-                return
+                return None
             self._lib.agree_service_set(r["sid"], **fields)
-            return
+            if fields.get("name", st["name"]) != st["name"]:
+                # Settings › Sets reads the sets again at this line (useSets).
+                self._api._journal.begin(KIND, f"Renaming {r['name']} to {st['name']}").done(
+                    f"Named {fields['name']}: the band service already has a set called {st['name']}")
+            return "sent"
         print(f"Band service: {st['name']} found no name the band service would take", file=sys.stderr)
+        return None
+
+    def _rename_here(self, st, was, name):
+        """The set here renamed `name` from `was`, the name the service
+        turned down; not when the interface renamed it meanwhile, whose
+        name goes at the next push. Whether it was."""
+        with self.writing:
+            now = next((x for x in self._lib.sets() if x["id"] == st["id"]), None)
+            if now is None or now["name"] != was:
+                return False
+            try:
+                self._lib.update_set(st["id"], name=name)
+            except SetRefused as e:
+                print(f"Band service: {was} could not be renamed {name}: {e}", file=sys.stderr)
+                return False
+        print(f"Band service: {was} is another set's name there: {name} here", file=sys.stderr)
+        return True
 
     def _number(self, client, numbers):
         """Numbers for the sets that have none: the first time with this
@@ -274,46 +312,70 @@ class ServiceSets:
         """РЭХА's changes go, then the service's are done here: sets deleted
         there, renamed, given other songs, and new. [(who, ("set", number))]
         for each change the band made. Offline and Refused for the whole call
-        are the caller's."""
+        are the caller's.
+
+        A set РЭХА changed since the two sides agreed that is in the
+        service's Trash, or gone from it, stays here: its change reached the
+        service after the delete, and wins. It goes there again as a set of
+        its own; one in the Trash keeps the change too. What the band
+        changed is written here under `writing`, against the sets as they
+        are then."""
         with self._lock:
             self._stuck = None
+        owed = self.owed()
+        mine = {sid for sid, _, _ in owed[2]} if owed else set()
         self.push(client)
         listed = client.sets()["sets"]
         there = {s["id"]: s for s in listed}
         lib = self._lib
-        numbers = self._numbers()
-        titles = {r["sid"]: r["now"]["title"] for r in lib.service_songs()}
-        # The songs the band sees in its sets: those with a number here, and
-        # not in the service's Trash.
-        shown = set(titles) - self.service.songs.in_trash
-        here = {st["id"]: st for st in lib.sets()}
-        done, changed, renames = [], {}, []
-        for r in lib.service_sets():
-            st = here.get(r["set_id"])
-            if st is None:
-                continue  # deleted here: its delete is on its way
-            s = there.get(r["sid"])
-            if s is None or s.get("trashed"):
-                self._deleted_there(r, st, s, done)
-                continue
-            if self._songs_there(r, st, s, numbers, titles, shown):
+        done, again = [], False
+        with self.writing:
+            numbers = self._numbers()
+            titles = {r["sid"]: r["now"]["title"] for r in lib.service_songs()}
+            # The songs the band sees in its sets: those with a number here, and
+            # not in the service's Trash.
+            shown = set(titles) - self.service.songs.in_trash
+            here = {st["id"]: st for st in lib.sets()}
+            changed, renames = {}, []
+            for r in lib.service_sets():
+                st = here.get(r["set_id"])
+                if st is None:
+                    continue  # deleted here: its delete is on its way
+                s = there.get(r["sid"])
+                if s is None or s.get("trashed"):
+                    if r["sid"] in mine or self._mine(r, st, numbers):
+                        print(f"Band service: {st['name']} was deleted there and changed here: it goes there again",
+                              file=sys.stderr)
+                        lib.drop_service_set(r["sid"])
+                        again = True
+                    else:
+                        self._deleted_there(r, st, s, done)
+                    continue
+                if self._songs_there(r, st, s, numbers, titles, shown):
+                    changed[r["sid"]] = (st["id"], s)
+                if st["name"] == r["name"] and s["name"] != r["name"]:
+                    renames.append((r, st, s))
+            for r, st, s in self._renames(renames):
                 changed[r["sid"]] = (st["id"], s)
-            if st["name"] == r["name"] and s["name"] != r["name"]:
-                renames.append((r, st, s))
-        for r, st, s in self._renames(renames):
-            changed[r["sid"]] = (st["id"], s)
-        names = {st["id"]: st["name"] for st in lib.sets()}
-        for sid, (set_id, s) in changed.items():
-            who = s.get("changed_by")
-            self._line(names.get(set_id, s["name"]), _by(who, "changed it", "Changed"))
-            done.append((who, ("set", sid)))
-        self._new_sets(listed, titles, shown, done)
+            names = {st["id"]: st["name"] for st in lib.sets()}
+            for sid, (set_id, s) in changed.items():
+                who = s.get("changed_by")
+                self._line(names.get(set_id, s["name"]), _by(who, "changed it", "Changed"))
+                done.append((who, ("set", sid)))
+            self._new_sets(listed, titles, shown, done)
+        if again:
+            self._number(client, self._numbers())
         print(f"Band service: sets checked, changes from the band service: {len(done)}", file=sys.stderr)
         return done
 
+    def _mine(self, r, st, numbers):
+        """Whether РЭХА changed the set since the two sides agreed."""
+        return st["name"] != r["name"] or self._sids(self._entries(st, numbers)) != r["songs"]
+
     def _deleted_there(self, r, st, s, done):
-        """A set in the service's Trash, or gone from it: it goes here too.
-        Rehearsals played by it keep their copy. Restore there brings it back
+        """A set in the service's Trash, or gone from it, that РЭХА did not
+        change since the two sides agreed: it goes here too. Rehearsals
+        played by it keep their copy. Restore there brings it back
         at a check as a set the band made."""
         try:
             self._lib.delete_set(st["id"])

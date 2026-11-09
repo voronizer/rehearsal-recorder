@@ -2260,9 +2260,13 @@ class Library:
         """Set `set_id` is number `sid` in the service, with what the two
         sides agree on for it now. A row another set had under `sid` goes,
         and with it that set's number: the service says the two are one set
-        there. False when the set is gone."""
+        there. False when the set is gone, deleted here while its number was
+        on its way: the number stays with no set, a delete still to send,
+        unless another set here has it."""
         with self._session.begin() as db:
             if db.get(SongSet, set_id) is None:
+                if db.get(ServiceSet, int(sid)) is None:
+                    db.add(ServiceSet(sid=int(sid), set_id=None, name=name, songs=list(songs)))
                 return False
             db.execute(ServiceSet.__table__.delete().where(
                 or_(ServiceSet.sid == sid, ServiceSet.set_id == set_id)))

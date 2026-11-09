@@ -6,8 +6,9 @@ checks every request against service/openapi.json.
 A set is a name and songs in an order, with one number on both sides. Its
 name and songs go both ways: what REHA changes goes at once, after the
 songs and before any take, and what the band changes there comes at the
-check. Each section is one test of the plan
-(docs/superpowers/plans/2026-11-09-gig-sets.md, Task 3).
+check. Sections 1 to 11 and the last are the tests of the plan
+(docs/superpowers/plans/2026-11-09-gig-sets.md, Task 3); 12 to 17 are what
+a review of it found.
 
 No sound card: the engine suite's stand-in for sounddevice, and its way of
 making an Api that points at temporary folders, are imported from it. The
@@ -16,6 +17,7 @@ worker's loop is never started: each check drives `run_next` itself.
 
 import sys
 import tempfile
+import threading
 import time
 from pathlib import Path
 
@@ -237,6 +239,8 @@ def run(tmp, fake):
     ok("renamed here to a name another set has there, it is renamed Club 2 here and there",
        here("Club 2") is not None and here("Club") is None
        and fake.set_called("Club 2")["id"] == row("Club 2")["sid"] and row("Club 2")["name"] == "Club 2")
+    ok("its line says why",
+       ("Renaming Summer to Club", "Named Club 2: the band service already has a set called Club") in lines())
     calls = fake.count("change set")
     check()
     check()
@@ -344,7 +348,170 @@ def run(tmp, fake):
     ok("with no key, it says so", api.check_band_service()["ok"] is False)
     api.set_service_key(fake.key)
 
-    print("\n[12] test_new_key_forgets_sets")
+    print("\n[12] test_names_passed_along_here_need_no_2")
+    for name in ("Chain 1", "Chain 2", "Chain 3"):
+        api.add_set(name, [])
+    drain()
+    # With no internet, each set takes the name of the one after it. The
+    # first goes first and meets a name the next still has there.
+    service()._later["sets"] = time.monotonic() + 3600
+    api.update_set(set_id("Chain 3"), "Chain 3 (old)", None)
+    api.update_set(set_id("Chain 2"), "Chain 3", None)
+    api.update_set(set_id("Chain 1"), "Chain 2", None)
+    service()._later.pop("sets")
+    drain()
+    chain = ("Chain 2", "Chain 3", "Chain 3 (old)")
+    ok("names passed along here go in one push, with no 2 after any",
+       sorted(s["name"] for s in lib.sets() if s["name"].startswith("Chain")) == list(chain)
+       and all(fake.set_called(n)["id"] == row(n)["sid"] and row(n)["name"] == n for n in chain)
+       and not any(t.startswith("Renaming Chain") for t, _ in lines()))
+
+    print("\n[13] test_set_deleted_while_its_number_comes_goes_to_trash")
+    real_set = fake._reha_set
+
+    def deleted_meanwhile(sent):
+        sid = real_set(sent)
+        if sent["name"] == "Quick":
+            api.delete_set(set_id("Quick"))  # deleted here while the answer is on its way
+        return sid
+
+    fake._reha_set = deleted_meanwhile
+    try:
+        api.add_set("Quick", ["Dym nad vadoj"])
+        drain()
+    finally:
+        fake._reha_set = real_set
+    drain()
+    quick = next(s for s in fake.sets.values() if s["name"] == "Quick")
+    ok("a set deleted here while its number was on its way goes to the Trash there",
+       here("Quick") is None and quick["trashed"] and all(r["sid"] != quick["id"] for r in lib.service_sets()))
+    check()
+    ok("and the check does not make it here again", here("Quick") is None)
+
+    print("\n[14] test_button_pressed_during_a_check_gets_a_check_of_its_own")
+    said = news().get("id")
+    real_songs = service().songs.check
+
+    def pressed_meanwhile(client):
+        done = real_songs(client)
+        api.check_band_service()
+        return done
+
+    service().songs.check = pressed_meanwhile
+    try:
+        service()._next_check = 0
+        service().run_next()  # the hourly check, with the button pressed in it
+    finally:
+        service().songs.check = real_songs
+    drain()
+    ok("pressed while a check runs, it gets a check of its own, which says so",
+       news().get("id") != said and news().get("text") == band_service.NOTHING_NEW)
+    said = news().get("id")
+    api.check_band_service()
+    fake.drop = 1
+    drain()
+    ok("pressed with no internet, a later check with nothing new says nothing",
+       fake.drop == 0 and news().get("id") == said)
+
+    print("\n[15] test_change_here_wins_over_delete_there")
+    api.add_set("Wedding gig", ["Dym nad vadoj"])
+    drain()
+    old = row("Wedding gig")["sid"]
+    service()._later["sets"] = time.monotonic() + 3600  # no internet for the sets
+    api.update_set(set_id("Wedding gig"), "Wedding gig, final", ["Dym nad vadoj", "Ahoń i vada"])
+    fake.delete_set_in_service("Wedding gig", by="Ira")
+    service()._later.pop("sets")
+    check()
+    ok("changed here with no internet and deleted there, the set stays here",
+       here("Wedding gig, final") == ["Dym nad vadoj", "Ahoń i vada"]
+       and not [t for t, d in lines() if t.startswith("Wedding gig") and "deleted" in d])
+    ok("and lives again there as a set of its own; the deleted one stays in the Trash",
+       fake.songs_of_set("Wedding gig, final") == ["Dym nad vadoj", "Ahoń i vada"]
+       and row("Wedding gig, final")["sid"] == fake.set_called("Wedding gig, final")["id"] != old
+       and fake.sets[old]["trashed"])
+    try:
+        fake.restore_set_in_service(old)
+        refused = False
+    except ValueError:
+        refused = True
+    ok("Restore there is turned down while a set in use has its name", refused and fake.sets[old]["trashed"])
+    calls = fake.count("set ") + fake.count("change set")
+    check()
+    ok("nothing loops", fake.count("set ") + fake.count("change set") == calls
+       and here("Wedding gig, final") == ["Dym nad vadoj", "Ahoń i vada"])
+
+    print("\n[16] test_set_changed_here_during_a_check_is_kept")
+    api.add_set("Tour", ["Dym nad vadoj", "Ahoń i vada"])
+    drain()
+    fake.change_set_in_service("Tour", titles=["Ahoń i vada", "Dym nad vadoj"], by="Vik")
+    tour = set_id("Tour")
+    read_there, edits = [], []
+    real_route = fake._sets_route
+    real_sets = lib.sets
+    worker = threading.current_thread()
+
+    def route(method, rest, body):
+        out = real_route(method, rest, body)
+        if method == "GET" and not rest:
+            read_there.append(True)
+        return out
+
+    def sets_then_edit():
+        out = real_sets()
+        if read_there and not edits and threading.current_thread() is worker:
+            # The check has read the band's change: the set is changed here
+            # at that moment, from the interface.
+            edit = threading.Thread(target=lambda: api.update_set(tour, None, ["Dym nad vadoj", "Pałyn nanova"]))
+            edits.append(edit)
+            edit.start()
+            edit.join(0.3)
+        return out
+
+    fake._sets_route = route
+    lib.sets = sets_then_edit
+    try:
+        check()
+    finally:
+        fake._sets_route = real_route
+        del lib.sets
+    for edit in edits:
+        edit.join()
+    drain()
+    ok("a set changed here while a check takes the band's change keeps the change here",
+       edits and here("Tour") == ["Dym nad vadoj", "Pałyn nanova"])
+    ok("and it goes there next", fake.songs_of_set("Tour") == ["Dym nad vadoj", "Pałyn nanova"])
+
+    print("\n[17] test_merge_here_of_a_song_in_sets")
+    for title in ("Viečar", "Viečarynka"):
+        api.add_song(title)
+    api.add_set("Evening", ["Viečar", "Dym nad vadoj"])
+    drain()
+    fake.change_set_in_service("Evening", titles=["Dym nad vadoj", "Viečar"], by="Vik")
+    check()
+    evening = row("Evening")["sid"]
+    # Two sets the band made since the check, one with both songs.
+    fake.new_set_in_service("Both", ["Viečarynka", "Dym nad vadoj", "Viečar"], by="Ivan")
+    fake.new_set_in_service("Only", ["Viečar", "Ahoń i vada"], by="Ivan")
+    ok("a merge here is a call", api.merge_songs(lib.song_id("Viečar"), lib.song_id("Viečarynka"))["ok"])
+    drain()
+    check()
+    ok("the set here follows the merge, and the set there is the same",
+       here("Evening") == ["Dym nad vadoj", "Viečarynka"]
+       and fake.songs_of_set("Evening") == ["Dym nad vadoj", "Viečarynka"])
+    ok("a change that changes nothing there leaves who changed it last",
+       fake.sets[evening]["changed_by"] == "Vik")
+    ok("a set there with both songs keeps the one merged into in its place",
+       here("Both") == ["Viečarynka", "Dym nad vadoj"])
+    ok("one with only the merged song has the other in its place",
+       here("Only") == ["Viečarynka", "Ahoń i vada"])
+    try:
+        fake.change_set_in_service("Only", to="both", by="Ivan")
+        refused = False
+    except ValueError:
+        refused = True
+    ok("the band cannot give a set another set's name there", refused and fake.set_called("Only") is not None)
+
+    print("\n[18] test_new_key_forgets_sets")
     drain()
     names = sorted(s["name"] for s in lib.sets())
     fake2 = FakeBandService().start()

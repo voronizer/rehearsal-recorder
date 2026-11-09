@@ -4481,12 +4481,17 @@ class Api:
         return self._lib.sets()
 
     def _sets_changed(self, change):
-        try:
-            sets = change()
-        except SetRefused as e:
-            return {"ok": False, "error": str(e)}
-        # The band service has the change at once (sending/service_sets.py).
-        self._sending.get("service").wake()
+        service = self._sending.get("service")
+        # Not while the band service's check writes what the band changed
+        # into the sets it has just read (sending/service_sets.py): this
+        # change comes after it, and goes to the service.
+        with service.sets.writing:
+            try:
+                sets = change()
+            except SetRefused as e:
+                return {"ok": False, "error": str(e)}
+        # The band service has the change at once.
+        service.wake()
         return {"ok": True, "sets": sets}
 
     def add_set(self, name, songs):

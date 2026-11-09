@@ -789,8 +789,13 @@ class BandService:
         MP3s РЭХА sent has them sent again. A take whose delete has not
         reached the service yet is left as it is. No internet asks again soon; a
         service that turned the question down is asked again in an hour.
+
+        Check the band service pressed while this runs gets a check of its
+        own after it. One that meets no internet says nothing: the check
+        that runs once it is back could be hours later, and is not the one
+        that was asked for.
         """
-        manual = self._manual
+        manual, self._manual = self._manual, False
         done = []
         try:
             done = self.songs.check(self._client())
@@ -806,15 +811,14 @@ class BandService:
             try:
                 done += self.sets.check(self._client())
             except Offline:
-                # What the songs brought is said now; the button's check ends
-                # with the sets'.
+                # What the songs brought is said now; the sets were not
+                # read, so nothing is said of them.
                 self._tell(done, False)
                 self._next_check = time.monotonic() + self.RETRY_SEC
                 return
             except (Refused, Gone) as e:
                 # A service from before sets: the takes all the same.
                 print(f"Band service: the sets could not be checked: {e}", file=sys.stderr)
-        self._manual = False
         self._tell(done, manual)
         try:
             listed = self._client().takes()

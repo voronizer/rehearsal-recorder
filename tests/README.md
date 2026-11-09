@@ -347,8 +347,14 @@ brings it back; a name another set has there gets 2 after it, and names
 swapped there are swapped here; a song the service deleted leaves the sets,
 and one in its Trash keeps its place here; the notice counts songs and sets;
 Check the band service with nothing new says so; a key to another service
-forgets the numbers. Needs openapi-core as test_sending.py does. Run with
-`python tests/test_service_sets.py`.
+forgets the numbers. Then what a review found: names passed along here
+with no internet need no 2, and a 2 says why in the list; a set deleted
+while its number was on its way goes to the Trash there; the button
+pressed during a check gets its own check, and one pressed with no
+internet says nothing later; a change here wins over a delete there; a
+set changed here while a check runs keeps the change; a merge here of a
+song in sets leaves them as the service does. Needs openapi-core as
+test_sending.py does. Run with `python tests/test_service_sets.py`.
 
 ## test_ring.py: sound through rtmixer's rings
 

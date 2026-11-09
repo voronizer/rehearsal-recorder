@@ -1,5 +1,5 @@
 import { useEffect, useSyncExternalStore } from "react"
-import { onNews } from "@/lib/activity"
+import { onBandChanges } from "@/lib/activity"
 import { api, type SongSet } from "@/lib/api"
 import { withSongBack } from "@/lib/setSongs"
 
@@ -8,8 +8,9 @@ import { withSongBack } from "@/lib/setSongs"
  * S1–S2), one copy for the start screen and Settings › Sets: a set made or
  * renamed in one is the same in the other at once.
  *
- * Read afresh whenever a screen that shows them opens, and when a check of
- * the band service has brought what the band changed. The choice is kept
+ * Read afresh whenever a screen that shows them opens, and when the band
+ * service may have changed them: a check brought what the band changed, or
+ * the service would not take a name (onBandChanges). The choice is kept
  * in the config across restarts (`next_set`); one whose set was deleted
  * since is no set.
  */
@@ -95,7 +96,7 @@ export function useSets(): {
   const now = useSyncExternalStore(subscribe, () => state)
   useEffect(() => {
     void loadSets()
-    return onNews(() => void loadSets())
+    return onBandChanges(() => void loadSets())
   }, [])
   return { sets: now.sets, chosen: valid(now), choose: chooseSet, replace: setsChanged }
 }

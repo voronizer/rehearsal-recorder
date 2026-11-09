@@ -753,6 +753,37 @@ test.describe("on the start screen", () => {
     await expect(menu(page).getByRole("menuitem", { name: "New set…" })).toBeVisible()
     await expect(checkItem(page)).toHaveCount(0)
   })
+
+  test("a line of the band service about a set reads the sets again", async ({ page }) => {
+    await openApp(page, { before: withSets([GIG], 1, WITH_KEY) })
+    await expect(picker(page)).toHaveText(/Gig on the 25th/)
+    const read = await callCount(page, "list_sets")
+    // The sending renamed the set, the service having one with its name,
+    // and says so in the list of background work.
+    await py(page, "update_set", 1, "Gig on the 25th 2", null)
+    await page.evaluate(() => {
+      const w = window as unknown as { __ACTIVITY__?: unknown[] }
+      w.__ACTIVITY__ = [
+        ...(w.__ACTIVITY__ || []),
+        {
+          id: 990,
+          kind: "service",
+          title: "Renaming Gig to Gig on the 25th",
+          folder: null,
+          take_number: null,
+          state: "done",
+          fraction: 1,
+          step: null,
+          error: null,
+          detail: "Named Gig on the 25th 2: the band service already has a set called Gig on the 25th",
+          retry: null,
+          seen: false,
+        },
+      ]
+    })
+    await expect(picker(page)).toHaveText(/Gig on the 25th 2/)
+    expect(await callCount(page, "list_sets")).toBeGreaterThan(read)
+  })
 })
 
 // ---------- Settings › Sets ----------
