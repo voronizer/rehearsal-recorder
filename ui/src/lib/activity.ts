@@ -32,8 +32,10 @@ const listeners = new Set<() => void>()
 const settledListeners = new Set<(e: ActivityEntry) => void>()
 const namesListeners = new Set<(e: ActivityEntry) => void>()
 const openListeners = new Set<() => void>()
-// The news about songs this page has said. Python keeps news only while it
-// runs, so news in the first answer is this run's and is said all the same.
+const newsListeners = new Set<() => void>()
+// The news about songs and sets this page has said. Python keeps news only
+// while it runs, so news in the first answer is this run's and is said all
+// the same.
 let saidNews = 0
 
 function emit() {
@@ -75,21 +77,34 @@ function announce(next: ActivityEntry[]) {
   }
 }
 
-/** A check that brought the band's changes to songs says so once, with See
- *  for the list where each change is a line (sending/service_songs.py). It
- *  waits while a take records: Recording has no list for See to open. With
- *  the list open it says nothing, the lines being there to see. */
+/** A check that brought the band's changes to songs and sets says so once,
+ *  with See for the list where each change is a line
+ *  (sending/band_service.py). Check the band service with nothing new says
+ *  so too, with no See: there is no line to see. It waits while a take
+ *  records: Recording has no list for See to open. With the list open it
+ *  says nothing, the lines being there to see. */
 function announceNews(next: Activity) {
   const news = next.news
   if (!news || news.id === saidNews || next.recording) return
   saidNews = news.id
+  for (const l of newsListeners) l()
   if (listOpen) return
   notify({
     key: "songs",
     kind: "done",
     text: news.text,
-    action: { label: "See", run: openList, undo: false },
+    ...(news.see === false ? {} : { action: { label: "See", run: openList, undo: false } }),
   })
+}
+
+/** Calls `heard` each time a check of the band service is said, for a
+ *  screen that shows what the check may have changed: the sets. */
+export function onNews(heard: () => void) {
+  ensureStarted()
+  newsListeners.add(heard)
+  return () => {
+    newsListeners.delete(heard)
+  }
 }
 
 /** Opens the list of background work, as pressing its button does. */

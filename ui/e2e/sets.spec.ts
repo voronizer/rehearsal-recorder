@@ -711,6 +711,48 @@ test.describe("on the start screen", () => {
     await startRehearsal(page)
     expect((await calls(page, "start_rehearsal")).at(-1)?.args[5] ?? null).toBeNull()
   })
+
+  // Check the band service: under New set… while takes go to the band
+  // service, where the sets are the same (sending/service_sets.py).
+  const WITH_KEY = "window.__SERVICE_KEY__ = 'band.example:secret';"
+  const checkItem = (page: Page) => menu(page).getByRole("menuitem", { name: "Check the band service" })
+
+  test("the set menu checks the band service", async ({ page }) => {
+    await openApp(page, { before: withSets([GIG], 1, WITH_KEY) })
+    await picker(page).click()
+    const items = menu(page).getByRole("menuitem")
+    await expect(items).toHaveText(["New set…", "Check the band service"])
+    await expect(checkItem(page).locator("svg.lucide-refresh-cw")).toHaveCount(1)
+    await checkItem(page).click()
+    await expect(menu(page)).toHaveCount(0)
+    expect(await callCount(page, "check_band_service")).toBe(1)
+    // Nothing new: it says so, with no lines to See.
+    const nothing = notices(page, "done").filter({ hasText: "Nothing new in the band service." })
+    await expect(nothing).toBeVisible()
+    await expect(nothing.getByRole("button", { name: "See", exact: true })).toHaveCount(0)
+
+    // The band made a set there: the notice says so, and the menu has it.
+    await page.evaluate(() => {
+      ;(window as unknown as { __CHECK__: unknown }).__CHECK__ = {
+        sets: [{ name: "Club gig, 13 December", songs: ["Dym"] }],
+        text: "Ivan changed 1 set in the band service",
+      }
+    })
+    await picker(page).click()
+    await checkItem(page).click()
+    expect(await callCount(page, "check_band_service")).toBe(2)
+    const news = notices(page, "done").filter({ hasText: "Ivan changed 1 set in the band service" })
+    await expect(news.getByRole("button", { name: "See", exact: true })).toBeVisible()
+    await picker(page).click()
+    await expect(menu(page).getByRole("menuitemradio", { name: /Club gig, 13 December/ })).toBeVisible()
+  })
+
+  test("no check item without the band service", async ({ page }) => {
+    await openApp(page, { before: withSets([GIG]) })
+    await picker(page).click()
+    await expect(menu(page).getByRole("menuitem", { name: "New set…" })).toBeVisible()
+    await expect(checkItem(page)).toHaveCount(0)
+  })
 })
 
 // ---------- Settings › Sets ----------

@@ -33,6 +33,7 @@ import { TrackRow } from "@/components/TrackRow"
 import { useAfter } from "@/hooks/useAfter"
 import { useSteady } from "@/hooks/useSteady"
 import { chosenSet, useSets } from "@/hooks/useSets"
+import { useEveningSettings } from "@/hooks/useEveningSettings"
 import { useSongChoices } from "@/hooks/useSongChoices"
 import { useErrorNotice } from "@/hooks/useErrorNotice"
 import { useEscape, useSpacebar } from "@/hooks/useSpacebar"
@@ -206,6 +207,9 @@ export function Setup({
   const sets = useSets()
   const [makingSet, setMakingSet] = useState(false)
   const songChoices = useSongChoices(makingSet, null, null)
+  // Check the band service is in the menu of sets while takes go there:
+  // the sets are the same in the band service then.
+  const toService = useEveningSettings()?.sendTo === "service"
   const [rescanning, setRescanning] = useState(false)
   const slowLook = useAfter(rescanning, SPINNER_AFTER_MS)
   const slowStart = useAfter(starting, SPINNER_AFTER_MS)
@@ -1309,6 +1313,7 @@ export function Setup({
                 chosen={sets.chosen}
                 onChoose={sets.choose}
                 onNew={() => setMakingSet(true)}
+                onCheck={toService ? () => void api().check_band_service() : undefined}
               />
               <Button
                 size="footer"

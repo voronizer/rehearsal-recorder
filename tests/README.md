@@ -1,15 +1,15 @@
 # Tests
 
 ```bash
-pip install openapi-core==0.23.1     # once: test_sending.py needs it
+pip install openapi-core==0.23.1     # once: the band service's two suites need it
 python tests/run_all.py              # the Python suites
 cd ui && npm test                    # the interface, what needs no browser
 cd ui && npm run build && npm run test:e2e   # the interface in a browser
 ```
 
-The nineteen Python suites cover audio, the sound process, storage, platform
-behaviour, MIDI, the tempo counter, shared controls and sending takes to a
-band service.
+The twenty Python suites cover audio, the sound process, storage, platform
+behaviour, MIDI, the tempo counter, shared controls, and sending takes and
+sets to a band service.
 Interface tests run as unit and browser suites.
 
 ## test_control_api.py: shared controls
@@ -333,6 +333,22 @@ folder is written down, so the app opened again makes it. The parts are 16
 KiB here, so a short take has several.
 Needs `pip install openapi-core==0.23.1`; without it the suite stops at once
 and says so. Run with `python tests/test_sending.py`.
+
+## test_service_sets.py: sets in the band service
+
+Sets kept the same in РЭХА and the band service (`sending/service_sets.py`),
+against the same fake, which keeps sets as the service does. Checked: the
+first check links sets by name and makes the rest on the other side; a set
+goes after its songs and before any take; a title that is no song is made a
+song first; a rename and new songs go both ways, one line each; changed on
+both sides, РЭХА's change wins; a set deleted here keeps its number until
+the service has the delete; a set deleted there goes here, and Restore
+brings it back; a name another set has there gets 2 after it, and names
+swapped there are swapped here; a song the service deleted leaves the sets,
+and one in its Trash keeps its place here; the notice counts songs and sets;
+Check the band service with nothing new says so; a key to another service
+forgets the numbers. Needs openapi-core as test_sending.py does. Run with
+`python tests/test_service_sets.py`.
 
 ## test_ring.py: sound through rtmixer's rings
 

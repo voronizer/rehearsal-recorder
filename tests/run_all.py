@@ -3,7 +3,7 @@ Every Python suite, one command:
 
     python tests/run_all.py
 
-Seventeen of them, because they answer different questions and need different
+Twenty of them, because they answer different questions and need different
 things to be true:
 
     test_control_api.py shared control API and JSON bridge without MIDI.
@@ -136,7 +136,13 @@ things to be true:
                        deletion and its Undo, the close dialog, disconnect.
                        Needs openapi-core 0.23.1.
 
-    test_ring.py       rtmixer's rings on a fake card (tests/fake_rtmixer.py):
+    test_service_sets.py sets kept the same in РЭХА and the band service
+                       (sending/service_sets.py), against the same fake:
+                       the first check, each change both ways, a name
+                       taken on the other side, a song deleted there, the
+                       notice, Check the band service. Needs openapi-core.
+
+    test_ring.py      rtmixer's rings on a fake card (tests/fake_rtmixer.py):
                        a second kept ahead, a setting heard from two card
                        calls on, an exact move, a dry ring started again,
                        a record ring that filled, the notes' clock, a take
@@ -176,7 +182,7 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 SUITES = ("test_control_api.py", "test_controller_browse.py", "test_controller_diagnostics.py", "test_controller_extensions.py", "test_controller_recovery.py", "test_controller.py", "test_transport.py", "test_engine.py", "test_platform.py", "test_store.py", "test_ports.py",
           "test_midi.py", "test_click.py", "test_tempo.py", "test_drift.py", "test_backing.py",
-          "test_sending.py", "test_ring.py", "test_sound.py")
+          "test_sending.py", "test_service_sets.py", "test_ring.py", "test_sound.py")
 
 # Four times the longest any suite has taken (test_engine, 145 s on CI's Mac).
 LIMIT = 600

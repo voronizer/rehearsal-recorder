@@ -24,7 +24,10 @@ when it starts and then every hour, which also finds a take put back there
 with Restore, and one deleted there for good.
 
 Songs go both ways (service_songs.py): РЭХА's changes to them go before any
-take, and the check reads the band's changes there first.
+take, and the check reads the band's changes there first. Sets go both ways
+too (service_sets.py), after the songs and before the takes, since a set
+names its songs by their numbers. Check the band service, beside Start
+rehearsal, runs the check at once.
 """
 
 import math
@@ -39,7 +42,8 @@ from rehearsal_recorder.sending import false_start, service_files
 from rehearsal_recorder.sending.service_client import (
     NOT_A_KEY, Gone, Offline, Refused, ServiceClient, address_of, parse_key,
 )
-from rehearsal_recorder.sending.service_songs import ServiceSongs
+from rehearsal_recorder.sending.service_sets import ServiceSets
+from rehearsal_recorder.sending.service_songs import ServiceSongs, news_text
 from rehearsal_recorder.store.names import shown_from_name, shown_name, take_name
 
 # The service's part size (R2 wants every part but the last the same size).
@@ -63,6 +67,8 @@ SERVICE_HELP_URL = "https://reha.stream/band-service"
 # What a service from 0.24.0 on tells an older РЭХА (service/worker/signin/
 # guards.ts). Takes it turned down with it go again once this one starts.
 UPDATE_REHA = "Update РЭХА to send takes here"
+# What a check from Check the band service says when it brought nothing.
+NOTHING_NEW = "Nothing new in the band service."
 # What a take's details carry only when РЭХА changed its song since it last
 # sent them: otherwise the service keeps the take's song and name, so a ★
 # does not undo a move made there. The song's tempo is the song's, sent with
@@ -135,8 +141,18 @@ class BandService:
         # again in this run, unless the take changes.
         self._drift_refused = set()
         self._active = None
-        # The songs: their numbers in the service, and what goes both ways.
+        # The songs and the sets: their numbers in the service, and what goes
+        # both ways.
         self.songs = ServiceSongs(self)
+        self.sets = ServiceSets(self)
+        # The notice of the last check that brought changes, or of one from
+        # Check the band service that brought none: {"id", "text"}, with
+        # "see": False when there are no lines to see.
+        self.news = None
+        self._news_id = 0
+        # Check the band service was pressed: the next check to finish says
+        # so even when it brings nothing.
+        self._manual = False
         # Files are being made, or a take's WAVs read for its tempo: the
         # names pass waits, since it moves folders.
         self.making = False
@@ -541,6 +557,8 @@ class BandService:
         way stops at its next part, finding its take gone."""
         self._lib.forget_service()
         self.songs.forget()
+        self.sets.forget()
+        self.news = None
         with self._lock:
             entries, self._entries = list(self._entries.values()), {}
             self._edits.clear()
@@ -633,9 +651,13 @@ class BandService:
                 print(f"Band service: {again} takes an older РЭХА could not send go again", file=sys.stderr)
             self._tidy()
 
-    def check_soon(self):
-        """A rehearsal has started: the service is asked what the band
-        changed there, at the next turn."""
+    def check_soon(self, manual=False):
+        """A rehearsal has started, or Check the band service was pressed
+        (`manual`): the service is asked what the band changed there, at the
+        next turn, which waits while a take records or plays. A check from
+        the button that brings nothing says so."""
+        if manual:
+            self._manual = True
         self._next_check = 0.0
         self._wake.set()
 
@@ -654,6 +676,10 @@ class BandService:
         # A song goes before any take: a take carries its song's number.
         if self._later.get("songs", 0) <= now and self.songs.owed() is not None:
             self._push_songs()
+        # The sets after the songs, whose numbers they carry.
+        if (self._later.get("songs", 0) <= now and self._later.get("sets", 0) <= now
+                and self.sets.owed() is not None):
+            self._push_sets()
         for d in self._deletes():
             if self._later.get(("delete", d["uid"]), 0) <= now:
                 return self._delete(d)
@@ -720,9 +746,40 @@ class BandService:
             print(f"Band service: songs could not go: {e}", file=sys.stderr)
             self._later["songs"] = time.monotonic() + self.CHECK_SEC
 
+    def _push_sets(self):
+        """РЭХА's changes to its sets, to the service, as _push_songs sends
+        the songs': no internet tries again soon, and a service that turned
+        them down (one from before sets, say) is asked again in an hour."""
+        try:
+            self.sets.push(self._client())
+        except Offline:
+            self._later["sets"] = time.monotonic() + self.RETRY_SEC
+        except (Refused, Gone) as e:
+            print(f"Band service: sets could not go: {e}", file=sys.stderr)
+            self._later["sets"] = time.monotonic() + self.CHECK_SEC
+
+    def _tell(self, done, manual):
+        """The notice of a check: who changed how many songs and sets, from
+        `done`, the band's changes as (who, ("song" or "set", number));
+        “Nothing new in the band service.” for a check from the button that
+        brought none; nothing otherwise."""
+        if done:
+            keys = {k for _, k in done}
+            news = {"text": news_text([w for w, _ in done], sum(k[0] == "song" for k in keys),
+                                      sum(k[0] == "set" for k in keys))}
+        elif manual:
+            news = {"text": NOTHING_NEW, "see": False}
+        else:
+            return
+        with self._lock:
+            self._news_id += 1
+            self.news = {"id": self._news_id, **news}
+
     def _compare(self):
         """
-        The songs first (service_songs.py), then the takes.
+        The songs first (service_songs.py), then the sets (service_sets.py),
+        then the takes. What the band changed in songs and sets is said in
+        one notice (_tell).
 
         Which of its takes the service has, against what РЭХА holds of them.
         A take the band deleted there, or the service deleted for good, is
@@ -733,14 +790,32 @@ class BandService:
         reached the service yet is left as it is. No internet asks again soon; a
         service that turned the question down is asked again in an hour.
         """
+        manual = self._manual
+        done = []
         try:
-            self.songs.check(self._client())
+            done = self.songs.check(self._client())
         except Offline:
             self._next_check = time.monotonic() + self.RETRY_SEC
             return
         except (Refused, Gone) as e:
             # A service from before songs had numbers: the takes all the same.
+            # Nothing could be asked, so the button's check says nothing.
             print(f"Band service: the songs could not be checked: {e}", file=sys.stderr)
+            manual = False
+        else:
+            try:
+                done += self.sets.check(self._client())
+            except Offline:
+                # What the songs brought is said now; the button's check ends
+                # with the sets'.
+                self._tell(done, False)
+                self._next_check = time.monotonic() + self.RETRY_SEC
+                return
+            except (Refused, Gone) as e:
+                # A service from before sets: the takes all the same.
+                print(f"Band service: the sets could not be checked: {e}", file=sys.stderr)
+        self._manual = False
+        self._tell(done, manual)
         try:
             listed = self._client().takes()
         except Offline:

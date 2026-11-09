@@ -2580,9 +2580,10 @@ class Api:
             for e in entries:
                 if e["kind"] == "cloud" and e["state"] == "waiting":
                     e["step"] = "After the take"
-        # The last check of the band service's songs that brought changes:
+        # The last check of the band service that brought changes to songs
+        # or sets, or one from Check the band service that brought none:
         # {"id", "text"}, said once per id (song sync spec, What РЭХА shows).
-        news = self._sending.get("service").songs.news
+        news = self._sending.get("service").news
         return {"entries": entries, "recording": recording, **({"news": news} if news else {})}
 
     def _sound_busy(self):
@@ -4481,9 +4482,12 @@ class Api:
 
     def _sets_changed(self, change):
         try:
-            return {"ok": True, "sets": change()}
+            sets = change()
         except SetRefused as e:
             return {"ok": False, "error": str(e)}
+        # The band service has the change at once (sending/service_sets.py).
+        self._sending.get("service").wake()
+        return {"ok": True, "sets": sets}
 
     def add_set(self, name, songs):
         return self._sets_changed(lambda: self._lib.add_set(name, songs))
@@ -7226,6 +7230,16 @@ class Api:
 
     def disconnect_service(self):
         return self._sending.get("service").disconnect()
+
+    def check_band_service(self):
+        """Check the band service, in the menu of sets beside Start
+        rehearsal: the check of songs, sets and takes runs at once, or right
+        after the take that records or plays. Its notice comes as any
+        check's does (activity), and says so when there was nothing new."""
+        if parse_key(self._config.get("service_key")) is None:
+            return {"ok": False, "error": NO_KEY}
+        self._sending.get("service").check_soon(manual=True)
+        return {"ok": True}
 
     def set_service_auto_publish(self, on):
         """Whether a saved take goes to the band service on its own."""

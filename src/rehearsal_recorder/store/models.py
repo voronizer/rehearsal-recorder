@@ -452,3 +452,24 @@ class ServiceSongMerge(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     from_sid: Mapped[int] = mapped_column(Integer)
     into_song_id: Mapped[int] = mapped_column(ForeignKey("song.id", ondelete="CASCADE"))
+
+
+class ServiceSet(Base):
+    """
+    A set's number in the band service, and what РЭХА and the service last
+    agreed on for it: its name, and its songs as the service's numbers
+    (migration 0016; sending/service_sets.py). Read against what each side
+    has now, as a song's row is (ServiceSong). `set_id` is None for a set
+    deleted here whose delete the service has not had yet. No row: the set
+    has no number yet.
+    """
+
+    __tablename__ = "service_set"
+
+    # Its number in the service, given by the service and never changed.
+    sid: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=False)
+    set_id: Mapped[int | None] = mapped_column(
+        ForeignKey("song_set.id", ondelete="SET NULL"), nullable=True, unique=True
+    )
+    name: Mapped[str] = mapped_column(String)
+    songs: Mapped[list] = mapped_column(JSON)
