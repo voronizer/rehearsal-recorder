@@ -1,7 +1,9 @@
 """Shared transport integration: real WAV/library work with a fake sound card."""
 import tempfile
 import threading
+import time
 from pathlib import Path
+from unittest import mock
 
 # Reuse the engine suite's fake sounddevice and isolated Api factory. Importing
 # the module does not run its suite or touch the user's recording library.
@@ -181,6 +183,117 @@ def metronome():
             api.shutdown()
 
 
+def _recorder_of(api):
+    """Record from the screen's Record and Stop as the band does, a block of
+    sound in between: the take Stop saved, as session_state lists takes."""
+    def record(stop="stop_keep"):
+        assert api.transport_command("start")["ok"]
+        fake_rtmixer.recorded(api._recorder, np.full((512, 1), 1000, dtype=np.int32), 512, None, None)
+        stopped = api.transport_command(stop)
+        assert stopped["ok"], stopped
+        return stopped["take"]
+    return record
+
+
+def held():
+    """The take saved by Stop is held from sending while the band listens to
+    it (listening-apart spec, Sending): every Stop holds it, from before it is
+    saved; release_take, the next take, ten minutes, its delete, Clear false
+    starts, a renamed rehearsal and Finish end the hold."""
+    with tempfile.TemporaryDirectory() as folder:
+        mod, api = fresh_api(Path(folder))
+        try:
+            assert mod.HOLD_SEC == 600
+            assert api.start_rehearsal("Held", 0, SR, [{"name": "Guitar", "channel": 1}])["ok"]
+            here = Path(api._session["folder"])
+            record = _recorder_of(api)
+
+            def held_take():
+                return api.session_state()["held_take"]
+
+            assert held_take() is None
+            # Held from before it is saved: saving puts the take on its way.
+            seen = []
+            original_keep = api.keep_take
+
+            def watched_keep(*args, **kwargs):
+                seen.append(api._held())
+                return original_keep(*args, **kwargs)
+
+            api.keep_take = watched_keep
+            api.set_next_take_name("Viasna")
+            first = record()
+            api.keep_take = original_keep
+            assert seen == [(here, first["take_number"])], seen
+            assert held_take() == first["take_number"]
+            assert api.transport_state()["state"] == "ready" and api.transport_state()["pending_take"] is None
+            # Closed on the screen, it goes; with nothing held that changes nothing.
+            assert api.release_take() == {"ok": True} and held_take() is None
+            assert api.release_take() == {"ok": True} and held_take() is None
+
+            # stop_review is stop_keep; Record from the controller ends the
+            # hold, and its Stop holds the next.
+            second = record("stop_review")
+            assert held_take() == second["take_number"]
+            assert api.transport_command("record_stop")["ok"]
+            assert held_take() is None
+            fake_rtmixer.recorded(api._recorder, np.full((512, 1), 1000, dtype=np.int32), 512, None, None)
+            third = api.transport_command("record_stop")["take"]
+            assert held_take() == third["take_number"]
+            # A Record that fails starts no take: the take stays held.
+            old_start = api.start_take
+            api.start_take = lambda: {"ok": False, "error": "Input device absent"}
+            try:
+                assert not api.transport_command("start")["ok"]
+            finally:
+                api.start_take = old_start
+            assert held_take() == third["take_number"]
+            # Ten minutes after Stop it goes, with nobody pressing anything.
+            real = time.monotonic
+            with mock.patch.object(mod.time, "monotonic", lambda: real() + mod.HOLD_SEC - 1):
+                assert held_take() == third["take_number"]
+            with mock.patch.object(mod.time, "monotonic", lambda: real() + mod.HOLD_SEC + 1):
+                assert held_take() is None
+            assert api._hold is None and held_take() is None
+
+            # Its trash ends the hold, and so does Clear false starts.
+            fourth = record()
+            gone = api.delete_take(str(here), fourth["take_number"])
+            assert gone["ok"] and held_take() is None and api._held() is None
+            assert api.end_trash(gone["undo"])["ok"]
+            fifth = record()
+            gone = api.delete_takes(str(here), [fifth["take_number"]])
+            assert gone["deleted"] == [fifth["take_number"]] and held_take() is None
+            assert api.end_trash(gone["undo"])["ok"]
+
+            # A save that does not work holds nothing, and Retry neither.
+            api.keep_take = lambda *args, **kwargs: {"ok": False, "error": "Disk refused save"}
+            assert api.transport_command("start")["ok"]
+            fake_rtmixer.recorded(api._recorder, np.full((512, 1), 1000, dtype=np.int32), 512, None, None)
+            assert not api.transport_command("stop_keep")["ok"]
+            assert api._held() is None
+            api.keep_take = original_keep
+            assert api.transport_command("retry_save")["ok"]
+            assert api._held() is None
+
+            # Renaming the rehearsal moves its folder, and ends the hold.
+            sixth = record()
+            assert held_take() == sixth["take_number"]
+            renamed = api.rename_rehearsal(str(here), "Held again")
+            assert renamed["ok"] and Path(renamed["folder"]) != here
+            assert held_take() is None and api._held() is None
+
+            # Finish ends it: the last take of the evening goes.
+            seventh = record()
+            assert held_take() == seventh["take_number"]
+            assert api.transport_command("stop_rehearsal")["ok"]
+            assert api._held() is None
+            print("The take held after Stop: all checks passed.")
+        finally:
+            api.shutdown()
+
+
 if __name__ == "__main__":
     main()
     metronome()
+    held()

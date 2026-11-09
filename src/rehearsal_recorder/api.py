@@ -171,6 +171,11 @@ MIDI_THREADS = True
 TAP_QUIET_SEC = 2.0
 TAP_POLL_SEC = 0.1
 
+# A take saved by Stop is held back from sending while the band listens to
+# it, and goes at the latest this long after Stop (listening-apart spec,
+# Sending). Fixed: a Settings row can follow if a band needs another number.
+HOLD_SEC = 600
+
 log = logging.getLogger(__name__)
 
 # The player's problem, and the signal check's, once РЭХА's sound process
@@ -857,6 +862,14 @@ class Api:
         # take hears the system going to sleep anyway (platform_support).
         self._awake = KeepAwake()
         self._sleep_watch = SleepWatch(self._laptop_sleeping)
+        # The take saved by the last Stop, held: neither sending module sends
+        # it while the band may still listen to it, star it, untick its box
+        # or throw it away (_held). (rehearsal folder, take number, when the
+        # hold ends on the monotonic clock), or None. In memory only: after a
+        # restart a held take simply goes. Set before the modules are made,
+        # whose threads ask for it.
+        self._hold = None
+        self._hold_lock = threading.Lock()
         # Where saved takes are sent: the cloud folder or the band service.
         # The settings are read further down, so the switch asks for them
         # each time.
@@ -2643,6 +2656,9 @@ class Api:
             # The set it is played by, its titles as they are now, or None.
             "set": here["set"] if here else None,
             "recording": self._recorder is not None,
+            # The take of this rehearsal saved by the last Stop, while it is
+            # held from sending (_held), or None.
+            "held_take": self._held_take_in(s["folder"]),
             # The takes on their way: "cloud_queue", "service_queue" and
             # "service_up", as sending_queue has them.
             **self.sending_queue(),
@@ -2853,6 +2869,9 @@ class Api:
         folder = Path(self._session["folder"])
         rehearsal = self._lib.rehearsal(folder)
         take_count = len(rehearsal["takes"]) if rehearsal else 0
+        # The last take of the evening is held no longer: nobody presses
+        # anything after it, and it goes now.
+        self._release_take()
         self._session = None
         # The click between takes stops with the rehearsal, and the row has
         # no next take to follow.
@@ -3367,6 +3386,66 @@ class Api:
             for t in band if records_notes(t) and t["name"] not in written
         ]
         return lanes, missing
+
+    # ---------- the take held after Stop ----------
+    #
+    # Stop saves the take at once, and the rehearsal screen opens it for
+    # listening (listening-apart spec). While the band listens it may still
+    # throw the take away, untick its box or give it a ★, so neither sending
+    # module sends it yet: it is held. The hold ends, and the take goes as the
+    # setting or its box says, when the screen closes the take or opens
+    # another (release_take), when the next take starts recording, when the
+    # rehearsal ends, when the take is deleted, or HOLD_SEC after Stop. One
+    # take at most is held. Everything else about sending is as it was: a
+    # held take is queued as any saved take is, and counts as still to send.
+
+    def _hold_take(self, folder, take_number):
+        """The take Stop is saving is held from now. Set before the take is
+        saved, since saving puts it on its way, and a sending thread must
+        not start on it in between. A take held before is held no longer."""
+        with self._hold_lock:
+            self._hold = (Path(folder), int(take_number), time.monotonic() + HOLD_SEC)
+
+    def _held(self):
+        """(rehearsal folder, take number) of the take held after Stop, or
+        None. A hold whose time has passed ends here: the sending modules ask
+        on every pass, so the take goes at their next one."""
+        with self._hold_lock:
+            if self._hold is None:
+                return None
+            folder, take_number, until = self._hold
+            if time.monotonic() >= until:
+                self._hold = None
+                return None
+            return folder, take_number
+
+    def _is_held(self, folder, take_number):
+        """Whether this take is the one held after Stop."""
+        return self._held() == (Path(folder), int(take_number))
+
+    def _held_take_in(self, folder):
+        """The number of the take of the rehearsal in `folder` held after
+        Stop, or None."""
+        held = self._held()
+        return held[1] if held is not None and held[0] == Path(folder) else None
+
+    def _release_take(self, folder=None, take_number=None):
+        """The hold ends: with `folder` only if the take held is of that
+        rehearsal, and with `take_number` too only if it is that take. The
+        sending modules are woken either way, to look again at once."""
+        with self._hold_lock:
+            hold = self._hold
+            if (hold is not None and (folder is None or hold[0] == Path(folder))
+                    and (take_number is None or hold[1] == int(take_number))):
+                self._hold = None
+        self._sending.wake()
+
+    def release_take(self):
+        """The rehearsal screen closed the take open after Stop, opened
+        another, or was left: whatever is held goes now. {"ok": True}, with
+        nothing held too."""
+        self._release_take()
+        return {"ok": True}
 
     @serialised
     def keep_take(
@@ -4270,6 +4349,10 @@ class Api:
         if self._session is not None and Path(self._session["folder"]) == original:
             self._session["folder"] = folder
             self._session["name"] = display_name
+        # The take held after Stop is held by its folder, which has moved:
+        # it is held no longer.
+        if folder != original:
+            self._release_take(original)
 
         # The copies sit in a cloud subfolder named after the rehearsal, so
         # that folder takes the new name too — this rehearsal's or one long
@@ -5837,7 +5920,8 @@ class Api:
         the interface's Undo sends back (undo_trash); the take reaches the
         Trash when that notice ends (end_trash), and its copy in the cloud
         folder leaves with it then. {"ok": False, "error"} leaves the take,
-        rows and files, as it was.
+        rows and files, as it was. The take held after Stop (_held) is held
+        no longer.
         """
         folder = Path(folder)
         if not self._inside_recordings(folder):
@@ -5850,10 +5934,14 @@ class Api:
                 return {"ok": False, "error": "Take not found"}
             if self._take_being_cropped(folder, take_number):
                 return {"ok": False, "error": CROPPING}
+            # Asked first: the files can take a while to move.
+            was_held = self._is_held(folder, take_number)
             held = self._hold_takes(folder, [take_number], "take")
             if held["failed"]:
                 return {"ok": False, "error": held["failed"][0]["error"],
                         "ended": held["ended"]}
+            if was_held:
+                self._release_take(folder, take_number)
             return {"ok": True, "undo": held["undo"], "takes_left": held["takes_left"],
                     "ended": held["ended"]}
 
@@ -5880,6 +5968,10 @@ class Api:
                                   else "Rehearsal not found")
             held = (self._hold_takes(folder, found, "takes") if found
                     else {"undo": None, "deleted": [], "failed": [], "ended": []})
+            # The take held after Stop among them is held no longer.
+            held_now = self._held()
+            if held_now is not None and held_now[0] == folder and held_now[1] in held["deleted"]:
+                self._release_take(folder, held_now[1])
         refused.update({f["take_number"]: f["error"] for f in held["failed"]})
         return {"ok": True, "deleted": held["deleted"],
                 "failed": [{"take_number": n, "error": refused[n]}

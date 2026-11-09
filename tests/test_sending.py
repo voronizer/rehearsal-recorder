@@ -864,6 +864,7 @@ def run(tmp, fake):
         api.take_drift = real_drift
 
     songs_both_ways(api, fake, service, drain, entries, keep, uid_of, take, folder)
+    held_after_stop(api, fake, service, drain, entries, keep, uid_of, take, folder)
 
     ok("every request matches the service's description", fake.mismatches == [])
     # Cloudflare's Browser Integrity Check turns away Python-urllib/3.x.
@@ -1156,6 +1157,119 @@ def songs_both_ways(api, fake, service, drain, entries, keep, uid_of, take, fold
         api.disconnect_service()
         api.set_service_key(fake.key)
         fake2.stop()
+
+
+def held_after_stop(api, fake, service, drain, entries, keep, uid_of, take, folder):
+    """The take saved by the last Stop is held: neither the band service nor
+    the cloud folder sends it until the hold ends (listening-apart spec,
+    Sending). The Stop itself is the transport's, in test_transport.py; here
+    each take is held as it holds one, and no worker thread runs to race it."""
+    print("\n[11] A take held after Stop")
+    from unittest import mock
+    from rehearsal_recorder import api as apimod
+
+    def calls(uid):
+        """What the service was asked about a take, but a delete."""
+        return [o for o in fake.order if uid in o and not o.startswith("delete ")]
+
+    def hold(n):
+        api._hold_take(folder(), n)
+        return n
+
+    up = {"up": True, "flac": True, "error": None}
+    drain()
+    n_held = hold(keep("Viasna", band=["Drums"]))
+    uid_held = uid_of(n_held)
+    drain()
+    ok("a held take waits for the band service, its line waiting",
+       uid_held is not None and calls(uid_held) == []
+       and take(n_held)["service"] == {"up": False, "flac": False, "error": None}
+       and [e["state"] for e in entries() if e["take_number"] == n_held] == ["waiting"]
+       and api.session_state()["service_queue"] == {n_held: "queued"}
+       and api.session_state()["held_take"] == n_held)
+    n_after = keep("Kupalle", band=["Drums"])
+    drain()
+    ok("a take saved after it goes meanwhile",
+       take(n_after)["service"] == up and calls(uid_held) == [])
+
+    left = api.sending_left()
+    ok("a held take counts as still to send", left["takes"] == 1 and left["bytes"] > 0)
+    window = Window()
+    api._window = window
+    service()._closing_anyway = False
+    ok("so closing the window asks first",
+       api.window_closing() is False and window.asked.wait(5))
+
+    ok("release_take answers ok", api.release_take() == {"ok": True}
+       and api.session_state()["held_take"] is None)
+    drain()
+    ok("released, it goes", take(n_held)["service"] == up
+       and api.sending_left() == {"takes": 0, "bytes": 0} and api.window_closing() is True)
+
+    n_late = hold(keep("Viasna", band=["Drums"]))
+    drain()
+    ok("held, it waits", calls(uid_of(n_late)) == [])
+    real = time.monotonic
+    with mock.patch.object(apimod.time, "monotonic", lambda: real() + apimod.HOLD_SEC + 1):
+        drain()
+    ok("ten minutes after Stop it goes on its own", take(n_late)["service"] == up)
+
+    n_out = hold(keep("Viasna", band=["Drums"]))
+    uid_out = uid_of(n_out)
+    res = api.unshare_take(folder(), n_out)
+    drain()
+    api.release_take()
+    drain()
+    ok("a held take unticked never goes, once released too",
+       res["ok"] and calls(uid_out) == [] and take(n_out)["service"] is None
+       and api.session_state()["service_queue"] == {})
+
+    n_false = hold(keep("Palyn", seconds=2.0, band=["Drums"]))
+    ok("a held false start stays at home", uid_of(n_false) is None)
+    sent = api.share_take(folder(), n_false)
+    drain()
+    ok("ticked, it is queued and still waits",
+       sent["ok"] and calls(uid_of(n_false)) == []
+       and api.session_state()["service_queue"] == {n_false: "queued"})
+    api.release_take()
+    drain()
+    ok("and goes once released", take(n_false)["service"] == up)
+
+    # The same with the cloud folder chosen (tmp/Drive, sending on, from [8]).
+    cloud = api._sending.get("cloud")
+    api.set_send_to("cloud")
+    while cloud.queue.run_next():
+        pass
+
+    def waiting_cloud(n):
+        return [e for e in api._journal.snapshot() if e["kind"] == "cloud"
+                and e["take_number"] == n and e["state"] == "waiting"]
+
+    n_c = hold(keep("Viasna", band=["Drums"]))
+    ok("a held take waits for the cloud folder",
+       cloud.queue.run_next() is False and api.session_state()["cloud_queue"] == {n_c: "queued"}
+       and not take(n_c)["cloud"] and waiting_cloud(n_c) != [])
+    n_c2 = keep("Kupalle", band=["Drums"])
+    ok("a take saved after it is copied meanwhile",
+       cloud.queue.run_next() is True and Path(take(n_c2)["cloud"].get("mix", "")).exists()
+       and api.session_state()["cloud_queue"] == {n_c: "queued"})
+    res = api.unshare_take(folder(), n_c)
+    ok("unticking a held take takes its copy off the queue, and is not refused",
+       res["ok"] and api.session_state()["cloud_queue"] == {} and waiting_cloud(n_c) == [])
+    api.release_take()
+    ok("and it stays at home once released", cloud.queue.run_next() is False and not take(n_c)["cloud"])
+    n_c3 = keep("Viasna", band=["Drums"])
+    res = api.unshare_take(folder(), n_c3)
+    ok("a take not held is still not taken out while its copy waits",
+       res["ok"] is False and api.session_state()["cloud_queue"] == {n_c3: "queued"})
+    while cloud.queue.run_next():
+        pass
+    n_c4 = hold(keep("Viasna", band=["Drums"]))
+    ok("held, a copy waits", cloud.queue.run_next() is False and not take(n_c4)["cloud"])
+    api.release_take()
+    ok("released, it is made", cloud.queue.run_next() is True
+       and Path(take(n_c4)["cloud"].get("mix", "")).exists())
+    api.set_send_to("service")
 
 
 if __name__ == "__main__":

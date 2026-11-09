@@ -135,6 +135,12 @@ def _copy_detail(what, res):
     return f"{said}{note}"
 
 
+def _is_held(job, held):
+    """Whether a job of the queue is of the take `held` names, as
+    PublishQueue's `held()` gives it."""
+    return held is not None and Path(job[0]) == held[0] and job[1] == held[1]
+
+
 class PublishQueue:
     """
     Takes waiting to be copied into the cloud folder.
@@ -148,11 +154,16 @@ class PublishQueue:
 
     The loop body is `run_next`, which the tests call directly. The thread is
     only started by the real app, so a test never races it.
+
+    `held()` names the take whose job waits however long it is queued, as
+    (folder, take number), or None: the take saved by the last Stop, while
+    the band listens to it (Api._held). The jobs after it go meanwhile.
     """
 
-    def __init__(self, step, paused):
+    def __init__(self, step, paused, held=lambda: None):
         self._step = step
         self._paused = paused
+        self._held = held
         # [folder, take_number, what]: what is None for an automatic job,
         # "mix"/"tracks"/"both" for one asked for by hand.
         self._jobs = []
@@ -204,14 +215,36 @@ class PublishQueue:
         with self._lock:
             return self._active is not None
 
+    def drop(self, folder, take_number):
+        """A job still waiting taken off the queue: True when there was one.
+        A copy being made is not stopped."""
+        folder, take_number = Path(folder), int(take_number)
+        with self._lock:
+            for i, job in enumerate(self._jobs):
+                if Path(job[0]) == folder and job[1] == take_number:
+                    del self._jobs[i]
+                    return True
+        return False
+
+    def wake(self):
+        """The worker looks at the queue now, rather than at its next turn."""
+        self._wake.set()
+
     def run_next(self):
         """One job. False when there was nothing to do, or not now."""
         if self._paused():
             return False
         with self._lock:
-            if not self._jobs:
+            # Asked under the lock: Stop holds a take before saving it queues
+            # its job, so a job found here was held already if it is to be.
+            # Api._held takes a lock of its own, and nothing that holds that
+            # one asks for this.
+            held = self._held()
+            at = next((i for i, job in enumerate(self._jobs)
+                       if not _is_held(job, held)), None)
+            if at is None:
                 return False
-            self._active = self._jobs.pop(0)
+            self._active = self._jobs.pop(at)
         try:
             self._step(*self._active)
         finally:
@@ -279,7 +312,8 @@ class CloudFolder:
     def __init__(self, api):
         self.api = api
         self.queue = PublishQueue(
-            step=self._publish_step, paused=lambda: api._sound_busy() is not None
+            step=self._publish_step, paused=lambda: api._sound_busy() is not None,
+            held=lambda: api._held(),
         )
         # The journal entry of each take waiting to be copied, by (folder,
         # take number): one however many times it is asked for.
@@ -634,8 +668,15 @@ class CloudFolder:
                 return {"ok": False, "error": "Rehearsal not found"}
             return {"ok": False, "error": "Take not found"}
         # A copy on its way would put back what is removed now the moment it
-        # finished — the file in the band's folder, and its record.
-        if self.queue.states(str(folder)).get(int(take_number)):
+        # finished — the file in the band's folder, and its record. The take
+        # held after Stop has not started on its way: its box unticked, its
+        # copy is not made at all.
+        if api._is_held(folder, take_number) and self.queue.drop(folder, take_number):
+            with self._lock:
+                entry = self.entries.pop((str(folder), int(take_number)), None)
+            if entry is not None:
+                entry.discard()
+        elif self.queue.states(str(folder)).get(int(take_number)):
             return {"ok": False, "error":
                     "This take is still being copied to the cloud. Remove it "
                     "once the copy has finished."}
@@ -663,3 +704,6 @@ class CloudFolder:
 
     def stop(self, timeout=2.0):
         self.queue.stop(timeout)
+
+    def wake(self):
+        self.queue.wake()

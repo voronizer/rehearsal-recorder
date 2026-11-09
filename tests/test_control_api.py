@@ -74,16 +74,22 @@ def main():
             assert adapter.execute('start_rehearsal', {'name':'API', 'device_index':0, 'samplerate':SR, 'tracks':[{'name':'Guitar','channel':1}]})['ok']
             api._session['set'] = {'songs': ['One', 'Empty']}
             api.set_next_take_name('One')
-            # Laptop Stop leaves a draft for Review even if an old config enabled automatic keeping.
+            # stop_review is another name for stop_keep: the take is saved at
+            # once, with no draft left for a screen after it, and held from
+            # sending while the band listens to it. An old config's
+            # automatic keeping changes nothing.
             api._config['automatic_keep'] = True
             assert adapter.execute('start')['ok']
             fake_rtmixer.recorded(api._recorder, np.full((512,1),1000,dtype=np.int32),512,None,None)
             review = adapter.execute('stop_review')
-            assert review['ok'] and not api._session_takes()
-            assert adapter.state()['pending_take']['take_number'] == 1
-            assert not adapter.execute('start')['ok']
-            assert api.keep_take(review['take_number'],review['temp_dir'],'One',review['duration_sec'],review['tracks'])['ok']
-            assert adapter.state()['state'] == 'ready'
+            assert review['ok'] and [t['take_number'] for t in api._session_takes()] == [1]
+            assert review['take']['take_number'] == 1 and review['take']['song'] == 'One'
+            assert review['transport']['state'] == 'ready' and review['transport']['pending_take'] is None
+            assert adapter.state()['pending_take'] is None and adapter.state()['state'] == 'ready'
+            assert api.session_state()['held_take'] == 1
+            assert adapter.state()['events'][-1]['action'] == 'stop_review' and adapter.state()['events'][-1]['ok']
+            assert not adapter.execute('stop_review')['ok']
+            assert api.release_take() == {'ok': True} and api.session_state()['held_take'] is None
             # Explicit stop-and-keep is available to any adapter.
             assert adapter.execute('record_stop')['ok']
             fake_rtmixer.recorded(api._recorder, np.full((512,1),1000,dtype=np.int32),512,None,None)
@@ -131,7 +137,7 @@ def main():
             finally: release.set();thread.join(5)
             assert not thread.is_alive()
             # Stop Review remains Saving even after stop_take clears its own
-            # stopping flag, until the pending take is published atomically.
+            # stopping flag, until the take is saved.
             assert adapter.execute('start')['ok']
             fake_rtmixer.recorded(api._recorder, np.full((512, 1), 1000, dtype=np.int32), 512, None, None)
             original_stop = api.stop_take
@@ -155,9 +161,10 @@ def main():
                 stop_thread.join(5)
                 api.stop_take = original_stop
             assert not stop_thread.is_alive() and stop_results[0]['ok']
-            pending = stop_results[0]
-            assert adapter.state()['readiness'] == 'attention'
-            assert api.keep_take(pending['take_number'], pending['temp_dir'], 'One', pending['duration_sec'], pending['tracks'])['ok']
+            saved = stop_results[0]['take']
+            assert adapter.state()['readiness'] == 'ready' and adapter.state()['pending_take'] is None
+            assert api._session_takes()[-1]['take_number'] == saved['take_number']
+            assert api.session_state()['held_take'] == saved['take_number']
             # A failed acknowledgement cannot prevent a validated action.
             def broken_feedback():
                 raise OSError('Feedback queue closed')
@@ -217,7 +224,7 @@ def main():
             assert adapter.state()['state'] == 'ready' and not adapter.state()['playback_open']
             assert not adapter.execute('play_stop')['ok']
             assert api.player_state()['playing']
-            print('Control API: JSON bridge, review/keep, bound selection, execution state, catalog limits, volume and shared gate passed')
+            print('Control API: JSON bridge, stop_review as stop_keep, explicit keep, bound selection, execution state, catalog limits, volume and shared gate passed')
         finally:
             api.shutdown()
 
