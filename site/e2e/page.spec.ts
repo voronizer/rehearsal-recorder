@@ -503,6 +503,10 @@ test("the MIDI piece shows two lanes of notes, each with its plate, the part hea
   await expect(keys).toContainText("Launchkey Mini MK3")
   await expect(keys.getByRole("button", { name: "Keys: Saved as .mid, not played here" })).toHaveAttribute("aria-pressed", "true")
   await expect(piece.locator("[data-notes-lane]")).toHaveCount(2)
+  // Each plate has the MIDI sign before M, as in the player, and no arrow:
+  // the piece has nothing to fold.
+  for (const plate of [drums, keys]) await expect(plate.getByRole("img", { name: "MIDI" })).toBeVisible()
+  await expect(piece.locator("[data-notes-fold]")).toHaveCount(0)
   // The drums' rows are named, and the keys' octaves.
   await expect(piece.locator("[data-notes-lane='Drums']")).toContainText("Crash")
   await expect(piece.locator("[data-notes-lane='Drums']")).toContainText("Kick")

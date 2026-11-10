@@ -67,6 +67,13 @@ const lane = (page: Page, name: string) => page.locator(`[data-lane='${name}'] >
 const cell = (page: Page, name: string) => page.locator(`[data-lane='${name}']`)
 const notesPlate = (page: Page, name: string) => page.locator(`[data-notes-plate='${name}']`)
 const notesLane = (page: Page, name: string) => page.locator(`[data-notes-lane='${name}']`)
+/** Opens a lane of notes, folded when its take opens, with the arrow after
+ *  its M. */
+async function unfold(page: Page, name: string) {
+  const arrow = notesPlate(page, name).getByRole("button", { name: `${name} notes` })
+  await arrow.click()
+  await expect(arrow).toHaveAttribute("aria-expanded", "true")
+}
 /** The one group every track's lane is a row of. */
 const group = (page: Page) => page.locator("[data-lanes]")
 /** The row a lane's picture or plate is in. */
@@ -352,6 +359,7 @@ test.describe("track lanes", () => {
     }) => {
       await stopped(page, BOTH, scaled(scale))
       await settled(page)
+      await unfold(page, "Drums")
       const midi = notesPlate(page, "Drums")
       const at = await box(midi)
       // At least what six named rows need, which is with the scale; the
@@ -376,6 +384,7 @@ test.describe("track lanes", () => {
     }) => {
       await stopped(page, BOTH, scaled(scale))
       await settled(page)
+      await unfold(page, "Keys")
       const keys = notesPlate(page, "Keys")
       const at = await box(keys)
       // At least what six named rows need, which is with the scale; the
@@ -632,6 +641,7 @@ test.describe("track lanes", () => {
       const greys = await group(page).locator("[data-plate-well]").all()
       expect(greys).toHaveLength(4)
       for (const el of greys) expect(await style(el, "background-color")).toEqual({ "background-color": well })
+      await unfold(page, "Keys")
       // The names of a notes lane's octaves stand on the card's colour, the
       // lane's ground, so a note under one does not run through it.
       const octave = notesLane(page, "Keys").getByText(/^C\d$/).first()
@@ -676,14 +686,15 @@ test.describe("track lanes", () => {
       "background-color": await colour(page, "--well"),
     })
     // Its plate is a row's plate, as an audio track's: no fill of its own,
-    // and the same padding.
+    // and the same padding at the left. Its line is 6 px under the row's top,
+    // folded or open, so the arrow does not move.
     const plateOf = notesPlate(page, "Keys")
     expect(await style(plateOf, "background-color", "border-top-width")).toEqual({
       "background-color": "rgba(0, 0, 0, 0)",
       "border-top-width": "0px",
     })
-    const pad = ["padding-left", "padding-top"]
-    expect(await style(plateOf, ...pad)).toEqual(await style(plate(page, "Gtr"), ...pad))
+    expect(await style(plateOf, "padding-left")).toEqual(await style(plate(page, "Gtr"), "padding-left"))
+    expect(await style(plateOf, "padding-top")).toEqual({ "padding-top": "6px" })
   })
 
   test("the time axis is one line from the map down through every lane", async ({ page }) => {
@@ -1007,6 +1018,7 @@ test.describe("M and S at the fader", () => {
     expect(await spinners.last().isVisible(), "a spinner at 0.9 s").toBe(false)
     await expect(spinners.first(), "a spinner by 2 s").toBeVisible({ timeout: 2000 })
     await expect(spinners.last()).toBeVisible()
+    await unfold(page, "Drums")
     await settled(page)
     const layout = () =>
       page
@@ -1062,6 +1074,8 @@ test.describe("M and S at the fader", () => {
   test("a notes lane's row names are 12 px", async ({ page }) => {
     await openTake2(page)
     await settled(page)
+    await unfold(page, "Drums")
+    await unfold(page, "Keys (Nord Stage 3 MIDI)")
     const kick = notesLane(page, "Drums").getByText("Kick", { exact: true })
     await expect(kick).toBeVisible()
     expect((await style(kick, "font-size"))["font-size"]).toBe("12px")

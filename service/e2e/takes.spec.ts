@@ -16,6 +16,11 @@ test.describe("as Alex", () => {
     await expect(lanes.nth(1)).toHaveAttribute("data-paired", "true")
     // Not played here: M pressed for good, the words in its tip.
     await expect(lanes.nth(1).locator("[data-notes-plate]").getByRole("button", { name: "Drums: Saved as .mid, not played here" })).toHaveAttribute("aria-pressed", "true")
+    // Folded when the take opens; the arrow after M opens them.
+    const unfold = lanes.nth(1).getByRole("button", { name: "Drums notes" })
+    await expect(unfold).toHaveAttribute("aria-expanded", "false")
+    await unfold.click()
+    await expect(unfold).toHaveAttribute("aria-expanded", "true")
     const kit = player.locator('[data-notes-lane="Drums"]')
     for (const row of ["Hi-hat", "Snare", "Kick"]) await expect(kit.getByText(row, { exact: true })).toBeVisible()
     await expect(kit).not.toContainText("Notes file")
@@ -81,6 +86,7 @@ test.describe("as Alex", () => {
   test("stuck at the foot of the window, Master covers the lanes that go on under it", async ({ page }) => {
     await page.setViewportSize({ width: 1280, height: 600 })
     await page.goto(`/takes/${band().takes["Viasna 12"]}`)
+    await page.getByRole("button", { name: "Drums notes" }).click()
     await expect(page.locator('[data-notes-lane="Drums"]').getByText("Kick", { exact: true })).toBeVisible()
     const master = page.locator("[data-master-band]")
     // Its foot is the window's, so no strip of a lane shows under it.
@@ -103,7 +109,8 @@ test.describe("as Alex", () => {
     await expect(lanes.nth(2)).not.toHaveAttribute("data-paired")
     await expect(lanes.nth(2).locator("[data-notes-plate]")).toContainText("Keys")
     await expect(lanes.nth(2).locator("[data-notes-plate] [data-icon]")).toHaveAttribute("data-icon", "keys")
-    // A chord in the octave of middle C.
+    // A chord in the octave of middle C, once the lane is open.
+    await lanes.nth(2).getByRole("button", { name: "Keys notes" }).click()
     const keys = page.locator('[data-notes-lane="Keys"]')
     await expect(keys.getByText("C4", { exact: true })).toBeVisible()
     await expect(keys).not.toContainText("Notes file")

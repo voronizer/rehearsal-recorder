@@ -54,6 +54,14 @@ const END_PX = 12
  *  out by this one template, over the same width, so a waveform lies exactly
  *  under the ruler and the band drawn across them. */
 const COLUMNS = `${GUTTER_PX}px minmax(0, 1fr) ${END_PX - COLUMN_GAP_PX}px`
+/** A folded lane of notes' row (Alex, 2026-11-10 12:41Z: every lane of notes
+ *  folded when a take opens): the plate's line of 1.25rem and the room the
+ *  notes need round it. Under its track 2 px above the line and the group's
+ *  3 px under the notes, which are 1.5rem, 24 px; alone 6 px above the line
+ *  and 3 px above and under the notes, 26 px. */
+const NOTES_STRIP = { paired: "calc(1.5rem + 3px)", alone: "calc(1.5rem + 8px)" }
+/** No lane of notes open: how every take opens. */
+const NONE_OPEN: ReadonlySet<string> = new Set()
 /** How fast the wheel zooms. One notch of a mouse wheel is about 100 units,
  *  so this makes a notch a fifth of the window. */
 const ZOOM_PER_PIXEL = 0.002
@@ -121,6 +129,18 @@ export function Timeline({
   const labels = useLabels()
   const surfaceId = useId()
   const { media, duration, position, region } = player
+  // The lanes of notes the band opened, by track name. A take closing or
+  // opening empties the player's tracks, and then every lane folds again; a
+  // zoom reads the waveforms again but never empties them, so it leaves the
+  // lanes as they are.
+  const [openNotes, setOpenNotes] = useState(NONE_OPEN)
+  if (media.length === 0 && openNotes.size > 0) setOpenNotes(NONE_OPEN)
+  const toggleNotes = (name: string) =>
+    setOpenNotes((open) => {
+      const next = new Set(open)
+      if (!next.delete(name)) next.add(name)
+      return next
+    })
   const from = player.view?.from ?? 0
   const to = player.view?.to ?? duration
   const span = Math.max(0.001, to - from)
@@ -541,8 +561,8 @@ export function Timeline({
                 // them apart, and their plates share one grey.
                 if (lane.kind !== "audio") {
                   // A Both track's notes are the row under its audio: its
-                  // plate says MIDI and has no name, the track's name being
-                  // on the row above.
+                  // plate has the MIDI sign and no name, the track's name
+                  // being on the row above.
                   const before = lanes[i - 1]
                   const paired = before?.kind === "audio" && before.name === lane.name
                   const read = notesRead?.get(lane.name)
@@ -552,16 +572,26 @@ export function Timeline({
                   const dimmed = paired
                     ? player.isMuted(lane.name) || (player.hasSolo && !player.isSoloed(lane.name))
                     : player.hasSolo
-                  // As tall as its plate, which a long name or port makes
-                  // taller and which is never less than six drum rows' names
-                  // and the room round them need (NotesPlate).
+                  // Open, as tall as its plate, which a long name or port
+                  // makes taller and which is never less than six drum rows'
+                  // names and the room round them need (NotesPlate); folded,
+                  // a strip.
+                  const open = openNotes.has(lane.name)
                   return (
                     <div
                       key={`notes:${lane.name}`}
                       data-lane-row={lane.name}
                       data-paired={paired || undefined}
+                      data-folded={!open || undefined}
                       className="grid"
-                      style={{ gridTemplateColumns: COLUMNS, columnGap: COLUMN_GAP_PX }}
+                      style={{
+                        gridTemplateColumns: COLUMNS,
+                        columnGap: COLUMN_GAP_PX,
+                        ...(!open && {
+                          height: paired ? NOTES_STRIP.paired : NOTES_STRIP.alone,
+                          gridTemplateRows: "minmax(0, 1fr)",
+                        }),
+                      }}
                     >
                       <PlateCell>
                         <PlateGrey join={paired ? "bottom" : "alone"} />
@@ -571,6 +601,7 @@ export function Timeline({
                           port={port}
                           paired={paired}
                           missing={lane.kind === "missing"}
+                          fold={{ open, onToggle: () => toggleNotes(lane.name) }}
                         />
                       </PlateCell>
                       <div className={cn("min-w-0", paired ? "pb-[3px]" : "py-[3px]")}>
