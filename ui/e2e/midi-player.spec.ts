@@ -74,7 +74,7 @@ const SAVED = "Saved as .mid, not played here"
 const GONE = "Not connected, no .mid saved"
 const notesLane = (page: Page, name: string) => page.locator(`[data-notes-lane='${name}']`)
 const audioLane = (page: Page, name: string) => page.locator(`[data-lane='${name}']`)
-/** The waveform in that lane, on its well. */
+/** The waveform in that lane, on the panel's fill. */
 const wave = (page: Page, name: string) => page.locator(`[data-lane='${name}'] > div`)
 const timeline = (page: Page) => page.getByRole("group", { name: "Take timeline" })
 /** The arrow after a lane of notes' M, which opens and folds it. */
@@ -257,14 +257,16 @@ test.describe("notes in the player", () => {
   test("a lane the band opened stays open while they zoom and play", async ({ page }) => {
     await stopped(page)
     await unfold(page, "Drums")
+    const read = await callCount(page, "take_media")
     const t = await box(timeline(page))
     await page.mouse.move(t.x + t.width / 2, t.y + t.height / 2)
     await page.keyboard.down("Control")
     await page.mouse.wheel(0, -400)
     await page.keyboard.up("Control")
     await expect(page.getByRole("button", { name: "Whole take" })).toBeVisible()
-    // Time for the waveforms to be read again for the zoomed view.
-    await page.waitForTimeout(800)
+    // The waveforms read again for the zoomed view, and the lane still open.
+    await expect.poll(() => callCount(page, "take_media")).toBeGreaterThan(read)
+    await page.waitForTimeout(300)
     await playButton(page).click()
     await page.waitForTimeout(500)
     await page.getByRole("toolbar", { name: "Transport" }).getByRole("button", { name: "Pause", exact: true }).click()
@@ -666,6 +668,7 @@ test.describe("notes in the player", () => {
       const b = await box(part)
       expect(b.x).toBeGreaterThanOrEqual(k.x)
       expect(b.x + b.width).toBeLessThanOrEqual(k.x + k.width)
+      expect(b.y).toBeGreaterThanOrEqual(k.y)
       expect(b.y + b.height).toBeLessThanOrEqual(k.y + k.height)
     }
     await unfold(page, "Drums")

@@ -131,8 +131,12 @@ test.describe("as Alex", () => {
     await expect(lanes.nth(2)).not.toHaveAttribute("data-paired")
     await expect(lanes.nth(2).locator("[data-notes-plate]")).toContainText("Keys")
     await expect(lanes.nth(2).locator("[data-notes-plate] [data-icon]")).toHaveAttribute("data-icon", "keys")
-    // A chord in the octave of middle C, once the lane is open.
-    await lanes.nth(2).getByRole("button", { name: "Keys notes" }).click()
+    // Folded when the take opens; a chord in the octave of middle C, once
+    // the lane is open.
+    const fold = lanes.nth(2).getByRole("button", { name: "Keys notes" })
+    await expect(fold).toHaveAttribute("aria-expanded", "false")
+    await expect(lanes.nth(2)).toHaveAttribute("data-folded", "true")
+    await fold.click()
     const keys = page.locator('[data-notes-lane="Keys"]')
     await expect(keys.getByText("C4", { exact: true })).toBeVisible()
     await expect(keys).not.toContainText("Notes file")

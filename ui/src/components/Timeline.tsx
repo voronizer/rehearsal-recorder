@@ -21,12 +21,12 @@ import type { MultitrackPlayer } from "@/hooks/useMultitrackPlayer"
 const DRAG_THRESHOLD_PX = 5
 const GUTTER_PX = 200
 /** The name row of 1rem, the fader's row of 1.25rem under it (the fader and
- *  its meter 1rem, M and S 1.25rem after it), 0.125rem apart, and the rest
- *  above and below: 3.5rem, 56 px at the Appearance scale of 1, with 9 px
- *  over the name and under M and S, 8 of them on the plate's grey (PlateGrey),
- *  1 px in from the row's edges. In rem because all
- *  of that is, and a row that stayed 56 px at 150 % left the name and the
- *  fader's row on top of each other. No taller than that: at 160 a lane's
+ *  its meter 1rem, M and S 1.25rem after it), 0.125rem apart on the grey
+ *  (0.25rem on Backing's plate, which has none), and the rest above and
+ *  below: 3.5rem, 56 px at the Appearance scale of 1, with 9 px over the name
+ *  and under M and S, 8 of them on the plate's grey (PlateGrey), 1 px in from
+ *  the row's edges. In rem because all of that is, and a row that stayed
+ *  56 px at 150 % left the name and the fader's row on top of each other. No taller than that: at 160 a lane's
  *  plate was mostly empty card, and at 96 five tracks took a laptop's screen
  *  and more. A lane of notes has neither, and is as tall as its plate needs
  *  instead. */
@@ -129,17 +129,17 @@ export function Timeline({
   const labels = useLabels()
   const surfaceId = useId()
   const { media, duration, position, region } = player
-  // The lanes of notes the band opened, by track name. A take closing or
-  // opening empties the player's tracks, and then every lane folds again; a
-  // zoom reads the waveforms again but never empties them, so it leaves the
-  // lanes as they are.
-  const [openNotes, setOpenNotes] = useState(NONE_OPEN)
-  if (media.length === 0 && openNotes.size > 0) setOpenNotes(NONE_OPEN)
+  // The lanes of notes the band opened, by track name, in the take open now.
+  // Each take that opens starts with every lane folded (player.openings); a
+  // zoom reads the waveforms again in the same take and leaves them be.
+  const [opened, setOpened] = useState({ take: player.openings, lanes: NONE_OPEN })
+  if (opened.take !== player.openings) setOpened({ take: player.openings, lanes: NONE_OPEN })
+  const openNotes = opened.take === player.openings ? opened.lanes : NONE_OPEN
   const toggleNotes = (name: string) =>
-    setOpenNotes((open) => {
-      const next = new Set(open)
+    setOpened(({ take, lanes }) => {
+      const next = new Set(lanes)
       if (!next.delete(name)) next.add(name)
-      return next
+      return { take, lanes: next }
     })
   const from = player.view?.from ?? 0
   const to = player.view?.to ?? duration
