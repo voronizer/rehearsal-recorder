@@ -382,6 +382,23 @@ export async function openEvening(page: Page, before = "", tonight: object[] = T
   return overview
 }
 
+/**
+ * The room between the take rows in `list`, in px, as the band sees it: from
+ * one row's light, less its padding, to the next row's. A row with marks
+ * listed under it ends at its last mark's line, so the room after it is not
+ * counted.
+ */
+export const roomBetweenTakes = (list: Locator) =>
+  list.evaluate((el) => {
+    const rows = [...el.querySelectorAll("[data-take]")].map((row) => {
+      const light = row.firstElementChild!
+      const r = light.getBoundingClientRect()
+      const s = getComputedStyle(light)
+      return { top: r.top + parseFloat(s.paddingTop), bottom: r.bottom - parseFloat(s.paddingBottom), alone: row.children.length === 1 }
+    })
+    return rows.slice(1).flatMap((next, i) => (rows[i].alone ? [Math.round(next.top - rows[i].bottom)] : []))
+  })
+
 /** A song set as the fake's library keeps it. */
 export type SetSeed = { id: number; name: string; songs: string[] }
 

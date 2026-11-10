@@ -13,6 +13,7 @@ import {
   openBandApp,
   openHistory,
   recordTake,
+  roomBetweenTakes,
   scaled,
   setFake,
   settled,
@@ -394,6 +395,21 @@ test.describe("Songs in History", () => {
     await expect(open.getByRole("button", { name: "Play Pałyn 1" })).toBeVisible()
     await expect(open.getByRole("button", { name: "Play Pałyn 2" })).toBeVisible()
     await expect(rungGroup(page, "/rec/older").locator("[data-take]")).toHaveCount(0)
+  })
+
+  test("a song's starred takes and its ladder's stand 24 px apart", async ({ page }) => {
+    await openApp(page, {
+      before: `window.__FULL_EVENING__ = true; window.__EXTRA_SONGS__ = ["Pałyn"];
+               window.__STARRED__ = ['/rec/old#1', '/rec/older#3'];`,
+    })
+    await openSongs(page)
+    await chooseSong(page, "Pałyn")
+    const starred = page.getByRole("region", { name: "Starred" })
+    await expect(starred.locator("[data-take]")).toHaveCount(2)
+    expect(await roomBetweenTakes(starred)).toEqual([24])
+    const open = rungGroup(page, "/rec/old")
+    await expect(open.locator("[data-take]")).toHaveCount(2)
+    expect(await roomBetweenTakes(open)).toEqual([24])
   })
 
   test("a rung opens and closes, and stays open while history is", async ({ page }) => {
