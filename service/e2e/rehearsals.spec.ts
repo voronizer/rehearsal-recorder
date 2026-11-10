@@ -18,7 +18,8 @@ test("rehearsals come by month, and a rehearsal's takes by song", async ({ page 
   expect(new Set(await linesOf(list))).toEqual(new Set(["0px"]))
   await expect(rows.nth(0).getByText(/Thu 30 Oct/)).toHaveCSS("text-decoration-line", "none")
 
-  await rows.nth(0).click()
+  // A press on the row's lit room round its words opens it too.
+  await list.getByRole("listitem").nth(0).click({ position: { x: 3, y: 3 } })
   await expect(page.getByRole("heading", { level: 1 })).toHaveText(/^Thursday, 30 October( 2025)?$/)
   await expect(page.getByText("5 takes · 3 songs · 0:50 recorded")).toBeVisible()
   // In the order they were played; takes with no song's title last.

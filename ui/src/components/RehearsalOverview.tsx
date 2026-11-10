@@ -65,11 +65,10 @@ export type OverviewPlayback = {
  * Play on a row plays the take right here, with no player on screen: the
  * wave darkens as it goes. The name, the wave or anywhere else on its row
  * opens the take in the player, and a take that is playing carries on there
- * from where it was. A
- * note opens its take at the spot it was left. ★ is on every row, faint on a
- * take with none (owner's pick B, 2026-11-02); Rename, the cloud and Delete
- * show on the row under the mouse, the same three the strip offers for an
- * open take.
+ * from where it was. A note opens its take at the spot it was left. ★ is on
+ * every row, faint on a take with none (owner's pick B, 2026-11-02); Rename,
+ * the cloud and Delete show on the row under the mouse, the same three the
+ * strip offers for an open take.
  *
  * It also stands in for the take strip while nothing is open, so a take
  * still waiting for the cloud says so here, as its pill did.

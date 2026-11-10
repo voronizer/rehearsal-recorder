@@ -211,7 +211,7 @@ export function Wave({
   return (
     <div
       data-testid="wave"
-      className={cn("relative min-w-0 py-[3px]", moves && "cursor-pointer", className)}
+      className={cn("relative min-w-0 py-[3px]", moves && "cursor-crosshair", className)}
       style={{ ...style, height }}
       // A press, not a touch: a finger landing on a wave still scrolls the list.
       onClick={
@@ -270,8 +270,21 @@ export function Diamond({ colour, className }: { colour: string; className?: str
 /** The room after the longest take's wave, in rem: its length and the gap. */
 const AFTER_WAVE = 3
 
-/** What a press in a take's row does by itself: none of these is the row. */
-const OWN_PRESS = "button, a, [role=menuitem], input"
+/**
+ * What a press in a row does by itself: none of these is the row. A box
+ * marked `data-own-press` holds a row's own buttons: a press on one greyed
+ * out goes through it to its box, which is not the row either.
+ */
+export const OWN_PRESS = "button, a, [role=menuitem], input, [data-own-press]"
+
+/** A row's own buttons in a box of their own (OWN_PRESS), with the arrow round them. */
+export function OwnPress({ children, className }: { children: ReactNode; className?: string }) {
+  return (
+    <span data-own-press className={cn("flex cursor-default items-center", className)}>
+      {children}
+    </span>
+  )
+}
 
 /**
  * One take as a row: ▶, its name on a line of its own, and under it the
@@ -298,7 +311,9 @@ export function TakeLine({ take, marks, short, after }: { take: TakeLike; marks?
           void navigate({ to: "/takes/$uid", params: { uid: take.uid } })
         }}
       >
-        <Play take={take} />
+        <OwnPress>
+          <Play take={take} />
+        </OwnPress>
         <div className="flex min-w-0 flex-col gap-0.5 overflow-x-clip">
           <TakeLink take={take} short={short} plain className="self-start" />
           <div className="flex min-w-0 items-center gap-2.5">
@@ -314,10 +329,10 @@ export function TakeLine({ take, marks, short, after }: { take: TakeLike; marks?
             {after}
           </div>
         </div>
-        <span className="flex items-center gap-1">
+        <OwnPress className="gap-1">
           <StarButton take={take} />
           <TakeMenu take={take} row />
-        </span>
+        </OwnPress>
       </div>
       {marks &&
         take.marks.map((k) => (

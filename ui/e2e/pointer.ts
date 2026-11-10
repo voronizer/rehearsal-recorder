@@ -37,16 +37,18 @@ function scrollOn(): boolean {
  * the page with `page.evaluate(pointers)`; nothing outside the function may
  * be used in it.
  *
- * Checked: links, buttons that are not disabled, menu items, radios, tabs,
- * switches and check boxes, a label that presses one of those, folds, and a
- * row that lights up under the pointer and opens something (a press and a
- * hover light on one element). The pointer is read where the person would
- * put it, the centre, from the element found there.
+ * Checked: links, buttons, menu items, radios, tabs, switches and check
+ * boxes, a label that presses one of those, folds, and a row that lights up
+ * under the pointer and opens something (a press and a hover light on one
+ * element). The pointer is read where the person would put it, the centre,
+ * from the element found there.
  *
- * Three keep their own and pass: a drag handle the open hand, a player's
- * wave the cross, a loop's ends the arrows left and right. A field to type
- * in and what cannot be pressed now (greyed out, the tab already open) are
- * not checked: the text cursor and the arrow are theirs.
+ * Each shows the hand, but three that keep their own by their class: a drag
+ * handle the open hand (`cursor-grab`), a player's wave the cross
+ * (`cursor-crosshair`), a loop's ends the arrows left and right
+ * (`cursor-ew-resize`). What cannot be pressed now (disabled, greyed out)
+ * shows anything but the hand, also where a press goes through it to the
+ * box round it. A field to type in is not checked: the text cursor is its.
  *
  * `wrong` names each that shows something else, with the cursor it shows;
  * `checked` is how many were looked at.
@@ -55,7 +57,7 @@ export function pointers(): { checked: number; wrong: string[] } {
   const ROLES = ["button", "link", "menuitem", "menuitemradio", "menuitemcheckbox", "tab", "radio", "switch", "checkbox", "option"]
   const PRESSES = ["a[href]", "button", "summary", ...ROLES.map((r) => `[role=${r}]`)].join(",")
   const TOGGLES = "input[type=checkbox],input[type=radio],[role=checkbox],[role=radio],[role=switch]"
-  const OWN = ["grab", "crosshair", "ew-resize"]
+  const OWN = /(^|\s)cursor-(grab|crosshair|ew-resize)(\s|$)/
 
   const clicked = (el: Element) => {
     const key = Object.keys(el).find((k) => k.startsWith("__reactProps$"))
@@ -74,20 +76,22 @@ export function pointers(): { checked: number; wrong: string[] } {
   let checked = 0
   const wrong: string[] = []
   for (const el of all) {
-    if (off(el)) continue
+    const dead = off(el)
     const r = el.getBoundingClientRect()
     if (r.width < 2 || r.height < 2) continue
     if (r.bottom <= 0 || r.top >= innerHeight || r.right <= 0 || r.left >= innerWidth) continue
     const s = getComputedStyle(el)
-    if (s.visibility === "hidden" || s.pointerEvents === "none") continue
+    if (s.visibility === "hidden" || (s.pointerEvents === "none" && !dead)) continue
     const x = Math.min(Math.max(r.left + r.width / 2, 0), innerWidth - 1)
     const y = Math.min(Math.max(r.top + r.height / 2, 0), innerHeight - 1)
     const hit = document.elementFromPoint(x, y)
     // Something else lies over its centre (a menu, the panel): that one is checked in its place.
-    if (!hit || !el.contains(hit)) continue
+    // A press on a greyed-out button may go through it to the box round it, so that box counts.
+    if (!hit || !(el.contains(hit) || (dead && hit.contains(el)))) continue
     checked++
     const cursor = getComputedStyle(hit).cursor
-    if (cursor === "pointer" || OWN.includes(cursor)) continue
+    const own = typeof el.className === "string" ? OWN.exec(el.className)?.[2] : undefined
+    if (dead ? cursor !== "pointer" : cursor === (own ?? "pointer")) continue
     const name = (el.getAttribute("aria-label") || el.getAttribute("title") || el.textContent || "").replace(/\s+/g, " ").trim().slice(0, 40)
     const place = el.closest("[role=dialog],[role=menu],[role=listbox],aside,header,nav,main,footer")
     const where = place ? place.getAttribute("aria-label") || place.tagName.toLowerCase() : ""

@@ -9,13 +9,13 @@ import { usePanel } from "../shell/panel"
 import { Empty, Group, Groups, Page, Rows, TitleWith, Trouble, useTitle } from "../shell/parts"
 import { useSize } from "../shell/size"
 import { clock, count, day } from "../shell/words"
-import { Play, TakeLine, TakeLink } from "../takes/parts"
-import { NewSongDialog } from "./NewSong"
+import { OWN_PRESS, OwnPress, Play, TakeLine, TakeLink } from "../takes/parts"
+import { AddSongDialog } from "./NewSong"
 
 // Last played as wide as “Thu 30 Oct 2025” on one line: a row of two lines would be taller than the rest.
 const COLS = "grid-cols-[minmax(0,1fr)_6rem_4rem_4rem_4rem_7rem_minmax(8rem,1fr)]"
 
-function SongLine({ song }: { song: SongItem }) {
+function ListedSong({ song }: { song: SongItem }) {
   const size = useSize()
   const navigate = useNavigate()
   const to = { to: "/songs/$id", params: { id: String(song.id) } } as const
@@ -28,10 +28,12 @@ function SongLine({ song }: { song: SongItem }) {
       </Link>
     </span>
   )
-  const row = (e: { target: EventTarget }) => (e.target as HTMLElement).closest("button, a") || void navigate(to)
+  const row = (e: { target: EventTarget }) => (e.target as HTMLElement).closest(OWN_PRESS) || void navigate(to)
   const best = song.best && (
     <span className="flex items-center gap-2">
-      <Play take={song.best} />
+      <OwnPress>
+        <Play take={song.best} />
+      </OwnPress>
       <TakeLink take={song.best} short plain />
     </span>
   )
@@ -92,7 +94,7 @@ export function Songs() {
       </Button>
     </TitleWith>
   )
-  const dialog = <NewSongDialog open={adding} onOpenChange={setAdding} />
+  const dialog = <AddSongDialog open={adding} onOpenChange={setAdding} />
   if (songs.error) return <Trouble error={songs.error} retry={() => void songs.refetch()} />
   if (!songs.data) return null
   const { statuses, songs: all, not_named } = songs.data
@@ -127,7 +129,7 @@ export function Songs() {
               {these.length ? (
                 <Rows opens>
                   {these.map((s) => (
-                    <SongLine key={s.id} song={s} />
+                    <ListedSong key={s.id} song={s} />
                   ))}
                 </Rows>
               ) : (

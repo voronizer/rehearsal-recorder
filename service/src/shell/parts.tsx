@@ -186,17 +186,30 @@ export function Group({
  * no box and no lines, 24 px from one row's content to the next. With
  * `opens`, a row lights up under the pointer over that room, and a press
  * there is the row's. `takes`: take rows (TakeLine), which light up by
- * themselves, the same 24 px apart.
+ * themselves, the same 24 px apart. `talk`: a take's marks, which read as
+ * messages and keep their 14 px (the spec's call 16).
  */
-export function Rows({ children, className, opens, takes }: { children: ReactNode; className?: string; opens?: boolean; takes?: boolean }) {
+export function Rows({
+  children,
+  className,
+  opens,
+  takes,
+  talk,
+}: {
+  children: ReactNode
+  className?: string
+  opens?: boolean
+  takes?: boolean
+  talk?: boolean
+}) {
   const items = Children.toArray(children).filter(Boolean)
   return (
-    <div role="list" className={cn("flex flex-col", takes && "gap-3", className)}>
+    <div role="list" className={cn("flex flex-col", takes && "gap-3", talk && "gap-0.5", className)}>
       {items.map((c, i) => (
         <div
           role="listitem"
           key={keyOf(c, i)}
-          className={cn(!takes && "-mx-2 rounded-lg px-2 py-3", opens && "cursor-pointer transition-colors hover:bg-accent/60")}
+          className={cn(!takes && "-mx-2 rounded-lg px-2", talk ? "py-1.5" : !takes && "py-3", opens && "cursor-pointer transition-colors hover:bg-accent/60")}
           onClick={
             opens
               ? (e) => {

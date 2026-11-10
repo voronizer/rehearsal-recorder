@@ -12,7 +12,7 @@ import { useAddSong, useSongs } from "../api"
  * the status, the band's first one to start with. **Add song** makes the
  * song with that status and opens its page.
  */
-export function NewSongDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
+export function AddSongDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
@@ -32,10 +32,12 @@ export function NewSongDialog({ open, onOpenChange }: { open: boolean; onOpenCha
 function NewSongForm() {
   const navigate = useNavigate()
   const add = useAddSong()
-  const statuses = useSongs().data?.statuses ?? []
+  const songs = useSongs()
+  const statuses = songs.data?.statuses ?? []
   const [title, setTitle] = useState("")
   const [status, setStatus] = useState<number>()
-  const picked = status ?? statuses[0]?.id
+  // A status someone deleted meanwhile gives way to the first again.
+  const picked = statuses.some((s) => s.id === status) ? status : statuses[0]?.id
   return (
     <>
       <form
@@ -46,7 +48,11 @@ function NewSongForm() {
           if (!title.trim()) return
           add.mutate(
             { title: title.trim(), status_id: picked },
-            { onSuccess: (made) => void navigate({ to: "/songs/$id", params: { id: String((made as { id: number }).id) } }) }
+            {
+              onSuccess: (made) => void navigate({ to: "/songs/$id", params: { id: String((made as { id: number }).id) } }),
+              // The band's list again, as it is now: a status may have gone meanwhile.
+              onError: () => void songs.refetch(),
+            }
           )
         }}
       >

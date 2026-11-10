@@ -1,6 +1,6 @@
 import { writeFileSync } from "node:fs"
 import { expect, test } from "@playwright/test"
-import { as, band } from "./band"
+import { as, band, HEADERS } from "./band"
 import { linesOf, roomBetween } from "./rows"
 
 test.use({ storageState: as("alex") })
@@ -65,6 +65,37 @@ test("a new song is refused for a title the band has in another case", async ({ 
   expect(new Set(await roomBetween(list))).toEqual(new Set([24]))
   expect(new Set(await linesOf(list))).toEqual(new Set(["0px"]))
   await expect(learning.getByRole("link", { name: "Zorka", exact: true })).toHaveCSS("text-decoration-line", "none")
+})
+
+test("a status deleted while New song is open: Add song says so, and the next press takes the first", async ({ page }) => {
+  const gig = (await (await page.request.post("/api/statuses", { data: { name: "Gig" }, headers: HEADERS })).json()) as { id: number }
+  await page.goto("/songs")
+  await page.getByRole("button", { name: "New song" }).click()
+  const dialog = page.getByRole("dialog", { name: "New song" })
+  const status = dialog.getByRole("combobox", { name: "Status" })
+  await dialog.getByLabel("Title").fill("Kalada")
+  await status.click()
+  await page.getByRole("option", { name: "Gig", exact: true }).click()
+  await expect(status).toHaveText("Gig")
+  // Someone else deletes it meanwhile.
+  expect((await page.request.delete(`/api/statuses/${gig.id}`, { headers: HEADERS })).ok()).toBe(true)
+  await dialog.getByRole("button", { name: "Add song" }).click()
+  await expect(dialog.getByRole("alert")).toHaveText("No such status")
+  await expect(status).toHaveText("Learning")
+  // Kalada stays, as Zorka does: a song in the trash would be in the Trash's tests.
+  await dialog.getByRole("button", { name: "Add song" }).click()
+  await expect(page).toHaveURL(/\/songs\/\d+$/)
+  await expect(page.getByRole("main").getByRole("button", { name: "Status: Learning" })).toBeVisible()
+})
+
+test("where the browser cannot play, a press on a song's greyed Play stays on Songs", async ({ page }) => {
+  await page.addInitScript(() => Object.assign(window, { AudioDecoder: undefined }))
+  await page.goto("/songs")
+  const play = page.locator('[data-song="Viasna"]').getByRole("button", { name: /^Play / })
+  await expect(play).toBeDisabled()
+  const box = (await play.boundingBox())!
+  await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2)
+  await expect(page).toHaveURL(/\/songs$/)
 })
 
 test("Statuses opens in the panel over Songs, New song a dialog, one at a time; Esc, Back and X close them", async ({ page }) => {
@@ -220,7 +251,12 @@ test("a song page puts the best take on top", async ({ page }) => {
   await expect(all.locator("[data-take]").nth(2)).toHaveAttribute("data-take", "Viasna 5")
   await all.getByText("1 take", { exact: true }).click()
   await expect(all.locator("[data-take]")).toHaveCount(2)
-  await all.locator('[data-pill="rehearsal"]').filter({ hasText: /^Thursday, 23 October/ }).click()
+  // By keyboard: from the arrow, Tab goes to the day's pill.
+  const pill = all.locator('[data-pill="rehearsal"]').filter({ hasText: /^Thursday, 23 October/ })
+  await all.getByRole("button", { name: /^Thursday, 23 October( 2025)?, 1 take$/ }).focus()
+  await page.keyboard.press("Tab")
+  await expect(pill).toBeFocused()
+  await pill.click()
   await expect(page).toHaveURL(`/rehearsals/${band().rehearsals.first}`)
 })
 

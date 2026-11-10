@@ -1,5 +1,6 @@
 import { expect, test, type Page } from "@playwright/test"
 import { as, band, HEADERS } from "./band"
+import { roomBetween } from "./rows"
 
 test.describe("as Alex", () => {
   test.use({ storageState: as("alex") })
@@ -268,6 +269,28 @@ test.describe("as Alex on a phone", () => {
     await expect(mute).toHaveAttribute("aria-pressed", "true")
     await expect(tracks.getByRole("slider", { name: "Vocals volume" })).toHaveAttribute("aria-valuetext", "70%")
   })
+  test("on a phone, a take's marks keep their talk close, as messages, and its wave the cross", async ({ page }) => {
+    await page.goto(`/takes/${band().takes["Viasna 12"]}`)
+    const main = page.getByRole("main")
+    // Not the lists' 24 px: a mark's talk reads as messages.
+    const talk = main.getByRole("region", { name: "Marks" }).getByRole("list").first()
+    // РЭХА's mark at 0:01 and the band's two.
+    await expect(talk.locator(":scope > [role=listitem]")).toHaveCount(3)
+    expect(await roomBetween(talk)).toEqual([14, 14])
+    // A press on the player's wave sets the playhead: the cross, as in REHA.
+    await expect(main.getByTestId("wave").first()).toHaveCSS("cursor", "crosshair")
+  })
+
+  test("on a phone, an old take's panel address opens its page, and an old editor's the panel", async ({ page }) => {
+    const uid = band().takes["Pałyn 3"]
+    await page.goto(`/songs?panel=take:${uid}`)
+    await expect(page).toHaveURL(`/takes/${uid}`)
+    await expect(page.getByLabel("Panel", { exact: true })).toHaveCount(0)
+    await page.goto("/songs?edit=statuses")
+    await expect(page).toHaveURL(/\/songs\?panel=statuses$/)
+    await expect(page.getByLabel("Panel", { exact: true }).getByRole("heading", { name: "Statuses", exact: true })).toBeVisible()
+  })
+
   test("on a phone, a track of notes alone has a row that says so, after the tracks of sound", async ({ page }) => {
     await page.goto(`/takes/${band().takes["Pałyn 9"]}`)
     const tracks = page.getByRole("main").getByRole("region", { name: "Tracks", exact: true })

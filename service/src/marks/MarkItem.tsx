@@ -429,7 +429,7 @@ export function TakeMarks({ take }: { take: { uid: string; marks: Mark[] } }) {
         />
       )}
       {marks.length ? (
-        <Rows>
+        <Rows talk>
           {marks.map((k) => (
             <MarkItem key={k.id} mark={k} />
           ))}

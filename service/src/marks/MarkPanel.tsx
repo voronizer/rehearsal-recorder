@@ -54,7 +54,7 @@ export function MarkPanel({ uid, id, at }: { uid: string; id?: number; at?: numb
         <span>· {longDay(take.data.date)}</span>
       </p>
       {mark ? (
-        <Rows>
+        <Rows talk>
           <MarkItem mark={mark} />
         </Rows>
       ) : (

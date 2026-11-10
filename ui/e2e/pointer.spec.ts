@@ -1,5 +1,5 @@
 import { closeTakeButton, expect, openBandApp, recordButton, settled, startButton, takeButton, test } from "./app.ts"
-import { wrongPointers } from "./pointer.ts"
+import { pointers, wrongPointers } from "./pointer.ts"
 
 test("the pointer is the hand over everything that presses, on every screen", async ({ page }) => {
   const wrong: string[] = []
@@ -49,4 +49,29 @@ test("the pointer is the hand over everything that presses, on every screen", as
   await look("Rehearsal, a take open")
 
   expect(wrong).toEqual([])
+})
+
+test("the check finds the hand on what cannot be pressed, and on a handle that keeps its own", async ({ page }) => {
+  await openBandApp(page)
+  await settled(page)
+  await page.evaluate(() => {
+    const box = document.createElement("div")
+    box.style.cssText = "position:fixed;left:0;top:0;z-index:99999;display:flex;gap:8px;padding:8px;background:white"
+    box.innerHTML = [
+      "<button disabled>Off</button>",
+      '<button aria-disabled="true">Not now</button>',
+      '<button class="cursor-grab">Drag</button>',
+      '<button style="cursor:default">Arrow</button>',
+      '<button disabled style="cursor:pointer">Off with the hand</button>',
+      '<span style="cursor:pointer"><button disabled style="pointer-events:none">Off in a hand</button></span>',
+      '<button class="cursor-grab" style="cursor:pointer">Drag with the hand</button>',
+    ].join("")
+    document.body.append(box)
+  })
+  expect((await page.evaluate(pointers)).wrong).toEqual([
+    'button "Arrow": default',
+    'button "Off with the hand": pointer',
+    'button "Off in a hand": pointer',
+    'button "Drag with the hand": pointer',
+  ])
 })
