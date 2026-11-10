@@ -337,20 +337,29 @@ the shared one when it is redone.
   a player stands (the rehearsal screen, History): the browser's own
   outline would go round the whole track.
   The lanes are one group on the card's fill, with no lines between tracks:
-  each lane's picture, a waveform or a lane of notes, sits on a well of its
-  own (C7), with 3 px of the group's fill above and below it, and a Both
-  track's audio and notes share one well split by a 1 px line. That split
-  is two class strings, said once in `Timeline.tsx`.
+  each lane's plate stands on a grey of its own, the well's colour (C7),
+  1 px in from the row's top and foot, so two plates have 2 px of the
+  group's fill between them (owner, 2026-11-10). The grey runs over the
+  12 px between the columns up to the lane's picture, its left corners 8 px
+  and its right ones square, and the plate with it, so M and S end 12 px
+  from the picture (`PlateCell`, `PlateGrey` in `Timeline.tsx`). The
+  pictures, a waveform or a lane of notes, have no fill and stand 3 px in
+  from the row's edges. A Both track's two plates are one grey, and its
+  notes are under a 1 px line. On the grey the name and the fader's row are
+  2 px apart, which leaves 8 px of grey over the name and under M and S;
+  the fader's track is `selected` and M and S off have the card's fill,
+  which read on the grey (`onWell`). The phone desk's plates, on the card,
+  keep the 4 px, the `muted` track and no fill.
   `LanePlate` is the plate beside a lane, the same for audio, notes and the
   master; `LanePlate grouped` is a plate in the group, with no fill or
   corners of its own. A notes lane is as tall as its plate needs. Master is
   its own group on the card's fill, sticky at the bottom in a band as wide
-  as the lanes, so that no part of a lane shows beside it: its plate and,
-  right of it on the same columns as a track's row, the click's lane on a
-  well (`MasterClickLane`).
-  A take's Backing track, the last lane above Master, has a dashed border
-  round its plate and its well, in the muted text's colour at half
-  strength, and after its name one ring or two (`ChannelsIcon`, the words
+  as the lanes, so that no part of a lane shows beside it: its plate on its
+  grey and, right of it on the same columns as a track's row, the click's
+  lane (`MasterClickLane`).
+  A take's Backing track, the last lane above Master, has no grey and a
+  dashed border round its plate and its waveform, in the muted text's colour
+  at half strength, and after its name one ring or two (`ChannelsIcon`, the words
   "Mono file" or "Stereo file" in its tip): a file played into the take,
   not an input the band recorded. One ring is mono and two are stereo
   wherever the app says it: a track's Stereo toggle on the start screen,
@@ -361,10 +370,11 @@ the shared one when it is redone.
   as each screen is redone. A group of rows, such as the start screen's
   tracks or the evening's songs on the rehearsal screen, splits them with
   1 px lines and lets each row keep its own padding. Where each row holds a
-  picture of its own, as the player's lanes do, the pictures' wells split
-  the rows instead, and there are no lines. A well is where a picture or a
-  recording tile sits in its group: `bg-well`, with 8 px corners and 3 px of
-  the group's fill round it. `--well` is the side panel's colour,
+  picture of its own, as the player's lanes do, the plates' grey splits the
+  rows instead (C6), and there are no lines. A well is where a recording
+  tile sits in its group: `bg-well`, with 8 px corners and 3 px of the
+  group's fill round it; in the player the plates have the well's colour.
+  `--well` is the side panel's colour,
   `var(--panel)`, in both themes, a shade darker than the card it is on. The
   page's colour was faint on the card in dark, and in light, where the page
   is white as the card is (F4), it would not show at all.

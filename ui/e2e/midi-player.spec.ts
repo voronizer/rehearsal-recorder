@@ -5,6 +5,7 @@ import {
   closeTake,
   dragRegion,
   expect,
+  nameTake,
   openApp,
   openHistory,
   recordTake,
@@ -15,10 +16,12 @@ import {
 import type { Locator, Page } from "@playwright/test"
 
 // The player with a take's notes in it (spec Part 6): a Both track's notes
-// right under its audio, sharing its audio's well under a line; a MIDI
+// right under its audio, on one grey plate with it, under a line; a MIDI
 // track's notes in a lane of their own; and a track whose port never
 // appeared, saying so. The notes are drawn, never played: their plates have
-// M pressed for good, the words in its tip, and no S or fader.
+// M pressed for good, the words in its tip, and no S or fader. Every lane of
+// notes opens folded to a strip, and the arrow after its M opens it (owner,
+// 2026-11-10).
 
 /** The drummer on Both, the keyboard player on MIDI between the guitar and
  *  the bass, as the band and as the session that records. */
@@ -71,9 +74,21 @@ const SAVED = "Saved as .mid, not played here"
 const GONE = "Not connected, no .mid saved"
 const notesLane = (page: Page, name: string) => page.locator(`[data-notes-lane='${name}']`)
 const audioLane = (page: Page, name: string) => page.locator(`[data-lane='${name}']`)
-/** The waveform in that lane, on its well. */
+/** The waveform in that lane, on the panel's fill. */
 const wave = (page: Page, name: string) => page.locator(`[data-lane='${name}'] > div`)
 const timeline = (page: Page) => page.getByRole("group", { name: "Take timeline" })
+/** The arrow after a lane of notes' M, which opens and folds it. */
+const arrow = (page: Page, name: string) => notesPlate(page, name).getByRole("button", { name: `${name} notes` })
+/** The row a lane of notes is in. */
+const notesRow = (page: Page, name: string) => notesPlate(page, name).locator("xpath=ancestor::*[@data-lane-row][1]")
+const playButton = (page: Page) =>
+  page.getByRole("toolbar", { name: "Transport" }).getByRole("button", { name: "Play", exact: true })
+
+/** Opens a lane of notes, folded when its take opens, with its arrow. */
+async function unfold(page: Page, name: string) {
+  await arrow(page, name).click()
+  await expect(arrow(page, name)).toHaveAttribute("aria-expanded", "true")
+}
 
 async function box(locator: Locator) {
   const b = await locator.boundingBox()
@@ -122,13 +137,15 @@ const accent = (p: { r: number; b: number }) => p.b - p.r > 60
 const grey = (p: { r: number; b: number }) => Math.abs(p.b - p.r) < 30
 
 test.describe("notes in the player", () => {
-  test("puts a Both track's notes right under its audio, sharing its audio's well under a line", async ({
+  test("puts a Both track's notes right under its audio, on one grey plate with it, under a line", async ({
     page,
   }) => {
     await stopped(page)
+    await unfold(page, "Drums")
+    await unfold(page, "Keys")
     const audio = plate(page, "Drums")
     const midi = notesPlate(page, "Drums")
-    await expect(midi).toContainText("MIDI")
+    await expect(midi.getByRole("img", { name: "MIDI" })).toBeVisible()
     await expect(midi).toContainText("TD-17")
     // There is nothing to hear: M pressed for good, where the track's M is,
     // and faded as a control that does nothing is; the words in its tip.
@@ -146,7 +163,9 @@ test.describe("notes in the player", () => {
     await locked.click({ force: true })
     await expect(locked).toHaveAttribute("aria-pressed", "true")
     await expect(midi).not.toContainText(SAVED)
-    await expect(midi.getByRole("button")).toHaveCount(1)
+    // Its buttons: M, and the arrow that folds the notes.
+    await expect(midi.getByRole("button")).toHaveCount(2)
+    await expect(arrow(page, "Drums")).toBeVisible()
     await expect(midi.locator("input")).toHaveCount(0)
     await expect(midi.getByRole("meter")).toHaveCount(0)
     // One track: the plates touch, with no line between them.
@@ -157,8 +176,8 @@ test.describe("notes in the player", () => {
     expect(Math.abs(m.width - a.width)).toBeLessThan(1)
     expect(await midi.evaluate((e) => getComputedStyle(e).borderTopWidth)).toBe("0px")
     expect(await audio.evaluate((e) => getComputedStyle(e).borderBottomWidth)).toBe("0px")
-    // And the notes are right under the waveform, on the same well, under a
-    // solid 1 px line: as tall as their plate less the well's 3 px below.
+    // And the notes are right under the waveform, under a solid 1 px line:
+    // as tall as their plate less the 3 px of the group's fill below.
     const w = await box(wave(page, "Drums"))
     const lane = await box(notesLane(page, "Drums"))
     expect(Math.abs(lane.y - (w.y + w.height))).toBeLessThan(1)
@@ -177,16 +196,110 @@ test.describe("notes in the player", () => {
     await expect(notesLane(page, "Keys").getByText("C4", { exact: true })).toBeVisible()
   })
 
+  test("every lane of notes opens folded, and the arrow after M opens and folds one", async ({ page }) => {
+    await stopped(page)
+    const drums = notesPlate(page, "Drums")
+    for (const name of ["Drums", "Keys"])
+      await expect(arrow(page, name)).toHaveAttribute("aria-expanded", "false")
+    // A strip: 1.5rem and 3 px under the track, the notes 24 px; 1.5rem and
+    // 8 px alone, the notes 26.
+    expect((await box(notesRow(page, "Drums"))).height).toBeCloseTo(27, 0)
+    expect((await box(notesLane(page, "Drums"))).height).toBeCloseTo(24, 0)
+    expect((await box(notesRow(page, "Keys"))).height).toBeCloseTo(32, 0)
+    expect((await box(notesLane(page, "Keys"))).height).toBeCloseTo(26, 0)
+    await expect(notesRow(page, "Drums")).toHaveAttribute("data-folded")
+    // Too short for the kit's names or the port.
+    await expect(notesLane(page, "Drums").getByText("Crash", { exact: true })).toHaveCount(0)
+    await expect(drums).not.toContainText("TD-17")
+    // Where a track has S, 6 px after the notes' M.
+    const a = await box(arrow(page, "Drums"))
+    const s = await box(page.getByRole("button", { name: "Solo Drums" }))
+    const m = await box(lockedM(drums, SAVED))
+    expect(Math.abs(a.x - s.x)).toBeLessThan(0.5)
+    expect(a.x - (m.x + m.width)).toBeCloseTo(6, 0)
+    expect([a.width, a.height]).toEqual([20, 20])
+
+    await arrow(page, "Drums").click()
+    await expect(arrow(page, "Drums")).toHaveAttribute("aria-expanded", "true")
+    await expect(arrow(page, "Keys")).toHaveAttribute("aria-expanded", "false")
+    await expect(notesRow(page, "Drums")).not.toHaveAttribute("data-folded")
+    // The arrow stays under the pointer.
+    expect(Math.abs((await box(arrow(page, "Drums"))).y - a.y)).toBeLessThan(0.5)
+    expect((await box(notesLane(page, "Drums"))).height).toBeCloseTo(91, 0)
+    await expect(notesLane(page, "Drums").getByText("Crash", { exact: true })).toBeVisible()
+    await expect(drums).toContainText("TD-17")
+
+    await arrow(page, "Drums").click()
+    await expect(arrow(page, "Drums")).toHaveAttribute("aria-expanded", "false")
+    expect(Math.abs((await box(arrow(page, "Drums"))).y - a.y)).toBeLessThan(0.5)
+    expect((await box(notesLane(page, "Drums"))).height).toBeCloseTo(24, 0)
+  })
+
+  test("under its track the notes have the MIDI sign and no name; alone, the track's icon and name and the sign", async ({
+    page,
+  }) => {
+    await stopped(page)
+    const drums = notesPlate(page, "Drums")
+    await expect(drums).not.toContainText("MIDI")
+    await expect(drums.locator("[data-icon]")).toHaveCount(0)
+    const keys = notesPlate(page, "Keys")
+    await expect(keys.locator("[data-icon]")).toHaveAttribute("data-icon", "keys")
+    await expect(keys).toContainText("Keys")
+    // The sign right before M, on both.
+    for (const p of [drums, keys]) {
+      const sign = await box(p.getByRole("img", { name: "MIDI" }))
+      const m = await box(lockedM(p, SAVED))
+      expect(sign.x + sign.width).toBeLessThan(m.x)
+      expect(m.x - (sign.x + sign.width)).toBeLessThan(10)
+    }
+  })
+
+  test("a lane the band opened stays open while they zoom and play", async ({ page }) => {
+    await stopped(page)
+    await unfold(page, "Drums")
+    const read = await callCount(page, "take_media")
+    const t = await box(timeline(page))
+    await page.mouse.move(t.x + t.width / 2, t.y + t.height / 2)
+    await page.keyboard.down("Control")
+    await page.mouse.wheel(0, -400)
+    await page.keyboard.up("Control")
+    await expect(page.getByRole("button", { name: "Whole take" })).toBeVisible()
+    // The waveforms read again for the zoomed view, and the lane still open.
+    await expect.poll(() => callCount(page, "take_media")).toBeGreaterThan(read)
+    await page.waitForTimeout(300)
+    await playButton(page).click()
+    await page.waitForTimeout(500)
+    await page.getByRole("toolbar", { name: "Transport" }).getByRole("button", { name: "Pause", exact: true }).click()
+    await page.waitForTimeout(500)
+    await expect(arrow(page, "Drums")).toHaveAttribute("aria-expanded", "true")
+    await expect(notesRow(page, "Drums")).not.toHaveAttribute("data-folded")
+  })
+
+  test("Space on the arrow opens the notes and does not start the take", async ({ page }) => {
+    await stopped(page)
+    // Reached from the keyboard, as Tab reaches it: focus the mouse left on a
+    // button is let go by Space, which then plays (useSpacebar).
+    await page.keyboard.press("Shift")
+    await arrow(page, "Drums").focus()
+    await page.keyboard.press("Space")
+    await expect(arrow(page, "Drums")).toHaveAttribute("aria-expanded", "true")
+    await page.waitForTimeout(300)
+    await expect(playButton(page)).toBeVisible()
+    await page.keyboard.press("Enter")
+    await expect(arrow(page, "Drums")).toHaveAttribute("aria-expanded", "false")
+  })
+
   test("gives a MIDI-only track a lane of its own in band order, with its icon", async ({
     page,
   }) => {
     await stopped(page)
+    await unfold(page, "Keys")
     const keys = notesPlate(page, "Keys")
     await expect(keys.locator("[data-icon]")).toHaveAttribute("data-icon", "keys")
     await expect(keys).toContainText("Keys")
     await expect(keys).toContainText("Launchkey Mini MK3")
     await expect(lockedM(keys, SAVED)).toHaveAttribute("aria-pressed", "true")
-    await expect(keys.getByRole("button")).toHaveCount(1)
+    await expect(keys.getByRole("button")).toHaveCount(2)
     await expect(keys.locator("input")).toHaveCount(0)
     // A row of its own, not part of the guitar's: no line on top, and a
     // well of its own, 6 px of the group's fill under the guitar's.
@@ -249,7 +362,11 @@ test.describe("notes in the player", () => {
 
   test("says so when a track's port never appeared in the take", async ({ page }) => {
     await stopped(page, "window.__MIDI_GONE__ = ['Launchkey Mini MK3'];")
+    // Folded, the strip says it all the same.
+    await expect(arrow(page, "Keys")).toHaveAttribute("aria-expanded", "false")
     await expect(notesLane(page, "Keys")).toContainText("No notes in this take")
+    await expect(notesLane(page, "Keys").getByText("No notes in this take")).toBeVisible()
+    await unfold(page, "Keys")
     const keys = notesPlate(page, "Keys")
     await expect(lockedM(keys, GONE)).toHaveAttribute("aria-pressed", "true")
     await expect(lockedM(keys, SAVED)).toHaveCount(0)
@@ -272,16 +389,17 @@ test.describe("notes in the player", () => {
     page,
   }) => {
     await stopped(page, "window.__MIDI_GONE__ = ['TD-17'];")
+    await unfold(page, "Drums")
     // The audio row is as it always is, its waveform drawn.
     await expect(plate(page, "Drums").getByRole("button", { name: "Mute Drums" })).toBeVisible()
     expect((await box(audioLane(page, "Drums"))).height).toBeCloseTo(56, 0)
     await expect
       .poll(async () => (await drawnAlong(audioLane(page, "Drums"), 0.5)).length)
       .toBeGreaterThan(0)
-    // The notes are still the row under it, sharing its well under the
+    // The notes are still the row under it, sharing its grey, under the
     // line, and say why they are empty.
     const midi = notesPlate(page, "Drums")
-    await expect(midi).toContainText("MIDI")
+    await expect(midi.getByRole("img", { name: "MIDI" })).toBeVisible()
     await expect(midi).toContainText("TD-17")
     await expect(lockedM(midi, GONE)).toBeVisible()
     await expect(notesLane(page, "Drums")).toContainText("No notes in this take")
@@ -389,6 +507,7 @@ test.describe("notes in the player", () => {
     await recordTake(page, 1)
     await expect(plate(page, "Bass")).toBeVisible()
     await expect.poll(() => callCount(page, "take_notes")).toBe(1)
+    await unfold(page, "Drums")
     await page.waitForTimeout(300)
     const before = await layout(page)
     // The notes' plates and lanes are there already, at their size, waiting:
@@ -411,6 +530,7 @@ test.describe("notes in the player", () => {
   }) => {
     await page.setViewportSize({ width: 1280, height: 1000 })
     await stopped(page)
+    await unfold(page, "Drums")
     const drums = notesLane(page, "Drums")
     // The fake kit's crash, once, a quarter of a second in.
     const crash = await rowMiddle(drums, 0)
@@ -462,6 +582,7 @@ test.describe("notes in the player", () => {
   test("the part before the playhead is in the accent, the rest grey", async ({ page }) => {
     await page.setViewportSize({ width: 1280, height: 1000 })
     await stopped(page)
+    await unfold(page, "Drums")
     const drums = notesLane(page, "Drums")
     // The hi-hat plays every quarter of a second.
     const hats = await rowMiddle(drums, 2)
@@ -507,6 +628,7 @@ test.describe("notes in the player", () => {
     })
     await startRehearsal(page)
     await recordTake(page, 1)
+    await unfold(page, "Keys")
     const keys = notesLane(page, "Keys")
     await expect(keys).toBeVisible()
     // The middle of E4's row, an octave of rows between 3 px at either end.
@@ -537,6 +659,20 @@ test.describe("notes in the player", () => {
        window.__BAND_ICONS__[${JSON.stringify(name)}] = 'keys';`
     )
     const keys = notesPlate(page, name)
+    // Folded, the line still holds the name, cut, then the MIDI sign, M and
+    // the arrow, all on the plate.
+    await expect(arrow(page, name)).toHaveAttribute("aria-expanded", "false")
+    await expect(keys.getByText(name, { exact: true })).toHaveAttribute("data-cut")
+    const k = await box(keys)
+    for (const part of [keys.getByRole("img", { name: "MIDI" }), lockedM(keys, SAVED), arrow(page, name)]) {
+      const b = await box(part)
+      expect(b.x).toBeGreaterThanOrEqual(k.x)
+      expect(b.x + b.width).toBeLessThanOrEqual(k.x + k.width)
+      expect(b.y).toBeGreaterThanOrEqual(k.y)
+      expect(b.y + b.height).toBeLessThanOrEqual(k.y + k.height)
+    }
+    await unfold(page, "Drums")
+    await unfold(page, name)
     await expect(keys).toContainText(name)
     await expect(keys).toContainText(port)
     for (const track of ["Drums", "Gtr", "Bass"])
@@ -592,14 +728,39 @@ test.describe("notes in the player", () => {
     await expect(notesPlate(page, "Drums")).toBeVisible()
   })
 
-  test("a saved take opens with its notes", async ({ page }) => {
+  test("a saved take opens with its notes, folded again", async ({ page }) => {
     await stopped(page)
+    await unfold(page, "Drums")
     await closeTake(page, 2)
     await takeButton(page, "Take #1").first().click()
+    await expect(arrow(page, "Drums")).toHaveAttribute("aria-expanded", "false")
+    await expect(arrow(page, "Keys")).toHaveAttribute("aria-expanded", "false")
+    await unfold(page, "Drums")
+    await unfold(page, "Keys")
     await expect(notesPlate(page, "Drums")).toContainText("TD-17")
     await expect(notesPlate(page, "Keys")).toContainText("Launchkey Mini MK3")
     await expect(notesLane(page, "Keys")).toBeVisible()
     await expect.poll(() => callCount(page, "take_notes")).toBe(2)
+  })
+
+  test("up to the take before folds the notes again, in the same player", async ({ page }) => {
+    // Two takes of one song: up goes through a song's takes only.
+    await stopped(page)
+    await nameTake(page, "Pałyn")
+    await closeTake(page, 2)
+    await recordTake(page, 2)
+    await nameTake(page, "Pałyn")
+    await unfold(page, "Drums")
+    await unfold(page, "Keys")
+    // The player stays open: up opens the take before in it, keeping the
+    // zoom and the loop, and only the notes fold.
+    await timeline(page).evaluate((el) => el.setAttribute("data-kept", ""))
+    const opens = await callCount(page, "player_open")
+    await page.keyboard.press("ArrowUp")
+    await expect.poll(() => callCount(page, "player_open")).toBeGreaterThan(opens)
+    await expect(timeline(page)).toHaveAttribute("data-kept", "")
+    await expect(arrow(page, "Drums")).toHaveAttribute("aria-expanded", "false")
+    await expect(arrow(page, "Keys")).toHaveAttribute("aria-expanded", "false")
   })
 
   test("a take of an evening before opens with its notes in History", async ({ page }) => {

@@ -30,9 +30,13 @@ function MeteredFader({
   volume,
   levels,
   channels = 1,
+  onWell = false,
   onVolume,
   onVolumeCommit,
 }: {
+  /** On the plate's grey in the player: the meter's track is the selected
+   *  grey, which reads on it, not the muted one, which does not. */
+  onWell?: boolean
   /** What the fader and the meter are called: "Guitar volume", "Guitar level". */
   name: string
   volume: number
@@ -59,7 +63,8 @@ function MeteredFader({
         aria-valuemax={100}
         data-clipping={clipping || undefined}
         className={cn(
-          "absolute inset-x-0 top-1/2 -translate-y-1/2 overflow-hidden rounded-full bg-muted",
+          "absolute inset-x-0 top-1/2 -translate-y-1/2 overflow-hidden rounded-full",
+          onWell ? "bg-selected" : "bg-muted",
           split ? "h-2" : "h-1.5"
         )}
       >
@@ -145,6 +150,13 @@ function MeteredFader({
  *
  * On the band service's desk for a phone, which has no lanes, the MIDI sign
  * after the name says the track recorded its notes too (`midi`).
+ *
+ * In the player the plate is on its grey (`onWell`, Timeline's PlateGrey):
+ * the name and the fader's row are 2 px apart, so the grey has 8 px over the
+ * name and under M and S (Alex, 2026-11-10 13:11Z); the meter's track is the
+ * selected grey, and M and S that are off have the card's fill, so they read
+ * as buttons on it (13:07Z). On the phone's desk and Backing's dashed plate,
+ * on the card, they are as they were.
  */
 export function LaneControls({
   name,
@@ -162,6 +174,7 @@ export function LaneControls({
   onToggleSolo,
   onVolume,
   onVolumeCommit,
+  onWell = false,
 }: {
   name: string
   /** The band's icon for this name; none draws the neutral one. */
@@ -185,6 +198,8 @@ export function LaneControls({
   onToggleSolo: () => void
   onVolume: (value: number) => void
   onVolumeCommit: () => void
+  /** On the plate's grey in the player (above). */
+  onWell?: boolean
 }) {
   return (
     <LanePlate
@@ -192,7 +207,10 @@ export function LaneControls({
       data-paired={paired || undefined}
       grouped
       // The frame is 1 px inside the plate's 56: 7 px above and below.
-      className={cn("gap-1", file && "rounded-md border border-dashed border-muted-foreground/50 py-[7px]")}
+      className={cn(
+        onWell ? "gap-0.5" : "gap-1",
+        file && "rounded-md border border-dashed border-muted-foreground/50 py-[7px]"
+      )}
     >
       <div className="flex h-4 items-center gap-2">
         <InstrumentIcon icon={icon} className="size-4 shrink-0 text-muted-foreground" />
@@ -220,8 +238,8 @@ export function LaneControls({
           </span>
         )}
       </div>
-      {/* 16 and 20 px, 4 apart: the plate's 56. On is grey, and the dimmed
-          lane is what says the track is silent. */}
+      {/* 16 and 20 px, 4 apart, or 2 on the grey: the plate's 56. On is
+          grey, and the dimmed lane is what says the track is silent. */}
       <div className="flex h-5 items-center gap-2">
         <div className="min-w-0 flex-1">
           {/* A track's level cannot overtake its thumb: what comes out is the
@@ -232,6 +250,7 @@ export function LaneControls({
             volume={volume}
             levels={levels}
             channels={channels}
+            onWell={onWell}
             onVolume={onVolume}
             onVolumeCommit={onVolumeCommit}
           />
@@ -244,7 +263,7 @@ export function LaneControls({
             pressed={muted}
             onPressedChange={onToggleMute}
             aria-label={`Mute ${name}`}
-            className="font-semibold"
+            className={cn("font-semibold", onWell && "bg-card")}
           >
             M
           </Toggle>
@@ -255,7 +274,7 @@ export function LaneControls({
             pressed={soloed}
             onPressedChange={onToggleSolo}
             aria-label={`Solo ${name}`}
-            className="font-semibold"
+            className={cn("font-semibold", onWell && "bg-card")}
           >
             S
           </Toggle>
@@ -297,6 +316,7 @@ export function MasterControls({
   onVolumeCommit,
   click,
   grouped = false,
+  onWell = false,
   className,
 }: {
   volume: number
@@ -308,10 +328,12 @@ export function MasterControls({
   click?: ReactNode
   /** A plate in the player's master group, whose fill it is on. */
   grouped?: boolean
+  /** On its grey in the player, as a track's plate is (LaneControls). */
+  onWell?: boolean
   className?: string
 }) {
   return (
-    <LanePlate data-master-plate grouped={grouped} className={cn("gap-1", className)}>
+    <LanePlate data-master-plate grouped={grouped} className={cn(onWell ? "gap-0.5" : "gap-1", className)}>
       <div className="flex h-4 items-center gap-2 text-sm">
         <VolumeIcon volume={volume} className="size-4 shrink-0 text-muted-foreground" />
         <Whole
@@ -328,6 +350,7 @@ export function MasterControls({
             name="Master"
             volume={volume}
             levels={[level]}
+            onWell={onWell}
             onVolume={onVolume}
             onVolumeCommit={onVolumeCommit}
           />

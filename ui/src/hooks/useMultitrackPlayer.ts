@@ -78,6 +78,7 @@ export function useMultitrackPlayer(
   sound: PlayerSound = pythonSound
 ) {
   const [media, setMedia] = useState<TrackMedia[]>([])
+  const [openings, setOpenings] = useState(0)
   const [loading, setLoading] = useState(false)
   const [loadError, setLoadError] = useState<string | null>(null)
   // An open of a take that has finished, opened or failed: a fresh object
@@ -184,6 +185,7 @@ export function useMultitrackPlayer(
     playOnOpen.current = false
     openedRef.current = false
     opening.current += 1
+    setOpenings((n) => n + 1)
     setMedia([])
     setPlaying(false)
     setPosition(0)
@@ -478,6 +480,9 @@ export function useMultitrackPlayer(
 
   return {
     media,
+    /** One more each time a take starts opening here, the same take again
+     *  included; a zoom reading the waveforms again leaves it as it is. */
+    openings,
     /** Reads a take's notes from its .mid files, through the same sound. */
     readNotes: sound.notes,
     loading,

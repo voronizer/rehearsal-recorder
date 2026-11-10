@@ -126,6 +126,17 @@ export const Notes: Story = {
 }
 export const NotesLight: Story = { ...Notes, globals: { theme: "light" } }
 
+/** In the player every lane of notes opens folded, its port left out, and the
+ *  arrow after M opens it; open, the port is back. */
+export const NotesFolded: Story = {
+  render: () => (
+    <Fill>
+      <NotesPlate name="Keys" icon="keys" port="Launchkey Mini MK3" fold={{ open: false, onToggle: noop }} />
+      <NotesPlate name="Keys" icon="keys" port="Launchkey Mini MK3" fold={{ open: true, onToggle: noop }} />
+    </Fill>
+  ),
+}
+
 /** The master's plate, under the tracks, is the third use of it: a group of
  *  its own, so it keeps its box. */
 export const Master: Story = {
@@ -150,8 +161,9 @@ const KIT: TakeNotes = {
 
 /* A row of the lanes group as Timeline lays it out: the plate, 12 px, the
    picture, and the group's 12 px after it. The picture's cell pads it 3 px
-   from the row's edges, onto its well, but where a Both track's audio and
-   notes meet. */
+   from the row's edges, but where a Both track's audio and notes meet. In
+   the player the grey is the plates' (Timeline's PlateGrey) and the pictures
+   have none; here each picture keeps the well it has on its own. */
 const ROW = "grid grid-cols-[12.5rem_minmax(0,1fr)] gap-x-3 pr-3"
 
 function Wave({ paired = false }: { paired?: boolean }) {
@@ -170,9 +182,9 @@ function Wave({ paired = false }: { paired?: boolean }) {
   )
 }
 
-/** A Both track: its audio row, and its notes' row under it. The two
- *  pictures share one well, split by a 1 px line: the waveform's lower
- *  corners square, the notes lane's upper ones square under the line. */
+/** A Both track: its audio row, and its notes' row under it, with the MIDI
+ *  sign and no name. The two pictures meet at a 1 px line: the waveform's
+ *  lower corners square, the notes lane's upper ones square under the line. */
 function BothTrack() {
   return (
     <>

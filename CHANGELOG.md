@@ -21,6 +21,13 @@ opening.
 - **The pointer is a hand over everything you can press**, in РЭХА and in
   the band service. Buttons, menus, switches and a take's name and row show
   it now, as links always did.
+- **Notes fold in the player.** When a take opens, every track's notes are
+  a thin strip, in РЭХА and in the band service. The arrow after their
+  **M** opens them and folds them again. Notes of a track on **Both** sit
+  right under its audio on the same grey plate, with the MIDI sign before
+  **M** and no name of their own, so you see whose notes they are. The grey
+  that was under the waveforms is now on the plates with each track's name
+  and fader.
 
 ## 0.26.0
 

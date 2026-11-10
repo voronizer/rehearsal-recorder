@@ -1494,15 +1494,17 @@ test("master lane lines up with the tracks at 960", async ({ page }) => {
   const lanes = (await page.locator("[data-lanes]").boundingBox())!
   expect(Math.abs(group.x - lanes.x)).toBeLessThanOrEqual(0.5)
   expect(Math.abs(group.width - lanes.width)).toBeLessThanOrEqual(0.5)
-  // On a well as the tracks' pictures are, over the same seconds.
+  // Under the tracks' pictures, over the same seconds, with no fill of its
+  // own as they have none: the grey is its plate's.
   const well = (await masterLane(page).boundingBox())!
   const wave = (await page.locator("[data-lane]").first().locator(":scope > *").first().boundingBox())!
   expect(Math.abs(well.x - wave.x)).toBeLessThanOrEqual(0.5)
   expect(Math.abs(well.width - wave.width)).toBeLessThanOrEqual(0.5)
   expect(Math.abs(well.height - wave.height)).toBeLessThanOrEqual(0.5)
-  expect(await masterLane(page).evaluate((e) => getComputedStyle(e).backgroundColor)).toBe(
-    await colour(page, "--well")
-  )
+  expect(await masterLane(page).evaluate((e) => getComputedStyle(e).backgroundColor)).toBe("rgba(0, 0, 0, 0)")
+  expect(
+    await page.locator("[data-master-group] [data-plate-well]").evaluate((e) => getComputedStyle(e).backgroundColor)
+  ).toBe(await colour(page, "--well"))
   const tag = (await clickTag(page).boundingBox())!
   expect(tag.x + tag.width).toBeLessThanOrEqual(well.x + well.width)
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(960)

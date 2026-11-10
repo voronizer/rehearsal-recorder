@@ -503,6 +503,10 @@ test("the MIDI piece shows two lanes of notes, each with its plate, the part hea
   await expect(keys).toContainText("Launchkey Mini MK3")
   await expect(keys.getByRole("button", { name: "Keys: Saved as .mid, not played here" })).toHaveAttribute("aria-pressed", "true")
   await expect(piece.locator("[data-notes-lane]")).toHaveCount(2)
+  // Each plate has the MIDI sign before M, as in the player, and no arrow:
+  // the piece has nothing to fold.
+  for (const plate of [drums, keys]) await expect(plate.getByRole("img", { name: "MIDI" })).toBeVisible()
+  await expect(piece.locator("[data-notes-fold]")).toHaveCount(0)
   // The drums' rows are named, and the keys' octaves.
   await expect(piece.locator("[data-notes-lane='Drums']")).toContainText("Crash")
   await expect(piece.locator("[data-notes-lane='Drums']")).toContainText("Kick")
@@ -677,6 +681,17 @@ for (const width of [1280, 390]) {
     await expect(piece.locator("[data-master-plate]")).toHaveCount(0)
     await expect(lane.locator("[data-drift-chip]")).toHaveText(["+6", "+7", "−5"])
     await expect(lane.locator("[data-drift-stretch]")).toHaveCount(3)
+    // The lane on the darker well, inside 3 px of the card, as it was before
+    // the player's grey went to its plates.
+    const [fill, well] = await lane.evaluate((el) => {
+      const probe = document.createElement("div")
+      probe.style.background = "var(--well)"
+      el.append(probe)
+      const colours = [getComputedStyle(el).backgroundColor, getComputedStyle(probe).backgroundColor]
+      probe.remove()
+      return colours
+    })
+    expect(fill).toBe(well)
     const found = await piece.evaluate((el) => {
       const box = (e: Element) => e.getBoundingClientRect()
       return { lane: box(el.querySelector("[data-master-lane]")!), chips: [...el.querySelectorAll("[data-drift-chip]")].map(box) }
