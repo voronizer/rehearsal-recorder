@@ -486,6 +486,7 @@ test.describe("as Ira", () => {
     await transport.getByRole("button", { name: "Pause", exact: true }).click()
     await expect(transport.getByRole("button", { name: "Play", exact: true })).toBeVisible()
     letThrough()
+    await page.unrouteAll({ behavior: "ignoreErrors" })
   })
 
   test("M and S on a take's page work before the take plays, and stay when it does", async ({ page }) => {

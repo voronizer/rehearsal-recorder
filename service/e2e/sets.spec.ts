@@ -119,6 +119,8 @@ test("type a length and empty it again", async ({ page }) => {
   await page.reload()
   await expect(songs.locator('[data-song="Kupalle"]').getByRole("button", { name: "no takes" })).toBeVisible()
   await expect(line).toHaveText("3 songs · 0:20 · no length: Kupalle")
+  // The page asks for the songs a second time: that answer may still be on its way.
+  await page.unrouteAll({ behavior: "ignoreErrors" })
 })
 
 test("on stage goes song to song and ends", async ({ page }) => {
@@ -192,6 +194,7 @@ test("print puts the set alone on the sheet", async ({ page }) => {
   await expect(page.locator("#root")).toBeHidden()
   await expect(sheet.locator("div").first()).toHaveText("Club gig3 songs · 0:30")
   await expect(sheet.locator("li")).toHaveText(["1Viasna", "2PałynF♯ · 96", "3KupalleEm"])
+  await page.unrouteAll({ behavior: "ignoreErrors" })
 })
 
 test("delete a set and restore it", async ({ page }) => {
