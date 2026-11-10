@@ -6,9 +6,9 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { cn } from "@/lib/utils"
 import { usePanel } from "./panel"
-import { sectionIcon } from "./sections"
+import { sectionIcon, type SectionTo } from "./sections"
 import { useSize } from "./size"
-import { count } from "./words"
+import { count, day, longDay } from "./words"
 
 /*
   The pages' layout, as РЭХА's History: one card a page with its parts
@@ -345,25 +345,52 @@ export function Pill({ kind, children, ...to }: PillTo & { kind: "song" | "rehea
   )
 }
 
-/**
- * A song over its takes on a rehearsal's page, on a grey band (Alex's pick
- * А, 2026-11-10): a note, its title a size up, then its takes here, its key
- * and tempo, and ›. The whole line opens the song's page.
- */
-export function SongLine({ song, takes }: { song: { id: number; title: string; key: string | null; tempo: number | null }; takes: number }) {
-  const facts = [count(takes, "take"), song.key, song.tempo ? `${Math.round(song.tempo)} bpm` : null].filter(Boolean).join(" · ")
-  const Note = sectionIcon("/songs")
+/** A grey line's look (Alex's pick А, 2026-11-10): a band of РЭХА's side panels' grey, lit under the pointer. */
+const LINE = "-mx-3 flex items-center gap-2.5 rounded-lg bg-panel px-3 py-2.5 transition-colors hover:bg-accent"
+
+/** What a grey line says: its section's icon, its title a size up, grey facts, and ›. The title keeps its room; the facts give way first. */
+function LineWords({ section, title, facts }: { section: SectionTo; title: string; facts: string }) {
+  const Icon = sectionIcon(section)
   return (
-    <Link
-      to="/songs/$id"
-      params={{ id: String(song.id) }}
-      className="-mx-3 flex items-center gap-2.5 rounded-lg bg-panel px-3 py-2.5 transition-colors hover:bg-accent"
-    >
-      <Note className="size-4 shrink-0 text-muted-foreground" />
-      <span className="min-w-0 truncate text-base font-semibold">{song.title}</span>{" "}
-      <span className="shrink-0 text-sm text-muted-foreground">{facts}</span>
+    <>
+      <Icon className="size-4 shrink-0 text-muted-foreground" />
+      <span className="max-w-[75%] shrink-0 truncate text-base font-semibold">{title}</span>{" "}
+      <span className="min-w-0 truncate text-sm text-muted-foreground">{facts}</span>
       <span className="flex-1" />
       <ChevronRight className="size-4 shrink-0 text-muted-foreground" />
+    </>
+  )
+}
+
+/**
+ * A song over its takes, on a grey band, on a rehearsal's page and on Home
+ * (Alex, 2026-11-10): its takes, its key and tempo, or when it was last
+ * played (`last`). The whole line opens the song's page.
+ */
+export function SongLine({
+  song,
+  takes,
+  last,
+}: {
+  song: { id: number; title: string; key?: string | null; tempo?: number | null }
+  takes: number
+  last?: string
+}) {
+  const facts = [count(takes, "take"), song.key, song.tempo ? `${Math.round(song.tempo)} bpm` : null, last && `last ${day(last)}`]
+    .filter(Boolean)
+    .join(" · ")
+  return (
+    <Link to="/songs/$id" params={{ id: String(song.id) }} className={LINE}>
+      <LineWords section="/songs" title={song.title} facts={facts} />
+    </Link>
+  )
+}
+
+/** A rehearsal over its takes, on Home, as a song's line: the whole line opens the rehearsal's page. */
+export function RehearsalLine({ uid, date, facts }: { uid: string; date: string; facts: string }) {
+  return (
+    <Link to="/rehearsals/$uid" params={{ uid }} className={LINE}>
+      <LineWords section="/rehearsals" title={longDay(date)} facts={facts} />
     </Link>
   )
 }

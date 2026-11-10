@@ -37,7 +37,8 @@ test("a press on a take's wave opens its page and plays nothing", async ({ page 
   const box = (await wave.boundingBox())!
   await wave.click({ position: { x: box.width * 0.5, y: box.height / 2 } })
   await expect(page).toHaveURL(`/takes/${band().takes["Viasna 11"]}`)
-  await expect(page.getByLabel("Panel")).toHaveCount(0)
+  await expect(page.getByRole("heading", { level: 1 })).toContainText("Viasna")
+  await expect(page.getByLabel("Panel", { exact: true })).toHaveCount(0)
   await expect(page.getByLabel("Player", { exact: true }).getByRole("button", { name: /^Pause/ })).toHaveCount(0)
 })
 
@@ -57,7 +58,7 @@ test.describe("on a phone", () => {
     await page.goto("/")
     await page.getByRole("region", { name: "The last rehearsal" }).getByRole("link", { name: "Viasna 11", exact: true }).click()
     await expect(page).toHaveURL(`/takes/${band().takes["Viasna 11"]}`)
-    await expect(page.getByLabel("Panel")).toHaveCount(0)
+    await expect(page.getByLabel("Panel", { exact: true })).toHaveCount(0)
     const bar = page.getByLabel("Player")
     await expect(bar.getByRole("button", { name: "Viasna 11", exact: true })).toBeVisible()
     await bar.getByRole("button", { name: "Mark", exact: true }).click()
@@ -71,7 +72,7 @@ test.describe("on a phone", () => {
     await page.getByRole("menuitem", { name: "New song…" }).click()
     await expect(page).toHaveURL(`/takes/${band().takes["Take 3"]}`)
     await expect(page.getByRole("main").getByRole("textbox", { name: "New song" })).toBeVisible()
-    await expect(page.getByLabel("Panel")).toHaveCount(0)
+    await expect(page.getByLabel("Panel", { exact: true })).toHaveCount(0)
   })
 })
 

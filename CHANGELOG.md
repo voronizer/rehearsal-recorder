@@ -10,8 +10,9 @@ opening.
 - **In the band service a take opens its page from anywhere on its row**,
   the wave too, and the take's panel is gone. Under a take's title its song
   and its rehearsal are buttons that open their pages; on a rehearsal's page
-  each song has a grey line over its takes that opens the song, in place of
-  **Notes and files**, and on a song's page a day opens its rehearsal.
+  and on **Home** each song has a grey line over its takes that opens the
+  song, in place of **Notes and files**, and Home's last rehearsal has one
+  that opens the rehearsal. On a song's page a day opens its rehearsal.
   Every list has the same room between rows and no lines. **Statuses** and
   **Labels** open in the panel on the right, and **New song** is a dialog
   that asks for the song's status too.

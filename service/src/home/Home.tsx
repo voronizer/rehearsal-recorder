@@ -1,30 +1,17 @@
 import { useState } from "react"
-import { Link } from "@tanstack/react-router"
 import { Button } from "@/components/ui/button"
-import { cn } from "@/lib/utils"
 import { useFrame, useHome, type Home as HomeData, type HomeSong } from "../api"
 import { MarkItem } from "../marks/MarkItem"
-import { Columns, Group, Groups, OPENS, Page, Rows, Trouble, useTitle } from "../shell/parts"
-import { clock, count, day, longDay } from "../shell/words"
+import { Columns, Group, Groups, Page, RehearsalLine, Rows, SongLine, Trouble, useTitle } from "../shell/parts"
+import { clock, count } from "../shell/words"
 import { TakeLine } from "../takes/parts"
 import { FirstDay } from "./FirstDay"
 
-/**
- * A song on Home, as a song in РЭХА's list: its title, a grey line about
- * it, then its best take as a row, 8 px under the title (the row's own
- * light makes up the rest).
- */
+/** A song on Home: its grey line, as on a rehearsal's page, over its best take. */
 function SongRow({ song }: { song: HomeSong }) {
   return (
-    <div className="flex flex-col gap-0.5" data-song={song.title}>
-      <div className="flex min-w-0 flex-wrap items-baseline gap-x-2">
-        <Link to="/songs/$id" params={{ id: String(song.id) }} title={song.title} className={cn("min-w-0 max-w-full truncate font-medium", OPENS)}>
-          {song.title}
-        </Link>
-        <span className="min-w-0 text-xs text-muted-foreground">
-          {count(song.takes, "take")} · last {day(song.last_date)}
-        </span>
-      </div>
+    <div className="flex flex-col gap-3" data-song={song.title}>
+      <SongLine song={song} takes={song.takes} last={song.last_date} />
       <TakeLine take={song.best} />
     </div>
   )
@@ -35,7 +22,8 @@ const FIRST = 8
 
 /**
  * The band's last rehearsal on top (Alex's pick A, 2026-11-02): its takes
- * as they were played. The day leads to the rehearsal's page.
+ * as they were played, under its grey line, which leads to the rehearsal's
+ * page as a song's does to the song's (Alex, 2026-11-10).
  */
 function LastRehearsal({ last }: { last: NonNullable<HomeData["last_rehearsal"]> }) {
   const [all, setAll] = useState(false)
@@ -43,16 +31,8 @@ function LastRehearsal({ last }: { last: NonNullable<HomeData["last_rehearsal"]>
   const shown = all || last.takes.length <= FIRST + 2 ? last.takes : last.takes.slice(0, FIRST)
   const more = last.takes.length - shown.length
   return (
-    <Group
-      name="The last rehearsal"
-      title={
-        // On one line: the grey words after it give way first.
-        <Link to="/rehearsals/$uid" params={{ uid: last.uid }} className={cn("whitespace-nowrap", OPENS)}>
-          {longDay(last.date)}
-        </Link>
-      }
-      hint={`the last rehearsal · ${count(last.takes.length, "take")} · ${clock(length)}`}
-    >
+    <Group name="The last rehearsal">
+      <RehearsalLine uid={last.uid} date={last.date} facts={`${count(last.takes.length, "take")} · ${clock(length)}`} />
       <Rows takes>
         {shown.map((t) => (
           <TakeLine key={t.uid} take={t} />
@@ -90,7 +70,7 @@ export function Home() {
             {h.last_rehearsal && <LastRehearsal last={h.last_rehearsal} />}
             <Group title="Songs" hint="with their best take">
               {h.songs.length ? (
-                // 24 px from one song's take to the next song's title, as between rows.
+                // 24 px from one song's take to the next song's line, as between rows.
                 <div className="flex flex-col gap-4.5">
                   {h.songs.map((s) => (
                     <SongRow key={s.id} song={s} />
