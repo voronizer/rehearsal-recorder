@@ -206,14 +206,17 @@ function Goes({ last, song, only }: { last: RehearsalDetail; song: string; only?
 
 /**
  * The Master row in the player (Timeline): the take's lane, the band's tempo
- * along it bar by bar, on its group's fill. Its plate is left out, as the
- * player leaves it out where there is no room for it: beside the plate, a
- * lane in a window this size is too short for its tag and its chips both.
+ * along it bar by bar, on the darker well inside the card. The player has
+ * its grey on the plates; a lane alone here keeps its well, so it still reads
+ * as a lane. Its plate is left out, as the player leaves it out where there
+ * is no room for it: beside the plate, a lane in a window this size is too
+ * short for its tag and its chips both.
  */
 function MasterRow({ master }: { master: MasterData }) {
   return (
     <div className="h-14 w-[33rem] max-w-full rounded-lg bg-card p-[3px]">
       <MasterClickLane
+        className="bg-well"
         from={0}
         to={master.to}
         position={master.at}

@@ -5,6 +5,7 @@ import {
   closeTake,
   dragRegion,
   expect,
+  nameTake,
   openApp,
   openHistory,
   recordTake,
@@ -737,6 +738,26 @@ test.describe("notes in the player", () => {
     await expect(notesPlate(page, "Keys")).toContainText("Launchkey Mini MK3")
     await expect(notesLane(page, "Keys")).toBeVisible()
     await expect.poll(() => callCount(page, "take_notes")).toBe(2)
+  })
+
+  test("up to the take before folds the notes again, in the same player", async ({ page }) => {
+    // Two takes of one song: up goes through a song's takes only.
+    await stopped(page)
+    await nameTake(page, "Pałyn")
+    await closeTake(page, 2)
+    await recordTake(page, 2)
+    await nameTake(page, "Pałyn")
+    await unfold(page, "Drums")
+    await unfold(page, "Keys")
+    // The player stays open: up opens the take before in it, keeping the
+    // zoom and the loop, and only the notes fold.
+    await timeline(page).evaluate((el) => el.setAttribute("data-kept", ""))
+    const opens = await callCount(page, "player_open")
+    await page.keyboard.press("ArrowUp")
+    await expect.poll(() => callCount(page, "player_open")).toBeGreaterThan(opens)
+    await expect(timeline(page)).toHaveAttribute("data-kept", "")
+    await expect(arrow(page, "Drums")).toHaveAttribute("aria-expanded", "false")
+    await expect(arrow(page, "Keys")).toHaveAttribute("aria-expanded", "false")
   })
 
   test("a take of an evening before opens with its notes in History", async ({ page }) => {

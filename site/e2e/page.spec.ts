@@ -681,6 +681,17 @@ for (const width of [1280, 390]) {
     await expect(piece.locator("[data-master-plate]")).toHaveCount(0)
     await expect(lane.locator("[data-drift-chip]")).toHaveText(["+6", "+7", "−5"])
     await expect(lane.locator("[data-drift-stretch]")).toHaveCount(3)
+    // The lane on the darker well, inside 3 px of the card, as it was before
+    // the player's grey went to its plates.
+    const [fill, well] = await lane.evaluate((el) => {
+      const probe = document.createElement("div")
+      probe.style.background = "var(--well)"
+      el.append(probe)
+      const colours = [getComputedStyle(el).backgroundColor, getComputedStyle(probe).backgroundColor]
+      probe.remove()
+      return colours
+    })
+    expect(fill).toBe(well)
     const found = await piece.evaluate((el) => {
       const box = (e: Element) => e.getBoundingClientRect()
       return { lane: box(el.querySelector("[data-master-lane]")!), chips: [...el.querySelectorAll("[data-drift-chip]")].map(box) }
