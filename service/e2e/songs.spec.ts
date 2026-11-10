@@ -191,9 +191,14 @@ test("a song page puts the best take on top", async ({ page }) => {
   await expect(all.locator("[data-take]")).toHaveCount(2)
   await expect(all.locator("[data-take]").nth(0)).toHaveAttribute("data-take", "Viasna 12")
   await expect(all.locator("[data-take]").nth(1)).toHaveAttribute("data-take", "Viasna 11")
-  await all.getByRole("button", { name: /^Thursday, 23 October/ }).click()
+  // A day is its rehearsal's pill; the arrow and the count fold its takes.
+  await all.getByRole("button", { name: /^Thursday, 23 October( 2025)?, 1 take$/ }).click()
   await expect(all.locator("[data-take]")).toHaveCount(3)
   await expect(all.locator("[data-take]").nth(2)).toHaveAttribute("data-take", "Viasna 5")
+  await all.getByText("1 take", { exact: true }).click()
+  await expect(all.locator("[data-take]")).toHaveCount(2)
+  await all.locator('[data-pill="rehearsal"]').filter({ hasText: /^Thursday, 23 October/ }).click()
+  await expect(page).toHaveURL(`/rehearsals/${band().rehearsals.first}`)
 })
 
 test("the star at rehearsal shows apart", async ({ page }) => {

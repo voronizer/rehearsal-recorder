@@ -21,7 +21,14 @@ test("rehearsals come by month, and a rehearsal's takes by song", async ({ page 
   await expect(viasna12).toContainText("The bridge drags here")
   await expect(viasna12).toContainText("Fill too long?")
 
-  await page.getByRole("region", { name: "Viasna", exact: true }).getByRole("link", { name: "Notes and files" }).click()
+  // Each song's line over its takes, which do not fold; Not named a plain heading; no Notes and files.
+  const main = page.getByRole("main")
+  await expect(main.getByRole("link", { name: "Notes and files" })).toHaveCount(0)
+  await expect(main.getByRole("button", { name: /^(Kupalle|Pałyn|Viasna|Not named)\s*\d+ takes?$/ })).toHaveCount(0)
+  await expect(main.getByRole("heading", { name: "Not named", exact: true })).toBeVisible()
+  await expect(main.getByRole("region", { name: "Not named" }).getByRole("link", { name: /takes?\b/ })).toHaveCount(0)
+  const line = page.getByRole("region", { name: "Viasna", exact: true }).getByRole("link", { name: /^Viasna\s*2 takes/ })
+  await line.click()
   await expect(page).toHaveURL(`/songs/${band().songs["Viasna"]}`)
   await expect(page.getByRole("heading", { level: 1 })).toContainText("Viasna")
   await page.getByRole("navigation", { name: "Sections" }).getByRole("link", { name: "Rehearsals" }).click()

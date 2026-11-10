@@ -6,7 +6,7 @@ test.describe("as Alex", () => {
 
   test("a take page has REHA's player: a lane per track with M and S, the drums' notes, and Master", async ({ page }) => {
     await page.goto(`/takes/${band().takes["Viasna 12"]}`)
-    await expect(page.getByText(/^Thursday, 30 October( 2025)? · 0:10 · 6 tracks$/)).toBeVisible()
+    await expect(page.getByRole("main").getByText(/^0:10 · 6 tracks$/)).toBeVisible()
     const player = page.locator("[data-take-player]")
     const lanes = player.locator("[data-lane-row]")
     await expect(lanes).toHaveCount(7)
@@ -59,6 +59,27 @@ test.describe("as Alex", () => {
     await expect(soloVocals).toHaveAttribute("aria-pressed", "false")
   })
 
+  test("a take's page has its song's and its rehearsal's pills, each to its page, and Songs is lit", async ({ page }) => {
+    await page.goto(`/takes/${band().takes["Pałyn 9"]}`)
+    const main = page.getByRole("main")
+    const songs = page.getByRole("navigation", { name: "Sections" }).getByRole("link", { name: "Songs" })
+    await expect(songs).toHaveAttribute("aria-current", "page")
+    await expect(main.locator("[data-pill]")).toHaveText(["Pałyn", /^Thursday, 30 October( 2025)?$/])
+    // No ‹ Pałyn over the title: the song's pill does its job.
+    await expect(main.getByRole("link", { name: "Pałyn" })).toHaveCount(1)
+    await main.getByRole("link", { name: "Pałyn", exact: true }).click()
+    await expect(page).toHaveURL(`/songs/${band().songs["Pałyn"]}`)
+    await page.goBack()
+    await main.getByRole("link", { name: /^Thursday, 30 October/ }).click()
+    await expect(page).toHaveURL(`/rehearsals/${band().rehearsals.second}`)
+
+    // A take with no song has the day alone; Songs is lit, as Songs lists it under Not named.
+    await page.goto(`/takes/${band().takes["Take 3"]}`)
+    await expect(main.locator("[data-pill]")).toHaveText([/^Thursday, 30 October( 2025)?$/])
+    await expect(main.locator('[data-pill="rehearsal"]')).toBeVisible()
+    await expect(songs).toHaveAttribute("aria-current", "page")
+  })
+
   test("a take plays, its time moves, and a press on the lanes moves the playhead", async ({ page }) => {
     await page.goto(`/takes/${band().takes["Viasna 12"]}`)
     const transport = page.getByRole("toolbar", { name: "Transport" })
@@ -96,7 +117,7 @@ test.describe("as Alex", () => {
   test("a track of notes alone has a lane of its own, after the tracks of sound", async ({ page }) => {
     await page.goto(`/takes/${band().takes["Pałyn 9"]}`)
     // The keys are one of its tracks.
-    await expect(page.getByText(/^Thursday, 30 October( 2025)? · 0:10 · 3 tracks$/)).toBeVisible()
+    await expect(page.getByRole("main").getByText(/^0:10 · 3 tracks$/)).toBeVisible()
     const lanes = page.locator("[data-take-player] [data-lane-row]")
     await expect(lanes).toHaveCount(3)
     await expect(lanes.nth(2)).toHaveAttribute("data-lane-row", "Keys")

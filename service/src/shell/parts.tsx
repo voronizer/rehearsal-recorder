@@ -6,7 +6,9 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { cn } from "@/lib/utils"
 import { usePanel } from "./panel"
+import { sectionIcon } from "./sections"
 import { useSize } from "./size"
+import { count } from "./words"
 
 /*
   The pages' layout, as РЭХА's History: one card a page with its parts
@@ -109,7 +111,12 @@ export function Group({
         </Group>
       </Groups>
     )
-  if (!title) return <section className="flex flex-col gap-3">{children}</section>
+  if (!title)
+    return (
+      <section aria-label={name} className="flex flex-col gap-3">
+        {children}
+      </section>
+    )
   const label = typeof title === "string" ? title : name
   const heading = (
     <>
@@ -117,6 +124,35 @@ export function Group({
       {hint && <span className="truncate text-sm text-muted-foreground">{hint}</span>}
     </>
   )
+  // A title that leads away, such as a day's pill: the arrow and the count
+  // fold the group, the title beside them leads to its page.
+  if (fold && typeof title !== "string")
+    return (
+      <Collapsible defaultOpen={fold === "open"} className="group/fold flex flex-col" role="region" aria-label={label}>
+        <div className="flex min-h-8 items-center gap-2">
+          <CollapsibleTrigger asChild>
+            <button
+              type="button"
+              aria-label={[label, typeof hint === "string" ? hint : null].filter(Boolean).join(", ")}
+              className="-ml-1 flex shrink-0 items-center rounded-md p-1 outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
+            >
+              <ChevronRight className="size-4 text-muted-foreground transition-transform group-data-[state=open]/fold:rotate-90" />
+            </button>
+          </CollapsibleTrigger>
+          <h2 className={cn("min-w-0 text-sm", small ? "font-medium" : "font-semibold")}>{title}</h2>
+          {hint && (
+            // The count folds too; the arrow says it to the keyboard and a screen reader.
+            <CollapsibleTrigger asChild>
+              <button type="button" tabIndex={-1} aria-hidden="true" className="min-w-0 flex-1 truncate py-1 text-left text-sm text-muted-foreground">
+                {hint}
+              </button>
+            </CollapsibleTrigger>
+          )}
+          <span className="hidden group-data-[state=open]/fold:contents">{action}</span>
+        </div>
+        <CollapsibleContent className="flex flex-col gap-3 pt-2">{children}</CollapsibleContent>
+      </Collapsible>
+    )
   if (fold)
     return (
       <Collapsible defaultOpen={fold === "open"} className="group/fold flex flex-col" role="region" aria-label={label}>
@@ -256,6 +292,52 @@ export function Props({ rows }: { rows: [string, ReactNode][] }) {
 }
 
 type BackTo = { to: "/rehearsals" } | { to: "/songs" } | { to: "/sets" } | { to: "/songs/$id"; params: { id: string } }
+
+type PillTo = { to: "/songs/$id"; params: { id: string } } | { to: "/rehearsals/$uid"; params: { uid: string } }
+
+/**
+ * A song or a rehearsal that leads to its page, under a take's title and as
+ * a day on a song's page (Alex's pick Б, 2026-11-10): the icon its section
+ * has in the column on the left, the words, a thin line round them. A press
+ * does not reach a fold round it.
+ */
+export function Pill({ kind, children, ...to }: PillTo & { kind: "song" | "rehearsal"; children: ReactNode }) {
+  const Icon = sectionIcon(kind === "song" ? "/songs" : "/rehearsals")
+  return (
+    <Link
+      {...(to as { to: "/songs/$id"; params: { id: string } })}
+      data-pill={kind}
+      onClick={(e) => e.stopPropagation()}
+      className="inline-flex h-7 max-w-full items-center gap-1.5 rounded-full border bg-background px-2.5 text-sm font-normal text-foreground transition-colors hover:bg-accent"
+    >
+      <Icon className="size-3.5 shrink-0 text-muted-foreground" />
+      <span className="truncate">{children}</span>
+    </Link>
+  )
+}
+
+/**
+ * A song over its takes on a rehearsal's page, on a grey band (Alex's pick
+ * А, 2026-11-10): a note, its title a size up, then its takes here, its key
+ * and tempo, and ›. The whole line opens the song's page.
+ */
+export function SongLine({ song, takes }: { song: { id: number; title: string; key: string | null; tempo: number | null }; takes: number }) {
+  const facts = [count(takes, "take"), song.key, song.tempo ? `${Math.round(song.tempo)} bpm` : null].filter(Boolean).join(" · ")
+  const Note = sectionIcon("/songs")
+  return (
+    <Link
+      to="/songs/$id"
+      params={{ id: String(song.id) }}
+      className="-mx-3 flex items-center gap-2.5 rounded-lg bg-panel px-3 py-2.5 transition-colors hover:bg-accent"
+    >
+      <Note className="size-4 shrink-0 text-muted-foreground" />
+      <span className="min-w-0 truncate text-base font-semibold">{song.title}</span>{" "}
+      <span className="shrink-0 text-sm text-muted-foreground">{facts}</span>
+      <span className="flex-1" />
+      <ChevronRight className="size-4 shrink-0 text-muted-foreground" />
+    </Link>
+  )
+}
 
 /** Back to where the page belongs: “‹ Songs”. */
 export function Back({ label, ...to }: BackTo & { label: string }) {

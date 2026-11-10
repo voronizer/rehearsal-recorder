@@ -1,12 +1,12 @@
 import { useNavigate, useParams } from "@tanstack/react-router"
 import { useSong, type TakeRow } from "../api"
-import { Back, Columns, Group, Groups, Page, Trouble, useTitle } from "../shell/parts"
+import { Back, Columns, Group, Groups, Page, Pill, Trouble, useTitle } from "../shell/parts"
 import { clock, count, longDay } from "../shell/words"
 import { TakeLine } from "../takes/parts"
 import { InPlaceTitle, TempoControls, TitleFacts } from "./edit"
 import { AddFile, BestTake, Files, KeySelect, Notes, SongMenu, StatusMenu, why } from "./parts"
 
-/** A song's takes by rehearsal, newest first, the newest rehearsal open. */
+/** A song's takes by rehearsal, newest first, the newest rehearsal open; each day a pill to its rehearsal. */
 function AllTakes({ takes }: { takes: TakeRow[] }) {
   const days = [...new Set(takes.map((t) => t.rehearsal_uid))]
   return (
@@ -14,7 +14,18 @@ function AllTakes({ takes }: { takes: TakeRow[] }) {
       {days.map((d, i) => {
         const these = takes.filter((t) => t.rehearsal_uid === d)
         return (
-          <Group key={d} small title={longDay(these[0].date)} hint={count(these.length, "take")} fold={i === 0 ? "open" : "closed"}>
+          <Group
+            key={d}
+            small
+            name={longDay(these[0].date)}
+            title={
+              <Pill kind="rehearsal" to="/rehearsals/$uid" params={{ uid: d }}>
+                {longDay(these[0].date)}
+              </Pill>
+            }
+            hint={count(these.length, "take")}
+            fold={i === 0 ? "open" : "closed"}
+          >
             <div className="flex flex-col gap-1">
               {these.map((t) => (
                 <TakeLine key={t.uid} take={t} />

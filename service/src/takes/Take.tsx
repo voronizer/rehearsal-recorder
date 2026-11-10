@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react"
-import { Link, useNavigate, useParams, useSearch } from "@tanstack/react-router"
+import { useNavigate, useParams, useSearch } from "@tanstack/react-router"
 import { RotateCcw } from "lucide-react"
 import { TakePlayer as RehaPlayer } from "@/components/TakePlayer"
 import { Badge } from "@/components/ui/badge"
@@ -13,7 +13,7 @@ import { cn } from "@/lib/utils"
 import { useLabels, useLevels, useLevelsTrouble, useRestore, useTake, type TakePage } from "../api"
 import { TakeMarks } from "../marks/MarkItem"
 import { usePanel } from "../shell/panel"
-import { Back, Group, Groups, OPENS, Page, Tile, Trouble, useTitle } from "../shell/parts"
+import { Group, Groups, Page, Pill, Tile, Trouble, useTitle } from "../shell/parts"
 import { useSize } from "../shell/size"
 import { clock, count, longDay, takeText } from "../shell/words"
 import { chipsOf } from "./chips"
@@ -249,7 +249,6 @@ function TakeView({ take }: { take: TakePage }) {
   const tracks = take.tracks.length + notesAlone(take, notes).length
   return (
     <Page
-      head={song ? <Back to="/songs/$id" params={{ id: String(song.id) }} label={song.title} /> : <Back to="/songs" label="Songs" />}
       title={
         <span className="flex flex-wrap items-center gap-3">
           {/* A long name wraps rather than being cut (2026-11-04). */}
@@ -276,13 +275,19 @@ function TakeView({ take }: { take: TakePage }) {
         </span>
       }
       sub={
-        <>
-          <Link to="/rehearsals/$uid" params={{ uid: take.rehearsal.uid }} className={OPENS}>
+        // Where the take comes from, each a pill to its page (Alex's pick Б, 2026-11-10).
+        <span className="mt-1 flex flex-wrap items-center gap-2">
+          {song && (
+            <Pill kind="song" to="/songs/$id" params={{ id: String(song.id) }}>
+              {song.title}
+            </Pill>
+          )}
+          <Pill kind="rehearsal" to="/rehearsals/$uid" params={{ uid: take.rehearsal.uid }}>
             {longDay(take.date)}
-          </Link>
+          </Pill>
           <SongWord take={take} />
-          {` · ${clock(take.duration_sec)} · ${count(tracks, "track")}`}
-        </>
+          <span>{`${clock(take.duration_sec)} · ${count(tracks, "track")}`}</span>
+        </span>
       }
     >
       {take.trashed_at && <InTrash uid={take.uid} />}

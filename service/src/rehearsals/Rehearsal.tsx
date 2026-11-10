@@ -1,17 +1,16 @@
 import { useEffect } from "react"
-import { Link, useNavigate, useParams } from "@tanstack/react-router"
-import { Button } from "@/components/ui/button"
+import { useNavigate, useParams } from "@tanstack/react-router"
 import { Refused, useRehearsal, useSongs, type TakeRow } from "../api"
-import { Back, Group, Groups, Page, Rows, Trouble, useTitle } from "../shell/parts"
+import { Back, Group, Groups, Page, Rows, SongLine, Trouble, useTitle } from "../shell/parts"
 import { clock, count, day, longDay } from "../shell/words"
 import { TakeLine } from "../takes/parts"
 
 /**
  * A rehearsal's page: its takes by song, in the order they were played,
- * each song a fold with **Notes and files** at its right. Takes with no
- * song are under **Not named**, last. Each take has its marks
- * under it. A rehearsal with no takes left, its last one deleted, opens
- * **Rehearsals** in its place.
+ * each song's line over its takes, leading to the song's page. Takes with
+ * no song are under **Not named**, last, a plain heading: it has no page.
+ * Each take has its marks under it. A rehearsal with no takes left, its
+ * last one deleted, opens **Rehearsals** in its place.
  */
 export function Rehearsal() {
   const { uid } = useParams({ from: "/band/rehearsals/$uid" })
@@ -30,7 +29,7 @@ export function Rehearsal() {
   // they would stand with no headings and be drawn again once they did.
   if (!page.data || !songs.data) return null
   const { rehearsal, takes } = page.data
-  const titles = new Map(songs.data.songs.map((s) => [s.id, s.title]))
+  const byId = new Map(songs.data.songs.map((s) => [s.id, s]))
   const ids = [...new Set(takes.map((t) => t.song_id).filter((id) => id !== null))]
   const groups: [number | null, TakeRow[]][] = ids.map((id) => [id, takes.filter((t) => t.song_id === id)])
   const loose = takes.filter((t) => t.song_id === null)
@@ -43,30 +42,28 @@ export function Rehearsal() {
       sub={`${count(takes.length, "take")} · ${count(ids.length, "song")} · ${clock(length)} recorded`}
     >
       <Groups>
-        {groups.map(([id, ts]) => (
-          <Group
-            key={id ?? "none"}
-            title={id === null ? "Not named" : (titles.get(id) ?? "")}
-            hint={count(ts.length, "take")}
-            fold="open"
-            action={
-              id !== null && (
-                // Says what it opens: the song's page, with what a rehearsal needs from it.
-                <Button asChild variant="ghost" size="row">
-                  <Link to="/songs/$id" params={{ id: String(id) }}>
-                    Notes and files
-                  </Link>
-                </Button>
-              )
-            }
-          >
+        {groups.map(([id, ts]) => {
+          const list = (
             <Rows>
               {ts.map((t) => (
                 <TakeLine key={t.uid} take={t} marks />
               ))}
             </Rows>
-          </Group>
-        ))}
+          )
+          if (id === null)
+            return (
+              <Group key="none" title="Not named" hint={count(ts.length, "take")}>
+                {list}
+              </Group>
+            )
+          const song = byId.get(id) ?? { id, title: "", key: null, tempo: null }
+          return (
+            <Group key={id} name={song.title}>
+              <SongLine song={song} takes={ts.length} />
+              {list}
+            </Group>
+          )
+        })}
       </Groups>
     </Page>
   )
