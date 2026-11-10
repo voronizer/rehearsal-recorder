@@ -61,6 +61,7 @@ test("a rehearsal opened by its link shows its takes only with their songs' titl
   const viasna = page.getByRole("region", { name: "Viasna", exact: true })
   await expect(viasna.locator('[data-take="Viasna 11"]')).toBeVisible()
   await expect(page.locator("[data-take]")).toHaveCount(5)
+  await page.unrouteAll({ behavior: "ignoreErrors" })
 })
 
 test("a rehearsal with no takes left opens Rehearsals", async ({ page }) => {
