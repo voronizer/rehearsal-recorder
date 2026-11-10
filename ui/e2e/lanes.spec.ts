@@ -21,10 +21,10 @@ import type { Locator, Page } from "@playwright/test"
 // The player's track lanes (spec C6): 56 px, M and S at 20, and the master
 // holding the window's bottom edge. M and S are after the fader, on its row
 // (owner, 2026-10-12, Q3), so the name has the plate's whole width. The lanes
-// are one group on the card's fill with no line between them, each picture on
-// a well of its own, a Both track's audio and notes sharing one under a 1 px
-// line; the master is its own group under them (owner, 2026-10-12, "Lanes as
-// one group" and "Lanes apart").
+// are one group on the card's fill with no line between them; the grey is on
+// the plates, each reaching its picture, a Both track's two plates one grey,
+// and the pictures have none (owner, 2026-11-10); the master is its own group
+// under them (owner, 2026-10-12, "Lanes as one group" and "Lanes apart").
 
 const NAMES = ["Drums", "Bass", "Guitar", "Vocals", "Keys", "Horns", "Room", "Talkback"]
 
@@ -113,15 +113,36 @@ function rowsOf(page: Page) {
       const pic = row.querySelector("[data-lane] > div, [data-notes-lane]")!
       const p = pic.getBoundingClientRect()
       const cs = getComputedStyle(pic)
+      const grey = row.querySelector("[data-plate-well]")
+      const g = grey?.getBoundingClientRect()
+      const gs = grey ? getComputedStyle(grey) : null
       return {
         name: `${row.getAttribute("data-lane-row")}${row.hasAttribute("data-paired") ? " (notes)" : ""}`,
         paired: row.hasAttribute("data-paired"),
         top: r.top,
         bottom: r.bottom,
         line: getComputedStyle(row).borderTopWidth,
+        left: r.left,
         picTop: p.top,
         picBottom: p.bottom,
+        picLeft: p.left,
         fill: cs.backgroundColor,
+        backing: row.getAttribute("data-lane-row") === "Backing",
+        grey: g && gs
+          ? {
+              top: g.top,
+              bottom: g.bottom,
+              left: g.left,
+              right: g.right,
+              fill: gs.backgroundColor,
+              corners: [
+                gs.borderTopLeftRadius,
+                gs.borderTopRightRadius,
+                gs.borderBottomRightRadius,
+                gs.borderBottomLeftRadius,
+              ].join(" "),
+            }
+          : null,
         split: `${cs.borderTopWidth} ${cs.borderTopStyle} ${cs.borderTopColor}`,
         corners: [
           cs.borderTopLeftRadius,
@@ -135,13 +156,16 @@ function rowsOf(page: Page) {
 }
 
 /**
- * The rows touch, with no line between them, and every picture is on its
- * well: the well's colour with 8 px corners, 3 px of the group's fill above
- * and below it. A Both track's audio and its notes (the row after, with
- * data-paired) are one well: nothing pads them apart, their corners where they
- * meet are square, and the notes are under a 1 px line in the border colour.
+ * The rows touch, with no line between them. No picture has a fill of its
+ * own: the grey is the plate's, the well's colour from 1 px under its row's
+ * top to 1 px above its foot, across the gap between the columns to the
+ * picture's edge, its left corners 8 px and its right ones square. A Both
+ * track's audio and its notes (the row after, with data-paired) are one grey:
+ * no gap where they meet and no corners there, and the notes' picture is
+ * under a 1 px line in the border colour. Backing has its dashed frame and
+ * no grey.
  */
-async function expectWells(page: Page) {
+async function expectPlateGrey(page: Page) {
   const rows = await rowsOf(page)
   const well = await colour(page, "--well")
   const line = await colour(page, "--border")
@@ -152,11 +176,18 @@ async function expectWells(page: Page) {
     expect(row.line, `no line over ${row.name}`).toBe("0px")
     if (i > 0)
       expect(Math.abs(row.top - rows[i - 1].bottom), `${row.name} starts where the row above ends`).toBeLessThan(0.5)
-    expect(row.fill, `${row.name}'s well`).toBe(well)
+    expect(row.fill, `${row.name}'s picture has no fill`).toBe("rgba(0, 0, 0, 0)")
     expect(row.picTop - row.top, `the fill over ${row.name}'s picture`).toBeCloseTo(above ? 0 : 3, 0)
     expect(row.bottom - row.picBottom, `the fill under ${row.name}'s picture`).toBeCloseTo(below ? 0 : 3, 0)
-    expect(row.corners, `${row.name}'s corners`).toBe(
-      above ? "0px 0px 8px 8px" : below ? "8px 8px 0px 0px" : "8px 8px 8px 8px"
+    const g = row.grey
+    expect(g, `${row.name}'s plate has its grey`).not.toBeNull()
+    expect(g!.fill, `${row.name}'s grey`).toBe(row.backing ? "rgba(0, 0, 0, 0)" : well)
+    expect(g!.top - row.top, `the fill over ${row.name}'s grey`).toBeCloseTo(above ? 0 : 1, 0)
+    expect(row.bottom - g!.bottom, `the fill under ${row.name}'s grey`).toBeCloseTo(below ? 0 : 1, 0)
+    expect(Math.abs(g!.left - row.left), `${row.name}'s grey from the row's left`).toBeLessThan(0.5)
+    expect(Math.abs(g!.right - row.picLeft), `${row.name}'s grey up to its picture`).toBeLessThan(0.5)
+    expect(g!.corners, `${row.name}'s grey's corners`).toBe(
+      above ? "0px 0px 0px 8px" : below ? "8px 0px 0px 0px" : "8px 0px 0px 8px"
     )
     if (above) {
       expect(row.split, `the line over ${row.name}`).toBe(`1px solid ${line}`)
@@ -406,11 +437,15 @@ test.describe("track lanes", () => {
           "border-top-left-radius": "0px",
           "border-top-width": "0px",
         })
-      // Each picture is on its well: the well's colour, 8 px corners
-      // (band(4) has no Both track).
+      // No picture has a fill: the grey is each plate's, the well's colour
+      // with its left corners 8 px (band(4) has no Both track).
       const pictures = await page.locator("[data-lane] > div, [data-notes-lane]").all()
       expect(pictures).toHaveLength(4)
       for (const el of pictures)
+        expect(await style(el, "background-color")).toEqual({ "background-color": "rgba(0, 0, 0, 0)" })
+      const greys = await group(page).locator("[data-plate-well]").all()
+      expect(greys).toHaveLength(4)
+      for (const el of greys)
         expect(
           await style(
             el,
@@ -423,8 +458,8 @@ test.describe("track lanes", () => {
         ).toEqual({
           "background-color": well,
           "border-top-left-radius": "8px",
-          "border-top-right-radius": "8px",
-          "border-bottom-right-radius": "8px",
+          "border-top-right-radius": "0px",
+          "border-bottom-right-radius": "0px",
           "border-bottom-left-radius": "8px",
         })
       // The master is not in it: a group of its own on the card's fill, its
@@ -447,7 +482,7 @@ test.describe("track lanes", () => {
   }) => {
     await stopped(page, band(4))
     await settled(page)
-    await expectWells(page)
+    await expectPlateGrey(page)
     // A lane is 56 px and its waveform 50, whatever the window did: a canvas
     // drawn at one size must not hold its row at that size.
     const sizes = async (at: string) => {
@@ -467,7 +502,7 @@ test.describe("track lanes", () => {
     await page.setViewportSize({ width: 1180, height: 820 })
     await frames(page)
     await sizes("back at 1180 by 820")
-    await expectWells(page)
+    await expectPlateGrey(page)
   })
 
   test("the plate has no Mono or Stereo line, whatever the file", async ({ page }) => {
@@ -484,7 +519,7 @@ test.describe("track lanes", () => {
   })
 
   for (const theme of ["dark", "light"] as const) {
-    test(`a Both track's audio and notes share one well split by a 1 px line, in the ${theme} theme`, async ({
+    test(`a Both track's audio and notes share one grey plate, the notes under a 1 px line, in the ${theme} theme`, async ({
       page,
     }) => {
       await stopped(page, BOTH, themed(theme))
@@ -502,8 +537,8 @@ test.describe("track lanes", () => {
       const w = await box(wave)
       const n = await box(notes)
       const nr = await box(notesRow)
-      // The waveform: on the well, 3 px under its row's top and down to its
-      // row's foot, with square lower corners.
+      // The waveform: no fill of its own, 3 px under its row's top and down
+      // to its row's foot, with square lower corners.
       expect(w.y - audioRow.y).toBeCloseTo(3, 0)
       expect(Math.abs(audioRow.y + audioRow.height - (w.y + w.height))).toBeLessThan(0.5)
       expect(
@@ -517,16 +552,16 @@ test.describe("track lanes", () => {
           "border-bottom-width"
         )
       ).toEqual({
-        "background-color": well,
+        "background-color": "rgba(0, 0, 0, 0)",
         "border-top-left-radius": "8px",
         "border-top-right-radius": "8px",
         "border-bottom-right-radius": "0px",
         "border-bottom-left-radius": "0px",
         "border-bottom-width": "0px",
       })
-      // Its notes: the same well, from where the waveform ends, under a 1 px
-      // line in the border colour, with square upper corners, to 3 px above
-      // their row's foot.
+      // Its notes: from where the waveform ends, under a 1 px line in the
+      // border colour, with square upper corners, to 3 px above their row's
+      // foot.
       expect(Math.abs(n.y - (w.y + w.height))).toBeLessThan(0.5)
       expect(
         await style(
@@ -541,7 +576,7 @@ test.describe("track lanes", () => {
           "border-bottom-left-radius"
         )
       ).toEqual({
-        "background-color": well,
+        "background-color": "rgba(0, 0, 0, 0)",
         "border-top-width": "1px",
         "border-top-style": "solid",
         "border-top-color": line,
@@ -551,8 +586,8 @@ test.describe("track lanes", () => {
         "border-bottom-left-radius": "8px",
       })
       expect(nr.y + nr.height - (n.y + n.height)).toBeCloseTo(3, 0)
-      // The next track's well is 3 px under its row's top: 6 px of the group's
-      // fill between the two wells.
+      // The next track's waveform is 3 px under its row's top: 6 px between
+      // the two pictures.
       const g = await box(lane(page, "Gtr"))
       expect(g.y - (await box(rowOf(lane(page, "Gtr")))).y).toBeCloseTo(3, 0)
       expect(g.y - (n.y + n.height)).toBeCloseTo(6, 0)
@@ -566,34 +601,48 @@ test.describe("track lanes", () => {
         "border-top-width": "0px",
         "background-color": "rgba(0, 0, 0, 0)",
       })
-      await expectWells(page)
+      // Behind them one grey: the track's down to its row's foot, the notes'
+      // from their row's top.
+      const ag = await box(rowOf(wave).locator("[data-plate-well]"))
+      const ng = await box(notesRow.locator("[data-plate-well]"))
+      expect(Math.abs(ng.y - (ag.y + ag.height))).toBeLessThan(0.5)
+      for (const grey of [rowOf(wave), notesRow])
+        expect(await style(grey.locator("[data-plate-well]"), "background-color")).toEqual({
+          "background-color": well,
+        })
+      await expectPlateGrey(page)
     })
   }
 
   // One look for a well on both screens (the recording screen's tiles too):
   // the side panel's colour, in both themes.
   for (const theme of ["dark", "light"] as const) {
-    test(`the rehearsal screen's wells are --well, in the ${theme} theme`, async ({ page }) => {
+    test(`the rehearsal screen's plates are on --well and its pictures on the card, in the ${theme} theme`, async ({ page }) => {
       await stopped(page, BOTH, themed(theme))
       await settled(page)
       const well = await colour(page, "--well")
       expect(well, "the theme has a well").not.toBe("rgba(0, 0, 0, 0)")
       expect(well, "a well is the panel's colour").toBe(await colour(page, "--panel"))
-      // Drums' waveform and notes, Gtr's waveform, Keys' notes.
+      // Drums' waveform and notes, Gtr's waveform, Keys' notes: on the card.
       const pictures = await page.locator("[data-lane] > div, [data-notes-lane]").all()
       expect(pictures).toHaveLength(4)
-      for (const el of pictures) expect(await style(el, "background-color")).toEqual({ "background-color": well })
-      // The names of a notes lane's octaves stand on the well's colour, so
-      // a note under one does not run through it.
+      for (const el of pictures)
+        expect(await style(el, "background-color")).toEqual({ "background-color": "rgba(0, 0, 0, 0)" })
+      // Their plates: Drums', its notes', Gtr's, Keys'.
+      const greys = await group(page).locator("[data-plate-well]").all()
+      expect(greys).toHaveLength(4)
+      for (const el of greys) expect(await style(el, "background-color")).toEqual({ "background-color": well })
+      // The names of a notes lane's octaves stand on the card's colour, the
+      // lane's ground, so a note under one does not run through it.
       const octave = notesLane(page, "Keys").getByText(/^C\d$/).first()
       await expect(octave).toBeVisible()
       expect(await style(octave, "background-color")).toEqual({
-        "background-color": await mixed(page, "--well", 85),
+        "background-color": await mixed(page, "--card", 85),
       })
     })
   }
 
-  test("a MIDI-only lane is a row of the group on a well of its own", async ({ page }) => {
+  test("a MIDI-only lane is a row of the group with a grey plate of its own", async ({ page }) => {
     await stopped(page, BOTH)
     await settled(page)
     const keys = notesLane(page, "Keys")
@@ -621,6 +670,9 @@ test.describe("track lanes", () => {
       "border-top-right-radius": "8px",
       "border-bottom-right-radius": "8px",
       "border-bottom-left-radius": "8px",
+      "background-color": "rgba(0, 0, 0, 0)",
+    })
+    expect(await style(row.locator("[data-plate-well]"), "background-color")).toEqual({
       "background-color": await colour(page, "--well"),
     })
     // Its plate is a row's plate, as an audio track's: no fill of its own,
@@ -699,7 +751,9 @@ test.describe("track lanes", () => {
     const p = await box(masterPlate(page))
     const b = await box(masterBand(page))
     expect(await masterInLanes(page)).toBe(false)
-    expect(p.width).toBeCloseTo(200, 0)
+    // The plates' column and the gap after it: the plate and its grey reach
+    // the click's lane, as a track's reach its picture.
+    expect(p.width).toBeCloseTo(212, 0)
     // The card's fill and its 12 px corners are the group's, round the plate
     // and the click's lane.
     expect(
@@ -812,6 +866,39 @@ test.describe("M and S at the fader", () => {
       expect((await box(p)).height).toBeCloseTo(56, 0)
       expect((await box(cell(page, name))).height).toBeCloseTo(56, 0)
     }
+  })
+
+  test("a track's name has 8 px of grey above it, and M and S 8 px under them", async ({ page }) => {
+    await stopped(page, BOTH)
+    await settled(page)
+    const greyOf = (row: Locator) => row.locator("[data-plate-well]")
+    // Gtr, alone: 8 px over its name and under its M and S.
+    const gtr = plate(page, "Gtr")
+    const gg = await box(greyOf(page.locator("[data-lane-row='Gtr']")))
+    const name = await box(gtr.locator("[data-plate-name]"))
+    const m = await box(gtr.getByRole("button", { name: "Mute Gtr" }))
+    expect(Math.abs(name.y - gg.y - 8), "over Gtr's name").toBeLessThan(0.5)
+    expect(Math.abs(gg.y + gg.height - (m.y + m.height) - 8), "under Gtr's M").toBeLessThan(0.5)
+    // Drums, whose grey runs on into its notes: 8 px over its name.
+    const dg = await box(greyOf(page.locator("[data-lane-row='Drums']:not([data-paired])")))
+    const drums = await box(plate(page, "Drums").locator("[data-plate-name]"))
+    expect(Math.abs(drums.y - dg.y - 8), "over Drums' name").toBeLessThan(0.5)
+    // Master the same.
+    const mg = await box(greyOf(masterGroup(page)))
+    const master = await box(masterPlate(page).locator("[data-plate-name='Master']"))
+    expect(Math.abs(master.y - mg.y - 8), "over Master's name").toBeLessThan(0.5)
+    // On the grey, the fader's track is the selected grey, and M and S that
+    // are off have the card's fill, so they read as buttons.
+    expect(await style(gtr.getByRole("meter"), "background-color")).toEqual({
+      "background-color": await colour(page, "--selected"),
+    })
+    for (const label of ["Mute", "Solo"])
+      expect(await style(gtr.getByRole("button", { name: `${label} Gtr` }), "background-color")).toEqual({
+        "background-color": await colour(page, "--card"),
+      })
+    expect(await style(masterPlate(page).getByRole("meter"), "background-color")).toEqual({
+      "background-color": await colour(page, "--selected"),
+    })
   })
 
   test("a cut plate name shows whole on hover and when Tab reaches it", async ({ page }) => {
@@ -996,7 +1083,7 @@ test.describe("the lanes group with the rehearsal stress band", () => {
     // Eight tracks in nine rows: Drums' notes are a row of their own.
     await expect(group(page).locator("[data-lane-row]")).toHaveCount(9)
     await expect(group(page).locator("[data-lane-row][data-paired]")).toHaveCount(1)
-    await expectWells(page)
+    await expectPlateGrey(page)
 
     // Halfway down, the rows are still one run, and the master's band holds
     // the window's foot with nothing of a lane beside it or under it.
@@ -1004,7 +1091,7 @@ test.describe("the lanes group with the rehearsal stress band", () => {
     const scrolls = await main.evaluate((el) => el.scrollHeight - el.clientHeight)
     expect(scrolls, "the page scrolls").toBeGreaterThan(100)
     await main.evaluate((el, y) => (el.scrollTop = y), scrolls / 2)
-    await expectWells(page)
+    await expectPlateGrey(page)
     expect(Math.abs(await above(page)), "the band is stuck").toBeLessThan(1)
     const b = await box(masterBand(page))
     const g = await box(group(page))

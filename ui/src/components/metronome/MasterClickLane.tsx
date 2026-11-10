@@ -49,8 +49,8 @@ function DriftTagText({ tag }: { tag: DriftTag }) {
 /**
  * Master's lane, right of its plate and as tall as a track's (spec Part 8,
  * Q11 D): the take's click as stripes, a bar's taller and stronger than a
- * beat's, on a well as the tracks' pictures are, over the same seconds as
- * theirs, `from` to `to`. Dimmed to half while the click is off; the
+ * beat's, on the group's fill as the tracks' pictures are, over the same
+ * seconds as theirs, `from` to `to`. Dimmed to half while the click is off; the
  * playhead and the region over it as over the tracks; the tempo in its
  * corner. With many clicks in view it draws the bars only, and with very
  * many every fourth bar (`clickLines`). A drag across it sets the region as
@@ -123,7 +123,7 @@ export function MasterClickLane({
       data-master-lane
       role="img"
       aria-label={label}
-      className={cn("relative h-full min-w-0 overflow-hidden rounded-md bg-well", className)}
+      className={cn("relative h-full min-w-0 overflow-hidden rounded-md", className)}
     >
       <div
         data-click-lines
@@ -157,7 +157,7 @@ export function MasterClickLane({
         aria-hidden
         className={cn(
           "pointer-events-none absolute top-1 left-1.5 max-w-[calc(100%-0.75rem)] truncate rounded-sm px-1 text-xs text-muted-foreground",
-          !counted && "bg-well/90"
+          !counted && "bg-card/90"
         )}
       >
         {tag ? (

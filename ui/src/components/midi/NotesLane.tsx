@@ -47,6 +47,7 @@ export function NotesLane({
   playhead,
   missing = false,
   dimmed = false,
+  ground = "well",
   className,
 }: {
   /** The track's name, for finding the lane: data-notes-lane. */
@@ -63,10 +64,14 @@ export function NotesLane({
   /** Its track is not heard: the notes not played yet go paler, as a
    *  waveform's do. */
   dimmed?: boolean
+  /** What it is drawn on: a well of its own, or, in the player, where the
+   *  grey is the plate's, the card it stands on. The row names stand on the
+   *  same colour, so a note under one does not run through it. */
+  ground?: "well" | "card"
   /** The lane's height comes from here, as a waveform's does. Nothing
    *  inside it has a height of its own, so it is as tall as the room it is
-   *  given: in the player, its plate's height less the well round it, 3 px
-   *  under a Both track's audio and 6 for a track on MIDI only. */
+   *  given: in the player, its row's height less the group's fill round it,
+   *  3 px under a Both track's audio and 6 for a track on MIDI only. */
   className?: string
 }) {
   const boxRef = useRef<HTMLDivElement>(null)
@@ -161,6 +166,7 @@ export function NotesLane({
         ? "No notes in this take"
         : null
   // A drum row each, or for pitches the octave above each C.
+  const chip = ground === "well" ? "bg-well/85" : "bg-card/85"
   const labelled =
     notes !== null &&
     notes.notes.length > 0 &&
@@ -180,7 +186,7 @@ export function NotesLane({
           "--nl-grid": "color-mix(in oklab, var(--color-border) 80%, transparent)",
         } as React.CSSProperties
       }
-      className={cn("relative w-full overflow-hidden rounded-md bg-well", className)}
+      className={cn("relative w-full overflow-hidden rounded-md", ground === "well" && "bg-well", className)}
     >
       {/* Out of the flow: a canvas is as tall as it was last drawn, and in
           the flow it would hold the lane at that height. */}
@@ -204,7 +210,7 @@ export function NotesLane({
         >
           {notes.rows.map((row) => (
             <span key={row} className="flex flex-1 items-center">
-              <span className="rounded-sm bg-well/85 px-0.5 text-xs leading-none text-muted-foreground">
+              <span className={cn("rounded-sm px-0.5 text-xs leading-none text-muted-foreground", chip)}>
                 {row}
               </span>
             </span>
@@ -218,7 +224,7 @@ export function NotesLane({
             .map((p) => (
               <span
                 key={p}
-                className="absolute -translate-y-full rounded-sm bg-well/85 px-0.5 text-xs leading-none whitespace-nowrap text-muted-foreground"
+                className={cn("absolute -translate-y-full rounded-sm px-0.5 text-xs leading-none whitespace-nowrap text-muted-foreground", chip)}
                 style={{ top: `${((notes.high - p + 1) / (notes.high - notes.low + 1)) * 100}%` }}
               >
                 C{p / 12 - 1}

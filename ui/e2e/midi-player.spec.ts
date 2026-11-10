@@ -15,7 +15,7 @@ import {
 import type { Locator, Page } from "@playwright/test"
 
 // The player with a take's notes in it (spec Part 6): a Both track's notes
-// right under its audio, sharing its audio's well under a line; a MIDI
+// right under its audio, on one grey plate with it, under a line; a MIDI
 // track's notes in a lane of their own; and a track whose port never
 // appeared, saying so. The notes are drawn, never played: their plates have
 // M pressed for good, the words in its tip, and no S or fader.
@@ -122,7 +122,7 @@ const accent = (p: { r: number; b: number }) => p.b - p.r > 60
 const grey = (p: { r: number; b: number }) => Math.abs(p.b - p.r) < 30
 
 test.describe("notes in the player", () => {
-  test("puts a Both track's notes right under its audio, sharing its audio's well under a line", async ({
+  test("puts a Both track's notes right under its audio, on one grey plate with it, under a line", async ({
     page,
   }) => {
     await stopped(page)
@@ -157,8 +157,8 @@ test.describe("notes in the player", () => {
     expect(Math.abs(m.width - a.width)).toBeLessThan(1)
     expect(await midi.evaluate((e) => getComputedStyle(e).borderTopWidth)).toBe("0px")
     expect(await audio.evaluate((e) => getComputedStyle(e).borderBottomWidth)).toBe("0px")
-    // And the notes are right under the waveform, on the same well, under a
-    // solid 1 px line: as tall as their plate less the well's 3 px below.
+    // And the notes are right under the waveform, under a solid 1 px line:
+    // as tall as their plate less the 3 px of the group's fill below.
     const w = await box(wave(page, "Drums"))
     const lane = await box(notesLane(page, "Drums"))
     expect(Math.abs(lane.y - (w.y + w.height))).toBeLessThan(1)

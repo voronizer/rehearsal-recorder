@@ -21,8 +21,10 @@ import type { MultitrackPlayer } from "@/hooks/useMultitrackPlayer"
 const DRAG_THRESHOLD_PX = 5
 const GUTTER_PX = 200
 /** The name row of 1rem, the fader's row of 1.25rem under it (the fader and
- *  its meter 1rem, M and S 1.25rem after it), 0.25rem apart, and 0.5rem above
- *  and below: 3.5rem, 56 px at the Appearance scale of 1. In rem because all
+ *  its meter 1rem, M and S 1.25rem after it), 0.125rem apart, and the rest
+ *  above and below: 3.5rem, 56 px at the Appearance scale of 1, with 9 px
+ *  over the name and under M and S, 8 of them on the plate's grey (PlateGrey),
+ *  1 px in from the row's edges. In rem because all
  *  of that is, and a row that stayed 56 px at 150 % left the name and the
  *  fader's row on top of each other. No taller than that: at 160 a lane's
  *  plate was mostly empty card, and at 96 five tracks took a laptop's screen
@@ -59,18 +61,19 @@ const ZOOM_PER_PIXEL = 0.002
 /**
  * Every track of the take on one time axis: a ruler, a lane each, and one
  * A–B band drawn through all of them. A track that took notes has a lane of
- * them too: right under its audio, sharing its well, for a Both track, and
+ * them too: right under its audio, sharing its grey, for a Both track, and
  * where the band has it for a track that records MIDI only (lib/midi.ts
  * laneOrder).
  *
  * The lanes are one group (the owner, 2026-10-12: «и я бы дорожки сделал
  * одной группой»): one fill for every track's lane, its plate and its picture
  * side by side in a row, and no line between the rows. What tells one lane
- * from the next is its picture, a waveform or a lane of notes, each on a well
- * of its own (--well, 8 px corners) with 3 px of the group's fill
- * above and below it, so 6 px between two tracks' wells. A Both track's audio
- * and notes share one well, split by a 1 px line. The master is its own group
- * under them.
+ * from the next is its plate's grey (--well, PlateGrey), 1 px in from the
+ * row's top and foot and reaching the picture; the pictures, a waveform or a
+ * lane of notes, have no fill of their own and stand 3 px in from the row's
+ * edges (Alex, 2026-11-10 13:03Z: «убрать серую подложку на волноформах и
+ * добавить в заголовки»). A Both track's audio and notes share one grey, and
+ * the notes are under a 1 px line. The master is its own group under them.
  *
  * This component is the only place that knows how an x position becomes a
  * second. That mapping used to be copied into every waveform, which is why
@@ -530,13 +533,12 @@ export function Timeline({
               style={{ gridColumn: "1 / -1", gridRow: 2 }}
             >
               {lanes.map((lane, i) => {
-                // A row of the group: the plate, the picture, and the group's
-                // room after it, on the grid's own columns, with no line or
-                // border. The picture's cell pads it 3 px from the row's
-                // edges, so it sits on its well with the group's fill round
-                // it. A Both track is its audio row and its notes row under
-                // it: their two pictures touch, with nothing padding them
-                // apart, and read as one well.
+                // A row of the group: the plate on its grey, the picture, and
+                // the group's room after it, on the grid's own columns, with
+                // no line or border. The picture's cell pads it 3 px from the
+                // row's edges. A Both track is its audio row and its notes row
+                // under it: their two pictures touch, with nothing padding
+                // them apart, and their plates share one grey.
                 if (lane.kind !== "audio") {
                   // A Both track's notes are the row under its audio: its
                   // plate says MIDI and has no name, the track's name being
@@ -552,7 +554,7 @@ export function Timeline({
                     : player.hasSolo
                   // As tall as its plate, which a long name or port makes
                   // taller and which is never less than six drum rows' names
-                  // and the well round them need (NotesPlate).
+                  // and the room round them need (NotesPlate).
                   return (
                     <div
                       key={`notes:${lane.name}`}
@@ -561,17 +563,19 @@ export function Timeline({
                       className="grid"
                       style={{ gridTemplateColumns: COLUMNS, columnGap: COLUMN_GAP_PX }}
                     >
-                      <NotesPlate
-                        name={lane.name}
-                        icon={read?.icon}
-                        port={port}
-                        paired={paired}
-                        missing={lane.kind === "missing"}
-                      />
+                      <PlateCell>
+                        <PlateGrey join={paired ? "bottom" : "alone"} />
+                        <NotesPlate
+                          name={lane.name}
+                          icon={read?.icon}
+                          port={port}
+                          paired={paired}
+                          missing={lane.kind === "missing"}
+                        />
+                      </PlateCell>
                       <div className={cn("min-w-0", paired ? "pb-[3px]" : "py-[3px]")}>
-                        {/* Its own well (NotesLane's rounded-md
-                            bg-well); under its audio, the lower part
-                            of the track's one well, under the line. */}
+                        {/* On the group's fill; under its audio, under the
+                            line. */}
                         <NotesLane
                           name={lane.name}
                           data={read ?? null}
@@ -580,6 +584,7 @@ export function Timeline({
                           view={{ from, to }}
                           playhead={position}
                           dimmed={dimmed}
+                          ground="card"
                           className={cn("h-full", paired && "rounded-t-none border-t", dimmed && "opacity-60")}
                         />
                       </div>
@@ -610,7 +615,9 @@ export function Timeline({
                       gridTemplateRows: "minmax(0, 1fr)",
                     }}
                   >
-                    <div className="min-h-0">
+                    <PlateCell>
+                      {/* Backing has its dashed frame and no grey (spec). */}
+                      <PlateGrey join={paired ? "top" : "alone"} fill={!backing} />
                       <LaneControls
                         name={m.name}
                         icon={m.icon}
@@ -626,13 +633,13 @@ export function Timeline({
                         onToggleSolo={() => player.toggleSolo(m.name)}
                         onVolume={(v) => player.setVolume(m.name, v)}
                         onVolumeCommit={player.persistVolumes}
+                        onWell={!backing}
                       />
-                    </div>
+                    </PlateCell>
 
                     <div data-lane={m.name} className={cn("min-w-0", paired ? "pt-[3px]" : "py-[3px]")}>
-                      {/* On its well (Waveform's own rounded-md
-                          bg-well), 50 px in the 56; above its notes,
-                          the upper part of the track's one well. */}
+                      {/* On the group's fill, 50 px in the 56; above its
+                          notes, down to the line over them. */}
                       <Waveform
                         peaks={m.peaks}
                         peaksFrom={player.peaksWindow.from}
@@ -642,7 +649,7 @@ export function Timeline({
                         position={position}
                         dimmed={dimmed}
                         className={cn(
-                          "h-full",
+                          "h-full bg-transparent",
                           paired && "rounded-b-none",
                           dimmed && "opacity-60",
                           backing && "border border-dashed border-muted-foreground/50"
@@ -677,8 +684,8 @@ export function Timeline({
           slide under all of it, and no part of a lane shows beside the
           master or under it.
 
-          The group is a row as a track's is (Q11 D): the plate, and right
-          of it the click's lane, on the same columns and on a well 3 px in
+          The group is a row as a track's is (Q11 D): the plate on its grey,
+          and right of it the click's lane, on the same columns and 3 px in
           from the group's edges, so its stripes stand under the tracks'
           pictures over the same seconds. It follows the zoom and the region
           as they do, and a drag across it sets the region (spec Part 8). */}
@@ -698,16 +705,18 @@ export function Timeline({
               gridTemplateRows: "minmax(0, 1fr)",
             }}
           >
-            <div className="min-h-0">
+            <PlateCell>
+              <PlateGrey join="alone" />
               <MasterControls
                 grouped
+                onWell
                 volume={player.master}
                 level={player.masterLevel}
                 onVolume={player.setMaster}
                 onVolumeCommit={player.persistMaster}
                 click={click ? <MasterClick take={take} /> : undefined}
               />
-            </div>
+            </PlateCell>
             {/* A press here is one on the tracks: the surface above takes
                 the pointer from it (onPointerDown captures it there), so a
                 drag sets the region and a click moves the playhead. With
@@ -742,5 +751,43 @@ export function Timeline({
         </div>
       )}
     </>
+  )
+}
+
+/**
+ * A plate's cell in a row of the lanes or in the master's group: as wide as
+ * the plates' column and the gap after it, so the plate and its grey reach
+ * the picture (Alex, 2026-11-10 13:06Z, «впритык к дорожке»). Its own
+ * stacking context keeps the grey behind the plate and over the group's fill.
+ */
+function PlateCell({ children }: { children: ReactNode }) {
+  return (
+    <div className="relative isolate min-h-0" style={{ marginRight: -COLUMN_GAP_PX }}>
+      {children}
+    </div>
+  )
+}
+
+/**
+ * The grey behind a plate, the well's colour (Alex, 2026-11-10 13:03Z: the
+ * grey off the pictures and onto the plates): 1 px in from the row's top and
+ * foot, so two plates have 2 px of the group's fill between them, and up to
+ * the picture, round at the left. A track and its notes are one grey: the
+ * track's runs down to its row's foot ("top") and the notes' from their row's
+ * top ("bottom"), with no corners where they meet. Backing's has no fill.
+ */
+function PlateGrey({ join, fill = true }: { join: "alone" | "top" | "bottom"; fill?: boolean }) {
+  return (
+    <div
+      data-plate-well
+      aria-hidden
+      className={cn(
+        "absolute inset-x-0 -z-10",
+        join === "bottom" ? "top-0" : "top-px",
+        join === "top" ? "bottom-0" : "bottom-px",
+        join === "top" ? "rounded-tl-md" : join === "bottom" ? "rounded-bl-md" : "rounded-l-md",
+        fill && "bg-well"
+      )}
+    />
   )
 }
