@@ -38,6 +38,19 @@ test("the marks switch counts to do, done and all", async ({ page }) => {
   await expect(page.getByText("No mark is done yet.")).toBeVisible()
 })
 
+test("a mark's take opens the take's page, from Marks and from the mark's panel", async ({ page }) => {
+  await page.goto("/marks")
+  const fill = page.locator("[data-mark]").filter({ hasText: "Fill too long?" })
+  await fill.getByRole("link", { name: "Viasna 12", exact: true }).click()
+  await expect(page).toHaveURL(`/takes/${band().takes["Viasna 12"]}`)
+
+  await page.goto("/")
+  await page.getByRole("region", { name: "Latest marks" }).getByRole("button", { name: /Too quiet here/ }).click()
+  await page.getByLabel("Panel", { exact: true }).getByRole("link", { name: "Kupalle 2", exact: true }).click()
+  await expect(page).toHaveURL(`/takes/${band().takes["Kupalle 2"]}`)
+  await expect(page.getByLabel("Panel", { exact: true })).toHaveCount(0)
+})
+
 test("a label renamed shows on its marks", async ({ page }) => {
   await page.goto("/marks")
   await page.getByRole("button", { name: "Labels" }).click()

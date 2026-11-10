@@ -98,12 +98,12 @@ test("Statuses and New song open at the top of Songs, one in place of the other,
   await expect(page).toHaveURL(/\/songs$/)
 })
 
-test("New song pressed over a take's panel on Statuses closes the panel, and Cancel is Songs", async ({ page }) => {
-  await page.goto("/songs")
+test("New song pressed over a panel on Statuses closes the panel, and Cancel is Songs", async ({ page }) => {
+  // A take's marks in the panel, by its address, over Statuses.
+  await page.goto(`/songs?edit=statuses&panel=marks:${band().takes["Kupalle 2"]}`)
   const main = page.getByRole("main")
   const panel = page.getByLabel("Panel")
-  await page.getByRole("button", { name: "Statuses", exact: true }).click()
-  await main.locator('[data-song="Pałyn"]').getByRole("button", { name: /^Pałyn \d+$/ }).click()
+  await expect(main.getByRole("heading", { name: "Statuses", exact: true })).toBeVisible()
   await expect(panel).toBeVisible()
   // The panel covers the buttons at the top right: by keyboard.
   await page.getByRole("button", { name: "New song", exact: true }).focus()

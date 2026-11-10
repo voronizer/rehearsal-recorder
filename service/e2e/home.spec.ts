@@ -48,17 +48,33 @@ test("play in a list plays the take in the bar", async ({ page }) => {
   await palyn.getByRole("button", { name: "Play “Pałyn 9”" }).click()
 
   const bar = page.getByLabel("Player")
-  await expect(bar.getByRole("button", { name: "Pałyn 9", exact: true })).toBeVisible()
+  await expect(bar.getByRole("link", { name: "Pałyn 9", exact: true })).toBeVisible()
   await expect(bar.getByTestId("bar-time")).toHaveText("0:01", { timeout: 10_000 })
   await bar.getByRole("button", { name: "Pause “Pałyn 9”" }).click()
 })
 
-test("a take's name opens its panel and does not play it", async ({ page }) => {
+test("a take's name opens its page and does not play it", async ({ page }) => {
   await page.goto("/")
-  await page.getByRole("region", { name: "The last rehearsal" }).getByRole("button", { name: "Viasna 11", exact: true }).click()
-  const panel = page.getByLabel("Panel")
-  await expect(panel.getByRole("heading", { level: 2 }).first()).toHaveText(/Viasna\s*#11/)
-  await expect(page.getByLabel("Player")).toContainText(NOTHING)
+  await page.getByRole("region", { name: "The last rehearsal" }).getByRole("link", { name: "Viasna 11", exact: true }).click()
+  await expect(page).toHaveURL(`/takes/${band().takes["Viasna 11"]}`)
+  await expect(page.getByLabel("Panel")).toHaveCount(0)
+  await expect(page.getByLabel("Player", { exact: true }).getByRole("button", { name: /^Pause/ })).toHaveCount(0)
+})
+
+test("the empty room of a take's row opens its page, and ▶ plays it without leaving Home", async ({ page }) => {
+  await page.goto("/")
+  const row = page.getByRole("region", { name: "The last rehearsal" }).locator('[data-take="Viasna 11"]')
+  await row.getByRole("button", { name: "Play “Viasna 11”" }).click()
+  const bar = page.getByLabel("Player", { exact: true })
+  await expect(bar.getByRole("button", { name: "Pause “Viasna 11”" })).toBeVisible()
+  await expect(page).toHaveURL("/")
+  await bar.getByRole("button", { name: "Pause “Viasna 11”" }).click()
+
+  // The room between the name and the length, on the name's line.
+  const name = (await row.getByRole("link", { name: "Viasna 11", exact: true }).boundingBox())!
+  const line = (await row.boundingBox())!
+  await page.mouse.click(line.x + line.width * 0.6, name.y + name.height / 2)
+  await expect(page).toHaveURL(`/takes/${band().takes["Viasna 11"]}`)
 })
 
 test("a song's name on Home opens its page", async ({ page }) => {

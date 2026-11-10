@@ -24,16 +24,11 @@ import { usePanel } from "../shell/panel"
 import { KeepWriting } from "../shell/unsent"
 import { clock, day, localDay } from "../shell/words"
 import { usePlayer, useTime } from "../takes/player/one"
-import { TakeName, useInitials, useLabelOf } from "../takes/parts"
+import { TakeLink, useInitials, useLabelOf } from "../takes/parts"
 
-/** The take a mark is on, as a name that opens the take's panel. */
+/** The take a mark is on, as a name that opens the take's page. */
 export function OnTake({ take, short }: { take: Mark["take"]; short: boolean }) {
-  const { open } = usePanel()
-  return (
-    <button type="button" aria-label={take.name} className={cn("min-w-0", OPENS)} onClick={() => open({ kind: "take", uid: take.uid })}>
-      <TakeName take={take} short={short} />
-    </button>
-  )
+  return <TakeLink take={take} short={short} className="min-w-0" />
 }
 
 /** A label from the band's list, as РЭХА picks one (Settings › Marks): the band may have many. */
@@ -394,11 +389,11 @@ export function MarkItem({ mark, take, compact }: { mark: Mark; take?: "full" | 
   )
 }
 
-/** A take's marks, with **Add a mark at 1:14** following the playhead. `markAt` opens with a new mark there. */
-export function TakeMarks({ take, markAt }: { take: { uid: string; marks: Mark[] }; markAt?: number }) {
+/** A take's marks, with **Add a mark at 1:14** following the playhead. */
+export function TakeMarks({ take }: { take: { uid: string; marks: Mark[] } }) {
   const at = useTime(take.uid)
   const add = useAddMark()
-  const [draft, setDraft] = useState<number | undefined>(markAt)
+  const [draft, setDraft] = useState<number>()
   const marks = take.marks
   return (
     <Group

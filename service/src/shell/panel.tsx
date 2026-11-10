@@ -1,14 +1,13 @@
 import { createContext, useContext, useEffect, useMemo, type ReactNode } from "react"
 import { useNavigate, useRouter, useRouterState } from "@tanstack/react-router"
-import { useSize } from "./size"
 
 /**
- * What the panel from the right holds: a take (with a new mark at
- * `markAt`), one mark of a take (`id`) or a new one at `at`, or a take's
- * marks alone, as the drawer on the take's page has them (shell/drawer.tsx).
+ * What the panel from the right holds: one mark of a take (`id`) or a new
+ * one at `at`, or a take's marks alone, as the drawer on the take's page
+ * has them (shell/drawer.tsx). A take itself opens its page (Alex,
+ * 2026-11-10): the panel drew the same take with less on it.
  */
 export type Panel =
-  | { kind: "take"; uid: string; markAt?: number }
   | { kind: "mark"; uid: string; id?: number; at?: number }
   | { kind: "marks"; uid: string }
   | null
@@ -16,14 +15,12 @@ export type Panel =
 const moment = (at: number) => String(Math.round(at * 100) / 100)
 
 /**
- * The panel as it is written in the address, `?panel=take:…`: so the
+ * The panel as it is written in the address, `?panel=mark:…`: so the
  * browser's Back and a phone's back gesture close it rather than leave the
  * page, a link can open it, and a reload keeps it.
  */
 export function panelText(p: Exclude<Panel, null>): string {
   switch (p.kind) {
-    case "take":
-      return `take:${p.uid}${p.markAt === undefined ? "" : `@${moment(p.markAt)}`}`
     case "mark":
       return p.id === undefined ? `mark:${p.uid}@${moment(p.at ?? 0)}` : `mark:${p.uid}:${p.id}`
     case "marks":
@@ -34,7 +31,8 @@ export function panelText(p: Exclude<Panel, null>): string {
 /**
  * The panel an address names; anything else is no panel. An older address
  * with a song or one of the band's lists in the panel (`song:3`, `labels`)
- * opens the page alone: those are on their own pages now.
+ * opens the page alone: those are on their own pages now. A take's
+ * (`take:…`) opens the take's page, by takeOfOldPanel.
  */
 export function panelOf(text: unknown): Panel {
   if (typeof text !== "string") return null
@@ -43,7 +41,6 @@ export function panelOf(text: unknown): Panel {
   const n = (v: string | undefined) => (v !== undefined && v !== "" && Number.isFinite(Number(v)) && Number(v) >= 0 ? Number(v) : undefined)
   if (!head) return null
   if (kind === "marks") return at === undefined ? { kind: "marks", uid: head } : null
-  if (kind === "take") return n(at) === undefined ? { kind: "take", uid: head } : { kind: "take", uid: head, markAt: n(at) }
   if (kind === "mark") {
     const [uid, id] = head.split(":")
     if (!uid) return null
@@ -51,6 +48,12 @@ export function panelOf(text: unknown): Panel {
     return { kind: "mark", uid, at: n(at) ?? 0 }
   }
   return null
+}
+
+/** The take an older address had in the panel, `take:<uid>` or `take:<uid>@<at>`: its page opens in its place. */
+export function takeOfOldPanel(text: unknown): string | undefined {
+  if (typeof text !== "string" || !text.startsWith("take:")) return undefined
+  return text.slice(5).split("@")[0] || undefined
 }
 
 /** How many panels deep this page of history is: 0 on the page itself. */
@@ -72,7 +75,6 @@ export const usePanel = () => useContext(PanelCtx)!
 export function PanelProvider({ children }: { children: ReactNode }) {
   const router = useRouter()
   const navigate = useNavigate()
-  const phone = useSize() === "phone"
   const text = useRouterState({ select: (s) => (s.location.search as { panel?: unknown }).panel })
   const depth = useRouterState({ select: (s) => (s.location.state as Kept).panelDepth ?? 0 })
   const panel = useMemo(() => panelOf(text), [text])
@@ -88,20 +90,18 @@ export function PanelProvider({ children }: { children: ReactNode }) {
   const close = () => (depth > 0 ? router.history.go(-depth) : go(undefined, true, 0))
   const open = (p: Panel, how?: { replace?: boolean }): void => {
     if (!p) return close()
-    // On a phone a take is its page, which has its wave, tracks and marks:
-    // its panel would be the same page with less on it. **Mark** opens a new
-    // mark there, full screen, as a mark's panel is.
-    if (phone && p.kind === "take") {
-      if (p.markAt !== undefined) return open({ kind: "mark", uid: p.uid, at: p.markAt }, how)
-      if (router.state.location.pathname === `/takes/${p.uid}`) return close()
-      return void navigate({ to: "/takes/$uid", params: { uid: p.uid } })
-    }
     const next = panelText(p)
     if (typeof text === "string" && next === text) return close()
     if (how?.replace) go(next, true, depth)
     else go(next, false, depth + 1)
   }
   const back = depth > 1 ? () => router.history.back() : undefined
+
+  // A link or bookmark from before: the take's page, in the address's place.
+  const old = takeOfOldPanel(text)
+  useEffect(() => {
+    if (old) void navigate({ to: "/takes/$uid", params: { uid: old }, replace: true })
+  }, [old, navigate])
 
   useEffect(() => {
     // Not when Esc closed something inside the panel first (a list, a menu, a

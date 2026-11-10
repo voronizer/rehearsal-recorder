@@ -7,7 +7,7 @@ import { TakeLink } from "../takes/parts"
 import { MarkForm, MarkItem, TakeMarks } from "./MarkItem"
 
 /** What a panel holds under a row with its ✕ alone: a list, or why there is nothing to show. */
-export function Closing({ children }: { children: ReactNode }) {
+function Closing({ children }: { children: ReactNode }) {
   return (
     <div className="flex flex-col gap-3">
       <div className="-mt-1 flex justify-end">
@@ -47,7 +47,7 @@ export function MarkPanel({ uid, id, at }: { uid: string; id?: number; at?: numb
         </h2>
         <PanelClose />
       </div>
-      {/* Whose mark it is, since the panel may cover the take: its take opens in the panel. */}
+      {/* Whose mark it is, since the panel may cover the take: its name opens the take's page. */}
       <p className="-mt-4 flex flex-wrap items-baseline gap-x-1.5 text-xs text-muted-foreground">
         <span>On</span>
         <TakeLink take={take.data} />
@@ -78,19 +78,15 @@ export function MarkPanel({ uid, id, at }: { uid: string; id?: number; at?: numb
   )
 }
 
-/**
- * A take's marks alone, as its panel lists them: what the drawer on the
- * take's page holds, there in place of the take's own panel, which would
- * draw the page a second time. `markAt` opens with a new mark there.
- */
-export function TakeMarksPanel({ uid, markAt }: { uid: string; markAt?: number }) {
+/** A take's marks alone: what the drawer on the take's page holds. */
+export function TakeMarksPanel({ uid }: { uid: string }) {
   const take = useTake(uid)
   return (
     <Closing>
       {take.error ? (
         <Trouble error={take.error} retry={() => void take.refetch()} />
       ) : take.data ? (
-        <TakeMarks take={take.data} markAt={markAt} />
+        <TakeMarks take={take.data} />
       ) : (
         <Waiting />
       )}

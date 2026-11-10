@@ -1,4 +1,5 @@
 import type { CSSProperties, ReactNode } from "react"
+import { Link, useNavigate, useRouterState } from "@tanstack/react-router"
 import { Star } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { LabelDot } from "@/components/ui/mark"
@@ -73,19 +74,24 @@ export function TakeName({
   )
 }
 
-/** A take's name that opens its panel. */
-export function TakeLink({ take, short, className }: { take: TakeLike; short?: boolean; className?: string }) {
+/**
+ * A take's name that opens its page. On that page already, it opens the
+ * take's marks in the drawer: the page itself is there.
+ */
+export function TakeLink({ take, short, className }: { take: TakeNaming & { uid: string }; short?: boolean; className?: string }) {
   const { open } = usePanel()
+  const here = useRouterState({ select: (s) => s.location.pathname === `/takes/${take.uid}` })
+  const look = cn("inline-flex min-w-0 max-w-full items-center gap-1.5", OPENS, className)
+  if (here)
+    return (
+      <button type="button" title={takeText(take)} aria-label={take.name} onClick={() => open({ kind: "marks", uid: take.uid })} className={look}>
+        <TakeName take={take} short={short} />
+      </button>
+    )
   return (
-    <button
-      type="button"
-      title={takeText(take)}
-      aria-label={take.name}
-      onClick={() => open({ kind: "take", uid: take.uid })}
-      className={cn("inline-flex min-w-0 max-w-full items-center gap-1.5", OPENS, className)}
-    >
+    <Link to="/takes/$uid" params={{ uid: take.uid }} title={takeText(take)} aria-label={take.name} className={look}>
       <TakeName take={take} short={short} />
-    </button>
+    </Link>
   )
 }
 
@@ -164,9 +170,10 @@ function bars(shape: number[]): number[] {
 
 /**
  * A take's wave: the part played darker, its marks as diamonds in their
- * colours, the playhead. Press it to play from there; in a take's player
- * (`moves`) a press only moves the playhead, as in РЭХА. A starred take's
- * wave is green, as РЭХА's bar has a green edge.
+ * colours, the playhead. In a take's player (`moves`) a press moves the
+ * playhead, as in РЭХА; in a list it has no press of its own, and its row
+ * opens the take's page (Alex, 2026-11-10). A starred take's wave is
+ * green, as РЭХА's bar has a green edge.
  */
 export function Wave({
   take,
@@ -193,15 +200,17 @@ export function Wave({
   return (
     <div
       data-testid="wave"
-      className={cn("relative min-w-0 cursor-pointer py-[3px]", className)}
+      className={cn("relative min-w-0 py-[3px]", moves && "cursor-pointer", className)}
       style={{ ...style, height }}
       // A press, not a touch: a finger landing on a wave still scrolls the list.
-      onClick={(e) => {
-        const r = e.currentTarget.getBoundingClientRect()
-        const to = Math.max(0, Math.min(1, (e.clientX - r.left) / r.width)) * take.duration_sec
-        if (moves) p.seek(take.uid, to)
-        else p.play(take.uid, to)
-      }}
+      onClick={
+        moves
+          ? (e) => {
+              const r = e.currentTarget.getBoundingClientRect()
+              p.seek(take.uid, Math.max(0, Math.min(1, (e.clientX - r.left) / r.width)) * take.duration_sec)
+            }
+          : undefined
+      }
     >
       <svg viewBox={`0 0 ${n} 100`} preserveAspectRatio="none" className="size-full" aria-hidden="true">
         {b.map((v, i) => (
@@ -250,22 +259,34 @@ export function Diamond({ colour, className }: { colour: string; className?: str
 /** The room after the longest take's wave, in rem: its length and the gap. */
 const AFTER_WAVE = 3
 
+/** What a press in a take's row does by itself: none of these is the row. */
+const OWN_PRESS = "button, a, [role=menuitem], input"
+
 /**
- * One take as a row: ▶, its name (opens the take's panel) on a line of its
- * own, and under it the wave to scale with its marks (green when it has
- * stars; press it to play from there) and its length; your star. The name
- * has the row's whole width and the wave all of it but its length's room
- * (Alex's pick B, 2026-11-04): a fixed column cut the name while the wave
- * had room to spare. `marks` lists its marks under it, each a line that
- * plays from there.
+ * One take as a row: ▶, its name on a line of its own, and under it the
+ * wave to scale with its marks (green when it has stars) and its length;
+ * your star. A press anywhere in the row but ▶, the star and ⋯ opens the
+ * take's page (Alex, 2026-11-10). The name has the row's whole width and
+ * the wave all of it but its length's room (Alex's pick B, 2026-11-04): a
+ * fixed column cut the name while the wave had room to spare. `marks`
+ * lists its marks under it, each a line that plays from there.
  */
 export function TakeLine({ take, marks, short, after }: { take: TakeLike; marks?: boolean; short?: boolean; after?: ReactNode }) {
   const p = usePlayer()
+  const navigate = useNavigate()
   const longest = useFrame().data?.longest || take.duration_sec || 1
   const labelOf = useLabelOf()
   return (
     <div className="flex flex-col gap-0.5" data-take={take.name}>
-      <div className="grid grid-cols-[2rem_minmax(0,1fr)_auto] items-center gap-x-3">
+      <div
+        className="-mx-2 grid cursor-pointer grid-cols-[2rem_minmax(0,1fr)_auto] items-center gap-x-3 rounded-lg px-2 py-1.5 hover:bg-accent/60"
+        onClick={(e) => {
+          if ((e.target as HTMLElement).closest(OWN_PRESS)) return
+          // A press inside a menu drawn over the row is the menu's.
+          if (!e.currentTarget.contains(e.target as Node)) return
+          void navigate({ to: "/takes/$uid", params: { uid: take.uid } })
+        }}
+      >
         <Play take={take} />
         <div className="flex min-w-0 flex-col gap-0.5 overflow-x-clip">
           <TakeLink take={take} short={short} className="self-start" />
