@@ -191,10 +191,9 @@ song's, a mark's words. The line turns solid when you point at it.
 
 - **▶** at the start of a row plays the take right there. Space pauses and
   continues it, and Esc stops it.
-- Click the wave to play the take from that spot, right in the row.
-- Click a take's name, or its row past the wave, to open the take in the
-  player (see [Listening back](#listening-back)). If it is playing, it
-  goes on playing from the same place.
+- Click a take's name, its wave or anywhere else on its row to open the
+  take in the player (see [Listening back](#listening-back)). If it is
+  playing, it goes on playing from the same place.
 - Click a mark under a take to open the take at that spot.
 - Every take has its ★ (see [Starring a take](#starring-a-take)): green on
   a starred take, faint on the others. Click it to star the take.

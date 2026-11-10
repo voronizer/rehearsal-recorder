@@ -83,7 +83,9 @@ showcase and reha.stream all import. A screen uses the names (`bg-primary`,
   stays grey, and in the dark theme the panel keeps its colour.
   On a take's page the panel folds into a strip 48 px wide along the right
   edge, in that column's grey, with a sign for each of its sections (Alex,
-  8 November 2026).
+  8 November 2026). The band's own lists, its statuses and its labels, are
+  edited in that panel, over the page; New song is a dialog (Alex, 10
+  November 2026).
 
 ### Type
 
@@ -126,6 +128,9 @@ showcase and reha.stream all import. A screen uses the names (`bg-primary`,
   left edge. `screens/Recording.tsx` fits this as the screen comes up and
   when the window or the Appearance scale changes, never because of
   anything the take does, so nothing moves while the band plays (B4).
+  In the band service every list has the same air: no lines between rows,
+  24 px from one row to the next (from a take's wave to the next take's
+  name) and one height for the rows of a list (Alex, 10 November 2026).
 - **F9. Three corner radii by role, plus round.** Nine radii said nothing;
   three say what a thing is. 4 px for small things (key chips, tags, take
   bars, M and S): `rounded-sm`, or bare `rounded`. 8 px for controls
@@ -172,6 +177,24 @@ showcase and reha.stream all import. A screen uses the names (`bg-primary`,
   reading in the clock's place. Nothing takes longer than 400 ms
   (`lib/theme.test.ts` checks every duration in the file).
 
+### The pointer
+
+- **F12. The hand over whatever presses**, in РЭХА, in the band service and
+  in the live РЭХА on reha.stream (Alex, 10 November 2026): links, buttons,
+  the words with a dotted line, a row that opens something, menu items,
+  switches, tabs, folds and check boxes. Tailwind 4 leaves a button the
+  browser's arrow, so the base layer of `index.css` gives the hand to a
+  button that is not disabled, `[role=button]`, `summary` and a label that
+  ticks a check box or a radio; a menu's and a list's items are
+  `cursor-pointer`. Five keep their own: a handle that drags a song or a
+  label, the open hand; the wave in a take's player, where a press sets the
+  playhead, the cross; the ends of a loop, the arrows left and right; a
+  field to type in, the text cursor; and what cannot be pressed now, greyed
+  out, or the tab already open, the arrow. A label beside a text field keeps
+  the arrow too: a press there only puts the cursor in the field.
+  `e2e/pointer.spec.ts`, in `ui/` and in `service/`, walks the screens and
+  checks it.
+
 ## The system's habits
 
 - **P1. One place knows which system it is**, `lib/platform.ts`: `system()`,
@@ -211,7 +234,10 @@ the shared one when it is redone.
   `player`. `link` and whatever opens or plays where it stands (a take's,
   a song's or a mark's words) wear `OPENS`, as the band service does: a
   grey dotted line under them, solid under the pointer (owner's pick A,
-  2026-11-02). The foot of a screen is one row, `FooterRow`: what the screen
+  2026-11-02). In the band service it is for a word that opens on its own.
+  A row that lights up under the pointer and opens as a whole has none: a
+  take's, a song's, a mark's, a rehearsal's day (Alex, 10 November 2026).
+  The foot of a screen is one row, `FooterRow`: what the screen
   has to say at the left, its buttons at the right, the main one rightmost,
   so that it is in the same place on every screen. In a window with no room
   for both, the left half gives way in steps (`squeeze`, owner's pick B,
@@ -398,7 +424,12 @@ the shared one when it is redone.
   the Marks page) is its name and then its wave, `TakeWave`, as in the band
   service (owner's pick A, 2026-11-02): 120 bars of its sound, the loudest
   track at each moment, made once in Python and kept with the take; green
-  when starred, pale when quiet; a press plays from there. Every take's ★
+  when starred, pale when quiet. A press on it opens the take, as the rest
+  of its row does, except on the Marks page, where it plays the take from
+  that spot. From one row's wave to the next row's name is 24 px (Alex, 10
+  November 2026). In the band service a take's song and its rehearsal, on
+  the take's page and on a song's, are pills with their section's icon that
+  lead to their pages. Every take's ★
   shows, faint on one with none (owner's pick B); the row's other buttons
   are under the pointer. The bars of a song's ladder are filled from
   `TAKE_FILLS` beside it: the plain fill, the starred one and the quiet one
