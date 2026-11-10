@@ -3,7 +3,6 @@ import { Check, GripVertical, Trash2, X } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { cn } from "@/lib/utils"
-import { InCard } from "./parts"
 
 /** An editor's heading with ✕. */
 export function PanelHead({ title, onClose }: { title: string; onClose: () => void }) {
@@ -13,15 +12,6 @@ export function PanelHead({ title, onClose }: { title: string; onClose: () => vo
       <Button variant="ghost" size="icon-row" aria-label="Close" onClick={onClose}>
         <X />
       </Button>
-    </div>
-  )
-}
-
-/** An editor at the top of its page, above the list it changes, in a card of its own (Alex's pick A, 2026-11-08). */
-export function EditCard({ children }: { children: ReactNode }) {
-  return (
-    <div className="rounded-xl border bg-card p-5 shadow-xs">
-      <InCard>{children}</InCard>
     </div>
   )
 }

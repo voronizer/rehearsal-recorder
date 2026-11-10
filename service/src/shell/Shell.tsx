@@ -4,7 +4,9 @@ import { ChevronLeft, Menu } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import { useFrame, useMe } from "../api"
+import { LabelsEditor } from "../marks/Labels"
 import { MarkPanel, TakeMarksPanel } from "../marks/MarkPanel"
+import { StatusesEditor } from "../songs/Statuses"
 import { PlayerProvider } from "../takes/player/one"
 import { Drawer } from "./drawer"
 import { PanelProvider, usePanel } from "./panel"
@@ -19,13 +21,15 @@ import { useSize } from "./size"
  * the drawer that folds into its strip.
  */
 function PanelView({ page }: { page?: string }) {
-  const { panel, back } = usePanel()
+  const { panel, back, close } = usePanel()
   const size = useSize()
   if (!panel) return null
   const body = (
     <InPanel>
       {panel.kind === "mark" && <MarkPanel uid={panel.uid} id={panel.id} at={panel.at} />}
       {panel.kind === "marks" && <TakeMarksPanel uid={panel.uid} />}
+      {panel.kind === "statuses" && <StatusesEditor onClose={close} />}
+      {panel.kind === "labels" && <LabelsEditor onClose={close} />}
     </InPanel>
   )
   return (

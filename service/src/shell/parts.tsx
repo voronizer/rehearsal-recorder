@@ -20,8 +20,6 @@ import { count } from "./words"
 type Surface = "page" | "card" | "panel"
 const SurfaceCtx = createContext<Surface>("page")
 export const InPanel = ({ children }: { children: ReactNode }) => <SurfaceCtx.Provider value="panel">{children}</SurfaceCtx.Provider>
-/** In a card of its own on a page, such as an editor at its top: its groups are parts of that card. */
-export const InCard = ({ children }: { children: ReactNode }) => <SurfaceCtx.Provider value="card">{children}</SurfaceCtx.Provider>
 /** Whether this is drawn in the panel, not on the page. */
 export const useInPanel = () => useContext(SurfaceCtx) === "panel"
 

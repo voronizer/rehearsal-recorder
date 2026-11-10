@@ -3,13 +3,16 @@ import { useNavigate, useRouter, useRouterState } from "@tanstack/react-router"
 
 /**
  * What the panel from the right holds: one mark of a take (`id`) or a new
- * one at `at`, or a take's marks alone, as the drawer on the take's page
- * has them (shell/drawer.tsx). A take itself opens its page (Alex,
- * 2026-11-10): the panel drew the same take with less on it.
+ * one at `at`, a take's marks alone, as the drawer on the take's page has
+ * them (shell/drawer.tsx), or the band's statuses or labels, edited over
+ * the page (Alex, 2026-11-10). A take itself opens its page: the panel drew
+ * the same take with less on it.
  */
 export type Panel =
   | { kind: "mark"; uid: string; id?: number; at?: number }
   | { kind: "marks"; uid: string }
+  | { kind: "statuses" }
+  | { kind: "labels" }
   | null
 
 const moment = (at: number) => String(Math.round(at * 100) / 100)
@@ -25,17 +28,21 @@ export function panelText(p: Exclude<Panel, null>): string {
       return p.id === undefined ? `mark:${p.uid}@${moment(p.at ?? 0)}` : `mark:${p.uid}:${p.id}`
     case "marks":
       return `marks:${p.uid}`
+    case "statuses":
+    case "labels":
+      return p.kind
   }
 }
 
 /**
  * The panel an address names; anything else is no panel. An older address
- * with a song or one of the band's lists in the panel (`song:3`, `labels`)
- * opens the page alone: those are on their own pages now. A take's
- * (`take:…`) opens the take's page, by takeOfOldPanel.
+ * with a song in the panel (`song:3`) opens the page alone: a song is on its
+ * own page now. A take's (`take:…`) opens the take's page, by
+ * takeOfOldPanel.
  */
 export function panelOf(text: unknown): Panel {
   if (typeof text !== "string") return null
+  if (text === "statuses" || text === "labels") return { kind: text }
   const [kind, rest = ""] = [text.slice(0, text.indexOf(":")), text.slice(text.indexOf(":") + 1)]
   const [head, at] = rest.split("@")
   const n = (v: string | undefined) => (v !== undefined && v !== "" && Number.isFinite(Number(v)) && Number(v) >= 0 ? Number(v) : undefined)
@@ -97,11 +104,15 @@ export function PanelProvider({ children }: { children: ReactNode }) {
   }
   const back = depth > 1 ? () => router.history.back() : undefined
 
-  // A link or bookmark from before: the take's page, in the address's place.
+  // A link or bookmark from before: the take's page, in the address's place;
+  // the statuses or the labels, once at the top of their page, in the panel.
   const old = takeOfOldPanel(text)
+  const edit = useRouterState({ select: (s) => String((s.location.search as { edit?: unknown }).edit ?? "") })
   useEffect(() => {
     if (old) void navigate({ to: "/takes/$uid", params: { uid: old }, replace: true })
-  }, [old, navigate])
+    else if (edit === "statuses" || edit === "labels")
+      void navigate({ to: ".", search: ((prev: Record<string, unknown>) => ({ ...prev, edit: undefined, panel: edit })) as never, replace: true })
+  }, [old, edit, navigate])
 
   useEffect(() => {
     // Not when Esc closed something inside the panel first (a list, a menu, a

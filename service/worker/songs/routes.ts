@@ -129,20 +129,24 @@ export const songRoutes = newApp()
     createRoute({
       method: "post",
       path: "/api/songs",
-      description: "**New song**, before its first take, with the first status.",
+      description: "**New song**, before its first take, with the status picked in its dialog, or the first one.",
       middleware: [needMember] as const,
-      request: { body: body(z.object({ title: z.string().trim().min(1, { error: TITLE }).max(100, { error: TITLE }) })) },
+      request: {
+        body: body(z.object({ title: z.string().trim().min(1, { error: TITLE }).max(100, { error: TITLE }), status_id: z.int().optional() })),
+      },
       responses: { 200: json(z.object({ id: z.number() })), ...errors(400, 401, 409) },
     }),
     async (c) => {
       const db = database(c.env)
-      const { title } = c.req.valid("json")
+      const { title, status_id } = c.req.valid("json")
       const refused = titleRefused(title)
       if (refused) return fail(c, 400, refused)
+      if (status_id !== undefined && !(await db.select().from(status).where(eq(status.id, status_id))).length)
+        return fail(c, 400, NO_STATUS)
       const clash = await findSong(db, title)
       if (clash?.trashedAt) return fail(c, 409, `“${clash.title}” is in the Trash. Restore it there.`)
       if (clash) return fail(c, 409, `There is already a song called “${clash.title}”.`)
-      const id = await makeSong(db, title, { tempo: null, signature: null }, c.var.member.id)
+      const id = await makeSong(db, title, { tempo: null, signature: null }, c.var.member.id, status_id)
       if (id === null) return fail(c, 409, `There is already a song called “${(await findSong(db, title))!.title}”.`)
       return c.json({ id }, 200)
     }

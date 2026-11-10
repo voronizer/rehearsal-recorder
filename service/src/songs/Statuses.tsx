@@ -8,7 +8,7 @@ import { EditRow, PanelHead, placed } from "../shell/EditList"
 import { Group, Groups } from "../shell/parts"
 import { count } from "../shell/words"
 
-/** **Statuses**, at the top of Songs: where a song stands with the band, the band's own list, changed by anyone in it. */
+/** **Statuses**, in the panel from the right: where a song stands with the band, the band's own list, changed by anyone in it. */
 export function StatusesEditor({ onClose }: { onClose: () => void }) {
   const statuses = useSongs().data?.statuses ?? []
   const add = useAddStatus()

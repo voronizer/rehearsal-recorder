@@ -1,17 +1,16 @@
 import { formatMeter } from "@/lib/format"
-import { Link, useNavigate } from "@tanstack/react-router"
+import { useEffect, useState } from "react"
+import { Link, useNavigate, useSearch } from "@tanstack/react-router"
 import { Plus } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import { useSongs, type SongItem } from "../api"
-import { EditCard } from "../shell/EditList"
-import { useEditor } from "../shell/editor"
+import { usePanel } from "../shell/panel"
 import { Empty, Group, Groups, Page, Rows, TitleWith, Trouble, useTitle } from "../shell/parts"
 import { useSize } from "../shell/size"
 import { clock, count, day } from "../shell/words"
 import { Play, TakeLine, TakeLink } from "../takes/parts"
-import { NewSongEditor } from "./NewSong"
-import { StatusesEditor } from "./Statuses"
+import { NewSongDialog } from "./NewSong"
 
 // Last played as wide as “Thu 30 Oct 2025” on one line: a row of two lines would be taller than the rest.
 const COLS = "grid-cols-[minmax(0,1fr)_6rem_4rem_4rem_4rem_7rem_minmax(8rem,1fr)]"
@@ -66,28 +65,43 @@ export function Songs() {
   useTitle("Songs")
   const songs = useSongs()
   const size = useSize()
-  const { edit, toggle, close } = useEditor<"statuses" | "new-song">()
+  const { panel, open, close } = usePanel()
+  const navigate = useNavigate()
+  // An address from before, `?edit=new-song`, opens Songs with the dialog.
+  const edit = useSearch({ from: "/band/songs", select: (s) => s.edit })
+  const [adding, setAdding] = useState(edit === "new-song")
+  useEffect(() => {
+    if (edit === "new-song") void navigate({ to: ".", search: {}, replace: true })
+  }, [edit, navigate])
   const head = (
     <TitleWith title="Songs">
-      <Button variant="outline" size="row" aria-pressed={edit === "statuses"} onClick={() => toggle("statuses")}>
+      <Button variant="outline" size="row" aria-pressed={panel?.kind === "statuses"} onClick={() => open({ kind: "statuses" })}>
         Statuses
       </Button>
-      <Button variant="outline" size="row" aria-pressed={edit === "new-song"} onClick={() => toggle("new-song")}>
+      <Button
+        variant="outline"
+        size="row"
+        onClick={() => {
+          // One at a time: the dialog in the panel's place.
+          if (panel) close()
+          setAdding(true)
+        }}
+      >
         <Plus />
         New song
       </Button>
     </TitleWith>
   )
-  const top = edit && <EditCard>{edit === "statuses" ? <StatusesEditor onClose={close} /> : <NewSongEditor onClose={close} />}</EditCard>
+  const dialog = <NewSongDialog open={adding} onOpenChange={setAdding} />
   if (songs.error) return <Trouble error={songs.error} retry={() => void songs.refetch()} />
   if (!songs.data) return null
   const { statuses, songs: all, not_named } = songs.data
   if (!all.length && !not_named.length)
-    return <Empty title={head} top={top} text="No songs yet. A song made in РЭХА appears here, or press New song to start one here." />
+    return <Empty title={head} top={dialog} text="No songs yet. A song made in РЭХА appears here, or press New song to start one here." />
   const takes = all.reduce((n, s) => n + s.takes, 0) + not_named.length
   return (
     <Page title={head} sub={`${count(all.length, "song")} · ${count(takes, "take")}`}>
-      {top}
+      {dialog}
       {size === "wide" && (
         <div className={cn("-mb-4 grid gap-3 px-6 text-xs text-muted-foreground", COLS)}>
           <span>Song</span>
