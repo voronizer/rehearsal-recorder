@@ -302,9 +302,11 @@ function Head() {
 function Editable({ ids, songs, put }: Pick<SetSongs, "ids" | "songs" | "put">) {
   if (!songs.length) return <p className="text-muted-foreground">No songs yet. Add them in the order you play them.</p>
   return (
+    // No lines between the songs, 24 px from one to the next, as every list of the service.
     <SortableList
       items={songs.map((s) => ({ id: s.id, song: s }))}
       label="Songs of the set"
+      lines={false}
       onMove={(id, to) => {
         const next = ids.filter((x) => x !== id)
         next.splice(to, 0, id)
@@ -312,7 +314,7 @@ function Editable({ ids, songs, put }: Pick<SetSongs, "ids" | "songs" | "put">) 
       }}
     >
       {({ song }, handleRef) => (
-        <div data-song={song.title} className="flex min-h-9 items-center gap-2 py-1">
+        <div data-song={song.title} className="flex min-h-9 items-center gap-2 py-3">
           <Button
             ref={handleRef}
             variant="ghost"

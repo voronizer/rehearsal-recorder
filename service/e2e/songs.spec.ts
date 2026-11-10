@@ -1,6 +1,7 @@
 import { writeFileSync } from "node:fs"
 import { expect, test } from "@playwright/test"
 import { as, band } from "./band"
+import { linesOf, roomBetween } from "./rows"
 
 test.use({ storageState: as("alex") })
 
@@ -53,7 +54,15 @@ test("a new song is refused for a title the band has in another case", async ({ 
   await page.goBack()
   await expect(page).toHaveURL(/\/songs$/)
   await expect(main.getByLabel("Title")).toHaveCount(0)
-  await expect(page.getByRole("region", { name: "Learning" }).locator('[data-song="Zorka"]')).toContainText("No takes yet")
+  const learning = page.getByRole("region", { name: "Learning" })
+  await expect(learning.locator('[data-song="Zorka"]')).toContainText("No takes yet")
+  // The rows of a list are one height, with ▶ or without; 24 px apart, no lines, no dotted titles.
+  const heights = await learning.locator("[data-song]").evaluateAll((rows) => rows.map((r) => Math.round(r.getBoundingClientRect().height)))
+  expect(new Set(heights).size, String(heights)).toBe(1)
+  const list = learning.getByRole("list")
+  expect(new Set(await roomBetween(list))).toEqual(new Set([24]))
+  expect(new Set(await linesOf(list))).toEqual(new Set(["0px"]))
+  await expect(learning.getByRole("link", { name: "Zorka", exact: true })).toHaveCSS("text-decoration-line", "none")
 })
 
 test("Statuses and New song open at the top of Songs, one in place of the other, and Back closes them", async ({ page }) => {

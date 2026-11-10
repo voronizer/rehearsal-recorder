@@ -183,14 +183,30 @@ export function Group({
   )
 }
 
-/** Rows of a list: no box of their own; with `opens`, a row lights up under the pointer. */
-export function Rows({ children, className, opens }: { children: ReactNode; className?: string; opens?: boolean }) {
+/**
+ * Rows of a list, by one rule for every list (Alex's pick А, 2026-11-10):
+ * no box and no lines, 24 px from one row's content to the next. With
+ * `opens`, a row lights up under the pointer over that room, and a press
+ * there is the row's. `takes`: take rows (TakeLine), which light up by
+ * themselves, the same 24 px apart.
+ */
+export function Rows({ children, className, opens, takes }: { children: ReactNode; className?: string; opens?: boolean; takes?: boolean }) {
   const items = Children.toArray(children).filter(Boolean)
   return (
-    <div role="list" className={cn("flex flex-col gap-0.5", className)}>
+    <div role="list" className={cn("flex flex-col", takes && "gap-3", className)}>
       {items.map((c, i) => (
-        // Lit under the pointer only where the whole row opens something (`opens`).
-        <div role="listitem" key={keyOf(c, i)} className={cn("-mx-2 rounded-lg px-2 py-1.5", opens && "transition-colors hover:bg-accent/60")}>
+        <div
+          role="listitem"
+          key={keyOf(c, i)}
+          className={cn(!takes && "-mx-2 rounded-lg px-2 py-3", opens && "cursor-pointer transition-colors hover:bg-accent/60")}
+          onClick={
+            opens
+              ? (e) => {
+                  if (e.target === e.currentTarget) (e.currentTarget.firstElementChild as HTMLElement | null)?.click()
+                }
+              : undefined
+          }
+        >
           {c}
         </div>
       ))}
@@ -199,10 +215,12 @@ export function Rows({ children, className, opens }: { children: ReactNode; clas
 }
 
 /**
- * What a word that opens or plays something looks like (Alex's pick C,
+ * What a word that opens something by itself looks like (Alex's pick C,
  * 2026-11-02): a grey dotted line under it, solid under the pointer, so a
- * phone with no pointer shows it too. A take's or a song's name, a mark's
- * words, a day that leads to its rehearsal, a file.
+ * phone with no pointer shows it too. Only where the row round it does not
+ * open (2026-11-10): a set's song and its length, a song's file, Home's day
+ * and song titles, a take's name in the bar or a mark's panel. A row that
+ * lights up and opens as a whole has none.
  */
 export const OPENS =
   "text-left underline decoration-muted-foreground/60 decoration-dotted underline-offset-4 hover:decoration-current hover:decoration-solid"

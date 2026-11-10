@@ -1,5 +1,6 @@
 import { expect, test } from "@playwright/test"
 import { as, band } from "./band"
+import { linesOf, roomBetween } from "./rows"
 
 test.use({ storageState: as("alex") })
 
@@ -11,6 +12,11 @@ test("rehearsals come by month, and a rehearsal's takes by song", async ({ page 
   await expect(rows.nth(0)).toContainText(/Thu 30 Oct( 2025)?/)
   await expect(rows.nth(0)).toContainText("Not named")
   await expect(rows.nth(1)).toContainText(/Thu 23 Oct( 2025)?/)
+  // 24 px between rows, no lines, and a row that opens as a whole has no dotted day.
+  const list = october.getByRole("list")
+  expect(await roomBetween(list)).toEqual([24])
+  expect(new Set(await linesOf(list))).toEqual(new Set(["0px"]))
+  await expect(rows.nth(0).getByText(/Thu 30 Oct/)).toHaveCSS("text-decoration-line", "none")
 
   await rows.nth(0).click()
   await expect(page.getByRole("heading", { level: 1 })).toHaveText(/^Thursday, 30 October( 2025)?$/)

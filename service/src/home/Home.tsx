@@ -9,10 +9,14 @@ import { clock, count, day, longDay } from "../shell/words"
 import { TakeLine } from "../takes/parts"
 import { FirstDay } from "./FirstDay"
 
-/** A song on Home, as a song in РЭХА's list: its title, a grey line about it, then its best take as a row. */
+/**
+ * A song on Home, as a song in РЭХА's list: its title, a grey line about
+ * it, then its best take as a row, 8 px under the title (the row's own
+ * light makes up the rest).
+ */
 function SongRow({ song }: { song: HomeSong }) {
   return (
-    <div className="flex flex-col gap-2" data-song={song.title}>
+    <div className="flex flex-col gap-0.5" data-song={song.title}>
       <div className="flex min-w-0 flex-wrap items-baseline gap-x-2">
         <Link to="/songs/$id" params={{ id: String(song.id) }} title={song.title} className={cn("min-w-0 max-w-full truncate font-medium", OPENS)}>
           {song.title}
@@ -49,7 +53,7 @@ function LastRehearsal({ last }: { last: NonNullable<HomeData["last_rehearsal"]>
       }
       hint={`the last rehearsal · ${count(last.takes.length, "take")} · ${clock(length)}`}
     >
-      <Rows>
+      <Rows takes>
         {shown.map((t) => (
           <TakeLine key={t.uid} take={t} />
         ))}
@@ -86,7 +90,8 @@ export function Home() {
             {h.last_rehearsal && <LastRehearsal last={h.last_rehearsal} />}
             <Group title="Songs" hint="with their best take">
               {h.songs.length ? (
-                <div className="flex flex-col gap-5">
+                // 24 px from one song's take to the next song's title, as between rows.
+                <div className="flex flex-col gap-4.5">
                   {h.songs.map((s) => (
                     <SongRow key={s.id} song={s} />
                   ))}
@@ -101,7 +106,7 @@ export function Home() {
           <Groups>
             <Group title="Latest marks">
               {h.latest_marks.length ? (
-                <Rows>
+                <Rows opens>
                   {h.latest_marks.map((k) => (
                     <MarkItem key={k.id} mark={k} take="full" compact />
                   ))}
@@ -112,11 +117,11 @@ export function Home() {
             </Group>
             <Group title="The band's favourites" hint={h.favourite_count > h.favourites.length ? `the latest ${h.favourites.length}` : undefined}>
               {h.favourites.length ? (
-                <div className="flex flex-col gap-1">
+                <Rows takes>
                   {h.favourites.map((t) => (
                     <TakeLine key={t.uid} take={t} />
                   ))}
-                </div>
+                </Rows>
               ) : (
                 <p className="text-muted-foreground">Takes starred by two or more of the band show here.</p>
               )}

@@ -6,14 +6,15 @@ import { cn } from "@/lib/utils"
 import { useSongs, type SongItem } from "../api"
 import { EditCard } from "../shell/EditList"
 import { useEditor } from "../shell/editor"
-import { Empty, Group, Groups, OPENS, Page, Rows, TitleWith, Trouble, useTitle } from "../shell/parts"
+import { Empty, Group, Groups, Page, Rows, TitleWith, Trouble, useTitle } from "../shell/parts"
 import { useSize } from "../shell/size"
 import { clock, count, day } from "../shell/words"
 import { Play, TakeLine, TakeLink } from "../takes/parts"
 import { NewSongEditor } from "./NewSong"
 import { StatusesEditor } from "./Statuses"
 
-const COLS = "grid-cols-[minmax(0,1fr)_6rem_4rem_4rem_4rem_6rem_minmax(8rem,1fr)]"
+// Last played as wide as “Thu 30 Oct 2025” on one line: a row of two lines would be taller than the rest.
+const COLS = "grid-cols-[minmax(0,1fr)_6rem_4rem_4rem_4rem_7rem_minmax(8rem,1fr)]"
 
 function SongLine({ song }: { song: SongItem }) {
   const size = useSize()
@@ -23,7 +24,7 @@ function SongLine({ song }: { song: SongItem }) {
   // anywhere else on the row opens it as well.
   const name = (
     <span className="flex min-w-0 items-center gap-2">
-      <Link {...to} className={cn("truncate", OPENS)}>
+      <Link {...to} className="truncate">
         {song.title}
       </Link>
     </span>
@@ -32,23 +33,23 @@ function SongLine({ song }: { song: SongItem }) {
   const best = song.best && (
     <span className="flex items-center gap-2">
       <Play take={song.best} />
-      <TakeLink take={song.best} short />
+      <TakeLink take={song.best} short plain />
     </span>
   )
   if (size === "wide")
     return (
-      <div data-song={song.title} className={cn("grid cursor-pointer items-center gap-3", COLS)} onClick={row}>
+      <div data-song={song.title} className={cn("grid min-h-8 cursor-pointer items-center gap-3", COLS)} onClick={row}>
         {name}
         <span>{song.key}</span>
         <span className="tnum">{song.tempo ? Math.round(song.tempo) : ""}</span>
         <span className="tnum">{song.length ? clock(song.length) : ""}</span>
         <span className="tnum">{song.takes || ""}</span>
-        <span>{song.last_date ? day(song.last_date) : ""}</span>
+        <span className="whitespace-nowrap">{song.last_date ? day(song.last_date) : ""}</span>
         {best ?? <span className="text-muted-foreground">No takes yet</span>}
       </div>
     )
   return (
-    <div data-song={song.title} className="flex cursor-pointer items-center gap-3" onClick={row}>
+    <div data-song={song.title} className="flex min-h-8 cursor-pointer items-center gap-3" onClick={row}>
       <span className="min-w-0 flex-1">
         {name}
         <span className="block truncate text-xs text-muted-foreground">
@@ -123,7 +124,7 @@ export function Songs() {
         })}
         {not_named.length > 0 && (
           <Group title="Not named" hint={String(not_named.length)} fold="open">
-            <Rows>
+            <Rows takes>
               {not_named.map((t) => (
                 <TakeLine key={t.uid} take={t} />
               ))}

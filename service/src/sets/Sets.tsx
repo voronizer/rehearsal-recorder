@@ -86,7 +86,8 @@ export function Sets() {
   const picked = chosen ?? all[0]
   const list = (
     <div className={cn("flex shrink-0 flex-col gap-2", size !== "phone" && "w-54")}>
-      <ul aria-label="Sets" className="flex flex-col gap-1">
+      {/* 24 px from one set's words to the next: each row's own room and 8 px. */}
+      <ul aria-label="Sets" className="flex flex-col gap-2">
         {all.map((s) => (
           <SetRow key={s.id} set={s} all={songs.data.songs} picked={size !== "phone" && s.id === picked.id} />
         ))}

@@ -44,7 +44,7 @@ export function Rehearsal() {
       <Groups>
         {groups.map(([id, ts]) => {
           const list = (
-            <Rows>
+            <Rows takes>
               {ts.map((t) => (
                 <TakeLine key={t.uid} take={t} marks />
               ))}

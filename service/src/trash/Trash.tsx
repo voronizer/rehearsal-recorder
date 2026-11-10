@@ -125,7 +125,7 @@ export function Trash() {
                   <div key={line.take.uid} className="flex items-center gap-3" data-take={line.take.name}>
                     <Play take={line.take} />
                     <div className="min-w-0 flex-1">
-                      <TakeLink take={line.take} />
+                      <TakeLink take={line.take} plain />
                       <div className="text-xs text-muted-foreground">
                         {day(line.take.date)} · {gone(line.take)} · {left(line.take)}
                       </div>

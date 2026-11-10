@@ -19,16 +19,16 @@ import {
   type Mark,
   type MarkComment,
 } from "../api"
-import { Avatar, Group, OPENS, Rows, TEXTAREA, Tile } from "../shell/parts"
+import { Avatar, Group, Rows, TEXTAREA, Tile } from "../shell/parts"
 import { usePanel } from "../shell/panel"
 import { KeepWriting } from "../shell/unsent"
 import { clock, day, localDay } from "../shell/words"
 import { usePlayer, useTime } from "../takes/player/one"
 import { TakeLink, useInitials, useLabelOf } from "../takes/parts"
 
-/** The take a mark is on, as a name that opens the take's page. */
+/** The take a mark is on, in a mark's row, as a name that opens the take's page. */
 export function OnTake({ take, short }: { take: Mark["take"]; short: boolean }) {
-  return <TakeLink take={take} short={short} className="min-w-0" />
+  return <TakeLink take={take} short={short} plain className="min-w-0" />
 }
 
 /** A label from the band's list, as РЭХА picks one (Settings › Marks): the band may have many. */
@@ -274,23 +274,29 @@ const setter = (mark: Mark) =>
 
 /**
  * A mark on Home: its colour, its moment and what it says on one line; the
- * take, who set it and when under that; its last comment. The line opens
- * the mark with its talk.
+ * take, who set it and when under that; its last comment. The row opens the
+ * mark with its talk, as a row of **Marks** does; the take's name, the take.
  */
 function MarkBrief({ mark, take }: { mark: Mark; take?: "full" | "short" }) {
   const { open } = usePanel()
   const label = useLabelOf()(mark.label_id)
   const last = mark.comments.at(-1)
+  const go = () => open({ kind: "mark", uid: mark.take.uid, id: mark.id })
   // РЭХА's mark line (components/ui/mark.tsx): the label's dot, the time, the
   // words; the label's name only when nothing is written (its colour says it).
   return (
-    <div data-mark={mark.id} data-closed={mark.closed} className={cn("grid grid-cols-[0.5rem_minmax(0,1fr)] items-baseline gap-x-2 gap-y-1", mark.closed && "opacity-60")}>
+    <div
+      data-mark={mark.id}
+      data-closed={mark.closed}
+      onClick={(e) => !(e.target as HTMLElement).closest("button, a") && go()}
+      className={cn("grid grid-cols-[0.5rem_minmax(0,1fr)] items-baseline gap-x-2 gap-y-1", mark.closed && "opacity-60")}
+    >
       <span title={label.name} className="flex">
         <LabelDot colour={label.colour} />
       </span>
-      <button type="button" className="flex min-w-0 items-baseline gap-2 text-left" onClick={() => open({ kind: "mark", uid: mark.take.uid, id: mark.id })}>
+      <button type="button" className="flex min-w-0 items-baseline gap-2 text-left" onClick={go}>
         <span className="tnum shrink-0 text-muted-foreground">{clock(mark.at)}</span>
-        <span className={cn("min-w-0", OPENS)}>{mark.note || label.name}</span>
+        <span className="min-w-0">{mark.note || label.name}</span>
       </button>
       <span className="col-start-2 flex flex-wrap items-center gap-x-1.5 text-xs text-muted-foreground">
         {take && <OnTake take={mark.take} short={take === "short"} />}

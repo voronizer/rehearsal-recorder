@@ -1,5 +1,6 @@
 import { expect, test } from "@playwright/test"
 import { as, asMember, band } from "./band"
+import { linesOf, roomBetween } from "./rows"
 
 test.use({ storageState: as("alex") })
 
@@ -22,7 +23,12 @@ test("the marks switch counts to do, done and all", async ({ page }) => {
   ])
   const shown = page.locator("[data-mark]")
   await expect(shown).toHaveCount(counts.open)
-  await expect(page.getByRole("region", { name: "Viasna", exact: true })).toBeVisible()
+  const viasna = page.getByRole("region", { name: "Viasna", exact: true })
+  await expect(viasna).toBeVisible()
+  // 24 px between rows, no lines; a row opens as a whole, so its words are not dotted.
+  expect(new Set(await roomBetween(viasna.getByRole("list")))).toEqual(new Set([24]))
+  expect(new Set(await linesOf(viasna.getByRole("list")))).toEqual(new Set(["0px"]))
+  await expect(viasna.getByRole("button", { name: "The bridge drags here" })).toHaveCSS("text-decoration-line", "none")
 
   await which.getByRole("radio", { name: /^Done/ }).click()
   await expect(shown).toHaveCount(1)

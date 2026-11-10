@@ -1,6 +1,6 @@
 import { useNavigate, useParams } from "@tanstack/react-router"
 import { useSong, type TakeRow } from "../api"
-import { Back, Columns, Group, Groups, Page, Pill, Trouble, useTitle } from "../shell/parts"
+import { Back, Columns, Group, Groups, Page, Pill, Rows, Trouble, useTitle } from "../shell/parts"
 import { clock, count, longDay } from "../shell/words"
 import { TakeLine } from "../takes/parts"
 import { InPlaceTitle, TempoControls, TitleFacts } from "./edit"
@@ -26,11 +26,11 @@ function AllTakes({ takes }: { takes: TakeRow[] }) {
             hint={count(these.length, "take")}
             fold={i === 0 ? "open" : "closed"}
           >
-            <div className="flex flex-col gap-1">
+            <Rows takes>
               {these.map((t) => (
                 <TakeLine key={t.uid} take={t} />
               ))}
-            </div>
+            </Rows>
           </Group>
         )
       })}

@@ -5,7 +5,7 @@ import { LabelDot } from "@/components/ui/mark"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { cn } from "@/lib/utils"
 import { useMarks, type Mark, type Show } from "../api"
-import { Empty, Group, Groups, OPENS, Page, Rows, TitleWith, Trouble, useTitle } from "../shell/parts"
+import { Empty, Group, Groups, Page, Rows, TitleWith, Trouble, useTitle } from "../shell/parts"
 import { EditCard } from "../shell/EditList"
 import { useEditor } from "../shell/editor"
 import { usePanel } from "../shell/panel"
@@ -67,7 +67,7 @@ function MarkLine({ mark }: { mark: Mark }) {
       </span>
       <span className="tnum text-muted-foreground">{clock(mark.at)}</span>
       <span className="flex min-w-0 items-center gap-1.5">
-        <button type="button" title={mark.note || label.name} onClick={go} className={cn("min-w-0 truncate", OPENS)}>
+        <button type="button" title={mark.note || label.name} onClick={go} className="min-w-0 truncate text-left">
           {mark.note || label.name}
         </button>
       </span>

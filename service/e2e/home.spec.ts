@@ -1,5 +1,6 @@
 import { expect, test } from "@playwright/test"
 import { as, band } from "./band"
+import { linesOf, roomBetween } from "./rows"
 
 // Paŭlik, a member of the band.
 test.use({ storageState: as("paulik") })
@@ -34,6 +35,51 @@ test("home has the last rehearsal as played, then the songs with their best take
 
   await expect(page.getByRole("region", { name: "The band's favourites" }).locator("[data-take]")).toHaveText(/Viasna\s*#11/)
   await expect(page.getByLabel("Player")).toContainText(NOTHING)
+})
+
+test("Home's lists have 24 px between rows and no lines; only the day and a song's title are dotted", async ({ page }) => {
+  await page.goto("/")
+  const last = page.getByRole("region", { name: "The last rehearsal" }).getByRole("list")
+  const marks = page.getByRole("region", { name: "Latest marks" }).getByRole("list")
+  for (const list of [last, marks]) {
+    expect(await roomBetween(list)).toEqual(Array((await list.getByRole("listitem").count()) - 1).fill(24))
+    expect(new Set(await linesOf(list))).toEqual(new Set(["0px"]))
+  }
+  await expect(page.getByRole("region", { name: "The band's favourites" }).getByRole("list")).toHaveCount(1)
+
+  // A song's title 8 px over its best take; 24 px from one song's take to the next song's title.
+  const songs = page.getByRole("region", { name: "Songs" }).locator("[data-song]")
+  const room = await songs.evaluateAll((rows) =>
+    rows.map((row) => {
+      const title = row.firstElementChild!.getBoundingClientRect()
+      const line = row.querySelector("[data-take] > div")!
+      const pad = parseFloat(getComputedStyle(line).paddingTop)
+      const r = line.getBoundingClientRect()
+      return { title, top: r.top + pad, bottom: r.bottom - pad }
+    })
+  )
+  for (const [i, r] of room.entries()) {
+    expect(Math.round(r.top - r.title.bottom), `title to take ${i}`).toBe(8)
+    if (i > 0) expect(Math.round(r.title.top - room[i - 1].bottom), `take to title ${i}`).toBe(24)
+  }
+
+  // A row that opens as a whole has no dotted line; a word that opens alone keeps it.
+  await expect(last.getByRole("link", { name: "Viasna 11", exact: true })).toHaveCSS("text-decoration-line", "none")
+  await expect(marks.getByText("Too quiet here")).toHaveCSS("text-decoration-line", "none")
+  await expect(page.getByRole("region", { name: "The last rehearsal" }).getByRole("link", { name: /^Thursday, 30 October/ })).toHaveCSS("text-decoration-style", "dotted")
+  await expect(page.getByRole("region", { name: "Songs" }).getByRole("link", { name: "Pałyn", exact: true })).toHaveCSS("text-decoration-style", "dotted")
+})
+
+test("a row of Latest marks opens the mark, and the take's name in it the take's page", async ({ page }) => {
+  await page.goto("/")
+  const row = page.getByRole("region", { name: "Latest marks" }).locator("[data-mark]").filter({ hasText: "Too quiet here" })
+  const box = (await row.boundingBox())!
+  // The room at the right of the take's line, under the words.
+  await page.mouse.click(box.x + box.width - 4, box.y + box.height - 6)
+  await expect(page.getByLabel("Panel").getByRole("heading", { level: 2 }).first()).toHaveText(/^Mark at 0:03$/)
+  await page.getByLabel("Panel").getByRole("button", { name: "Close", exact: true }).click()
+  await row.getByRole("link", { name: "Kupalle 2", exact: true }).click()
+  await expect(page).toHaveURL(`/takes/${band().takes["Kupalle 2"]}`)
 })
 
 test("the last rehearsal's day opens its page", async ({ page }) => {

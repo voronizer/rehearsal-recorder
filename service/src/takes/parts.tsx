@@ -76,12 +76,23 @@ export function TakeName({
 
 /**
  * A take's name that opens its page. On that page already, it opens the
- * take's marks in the drawer: the page itself is there.
+ * take's marks in the drawer: the page itself is there. `plain`: in a row
+ * that lights up and opens as a whole, with no dotted line.
  */
-export function TakeLink({ take, short, className }: { take: TakeNaming & { uid: string }; short?: boolean; className?: string }) {
+export function TakeLink({
+  take,
+  short,
+  plain,
+  className,
+}: {
+  take: TakeNaming & { uid: string }
+  short?: boolean
+  plain?: boolean
+  className?: string
+}) {
   const { open } = usePanel()
   const here = useRouterState({ select: (s) => s.location.pathname === `/takes/${take.uid}` })
-  const look = cn("inline-flex min-w-0 max-w-full items-center gap-1.5", OPENS, className)
+  const look = cn("inline-flex min-w-0 max-w-full items-center gap-1.5 text-left", !plain && OPENS, className)
   if (here)
     return (
       <button type="button" title={takeText(take)} aria-label={take.name} onClick={() => open({ kind: "marks", uid: take.uid })} className={look}>
@@ -289,7 +300,7 @@ export function TakeLine({ take, marks, short, after }: { take: TakeLike; marks?
       >
         <Play take={take} />
         <div className="flex min-w-0 flex-col gap-0.5 overflow-x-clip">
-          <TakeLink take={take} short={short} className="self-start" />
+          <TakeLink take={take} short={short} plain className="self-start" />
           <div className="flex min-w-0 items-center gap-2.5">
             <Wave
               take={take}
@@ -318,7 +329,7 @@ export function TakeLine({ take, marks, short, after }: { take: TakeLike; marks?
           >
             <LabelDot colour={labelOf(k.label_id).colour} />
             <span className="tnum shrink-0 text-muted-foreground">{clock(k.at)}</span>
-            <span className={cn("truncate", OPENS)}>{k.note || labelOf(k.label_id).name}</span>
+            <span className="truncate">{k.note || labelOf(k.label_id).name}</span>
           </button>
         ))}
     </div>
