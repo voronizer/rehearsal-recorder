@@ -1,12 +1,13 @@
 import { expect, test, type Page } from "@playwright/test"
 import { as, band, HEADERS } from "./band"
+import { roomBetween } from "./rows"
 
 test.describe("as Alex", () => {
   test.use({ storageState: as("alex") })
 
   test("a take page has REHA's player: a lane per track with M and S, the drums' notes, and Master", async ({ page }) => {
     await page.goto(`/takes/${band().takes["Viasna 12"]}`)
-    await expect(page.getByText(/^Thursday, 30 October( 2025)? · 0:10 · 6 tracks$/)).toBeVisible()
+    await expect(page.getByRole("main").getByText(/^0:10 · 6 tracks$/)).toBeVisible()
     const player = page.locator("[data-take-player]")
     const lanes = player.locator("[data-lane-row]")
     await expect(lanes).toHaveCount(7)
@@ -64,6 +65,27 @@ test.describe("as Alex", () => {
     await expect(soloVocals).toHaveAttribute("aria-pressed", "false")
   })
 
+  test("a take's page has its song's and its rehearsal's pills, each to its page, and Songs is lit", async ({ page }) => {
+    await page.goto(`/takes/${band().takes["Pałyn 9"]}`)
+    const main = page.getByRole("main")
+    const songs = page.getByRole("navigation", { name: "Sections" }).getByRole("link", { name: "Songs" })
+    await expect(songs).toHaveAttribute("aria-current", "page")
+    await expect(main.locator("[data-pill]")).toHaveText(["Pałyn", /^Thursday, 30 October( 2025)?$/])
+    // No ‹ Pałyn over the title: the song's pill does its job.
+    await expect(main.getByRole("link", { name: "Pałyn" })).toHaveCount(1)
+    await main.getByRole("link", { name: "Pałyn", exact: true }).click()
+    await expect(page).toHaveURL(`/songs/${band().songs["Pałyn"]}`)
+    await page.goBack()
+    await main.getByRole("link", { name: /^Thursday, 30 October/ }).click()
+    await expect(page).toHaveURL(`/rehearsals/${band().rehearsals.second}`)
+
+    // A take with no song has the day alone; Songs is lit, as Songs lists it under Not named.
+    await page.goto(`/takes/${band().takes["Take 3"]}`)
+    await expect(main.locator("[data-pill]")).toHaveText([/^Thursday, 30 October( 2025)?$/])
+    await expect(main.locator('[data-pill="rehearsal"]')).toBeVisible()
+    await expect(songs).toHaveAttribute("aria-current", "page")
+  })
+
   test("a take plays, its time moves, and a press on the lanes moves the playhead", async ({ page }) => {
     await page.goto(`/takes/${band().takes["Viasna 12"]}`)
     const transport = page.getByRole("toolbar", { name: "Transport" })
@@ -102,7 +124,7 @@ test.describe("as Alex", () => {
   test("a track of notes alone has a lane of its own, after the tracks of sound", async ({ page }) => {
     await page.goto(`/takes/${band().takes["Pałyn 9"]}`)
     // The keys are one of its tracks.
-    await expect(page.getByText(/^Thursday, 30 October( 2025)? · 0:10 · 3 tracks$/)).toBeVisible()
+    await expect(page.getByRole("main").getByText(/^0:10 · 3 tracks$/)).toBeVisible()
     const lanes = page.locator("[data-take-player] [data-lane-row]")
     await expect(lanes).toHaveCount(3)
     await expect(lanes.nth(2)).toHaveAttribute("data-lane-row", "Keys")
@@ -254,6 +276,28 @@ test.describe("as Alex on a phone", () => {
     await expect(mute).toHaveAttribute("aria-pressed", "true")
     await expect(tracks.getByRole("slider", { name: "Vocals volume" })).toHaveAttribute("aria-valuetext", "70%")
   })
+  test("on a phone, a take's marks keep their talk close, as messages, and its wave the cross", async ({ page }) => {
+    await page.goto(`/takes/${band().takes["Viasna 12"]}`)
+    const main = page.getByRole("main")
+    // Not the lists' 24 px: a mark's talk reads as messages.
+    const talk = main.getByRole("region", { name: "Marks" }).getByRole("list").first()
+    // РЭХА's mark at 0:01 and the band's two.
+    await expect(talk.locator(":scope > [role=listitem]")).toHaveCount(3)
+    expect(await roomBetween(talk)).toEqual([14, 14])
+    // A press on the player's wave sets the playhead: the cross, as in REHA.
+    await expect(main.getByTestId("wave").first()).toHaveCSS("cursor", "crosshair")
+  })
+
+  test("on a phone, an old take's panel address opens its page, and an old editor's the panel", async ({ page }) => {
+    const uid = band().takes["Pałyn 3"]
+    await page.goto(`/songs?panel=take:${uid}`)
+    await expect(page).toHaveURL(`/takes/${uid}`)
+    await expect(page.getByLabel("Panel", { exact: true })).toHaveCount(0)
+    await page.goto("/songs?edit=statuses")
+    await expect(page).toHaveURL(/\/songs\?panel=statuses$/)
+    await expect(page.getByLabel("Panel", { exact: true }).getByRole("heading", { name: "Statuses", exact: true })).toBeVisible()
+  })
+
   test("on a phone, a track of notes alone has a row that says so, after the tracks of sound", async ({ page }) => {
     await page.goto(`/takes/${band().takes["Pałyn 9"]}`)
     const tracks = page.getByRole("main").getByRole("region", { name: "Tracks", exact: true })
@@ -374,12 +418,12 @@ test.describe("as Ira", () => {
   })
 
   test("a level turned while another take plays is the one heard when Play is pressed, before it is kept", async ({ page }) => {
-    await page.goto(`/?panel=take:${band().takes["Viasna 12"]}`)
-    await page.getByRole("button", { name: "Play “Viasna 11”" }).first().click()
+    await page.goto(`/rehearsals/${band().rehearsals.second}`)
+    await page.locator('[data-take="Viasna 11"]').getByRole("button", { name: "Play “Viasna 11”" }).click()
     await expect(page.getByRole("button", { name: "Pause “Viasna 11”" }).first()).toBeVisible()
-    // To the take's page while Viasna 11 plays on in the bar: Viasna 12 is not in the player yet.
-    await page.getByLabel("Panel", { exact: true }).getByRole("link", { name: /^Viasna/ }).first().click()
-    await expect(page).toHaveURL(/\/takes\//)
+    // To Viasna 12's page while Viasna 11 plays on in the bar: Viasna 12 is not in the player yet.
+    await page.locator('[data-take="Viasna 12"]').getByRole("link", { name: "Viasna 12", exact: true }).click()
+    await expect(page).toHaveURL(`/takes/${band().takes["Viasna 12"]}`)
     const waiting: (() => void)[] = []
     await page.route("**/api/me/levels", async (route) => {
       if (route.request().method() !== "PUT") return route.fallback()
@@ -440,25 +484,23 @@ test.describe("as Ira", () => {
     letThrough()
   })
 
-  test("M and S in a take panel work before the take plays, and stay when it does", async ({ page }) => {
-    await page.goto(`/?panel=take:${band().takes["Pałyn 3"]}`)
-    const panel = page.getByLabel("Panel", { exact: true })
-    await panel.getByRole("button", { name: /^Tracks/ }).click()
-    const solo = panel.getByRole("button", { name: "Solo Bass" })
+  test("M and S on a take's page work before the take plays, and stay when it does", async ({ page }) => {
+    await page.goto(`/takes/${band().takes["Pałyn 3"]}`)
+    const player = page.locator("[data-take-player]")
+    const solo = player.getByRole("button", { name: "Solo Bass" })
     await expect(solo).toBeEnabled()
     await solo.click()
     await expect(solo).toHaveAttribute("aria-pressed", "true")
-    await expect(panel.getByRole("group", { name: "Drums" })).toHaveAttribute("data-heard", "false")
-    await panel.getByRole("button", { name: /^Play “Pałyn 3”/ }).click()
-    await expect(panel.getByRole("button", { name: /^Pause “Pałyn 3”/ })).toBeVisible()
+    const transport = page.getByRole("toolbar", { name: "Transport" })
+    await transport.getByRole("button", { name: "Play", exact: true }).click()
+    await expect(transport.getByRole("button", { name: "Pause", exact: true })).toBeVisible()
     await expect(solo).toHaveAttribute("aria-pressed", "true")
-    await expect(panel.getByRole("group", { name: "Drums" })).toHaveAttribute("data-heard", "false")
     // M on the soloed track takes its S off.
-    const mute = panel.getByRole("button", { name: "Mute Bass" })
+    const mute = player.getByRole("button", { name: "Mute Bass" })
     await mute.click()
     await expect(mute).toHaveAttribute("aria-pressed", "true")
     await expect(solo).toHaveAttribute("aria-pressed", "false")
-    await expect(panel.getByRole("group", { name: "Drums" })).toHaveAttribute("data-heard", "true")
+    await transport.getByRole("button", { name: "Pause", exact: true }).click()
   })
 
   test("a star shows at once and stays after a reload", async ({ page }) => {
@@ -486,7 +528,7 @@ test.describe("as Dzima", () => {
     await expect(bar.getByTestId("bar-time")).toHaveText("0:05")
     await bar.getByRole("button", { name: "Mark" }).click()
     const panel = page.getByLabel("Panel", { exact: true })
-    await expect(panel).toContainText("A mark at 0:05")
+    await expect(panel.getByRole("heading", { level: 2 })).toHaveText("New mark at 0:05")
     await panel.getByLabel("Note").fill("Bass comes in late")
     await panel.getByRole("button", { name: "Add mark" }).click()
     const mine = panel.locator("[data-mark]").filter({ hasText: "Bass comes in late" })
@@ -575,14 +617,12 @@ test.describe("deleting a take, as Alex", () => {
     await page.getByRole("dialog").getByRole("button", { name: "Delete take" }).click()
   }
 
-  test("deleting the open take closes its panel", async ({ page }) => {
+  test("an old take's panel address opens the take's page", async ({ page }) => {
     const uid = band().takes["Pałyn 3"]
-    await page.goto(`/?panel=take:${uid}`)
-    const panel = page.getByLabel("Panel", { exact: true })
-    await deleteTake(page, panel, "Pałyn 3")
-    await expect(panel).toHaveCount(0)
-    await expect(page.getByText("This screen could not open.")).toHaveCount(0)
-    expect((await page.request.post(`/api/trash/${uid}/restore`, { headers: HEADERS })).ok()).toBe(true)
+    await page.goto(`/songs?panel=take:${uid}`)
+    await expect(page).toHaveURL(`/takes/${uid}`)
+    await expect(page.getByLabel("Panel", { exact: true })).toHaveCount(0)
+    await expect(page.getByRole("heading", { level: 1 })).toContainText("Pałyn")
   })
 
   test("deleting a take on its page goes to its rehearsal", async ({ page }) => {
@@ -608,27 +648,30 @@ test.describe("moving a take", () => {
     // A take with no song: Not named is ticked.
     await expect(page.getByRole("menuitemradio", { name: "Not named" })).toHaveAttribute("aria-checked", "true")
     await page.getByRole("menuitem", { name: "New song…" }).click()
-    // From a list the take's panel opens, the field in its line.
-    const panel = page.getByLabel("Panel", { exact: true })
-    const field = panel.getByRole("textbox", { name: "New song" })
+    // From a list the take's page opens, the field in its line.
+    await expect(page).toHaveURL(`/takes/${band().takes["Take 3"]}`)
+    const main = page.getByRole("main")
+    const title = main.getByRole("heading", { level: 1 })
+    const field = main.getByRole("textbox", { name: "New song" })
     await expect(field).toBeFocused()
     // Its number among the takes with no song, not the 7 of its evening.
-    await expect(panel.getByRole("heading", { level: 2 }).first()).toHaveText("Take #3")
+    await expect(title).toContainText("Take #3")
     await field.fill("pałyn")
-    await expect(panel.getByRole("alert")).toHaveText("“Pałyn” is already a song: pick it in the list.")
-    await expect(panel.getByRole("button", { name: "Make the song" })).toBeDisabled()
+    await expect(main.getByRole("alert")).toHaveText("“Pałyn” is already a song: pick it in the list.")
+    await expect(main.getByRole("button", { name: "Make the song" })).toBeDisabled()
     await field.fill("Rečka")
     await field.press("Enter")
     // РЭХА gives the number at its next check.
-    await expect(panel.getByRole("heading", { level: 2 }).first()).toHaveText("Rečka · number from РЭХА")
-    await expect(named).toHaveCount(0)
-    await expect(page.getByRole("region", { name: "Learning" }).locator('[data-song="Rečka"]')).toBeVisible()
+    await expect(title).toContainText("Rečka · number from РЭХА")
 
-    await panel.getByRole("button", { name: "What to do with Rečka", exact: true }).click()
+    await main.getByRole("button", { name: "What to do with Rečka", exact: true }).click()
     await page.getByRole("menuitem", { name: "Move to song" }).click()
     await expect(page.getByRole("menuitemradio", { name: "Rečka" })).toHaveAttribute("aria-checked", "true")
     await page.getByRole("menuitemradio", { name: "Pałyn" }).click()
-    await expect(panel.getByRole("heading", { level: 2 }).first()).toHaveText("Pałyn · number from РЭХА")
+    await expect(title).toContainText("Pałyn · number from РЭХА")
+    await page.goto("/songs")
+    await expect(named).toHaveCount(0)
+    await expect(page.getByRole("region", { name: "Learning" }).locator('[data-song="Rečka"]')).toBeVisible()
     // In a row, the song's title alone.
     await page.goto(`/songs/${band().songs["Pałyn"]}`)
     const row = page.getByRole("main").locator('[data-take="Pałyn"]')
@@ -642,13 +685,13 @@ test.describe("moving a take", () => {
     await expect(row).toHaveCount(0)
     await page.goto("/songs")
     await expect(named.locator('[data-take="Take"]')).toBeVisible()
-    await named.getByRole("button", { name: "Take", exact: true }).click()
-    await expect(panel.getByRole("heading", { level: 2 }).first()).toHaveText("Take · number from РЭХА")
+    await named.getByRole("link", { name: "Take", exact: true }).click()
+    await expect(title).toContainText("Take · number from РЭХА")
 
     // Not named is ticked, and picking it again sends nothing.
     let sent = 0
     page.on("request", (r) => void (r.method() === "PATCH" && sent++))
-    await panel.getByRole("button", { name: "What to do with Take", exact: true }).click()
+    await main.getByRole("button", { name: "What to do with Take", exact: true }).click()
     await page.getByRole("menuitem", { name: "Move to song" }).click()
     const none = page.getByRole("menuitemradio", { name: "Not named" })
     await expect(none).toHaveAttribute("aria-checked", "true")

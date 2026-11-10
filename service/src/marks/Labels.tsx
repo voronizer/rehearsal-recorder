@@ -13,7 +13,7 @@ import { colourCss, Diamond } from "../takes/parts"
 
 const diamond = (l: Label) => <Diamond colour={colourCss(l)} />
 
-/** **Labels**, at the top of Marks: the band's labels for marks, as РЭХА's Settings › Marks; any member changes them. */
+/** **Labels**, in the panel from the right: the band's labels for marks, as РЭХА's Settings › Marks; any member changes them. */
 export function LabelsEditor({ onClose }: { onClose: () => void }) {
   const labels = useLabels().data ?? []
   const add = useAddLabel()

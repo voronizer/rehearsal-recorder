@@ -1,6 +1,7 @@
 import { writeFileSync } from "node:fs"
 import { expect, test } from "@playwright/test"
-import { as, band } from "./band"
+import { as, band, HEADERS } from "./band"
+import { linesOf, roomBetween } from "./rows"
 
 test.use({ storageState: as("alex") })
 
@@ -42,87 +43,140 @@ test("a new song is refused for a title the band has in another case", async ({ 
   await page.goto("/songs")
   await page.getByRole("button", { name: "New song" }).click()
   const main = page.getByRole("main")
-  await main.getByLabel("Title").fill("pałyn")
-  await main.getByRole("button", { name: "Add song" }).click()
-  await expect(main.getByRole("alert")).toHaveText("There is already a song called “Pałyn”.")
-  await main.getByLabel("Title").fill("Zorka")
-  await main.getByRole("button", { name: "Add song" }).click()
-  // The new song's page opens; Back from it is Songs, not the empty New song again.
+  const dialog = page.getByRole("dialog", { name: "New song" })
+  await dialog.getByLabel("Title").fill("pałyn")
+  await dialog.getByRole("button", { name: "Add song" }).click()
+  await expect(dialog.getByRole("alert")).toHaveText("There is already a song called “Pałyn”.")
+  await dialog.getByLabel("Title").fill("Zorka")
+  await dialog.getByRole("button", { name: "Add song" }).click()
+  // The new song's page opens, with the first status; Back from it is Songs, with no dialog.
   await expect(page).toHaveURL(/\/songs\/\d+$/)
   await expect(main.getByRole("heading", { level: 1 })).toContainText("Zorka")
+  await expect(main.getByRole("button", { name: "Status: Learning" })).toBeVisible()
   await page.goBack()
   await expect(page).toHaveURL(/\/songs$/)
-  await expect(main.getByLabel("Title")).toHaveCount(0)
-  await expect(page.getByRole("region", { name: "Learning" }).locator('[data-song="Zorka"]')).toContainText("No takes yet")
+  await expect(dialog).toHaveCount(0)
+  const learning = page.getByRole("region", { name: "Learning" })
+  await expect(learning.locator('[data-song="Zorka"]')).toContainText("No takes yet")
+  // The rows of a list are one height, with ▶ or without; 24 px apart, no lines, no dotted titles.
+  const heights = await learning.locator("[data-song]").evaluateAll((rows) => rows.map((r) => Math.round(r.getBoundingClientRect().height)))
+  expect(new Set(heights).size, String(heights)).toBe(1)
+  const list = learning.getByRole("list")
+  expect(new Set(await roomBetween(list))).toEqual(new Set([24]))
+  expect(new Set(await linesOf(list))).toEqual(new Set(["0px"]))
+  await expect(learning.getByRole("link", { name: "Zorka", exact: true })).toHaveCSS("text-decoration-line", "none")
 })
 
-test("Statuses and New song open at the top of Songs, one in place of the other, and Back closes them", async ({ page }) => {
-  // An address from before, with an editor in the panel, opens the page alone.
-  await page.goto("/songs?panel=statuses")
-  await expect(page.getByRole("heading", { level: 1 })).toContainText("Songs")
-  await expect(page.getByLabel("Panel")).toHaveCount(0)
-  await expect(page.getByRole("heading", { name: "Statuses", exact: true })).toHaveCount(0)
-
+test("a status deleted while New song is open: Add song says so, and the next press takes the first", async ({ page }) => {
+  const gig = (await (await page.request.post("/api/statuses", { data: { name: "Gig" }, headers: HEADERS })).json()) as { id: number }
   await page.goto("/songs")
-  const main = page.getByRole("main")
-  const statuses = main.getByRole("heading", { name: "Statuses", exact: true })
-  const newSong = main.getByRole("heading", { name: "New song", exact: true })
-  await page.getByRole("button", { name: "Statuses", exact: true }).click()
-  await expect(page).toHaveURL(/\?edit=statuses$/)
-  await expect(statuses).toBeVisible()
-  await expect(page.getByRole("button", { name: "Statuses", exact: true })).toHaveAttribute("aria-pressed", "true")
-  await expect(page.getByLabel("Panel")).toHaveCount(0)
-  // The editor is in the page's address: a reload keeps it open.
-  await page.reload()
-  await expect(statuses).toBeVisible()
+  await page.getByRole("button", { name: "New song" }).click()
+  const dialog = page.getByRole("dialog", { name: "New song" })
+  const status = dialog.getByRole("combobox", { name: "Status" })
+  await dialog.getByLabel("Title").fill("Kalada")
+  await status.click()
+  await page.getByRole("option", { name: "Gig", exact: true }).click()
+  await expect(status).toHaveText("Gig")
+  // Someone else deletes it meanwhile.
+  expect((await page.request.delete(`/api/statuses/${gig.id}`, { headers: HEADERS })).ok()).toBe(true)
+  await dialog.getByRole("button", { name: "Add song" }).click()
+  await expect(dialog.getByRole("alert")).toHaveText("No such status")
+  await expect(status).toHaveText("Learning")
+  // Kalada stays, as Zorka does: a song in the trash would be in the Trash's tests.
+  await dialog.getByRole("button", { name: "Add song" }).click()
+  await expect(page).toHaveURL(/\/songs\/\d+$/)
+  await expect(page.getByRole("main").getByRole("button", { name: "Status: Learning" })).toBeVisible()
+})
 
-  await page.getByRole("button", { name: "New song", exact: true }).click()
-  await expect(newSong).toBeVisible()
-  await expect(statuses).toHaveCount(0)
-  await page.goBack()
-  await expect(page).toHaveURL(/\/songs$/)
-  await expect(newSong).toHaveCount(0)
-  await expect(statuses).toHaveCount(0)
-
-  // The button pressed again, the card's ✕ or Cancel closes it.
-  await page.getByRole("button", { name: "Statuses", exact: true }).click()
-  await expect(statuses).toBeVisible()
-  await page.getByRole("button", { name: "Statuses", exact: true }).click()
-  await expect(statuses).toHaveCount(0)
-  await page.getByRole("button", { name: "Statuses", exact: true }).click()
-  await main.getByRole("button", { name: "Close" }).click()
-  await expect(statuses).toHaveCount(0)
-  await page.getByRole("button", { name: "New song", exact: true }).click()
-  await main.getByRole("button", { name: "Cancel" }).click()
-  await expect(newSong).toHaveCount(0)
+test("where the browser cannot play, a press on a song's greyed Play stays on Songs", async ({ page }) => {
+  await page.addInitScript(() => Object.assign(window, { AudioDecoder: undefined }))
+  await page.goto("/songs")
+  const play = page.locator('[data-song="Viasna"]').getByRole("button", { name: /^Play / })
+  await expect(play).toBeDisabled()
+  const box = (await play.boundingBox())!
+  await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2)
   await expect(page).toHaveURL(/\/songs$/)
 })
 
-test("New song pressed over a take's panel on Statuses closes the panel, and Cancel is Songs", async ({ page }) => {
+test("Statuses opens in the panel over Songs, New song a dialog, one at a time; Esc, Back and X close them", async ({ page }) => {
   await page.goto("/songs")
   const main = page.getByRole("main")
   const panel = page.getByLabel("Panel")
-  await page.getByRole("button", { name: "Statuses", exact: true }).click()
-  await main.locator('[data-song="Pałyn"]').getByRole("button", { name: /^Pałyn \d+$/ }).click()
-  await expect(panel).toBeVisible()
-  // The panel covers the buttons at the top right: by keyboard.
+  const button = page.getByRole("button", { name: "Statuses", exact: true })
+  const statuses = panel.getByRole("heading", { name: "Statuses", exact: true })
+  await button.click()
+  await expect(page).toHaveURL(/\/songs\?panel=statuses$/)
+  await expect(statuses).toBeVisible()
+  // The songs stay where they are under it.
+  await expect(main.getByRole("region", { name: "Learning" })).toBeVisible()
+  await expect(main.getByRole("heading", { name: "Statuses", exact: true })).toHaveCount(0)
+  await page.keyboard.press("Escape")
+  await expect(panel).toHaveCount(0)
+  await button.click()
+  await page.goBack()
+  await expect(panel).toHaveCount(0)
+  await expect(page).toHaveURL(/\/songs$/)
+  await button.click()
+  await panel.getByRole("button", { name: "Close", exact: true }).click()
+  await expect(panel).toHaveCount(0)
+  // Statuses again closes it; the panel covers the buttons at the top right: by keyboard.
+  await button.click()
+  await button.focus()
+  await page.keyboard.press("Enter")
+  await expect(panel).toHaveCount(0)
+
+  // New song over the open panel: the dialog in its place.
+  await button.click()
+  await expect(statuses).toBeVisible()
   await page.getByRole("button", { name: "New song", exact: true }).focus()
   await page.keyboard.press("Enter")
-  await expect(main.getByRole("heading", { name: "New song", exact: true })).toBeVisible()
-  await expect(main.getByRole("heading", { name: "Statuses", exact: true })).toHaveCount(0)
+  const dialog = page.getByRole("dialog", { name: "New song" })
+  await expect(dialog).toBeVisible()
   await expect(panel).toHaveCount(0)
-  await main.getByRole("button", { name: "Cancel" }).click()
+  await expect(dialog.getByRole("combobox", { name: "Status" })).toHaveText("Learning")
+  await page.keyboard.press("Escape")
+  await expect(dialog).toHaveCount(0)
+  await page.getByRole("button", { name: "New song", exact: true }).click()
+  await dialog.getByRole("button", { name: "Cancel" }).click()
+  await expect(dialog).toHaveCount(0)
   await expect(page).toHaveURL(/\/songs$/)
-  await expect(main.getByRole("heading", { name: "Statuses", exact: true })).toHaveCount(0)
 })
 
-test("Edit statuses on a song's page opens Statuses on Songs", async ({ page }) => {
+test("New song's dialog makes the song with the status picked and opens its page", async ({ page }) => {
+  await page.goto("/songs")
+  await page.getByRole("button", { name: "New song", exact: true }).click()
+  const dialog = page.getByRole("dialog", { name: "New song" })
+  await dialog.getByLabel("Title").fill("Rosy")
+  await dialog.getByRole("combobox", { name: "Status" }).click()
+  await page.getByRole("option", { name: "Ready" }).click()
+  await dialog.getByRole("button", { name: "Add song" }).click()
+  await expect(page).toHaveURL(/\/songs\/\d+$/)
+  const main = page.getByRole("main")
+  await expect(main.getByRole("heading", { level: 1 })).toContainText("Rosy")
+  await expect(main.getByRole("button", { name: "Status: Ready" })).toBeVisible()
+  await page.goto("/songs")
+  await expect(page.getByRole("region", { name: "Ready" }).locator('[data-song="Rosy"]')).toBeVisible()
+})
+
+test("Edit statuses on a song's page opens Statuses in the panel over the page", async ({ page }) => {
   await page.goto(`/songs/${band().songs["Pałyn"]}`)
   await page.getByRole("main").getByRole("button", { name: /^Status: / }).click()
   await page.getByRole("menuitem", { name: "Edit statuses" }).click()
-  await expect(page).toHaveURL(/\/songs\?edit=statuses$/)
-  await expect(page.getByRole("main").getByRole("heading", { name: "Statuses", exact: true })).toBeVisible()
-  await expect(page.getByLabel("Panel")).toHaveCount(0)
+  await expect(page).toHaveURL(new RegExp(`/songs/${band().songs["Pałyn"]}\\?panel=statuses$`))
+  await expect(page.getByLabel("Panel").getByRole("heading", { name: "Statuses", exact: true })).toBeVisible()
+  await expect(page.getByRole("main").getByRole("heading", { level: 1 })).toContainText("Pałyn")
+})
+
+test("an old address with an editor at the top opens it where it is now", async ({ page }) => {
+  await page.goto("/songs?edit=statuses")
+  await expect(page).toHaveURL(/\/songs\?panel=statuses$/)
+  await expect(page.getByLabel("Panel").getByRole("heading", { name: "Statuses", exact: true })).toBeVisible()
+  await page.goto("/songs?edit=new-song")
+  await expect(page).toHaveURL(/\/songs$/)
+  await expect(page.getByRole("dialog", { name: "New song" })).toBeVisible()
+  await page.goto("/marks?edit=labels")
+  await expect(page).toHaveURL(/\/marks\?panel=labels$/)
+  await expect(page.getByLabel("Panel").getByRole("heading", { name: "Labels", exact: true })).toBeVisible()
 })
 
 test("a song's title changes where it stands, its takes with it", async ({ page }) => {
@@ -191,9 +245,19 @@ test("a song page puts the best take on top", async ({ page }) => {
   await expect(all.locator("[data-take]")).toHaveCount(2)
   await expect(all.locator("[data-take]").nth(0)).toHaveAttribute("data-take", "Viasna 12")
   await expect(all.locator("[data-take]").nth(1)).toHaveAttribute("data-take", "Viasna 11")
-  await all.getByRole("button", { name: /^Thursday, 23 October/ }).click()
+  // A day is its rehearsal's pill; the arrow and the count fold its takes.
+  await all.getByRole("button", { name: /^Thursday, 23 October( 2025)?, 1 take$/ }).click()
   await expect(all.locator("[data-take]")).toHaveCount(3)
   await expect(all.locator("[data-take]").nth(2)).toHaveAttribute("data-take", "Viasna 5")
+  await all.getByText("1 take", { exact: true }).click()
+  await expect(all.locator("[data-take]")).toHaveCount(2)
+  // By keyboard: from the arrow, Tab goes to the day's pill.
+  const pill = all.locator('[data-pill="rehearsal"]').filter({ hasText: /^Thursday, 23 October/ })
+  await all.getByRole("button", { name: /^Thursday, 23 October( 2025)?, 1 take$/ }).focus()
+  await page.keyboard.press("Tab")
+  await expect(pill).toBeFocused()
+  await pill.click()
+  await expect(page).toHaveURL(`/rehearsals/${band().rehearsals.first}`)
 })
 
 test("the star at rehearsal shows apart", async ({ page }) => {
@@ -214,8 +278,9 @@ test("a file and a song with no takes go only after asking", async ({ page }) =>
   await page.goto("/songs")
   await page.getByRole("button", { name: "New song" }).click()
   const main = page.getByRole("main")
-  await main.getByLabel("Title").fill("Kalyhanka")
-  await main.getByRole("button", { name: "Add song" }).click()
+  const dialog = page.getByRole("dialog", { name: "New song" })
+  await dialog.getByLabel("Title").fill("Kalyhanka")
+  await dialog.getByRole("button", { name: "Add song" }).click()
   await expect(main.getByRole("heading", { level: 1 })).toContainText("Kalyhanka")
   await main.getByLabel("A file for the song").setInputFiles({ name: "words.txt", mimeType: "text/plain", buffer: Buffer.from("la la") })
   await expect(main.getByRole("link", { name: /words\.txt/ })).toBeVisible()
@@ -256,11 +321,11 @@ test("a file and a song with no takes go only after asking", async ({ page }) =>
 test("a status dragged by its grip moves its group on Songs", async ({ page }) => {
   await page.goto("/songs")
   await page.getByRole("button", { name: "Statuses", exact: true }).click()
-  const main = page.getByRole("main")
-  const names = main.getByRole("textbox", { name: "Name" })
+  const panel = page.getByLabel("Panel")
+  const names = panel.getByRole("textbox", { name: "Name" })
   await expect(names.first()).toHaveValue("Learning")
   const target = (await names.first().boundingBox())!
-  await main.getByRole("button", { name: "Move Archive" }).hover()
+  await panel.getByRole("button", { name: "Move Archive" }).hover()
   await page.mouse.down()
   await page.mouse.move(target.x + 20, target.y + 2, { steps: 12 })
   await page.mouse.up()
@@ -268,7 +333,7 @@ test("a status dragged by its grip moves its group on Songs", async ({ page }) =
   // Put back, for the tests after.
   const learning = (await names.nth(1).boundingBox())!
   const archive = (await names.first().boundingBox())!
-  await main.getByRole("button", { name: "Move Archive" }).hover()
+  await panel.getByRole("button", { name: "Move Archive" }).hover()
   await page.mouse.down()
   await page.mouse.move(archive.x + 20, learning.y + learning.height * 3, { steps: 12 })
   await page.mouse.up()

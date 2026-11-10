@@ -22,6 +22,8 @@ test("trash lists takes and restores them", async ({ page }) => {
   await expect(page.getByRole("heading", { level: 1, name: "Trash" })).toBeVisible()
   const row = page.locator('[data-take="Viasna 4"]')
   await expect(row).toContainText(/Thu 23 Oct( 2025)? · removed in РЭХА .+ · deleted for good in 30 days/)
+  // The row does not open as a whole, so the take's name has its dotted line.
+  await expect(row.getByRole("link", { name: "Viasna 4", exact: true })).toHaveCSS("text-decoration-style", "dotted")
   await row.getByRole("button", { name: "Restore" }).click()
   await expect(page.getByRole("status")).toHaveText(/^“Viasna\s#4” is back with the takes of Thursday, 23 October( 2025)?\.$/)
   await expect(page.getByText("The trash is empty.")).toBeVisible()

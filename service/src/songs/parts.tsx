@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState } from "react"
-import { useNavigate } from "@tanstack/react-router"
 import { ChevronDown, Download, Ellipsis, ExternalLink, X } from "lucide-react"
 import { ConfirmDialog } from "@/components/ConfirmDialog"
 import { Button } from "@/components/ui/button"
@@ -17,6 +16,7 @@ import { cn } from "@/lib/utils"
 import { KEYS } from "../../worker/shared/keys"
 import { MAX_FILE, TOO_BIG } from "../../worker/songs/limits"
 import { useAddFile, useChangeSong, useDeleteFile, useDeleteSong, useSongs, type SongFile, type SongPage } from "../api"
+import { usePanel } from "../shell/panel"
 import { OPENS, Rows, TEXTAREA, Tile, useFlash } from "../shell/parts"
 import { count, quoted } from "../shell/words"
 import { TakeLine } from "../takes/parts"
@@ -26,11 +26,11 @@ type Song = SongPage["song"]
 /** Why the best take is the best, in words. */
 export const why = (s: Song) => (s.best_why === "latest" ? "latest, no stars yet" : s.best_why ?? undefined)
 
-/** The song's status, as a list with **Edit statuses** under it. */
+/** The song's status, as a list with **Edit statuses** under it, which opens the statuses in the panel over the page. */
 export function StatusMenu({ song }: { song: Song }) {
   const statuses = useSongs().data?.statuses ?? []
   const change = useChangeSong()
-  const navigate = useNavigate()
+  const { open } = usePanel()
   const name = statuses.find((s) => s.id === song.status_id)?.name ?? ""
   return (
     <DropdownMenu>
@@ -49,7 +49,7 @@ export function StatusMenu({ song }: { song: Song }) {
           ))}
         </DropdownMenuRadioGroup>
         <DropdownMenuSeparator />
-        <DropdownMenuItem onSelect={() => void navigate({ to: "/songs", search: { edit: "statuses" } })}>Edit statuses</DropdownMenuItem>
+        <DropdownMenuItem onSelect={() => open({ kind: "statuses" })}>Edit statuses</DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
   )

@@ -55,7 +55,6 @@ export function SongPage({
   onPlay,
   onOpen,
   onOpenAt,
-  onPlayAt,
   onRename,
   onStar,
   onShare,
@@ -74,8 +73,6 @@ export function SongPage({
   onPlay: (take: PlacedTake) => void
   onOpen: (take: PlacedTake) => void
   onOpenAt: (take: PlacedTake, at: number) => void
-  /** Plays a take where it is from a spot: a press on its wave. */
-  onPlayAt?: (take: PlacedTake, at: number) => void
   onRename: (take: PlacedTake) => void
   onStar: (take: PlacedTake, starred: boolean) => void
   onShare: (take: PlacedTake) => void
@@ -122,7 +119,8 @@ export function SongPage({
         </>
       ),
       body: (
-        <div className="flex flex-col gap-1">
+        // 24 px from a wave to the next name, with the rows' own 4 px.
+        <div className="flex flex-col gap-4">
           {starred.map((go) => (
             <TakeRow
               key={`${go.folder}#${go.take.take_number}`}
@@ -135,7 +133,6 @@ export function SongPage({
               onPlay={(t) => onPlay(placed(go.folder, t))}
               onOpen={(t) => onOpen(placed(go.folder, t))}
               onOpenAt={(t, sec) => onOpenAt(placed(go.folder, t), sec)}
-              onPlayAt={onPlayAt && ((t, sec) => onPlayAt(placed(go.folder, t), sec))}
               folder={go.folder}
               onRename={(t) => onRename(placed(go.folder, t))}
               onStar={(t, on) => onStar(placed(go.folder, t), on)}
@@ -182,7 +179,6 @@ export function SongPage({
           onPlay={onPlay}
           onOpen={onOpen}
           onOpenAt={onOpenAt}
-          onPlayAt={onPlayAt}
           onRename={onRename}
           onStar={onStar}
           onShare={onShare}

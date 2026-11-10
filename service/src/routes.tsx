@@ -52,7 +52,7 @@ const shell = createRoute({
 const home = createRoute({ getParentRoute: () => shell, path: "/", component: Home })
 const rehearsals = createRoute({ getParentRoute: () => shell, path: "/rehearsals", component: Rehearsals })
 const rehearsal = createRoute({ getParentRoute: () => shell, path: "/rehearsals/$uid", component: Rehearsal })
-/** ?edit= is the editor open at the top of the page (shell/editor.ts). */
+/** ?edit= from before, when an editor opened at the top of the page: shell/panel.tsx and Songs open it where it is now. */
 const editOf =
   <K extends string>(...kinds: K[]) =>
   (search: Record<string, unknown>): { edit?: K } =>

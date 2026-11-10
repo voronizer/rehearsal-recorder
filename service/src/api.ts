@@ -239,7 +239,7 @@ export const useOrderLabels = () => useChange((ids: number[]) => data(client.api
 export const useDeleteLabel = () =>
   useChange(({ id: n, to }: { id: number; to?: number }) => data(client.api.labels[":id"].$delete({ param: id(n), json: { to } })))
 
-export const useAddSong = () => useChange((title: string) => data(client.api.songs.$post({ json: { title } })))
+export const useAddSong = () => useChange((json: { title: string; status_id?: number }) => data(client.api.songs.$post({ json })))
 export const useDeleteSong = () => useChange((n: number) => data(client.api.songs[":id"].$delete({ param: id(n) })))
 export type SongChange = {
   id: number

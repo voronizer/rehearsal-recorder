@@ -1237,7 +1237,6 @@ export function HistoryScreen({
                   onPlay={playInOverview}
                   onOpen={(take) => void openGo(take)}
                   onOpenAt={(take, at) => void openGo(take, at)}
-                  onPlayAt={cueAt}
                   onRename={setTakeToRename}
                   onStar={(take, starred) => void starTake(take, starred)}
                   onShare={sending.share}
@@ -1412,7 +1411,6 @@ export function HistoryScreen({
                     onPlay={(take) => playInOverview(placed(opened.folder, take))}
                     onOpen={(take) => select(placed(opened.folder, take))}
                     onOpenAt={(take, at) => openAt(placed(opened.folder, take), at)}
-                    onPlayAt={(take, at) => cueAt(placed(opened.folder, take), at)}
                     onRename={(take) => setTakeToRename(placed(opened.folder, take))}
                     onStar={(take, starred) => void starTake(placed(opened.folder, take), starred)}
                     onShare={(take) => sending.share(placed(opened.folder, take))}

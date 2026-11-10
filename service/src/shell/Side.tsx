@@ -1,24 +1,13 @@
 import { Link, useLocation, useNavigate } from "@tanstack/react-router"
-import { CalendarDays, Diamond, Ellipsis, House, ListMusic, Music, Trash2, Users, type LucideIcon } from "lucide-react"
+import { Ellipsis } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { cn } from "@/lib/utils"
 import { queryClient, useFrame, useMe } from "../api"
 import { authClient } from "../auth"
 import { Avatar, Logo } from "./parts"
+import { SECTIONS } from "./sections"
 import { count } from "./words"
-
-type To = "/" | "/rehearsals" | "/songs" | "/sets" | "/marks" | "/members" | "/trash"
-
-const SECTIONS: [To, string, LucideIcon][] = [
-  ["/", "Home", House],
-  ["/rehearsals", "Rehearsals", CalendarDays],
-  ["/songs", "Songs", Music],
-  ["/sets", "Sets", ListMusic],
-  ["/marks", "Marks", Diamond],
-  ["/members", "Members", Users],
-  ["/trash", "Trash", Trash2],
-]
 
 /** The band's logo and name, grey “Band name” until the owner gives one. */
 export function BandName({ small }: { small?: boolean }) {
@@ -61,13 +50,19 @@ function You() {
   )
 }
 
+/** How a section in the column is lit while its page is open. */
+const LIT = "bg-selected hover:bg-selected dark:hover:bg-selected"
+
 /**
  * The column down the left: the band, how many members, the sections
  * (Marks with how many are open), your name. `onGo`: on a phone, where the
- * column comes over the page, a section pressed closes it.
+ * column comes over the page, a section pressed closes it. A take's page
+ * lights **Songs**, where the band finds its takes, also those with no song
+ * (under **Not named**).
  */
 export function Side({ onGo }: { onGo?: () => void }) {
   const frame = useFrame().data
+  const onTake = useLocation({ select: (l) => l.pathname.startsWith("/takes/") })
   return (
     <aside className={cn("flex shrink-0 flex-col gap-5 overflow-y-auto bg-panel p-3", onGo ? "h-full w-64" : "w-56")}>
       <div className="flex items-center gap-3 px-2 pt-1">
@@ -84,7 +79,8 @@ export function Side({ onGo }: { onGo?: () => void }) {
               to={to}
               onClick={onGo}
               activeOptions={{ exact: to === "/" }}
-              activeProps={{ className: "bg-selected hover:bg-selected dark:hover:bg-selected" }}
+              activeProps={{ className: LIT }}
+              {...(onTake && to === "/songs" && { className: LIT, "aria-current": "page" as const })}
             >
               <Icon className="text-muted-foreground" />
               {label}

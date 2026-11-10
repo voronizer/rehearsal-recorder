@@ -28,14 +28,14 @@ export async function findSong(db: Database, title: string, except?: number) {
 export const titleRefused = (title: string) => (TAKE_NAME.test(title) ? `${title} is what a take with no song is called.` : null)
 
 /**
- * A new song, with the first status; `by` the member who made it here, null
- * for РЭХА. Null when a request running at the same time made a song of that
- * title a moment before.
+ * A new song, with `statusId` or the first status; `by` the member who made
+ * it here, null for РЭХА. Null when a request running at the same time made
+ * a song of that title a moment before.
  */
-export async function makeSong(db: Database, title: string, meter: SongMeter, by: string | null): Promise<number | null> {
+export async function makeSong(db: Database, title: string, meter: SongMeter, by: string | null, statusId?: number): Promise<number | null> {
   const [made] = await db
     .insert(song)
-    .values({ title, statusId: await firstStatus(db), createdAt: iso(), ...meter, madeBy: by })
+    .values({ title, statusId: statusId ?? (await firstStatus(db)), createdAt: iso(), ...meter, madeBy: by })
     .onConflictDoNothing()
     .returning({ id: song.id })
   return made?.id ?? null

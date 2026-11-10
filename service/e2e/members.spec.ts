@@ -1,5 +1,6 @@
 import { expect, test } from "@playwright/test"
 import { as } from "./band"
+import { linesOf, roomBetween } from "./rows"
 
 test.describe("as Alex", () => {
   test.use({ storageState: as("alex") })
@@ -78,6 +79,9 @@ test.describe("as Ira", () => {
     await expect(page.getByRole("heading", { level: 1, name: "Members" })).toBeVisible()
     const people = page.getByRole("region", { name: "People" })
     await expect(people).toContainText("Alex")
+    // 24 px between rows, no lines.
+    expect(new Set(await roomBetween(people.getByRole("list")))).toEqual(new Set([24]))
+    expect(new Set(await linesOf(people.getByRole("list")))).toEqual(new Set(["0px"]))
     await expect(people).toContainText("Dzima")
     await expect(people).toContainText("Ira · you")
     await expect(people).not.toContainText("@example.com")
