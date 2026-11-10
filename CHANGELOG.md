@@ -5,6 +5,16 @@ versioning](https://semver.org/): until 1.0 the shape of things can still
 move, though recordings on disk are never left behind — old rehearsals keep
 opening.
 
+## Unreleased
+
+- **Notes fold in the player.** When a take opens, every track's notes are
+  a thin strip, in РЭХА and in the band service. The arrow after their
+  **M** opens them and folds them again. Notes of a track on **Both** sit
+  right under its audio on the same grey plate, with the MIDI sign before
+  **M** and no name of their own, so you see whose notes they are. The grey
+  that was under the waveforms is now on the plates with each track's name
+  and fader.
+
 ## 0.26.0
 
 - **Sets for a gig in the band service.** **Sets**, after **Songs**, lists

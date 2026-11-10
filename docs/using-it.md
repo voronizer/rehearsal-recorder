@@ -403,9 +403,9 @@ rehearsal into the next.
   seconds back and forward, and Home goes back to the start. Click anywhere
   on the tracks to jump there.
 - Each track shows its icon and name. The tracks are one panel, with no
-  lines between them: each track's waveform, the drawing of its sound, sits
-  on a darker background of its own. A name too long for its place is cut, and
-  shows whole when you point at it or reach it with Tab.
+  lines between them: each track's name and fader sit on a grey plate that
+  runs up to its waveform, the drawing of its sound. A name too long for its
+  place is cut, and shows whole when you point at it or reach it with Tab.
 - Balance the band with the fader under each track name. **M**, after the
   fader, mutes a track, and **S**, after **M**, plays it on its own. A
   pressed **M** is blue and a pressed **S** yellow, so you see at a glance
@@ -1098,12 +1098,14 @@ the right of its tile, and a track on **MIDI** has a tile of its own. A port
 that is not connected gives the tile an amber edge, and says so where the
 tile is wide enough.
 
-In the player, a track's notes are a lane of their own. On **Both** they are
-the next lane under the track's audio, and share its dark background, under a
-thin line; on **MIDI** they are in the track's own place among the lanes, on a
-background of their own. On the left the lane has **M** pressed and faded,
-as there is nothing to hear: it cannot be turned off, and pointing at it says
-“Saved as .mid, not played here”. There is no **S** or fader. The
+In the player, a track's notes are a lane of their own, folded to a thin
+strip when a take opens. The arrow after their **M** opens them, and folds
+them again. On **Both** the notes are right under the track's audio, on the
+same grey plate, with the MIDI sign (a round socket with five pins) and no
+name of their own. On **MIDI** they are in the track's own place among the
+lanes, with its icon, its name and the MIDI sign. The plate has **M**
+pressed and faded, as there is nothing to hear: it cannot be turned off, and
+pointing at it says “Saved as .mid, not played here”. There is no **S** or fader. The
 notes go paler with their track's waveform when the track is muted or another
 is soloed; notes of a track on **MIDI** go paler while any track is soloed. A kit
 is drawn in six rows, Crash, Ride, Hi-hat, Toms, Snare and Kick; anything

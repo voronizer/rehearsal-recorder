@@ -415,6 +415,8 @@ def main():
         page.click(take_button("Pałyn\u00a0#2"))
         page.wait_for_selector("[aria-label='Take timeline']")
         page.wait_for_selector("[data-notes-lane='Drums']")
+        # The notes open folded; this picture is about them.
+        page.get_by_role("button", name="Drums notes").click()
         page.wait_for_timeout(800)
         # Zoomed to where the bridge ends and the last chorus comes in, so
         # each hit shows, and the part played is drawn as played.

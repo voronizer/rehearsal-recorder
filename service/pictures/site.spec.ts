@@ -59,12 +59,13 @@ const SHOTS: Record<string, Shot> = {
   song: { who: "ivan", path: () => `/songs/${pictured().songs["Viasna"]}` },
   "three-weeks-ago": { who: "ivan", path: () => `/takes/${pictured().takes["Viasna 3"]}?at=104` },
   // On the computer at home, for the recording program: РЭХА's player with a
-  // lane per track, and the Download window over it.
+  // lane per track, the drums' notes opened, and the Download window over it.
   downloads: {
     who: "ivan",
     path: () => `/takes/${pictured().takes["Kupalle 2"]}`,
     on: COMPUTER,
     then: async (page) => {
+      await page.getByRole("button", { name: "Drums notes" }).click()
       await page.getByRole("button", { name: "Download", exact: true }).click()
       await page.getByRole("dialog").waitFor()
     },
