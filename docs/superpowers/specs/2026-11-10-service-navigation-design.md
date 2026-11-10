@@ -115,6 +115,8 @@ All on 10 November 2026 (UTC), each a tap on a card unless quoted.
   a dialog.
 - 12:13:39 «А. И метки»: **Labels** on **Marks** is edited in the panel from
   the right too.
+- 12:14:36, on **New song** as a dialog: «кроме поля названия туда добавь
+  еще статус».
 
 ## What the band sees
 
@@ -204,8 +206,10 @@ songs with their best take, **Latest marks**, **The band's favourites**),
   opens the same panel over the song's page.
 - **Labels** on **Marks** opens the band's labels in the panel from the
   right in the same way.
-- **New song** opens a dialog: the title, **Add song** and **Cancel**.
-  **Add song** makes the song and opens its page, as now.
+- **New song** opens a dialog: the title, the status under it, **Add song**
+  and **Cancel**. The status starts at the band's first one (“Learning”),
+  which a new song gets now. **Add song** makes the song with that status
+  and opens its page, as now.
 - The card at the top of the page goes.
 
 ### The pointer
@@ -294,8 +298,12 @@ page with **Starred**, the song's ladder):
   `?edit=labels` opens it. `songs/parts.tsx`: **Edit statuses** opens the
   panel where it is. `shell/editor.ts` and `useEditor` go with the card.
 - `songs/NewSong.tsx`: `NewSongEditor` becomes `NewSongDialog` in the shared
-  `Dialog` (C3). `?edit=new-song` goes; an old address with it opens
-  **Songs** with the dialog.
+  `Dialog` (C3), with the shared `Select` for the status. `?edit=new-song`
+  goes; an old address with it opens **Songs** with the dialog.
+- `worker/songs/routes.ts`: **New song** (`POST /api/songs`) takes an
+  optional `status_id`, checked as the song's own change checks it (“No
+  such status”); without it, the first status, as now. `openapi.json`
+  follows (`npm run openapi`), and `api.ts`' `useAddSong` sends it.
 - `shell/EditList.tsx`: `EditCard` goes once no page uses it.
 
 ### The pointer
@@ -382,7 +390,9 @@ Playwright, changed where they open a take's panel or press a wave:
   statuses on a song's page opens Statuses on Songs” (`:119`) become: the
   statuses' panel and **New song**'s dialog, one at a time, Back and Esc
   close them, the songs stay under the panel, **Edit statuses** opens the
-  panel over the song's page, the dialog makes the song and opens its page.
+  panel over the song's page, the dialog makes the song with the status
+  picked and opens its page. A Worker test: a song made with a status has
+  it, one with a status that is not there is refused.
   `marks.spec.ts` (`:45`, `:75`): **Labels** in the panel.
 - `service/e2e/marks.spec.ts`: a mark's take opens the take's page; a row
   of **Latest marks** opens the mark; an old `?edit=statuses` or
@@ -447,8 +457,9 @@ suites run once, on CI.
     closes it, a reload keeps it. On a phone the panel takes the whole
     screen, as a mark's does.
 18. **New song**'s dialog keeps the service's words: **Add song** and
-    **Cancel**, the title field with “Zorka” in grey. РЭХА's dialog has
-    **Create**; the two stay as they are.
+    **Cancel**, the title field with “Zorka” in grey, the status named
+    “Status” as on a song's page. РЭХА's dialog has **Create** and no
+    status (РЭХА has none); the two stay as they are.
 19. РЭХА keeps its own dotted words and lists: the rule for lists is the
     service's.
 20. A row of **Latest marks** on **Home** opens the mark, as a row of
