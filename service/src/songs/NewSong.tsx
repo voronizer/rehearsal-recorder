@@ -1,49 +1,101 @@
 import { useState } from "react"
 import { useNavigate } from "@tanstack/react-router"
 import { Button } from "@/components/ui/button"
+import { Dialog, DialogButtons, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { useAddSong } from "../api"
-import { PanelHead } from "../shell/EditList"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { useAddSong, useSongs } from "../api"
 
-/** **New song**, at the top of Songs: a song before its first take, so its notes and files can go here now. */
-export function NewSongEditor({ onClose }: { onClose: () => void }) {
+/**
+ * **New song**, on Songs, as a dialog (Alex, 2026-11-10): the title, then
+ * the status, the band's first one to start with. **Add song** makes the
+ * song with that status and opens its page.
+ */
+export function AddSongDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>New song</DialogTitle>
+          <DialogDescription>
+            For a song before its first take: its notes and files can go here now. Takes come to it from РЭХА when a take has the same title.
+          </DialogDescription>
+        </DialogHeader>
+        <NewSongForm />
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+/** The dialog's fields, new each time it opens. */
+function NewSongForm() {
   const navigate = useNavigate()
   const add = useAddSong()
+  const songs = useSongs()
+  const statuses = songs.data?.statuses ?? []
   const [title, setTitle] = useState("")
+  const [status, setStatus] = useState<number>()
+  // A status someone deleted meanwhile gives way to the first again.
+  const picked = statuses.some((s) => s.id === status) ? status : statuses[0]?.id
   return (
-    <div className="flex flex-col gap-6">
-      <PanelHead title="New song" onClose={onClose} />
-      <p className="text-muted-foreground">
-        For a song before its first take: its notes and files can go here now. Takes come to it from РЭХА when a take has the same title.
-      </p>
+    <>
       <form
-        className="flex flex-col gap-3"
+        id="new-song"
+        className="flex flex-col gap-4"
         onSubmit={(e) => {
           e.preventDefault()
           if (!title.trim()) return
-          // The song's page in the editor's place, so Back from it is Songs.
-          add.mutate(title.trim(), {
-            onSuccess: (made) => void navigate({ to: "/songs/$id", params: { id: String((made as { id: number }).id) }, replace: true }),
-          })
+          add.mutate(
+            { title: title.trim(), status_id: picked },
+            {
+              onSuccess: (made) => void navigate({ to: "/songs/$id", params: { id: String((made as { id: number }).id) } }),
+              // The band's list again, as it is now: a status may have gone meanwhile.
+              onError: () => void songs.refetch(),
+            }
+          )
         }}
       >
-        <Label htmlFor="new-title">Title</Label>
-        <Input id="new-title" autoFocus maxLength={100} value={title} onChange={(e) => (setTitle(e.target.value), add.reset())} placeholder="Zorka" aria-invalid={!!add.error} />
+        <div className="flex flex-col gap-2">
+          <Label htmlFor="new-title">Title</Label>
+          <Input
+            id="new-title"
+            autoFocus
+            maxLength={100}
+            value={title}
+            onChange={(e) => (setTitle(e.target.value), add.reset())}
+            placeholder="Zorka"
+            aria-invalid={!!add.error}
+          />
+        </div>
+        <div className="flex flex-col gap-2">
+          <Label htmlFor="new-status">Status</Label>
+          <Select value={picked === undefined ? undefined : String(picked)} onValueChange={(v) => (setStatus(Number(v)), add.reset())}>
+            <SelectTrigger id="new-status" className="w-full">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {statuses.map((s) => (
+                <SelectItem key={s.id} value={String(s.id)}>
+                  {s.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
         {add.error && (
           <p role="alert" className="text-destructive">
             {add.error.message}
           </p>
         )}
-        <div className="flex gap-2">
-          <Button type="submit" disabled={add.isPending}>
+      </form>
+      <DialogButtons
+        action={
+          <Button type="submit" form="new-song" disabled={add.isPending}>
             Add song
           </Button>
-          <Button type="button" variant="ghost" onClick={onClose}>
-            Cancel
-          </Button>
-        </div>
-      </form>
-    </div>
+        }
+      />
+    </>
   )
 }

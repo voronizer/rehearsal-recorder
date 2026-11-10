@@ -4,9 +4,10 @@ import { ChevronLeft, Menu } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import { useFrame, useMe } from "../api"
+import { LabelsEditor } from "../marks/Labels"
 import { MarkPanel, TakeMarksPanel } from "../marks/MarkPanel"
+import { StatusesEditor } from "../songs/Statuses"
 import { PlayerProvider } from "../takes/player/one"
-import { TakePanel } from "../takes/TakePanel"
 import { Drawer } from "./drawer"
 import { PanelProvider, usePanel } from "./panel"
 import { InDrawer, InPanel } from "./parts"
@@ -17,19 +18,18 @@ import { useSize } from "./size"
 /**
  * The panel from the right, as the app's Sheet: 28 rem, over the page, no
  * veil, so the page stays live. On a take's page (`page`, its uid) it is
- * the drawer that folds into its strip, and the take's own panel there is
- * its marks alone, so the page is not drawn twice.
+ * the drawer that folds into its strip.
  */
 function PanelView({ page }: { page?: string }) {
-  const { panel, back } = usePanel()
+  const { panel, back, close } = usePanel()
   const size = useSize()
   if (!panel) return null
-  const marks = panel.kind === "marks" || (panel.kind === "take" && panel.uid === page)
   const body = (
     <InPanel>
       {panel.kind === "mark" && <MarkPanel uid={panel.uid} id={panel.id} at={panel.at} />}
-      {panel.kind === "take" && !marks && <TakePanel uid={panel.uid} markAt={panel.markAt} />}
-      {marks && <TakeMarksPanel uid={panel.uid} markAt={panel.kind === "take" ? panel.markAt : undefined} />}
+      {panel.kind === "marks" && <TakeMarksPanel uid={panel.uid} />}
+      {panel.kind === "statuses" && <StatusesEditor onClose={close} />}
+      {panel.kind === "labels" && <LabelsEditor onClose={close} />}
     </InPanel>
   )
   return (

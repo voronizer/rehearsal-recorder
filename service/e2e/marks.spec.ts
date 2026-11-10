@@ -1,5 +1,6 @@
 import { expect, test } from "@playwright/test"
 import { as, asMember, band } from "./band"
+import { linesOf, roomBetween } from "./rows"
 
 test.use({ storageState: as("alex") })
 
@@ -22,7 +23,12 @@ test("the marks switch counts to do, done and all", async ({ page }) => {
   ])
   const shown = page.locator("[data-mark]")
   await expect(shown).toHaveCount(counts.open)
-  await expect(page.getByRole("region", { name: "Viasna", exact: true })).toBeVisible()
+  const viasna = page.getByRole("region", { name: "Viasna", exact: true })
+  await expect(viasna).toBeVisible()
+  // 24 px between rows, no lines; a row opens as a whole, so its words are not dotted.
+  expect(new Set(await roomBetween(viasna.getByRole("list")))).toEqual(new Set([24]))
+  expect(new Set(await linesOf(viasna.getByRole("list")))).toEqual(new Set(["0px"]))
+  await expect(viasna.getByRole("button", { name: "The bridge drags here" })).toHaveCSS("text-decoration-line", "none")
 
   await which.getByRole("radio", { name: /^Done/ }).click()
   await expect(shown).toHaveCount(1)
@@ -38,20 +44,34 @@ test("the marks switch counts to do, done and all", async ({ page }) => {
   await expect(page.getByText("No mark is done yet.")).toBeVisible()
 })
 
+test("a mark's take opens the take's page, from Marks and from the mark's panel", async ({ page }) => {
+  await page.goto("/marks")
+  const fill = page.locator("[data-mark]").filter({ hasText: "Fill too long?" })
+  await fill.getByRole("link", { name: "Viasna 12", exact: true }).click()
+  await expect(page).toHaveURL(`/takes/${band().takes["Viasna 12"]}`)
+
+  await page.goto("/")
+  await page.getByRole("region", { name: "Latest marks" }).getByRole("button", { name: /Too quiet here/ }).click()
+  await page.getByLabel("Panel", { exact: true }).getByRole("link", { name: "Kupalle 2", exact: true }).click()
+  await expect(page).toHaveURL(`/takes/${band().takes["Kupalle 2"]}`)
+  await expect(page.getByLabel("Panel", { exact: true })).toHaveCount(0)
+})
+
 test("a label renamed shows on its marks", async ({ page }) => {
   await page.goto("/marks")
   await page.getByRole("button", { name: "Labels" }).click()
-  // At the top of Marks, not in the panel.
-  await expect(page).toHaveURL(/\/marks\?edit=labels$/)
-  await expect(page.getByLabel("Panel")).toHaveCount(0)
-  const main = page.getByRole("main")
+  // In the panel from the right, over the marks.
+  await expect(page).toHaveURL(/\/marks\?panel=labels$/)
+  const panel = page.getByLabel("Panel")
+  await expect(panel.getByRole("heading", { name: "Labels", exact: true })).toBeVisible()
+  await expect(page.getByRole("main").locator("[data-mark]").first()).toBeVisible()
   // РЭХА's four, then the two its marks brought.
-  const names = main.getByRole("textbox", { name: "Name" })
+  const names = panel.getByRole("textbox", { name: "Name" })
   await expect(names).toHaveCount(6)
   await expect(names.nth(5)).toHaveValue("Good")
   await names.nth(5).fill("Great")
   await names.nth(5).press("Enter")
-  await expect(main.getByRole("button", { name: "Delete “Great”" })).toBeVisible()
+  await expect(panel.getByRole("button", { name: "Delete “Great”" })).toBeVisible()
 
   // The mark from РЭХА with no note shows its label's name, on its chip in РЭХА's player too.
   await page.goto(`/takes/${band().takes["Viasna 12"]}`)
@@ -61,41 +81,39 @@ test("a label renamed shows on its marks", async ({ page }) => {
 test("a label dragged by its grip to the top is the first", async ({ page }) => {
   await page.goto("/marks")
   await page.getByRole("button", { name: "Labels" }).click()
-  const main = page.getByRole("main")
-  const names = main.getByRole("textbox", { name: "Name" })
+  const panel = page.getByLabel("Panel")
+  const names = panel.getByRole("textbox", { name: "Name" })
   await expect(names.first()).toHaveValue("Note")
   const target = (await names.first().boundingBox())!
-  await main.getByRole("button", { name: "Move Do again" }).hover()
+  await panel.getByRole("button", { name: "Move Do again" }).hover()
   await page.mouse.down()
   await page.mouse.move(target.x + 20, target.y + 2, { steps: 12 })
   await page.mouse.up()
   await expect.poll(() => names.evaluateAll((els) => els.slice(0, 2).map((e) => (e as HTMLInputElement).value))).toEqual(["Do again", "Note"])
-  // The editor is in the page's address: a reload keeps it open.
+  // The panel is in the page's address: a reload keeps it open.
   await page.reload()
-  await expect(page).toHaveURL(/\?edit=labels$/)
+  await expect(page).toHaveURL(/\?panel=labels$/)
   await expect(names.first()).toHaveValue("Do again")
 })
 
-test("Labels opened from a mark's panel closes with its X, a mark's panel over it too, and stays closed", async ({ page }) => {
+test("Labels and a mark's panel are one layer: one in the other's place, Back steps through them, X closes", async ({ page }) => {
   await page.goto("/marks")
-  const main = page.getByRole("main")
   const panel = page.getByLabel("Panel")
-  const labels = main.getByRole("heading", { name: "Labels", exact: true })
-  const lines = main.locator("[data-mark]")
+  const labels = panel.getByRole("heading", { name: "Labels", exact: true })
+  const lines = page.getByRole("main").locator("[data-mark]")
   await lines.nth(0).getByRole("button").first().click()
-  await expect(panel).toBeVisible()
-  // The panel covers the buttons at the top right, and the card's X later: by keyboard.
+  await expect(panel.getByRole("heading", { level: 2 }).first()).toHaveText(/^Mark at/)
+  // The panel covers the buttons at the top right: by keyboard.
   await page.getByRole("button", { name: "Labels", exact: true }).focus()
   await page.keyboard.press("Enter")
   await expect(labels).toBeVisible()
-  await expect(panel).toHaveCount(0)
+  await expect(panel).toHaveCount(1)
   await lines.nth(1).getByRole("button").first().click()
-  await expect(panel).toBeVisible()
-  await main.getByRole("button", { name: "Close" }).focus()
-  await page.keyboard.press("Enter")
   await expect(labels).toHaveCount(0)
+  await expect(panel.getByRole("heading", { level: 2 }).first()).toHaveText(/^Mark at/)
+  await page.goBack()
+  await expect(labels).toBeVisible()
+  await panel.getByRole("button", { name: "Close", exact: true }).click()
   await expect(panel).toHaveCount(0)
-  await page.keyboard.press("Escape")
-  await expect(labels).toHaveCount(0)
   await expect(page).toHaveURL(/\/marks$/)
 })

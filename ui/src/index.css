@@ -292,6 +292,17 @@ html[data-recording]
   textarea {
     user-select: text;
   }
+  /* The hand over whatever presses (docs/design-system.md, "The pointer"):
+     Tailwind 4 leaves a button the browser's arrow. A cursor class of its
+     own still wins, as utilities come after this layer: the open hand on a
+     drag handle, the cross on a player's wave. Not over what is disabled. */
+  button:not(:disabled, [aria-disabled="true"]),
+  [role="button"]:not([aria-disabled="true"]),
+  summary,
+  label:has(:is(input[type="checkbox"], input[type="radio"], [role="checkbox"], [role="radio"], [role="switch"]):enabled),
+  :is([role="checkbox"], [role="radio"], [role="switch"]):enabled + label {
+    cursor: pointer;
+  }
   /* Figures (timer, levels, durations) must not jitter: the same width for
      every digit, in the system font like the rest. */
   .tnum {

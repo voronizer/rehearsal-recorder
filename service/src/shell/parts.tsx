@@ -6,7 +6,9 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { cn } from "@/lib/utils"
 import { usePanel } from "./panel"
+import { sectionIcon } from "./sections"
 import { useSize } from "./size"
+import { count } from "./words"
 
 /*
   The pages' layout, as РЭХА's History: one card a page with its parts
@@ -18,8 +20,6 @@ import { useSize } from "./size"
 type Surface = "page" | "card" | "panel"
 const SurfaceCtx = createContext<Surface>("page")
 export const InPanel = ({ children }: { children: ReactNode }) => <SurfaceCtx.Provider value="panel">{children}</SurfaceCtx.Provider>
-/** In a card of its own on a page, such as an editor at its top: its groups are parts of that card. */
-export const InCard = ({ children }: { children: ReactNode }) => <SurfaceCtx.Provider value="card">{children}</SurfaceCtx.Provider>
 /** Whether this is drawn in the panel, not on the page. */
 export const useInPanel = () => useContext(SurfaceCtx) === "panel"
 
@@ -109,7 +109,12 @@ export function Group({
         </Group>
       </Groups>
     )
-  if (!title) return <section className="flex flex-col gap-3">{children}</section>
+  if (!title)
+    return (
+      <section aria-label={name} className="flex flex-col gap-3">
+        {children}
+      </section>
+    )
   const label = typeof title === "string" ? title : name
   const heading = (
     <>
@@ -117,6 +122,35 @@ export function Group({
       {hint && <span className="truncate text-sm text-muted-foreground">{hint}</span>}
     </>
   )
+  // A title that leads away, such as a day's pill: the arrow and the count
+  // fold the group, the title beside them leads to its page.
+  if (fold && typeof title !== "string")
+    return (
+      <Collapsible defaultOpen={fold === "open"} className="group/fold flex flex-col" role="region" aria-label={label}>
+        <div className="flex min-h-8 items-center gap-2">
+          <CollapsibleTrigger asChild>
+            <button
+              type="button"
+              aria-label={[label, typeof hint === "string" ? hint : null].filter(Boolean).join(", ")}
+              className="-ml-1 flex shrink-0 items-center rounded-md p-1 outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
+            >
+              <ChevronRight className="size-4 text-muted-foreground transition-transform group-data-[state=open]/fold:rotate-90" />
+            </button>
+          </CollapsibleTrigger>
+          <h2 className={cn("min-w-0 text-sm", small ? "font-medium" : "font-semibold")}>{title}</h2>
+          {hint && (
+            // The count folds too; the arrow says it to the keyboard and a screen reader.
+            <CollapsibleTrigger asChild>
+              <button type="button" tabIndex={-1} aria-hidden="true" className="min-w-0 flex-1 truncate py-1 text-left text-sm text-muted-foreground">
+                {hint}
+              </button>
+            </CollapsibleTrigger>
+          )}
+          <span className="hidden group-data-[state=open]/fold:contents">{action}</span>
+        </div>
+        <CollapsibleContent className="flex flex-col gap-3 pt-2">{children}</CollapsibleContent>
+      </Collapsible>
+    )
   if (fold)
     return (
       <Collapsible defaultOpen={fold === "open"} className="group/fold flex flex-col" role="region" aria-label={label}>
@@ -147,14 +181,43 @@ export function Group({
   )
 }
 
-/** Rows of a list: no box of their own; with `opens`, a row lights up under the pointer. */
-export function Rows({ children, className, opens }: { children: ReactNode; className?: string; opens?: boolean }) {
+/**
+ * Rows of a list, by one rule for every list (Alex's pick А, 2026-11-10):
+ * no box and no lines, 24 px from one row's content to the next. With
+ * `opens`, a row lights up under the pointer over that room, and a press
+ * there is the row's. `takes`: take rows (TakeLine), which light up by
+ * themselves, the same 24 px apart. `talk`: a take's marks, which read as
+ * messages and keep their 14 px (the spec's call 16).
+ */
+export function Rows({
+  children,
+  className,
+  opens,
+  takes,
+  talk,
+}: {
+  children: ReactNode
+  className?: string
+  opens?: boolean
+  takes?: boolean
+  talk?: boolean
+}) {
   const items = Children.toArray(children).filter(Boolean)
   return (
-    <div role="list" className={cn("flex flex-col gap-0.5", className)}>
+    <div role="list" className={cn("flex flex-col", takes && "gap-3", talk && "gap-0.5", className)}>
       {items.map((c, i) => (
-        // Lit under the pointer only where the whole row opens something (`opens`).
-        <div role="listitem" key={keyOf(c, i)} className={cn("-mx-2 rounded-lg px-2 py-1.5", opens && "transition-colors hover:bg-accent/60")}>
+        <div
+          role="listitem"
+          key={keyOf(c, i)}
+          className={cn(!takes && "-mx-2 rounded-lg px-2", talk ? "py-1.5" : !takes && "py-3", opens && "cursor-pointer transition-colors hover:bg-accent/60")}
+          onClick={
+            opens
+              ? (e) => {
+                  if (e.target === e.currentTarget) (e.currentTarget.firstElementChild as HTMLElement | null)?.click()
+                }
+              : undefined
+          }
+        >
           {c}
         </div>
       ))}
@@ -163,10 +226,12 @@ export function Rows({ children, className, opens }: { children: ReactNode; clas
 }
 
 /**
- * What a word that opens or plays something looks like (Alex's pick C,
+ * What a word that opens something by itself looks like (Alex's pick C,
  * 2026-11-02): a grey dotted line under it, solid under the pointer, so a
- * phone with no pointer shows it too. A take's or a song's name, a mark's
- * words, a day that leads to its rehearsal, a file.
+ * phone with no pointer shows it too. Only where the row round it does not
+ * open (2026-11-10): a set's song and its length, a song's file, Home's day
+ * and song titles, a take's name in the bar or a mark's panel. A row that
+ * lights up and opens as a whole has none.
  */
 export const OPENS =
   "text-left underline decoration-muted-foreground/60 decoration-dotted underline-offset-4 hover:decoration-current hover:decoration-solid"
@@ -256,6 +321,52 @@ export function Props({ rows }: { rows: [string, ReactNode][] }) {
 }
 
 type BackTo = { to: "/rehearsals" } | { to: "/songs" } | { to: "/sets" } | { to: "/songs/$id"; params: { id: string } }
+
+type PillTo = { to: "/songs/$id"; params: { id: string } } | { to: "/rehearsals/$uid"; params: { uid: string } }
+
+/**
+ * A song or a rehearsal that leads to its page, under a take's title and as
+ * a day on a song's page (Alex's pick Б, 2026-11-10): the icon its section
+ * has in the column on the left, the words, a thin line round them. A press
+ * does not reach a fold round it.
+ */
+export function Pill({ kind, children, ...to }: PillTo & { kind: "song" | "rehearsal"; children: ReactNode }) {
+  const Icon = sectionIcon(kind === "song" ? "/songs" : "/rehearsals")
+  return (
+    <Link
+      {...(to as { to: "/songs/$id"; params: { id: string } })}
+      data-pill={kind}
+      onClick={(e) => e.stopPropagation()}
+      className="inline-flex h-7 max-w-full items-center gap-1.5 rounded-full border bg-background px-2.5 text-sm font-normal text-foreground transition-colors hover:bg-accent"
+    >
+      <Icon className="size-3.5 shrink-0 text-muted-foreground" />
+      <span className="truncate">{children}</span>
+    </Link>
+  )
+}
+
+/**
+ * A song over its takes on a rehearsal's page, on a grey band (Alex's pick
+ * А, 2026-11-10): a note, its title a size up, then its takes here, its key
+ * and tempo, and ›. The whole line opens the song's page.
+ */
+export function SongLine({ song, takes }: { song: { id: number; title: string; key: string | null; tempo: number | null }; takes: number }) {
+  const facts = [count(takes, "take"), song.key, song.tempo ? `${Math.round(song.tempo)} bpm` : null].filter(Boolean).join(" · ")
+  const Note = sectionIcon("/songs")
+  return (
+    <Link
+      to="/songs/$id"
+      params={{ id: String(song.id) }}
+      className="-mx-3 flex items-center gap-2.5 rounded-lg bg-panel px-3 py-2.5 transition-colors hover:bg-accent"
+    >
+      <Note className="size-4 shrink-0 text-muted-foreground" />
+      <span className="min-w-0 truncate text-base font-semibold">{song.title}</span>{" "}
+      <span className="shrink-0 text-sm text-muted-foreground">{facts}</span>
+      <span className="flex-1" />
+      <ChevronRight className="size-4 shrink-0 text-muted-foreground" />
+    </Link>
+  )
+}
 
 /** Back to where the page belongs: “‹ Songs”. */
 export function Back({ label, ...to }: BackTo & { label: string }) {

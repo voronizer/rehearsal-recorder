@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react"
-import { Link, useNavigate, useParams, useSearch } from "@tanstack/react-router"
+import { useNavigate, useParams, useSearch } from "@tanstack/react-router"
 import { RotateCcw } from "lucide-react"
 import { TakePlayer as RehaPlayer } from "@/components/TakePlayer"
 import { Badge } from "@/components/ui/badge"
@@ -13,19 +13,18 @@ import { cn } from "@/lib/utils"
 import { useLabels, useLevels, useLevelsTrouble, useRestore, useTake, type TakePage } from "../api"
 import { TakeMarks } from "../marks/MarkItem"
 import { usePanel } from "../shell/panel"
-import { Back, Group, Groups, OPENS, Page, Tile, Trouble, useTitle } from "../shell/parts"
+import { Group, Groups, Page, Pill, Tile, Trouble, useTitle } from "../shell/parts"
 import { useSize } from "../shell/size"
 import { clock, count, longDay, takeText } from "../shell/words"
 import { chipsOf } from "./chips"
 import { Desk } from "./Desk"
 import { Download } from "./Download"
 import { notesAlone, notesOf } from "./player/lanes"
-import { CANNOT_PLAY, usePlayer } from "./player/one"
+import { CANNOT_PLAY, usePlayer, useTime } from "./player/one"
 import { useServiceSound, type ServiceSound } from "./player/sound"
-import { StarButton, TakeName } from "./parts"
+import { Play, StarButton, TakeName, Wave } from "./parts"
 import { SongWord } from "./move"
 import { TakeMenu } from "./TakeMenu"
-import { TakePlayer } from "./TakePanel"
 
 /**
  * A take's page, for close work. On a computer, РЭХА's own player: a lane
@@ -197,6 +196,28 @@ function Full({ take, notes, sound }: { take: TakePage; notes: NotesFile[]; soun
   )
 }
 
+/**
+ * The take's player on one line: ▶ on the wave's level, the wave with the
+ * time in its corner (Alex, 2026-11-04: «На волне»).
+ */
+function TakePlayer({ take, height = 64 }: { take: TakePage; height?: number }) {
+  const at = useTime(take.uid)
+  return (
+    <div className="flex items-center gap-3">
+      <Play take={take} />
+      <div className="relative min-w-0 flex-1">
+        <Wave take={take} height={height} starred={take.stars.length > 0} moves />
+        <span
+          data-testid="clock"
+          className="tnum pointer-events-none absolute right-0 bottom-0 rounded bg-background/85 px-1 text-xs leading-4 text-muted-foreground"
+        >
+          {clock(at)} / {clock(take.duration_sec)}
+        </span>
+      </div>
+    </div>
+  )
+}
+
 /** On a phone: the take's wave with ▶, a row per track as on РЭХА's desk, then the marks. */
 function Phone({ take, notes, tracks, sound }: { take: TakePage; notes: NotesFile[]; tracks: number; sound: ServiceSound }) {
   const player = useMultitrackPlayer(sound.tracks, take.duration_sec, null, sound)
@@ -228,7 +249,6 @@ function TakeView({ take }: { take: TakePage }) {
   const tracks = take.tracks.length + notesAlone(take, notes).length
   return (
     <Page
-      head={song ? <Back to="/songs/$id" params={{ id: String(song.id) }} label={song.title} /> : <Back to="/songs" label="Songs" />}
       title={
         <span className="flex flex-wrap items-center gap-3">
           {/* A long name wraps rather than being cut (2026-11-04). */}
@@ -255,13 +275,19 @@ function TakeView({ take }: { take: TakePage }) {
         </span>
       }
       sub={
-        <>
-          <Link to="/rehearsals/$uid" params={{ uid: take.rehearsal.uid }} className={OPENS}>
+        // Where the take comes from, each a pill to its page (Alex's pick Б, 2026-11-10).
+        <span className="mt-1 flex flex-wrap items-center gap-2">
+          {song && (
+            <Pill kind="song" to="/songs/$id" params={{ id: String(song.id) }}>
+              {song.title}
+            </Pill>
+          )}
+          <Pill kind="rehearsal" to="/rehearsals/$uid" params={{ uid: take.rehearsal.uid }}>
             {longDay(take.date)}
-          </Link>
+          </Pill>
           <SongWord take={take} />
-          {` · ${clock(take.duration_sec)} · ${count(tracks, "track")}`}
-        </>
+          <span>{`${clock(take.duration_sec)} · ${count(tracks, "track")}`}</span>
+        </span>
       }
     >
       {take.trashed_at && <InTrash uid={take.uid} />}

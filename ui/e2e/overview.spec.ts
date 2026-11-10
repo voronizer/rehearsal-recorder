@@ -1,10 +1,12 @@
 import type { Locator } from "@playwright/test"
 import {
+  calls,
   colour,
   expect,
   hold,
   letGo,
   openEvening,
+  roomBetweenTakes,
   settled,
   style,
   test,
@@ -342,16 +344,32 @@ test.describe("the wave of a take", () => {
     expectSame(await box(row(overview, 1)), before, "the row")
   })
 
-  test("a press on the wave plays the take from there, where it is", async ({ page }) => {
+  test("a press on the wave opens the take, and a take that plays goes on", async ({ page }) => {
     const overview = await openEvening(page)
     await expect(wave(overview, 1)).toHaveAttribute("data-shaped", "true")
+    await play(overview, 1).click()
+    await expect(play(overview, 1)).toHaveAccessibleName(/^Pause /)
     const at = await box(wave(overview, 1))
     await page.mouse.click(at.x + at.width / 2, at.y + at.height / 2)
-    await expect(play(overview, 1)).toHaveAccessibleName(/^Pause /)
-    // From the middle of 3:20 on, here: the player is not opened.
-    await expect.poll(() => lengthOf(overview, "/ 3:20").innerText()).toMatch(/^1:(4\d|5\d) \/ 3:20$/)
-    await expect(row(overview, 1)).toBeVisible()
-    await expect(wave(overview, 1).locator("[data-playhead]")).toHaveCount(1)
+    // The player has it, still playing, from where it was: not the middle of 3:20.
+    await expect(page.getByRole("group", { name: "Take timeline" })).toBeVisible()
+    await expect(row(overview, 1)).toHaveCount(0)
+    const transport = page.getByRole("toolbar", { name: "Transport" })
+    await expect(transport.getByRole("button", { name: "Pause", exact: true })).toBeVisible()
+    expect((await calls(page, "player_seek")).map((c) => c.args[0] as number).filter((sec) => sec > 60)).toEqual([])
+  })
+
+  test("a song's rows stand 24 px apart, and its heading where it was", async ({ page }) => {
+    const overview = await openEvening(page)
+    const palyn = overview.locator("[data-song-group][aria-label='Pałyn']")
+    expect(await roomBetweenTakes(palyn)).toEqual([24, 24, 24])
+    // From the heading to the first row's light, as before.
+    const gap = await palyn.evaluate((el) => {
+      const head = el.firstElementChild!.getBoundingClientRect()
+      const light = el.querySelector("[data-take] > div")!
+      return Math.round(light.getBoundingClientRect().top + parseFloat(getComputedStyle(light).paddingTop) - head.bottom)
+    })
+    expect(gap).toBe(16)
   })
 
   test("the name opens the take", async ({ page }) => {

@@ -29,7 +29,7 @@ function BarPlay({ take }: { take: TakePage | undefined }) {
 function MarkHere({ take, at }: { take: TakePage | undefined; at: number }) {
   const { open } = usePanel()
   return (
-    <Button variant="outline" size="row" disabled={!take || !!take.trashed_at} onClick={() => take && open({ kind: "take", uid: take.uid, markAt: at })}>
+    <Button variant="outline" size="row" disabled={!take || !!take.trashed_at} onClick={() => take && open({ kind: "mark", uid: take.uid, at })}>
       Mark
     </Button>
   )

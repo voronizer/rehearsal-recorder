@@ -1,5 +1,6 @@
 import { expect, test, type Locator, type Page } from "@playwright/test"
 import { as, asMember, band } from "./band"
+import { linesOf, roomBetween } from "./rows"
 
 // The seed's sets: Club gig with Viasna, Pałyn and Kupalle, and Vik's
 // birthday with Kupalle and Viasna. Each test puts back what it changed;
@@ -82,6 +83,11 @@ test("type a length and empty it again", async ({ page }) => {
   const viasna = songs.locator('[data-song="Viasna"]')
   const line = main.locator("p").filter({ hasText: /^3 songs/ })
   await expect(line).toHaveText("3 songs · 0:30")
+  // A set's songs as every list: 24 px apart, no lines; a song's title and its length keep the dotted line.
+  expect(await roomBetween(songs, ":scope > li > [data-song]")).toEqual([24, 24])
+  expect(new Set(await linesOf(songs, ":scope > li"))).toEqual(new Set(["0px"]))
+  await expect(viasna.getByRole("link", { name: "Viasna", exact: true })).toHaveCSS("text-decoration-style", "dotted")
+  await expect(viasna.getByRole("button", { name: "0:10" })).toHaveCSS("text-decoration-style", "dotted")
   await viasna.getByRole("button", { name: "0:10" }).click()
   const field = main.getByRole("textbox", { name: "Length of Viasna" })
   await expect(field).toHaveValue("0:10")

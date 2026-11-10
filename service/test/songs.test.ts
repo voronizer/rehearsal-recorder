@@ -80,6 +80,16 @@ test("a new song: its title once in any case, the first status, and its own pane
   })
 })
 
+test("a new song made with a status has it; a status that is not there is refused", async () => {
+  const owner = await signInOwner()
+  const ready = (await songs(owner)).statuses[1].id
+  const made = await answer(post("/api/songs", { title: "Zorka", status_id: ready }, owner))
+  expect(made.status).toBe(200)
+  expect((await song(owner, made.body.id)).song.status_id).toBe(ready)
+  expect(await answer(post("/api/songs", { title: "Kupalle", status_id: 9999 }, owner))).toEqual({ status: 400, body: { error: "No such status" } })
+  expect((await songs(owner)).songs.map((s) => s.title)).not.toContain("Kupalle")
+})
+
 test("one song made by two members at once is made once; the other hears it is there", async () => {
   const owner = await signInOwner()
   const ira = await member(owner, "ira@example.com")

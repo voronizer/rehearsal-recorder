@@ -5,6 +5,23 @@ versioning](https://semver.org/): until 1.0 the shape of things can still
 move, though recordings on disk are never left behind — old rehearsals keep
 opening.
 
+## Unreleased
+
+- **In the band service a take opens its page from anywhere on its row**,
+  the wave too, and the take's panel is gone. Under a take's title its song
+  and its rehearsal are buttons that open their pages; on a rehearsal's page
+  each song has a grey line over its takes that opens the song, in place of
+  **Notes and files**, and on a song's page a day opens its rehearsal.
+  Every list has the same room between rows and no lines. **Statuses** and
+  **Labels** open in the panel on the right, and **New song** is a dialog
+  that asks for the song's status too.
+- **A press on a take's wave opens the take**, as the rest of its row does,
+  in the rehearsal screen's list and in **History**. The rows stand further
+  apart.
+- **The pointer is a hand over everything you can press**, in РЭХА and in
+  the band service. Buttons, menus, switches and a take's name and row show
+  it now, as links always did.
+
 ## 0.26.0
 
 - **Sets for a gig in the band service.** **Sets**, after **Songs**, lists

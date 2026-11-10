@@ -4641,7 +4641,7 @@
         }
       },
       "post": {
-        "description": "**New song**, before its first take, with the first status.",
+        "description": "**New song**, before its first take, with the status picked in its dialog, or the first one.",
         "requestBody": {
           "required": true,
           "content": {
@@ -4653,6 +4653,9 @@
                     "type": "string",
                     "minLength": 1,
                     "maxLength": 100
+                  },
+                  "status_id": {
+                    "type": "integer"
                   }
                 },
                 "required": [

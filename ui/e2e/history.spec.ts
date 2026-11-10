@@ -112,6 +112,20 @@ test.describe("History", () => {
     await expect(list).toHaveCount(0)
   })
 
+  test("a press on a take's wave opens it in the player, in a rehearsal and on a song's page", async ({ page }) => {
+    await openApp(page)
+    await openHistory(page)
+    const timeline = page.getByRole("group", { name: "Take timeline" })
+    await page.locator("[aria-label='Rehearsal overview'] [data-take] [data-wave]").first().click()
+    await expect(timeline).toBeVisible()
+    await page.keyboard.press("Escape")
+    await expect(timeline).toHaveCount(0)
+    await page.getByRole("radio", { name: "Songs", exact: true }).click()
+    await page.getByRole("navigation", { name: "Songs" }).locator("[data-song]").first().click()
+    await page.locator("[data-take] [data-wave]").first().click()
+    await expect(timeline).toBeVisible()
+  })
+
   test("lists each rehearsal by month, with when, how long and its evening drawn", async ({
     page,
   }) => {

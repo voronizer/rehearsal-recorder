@@ -89,7 +89,6 @@ export function Rehearsal({
     openAt,
     move,
     playInOverview,
-    cueAt,
     player,
   } = useTakeStripPlayer()
   // A take open in the player, or playing in the overview: either way Space
@@ -811,7 +810,6 @@ export function Rehearsal({
               onPlay={playInOverview}
               onOpen={select}
               onOpenAt={openAt}
-              onPlayAt={cueAt}
               onRename={setToRename}
               onStar={starTake}
               onShare={sending.share}

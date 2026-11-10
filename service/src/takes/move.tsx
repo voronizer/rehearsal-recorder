@@ -1,4 +1,5 @@
 import { useEffect, useState, useSyncExternalStore, type ReactNode } from "react"
+import { useNavigate, useRouterState } from "@tanstack/react-router"
 import { Check, X } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import {
@@ -13,7 +14,6 @@ import {
 import { Input } from "@/components/ui/input"
 import { same, TAKE_NAME } from "../../worker/shared/names"
 import { useMoveTake, useSongs } from "../api"
-import { usePanel } from "../shell/panel"
 
 /**
  * ⋯ › **Move to song** (Alex, 5 November: in the menu, a list of the songs
@@ -41,7 +41,7 @@ const useNaming = (uid: string) =>
     (f) => (heard.add(f), () => heard.delete(f)),
     () => naming === uid
   )
-/** Fields open now: one that goes with its panel closes, so it is not there when the panel opens again. */
+/** Fields open now: one that goes with its page closes, so it is not there when the page opens again. */
 let shown = 0
 function useShown() {
   useEffect(() => {
@@ -56,8 +56,8 @@ function useShown() {
 
 /**
  * **Not named**, then the band's songs, with the take's place ticked, then
- * **New song…**. From a row, New song… opens the take's panel first (on a
- * phone its page): the field stands in its line.
+ * **New song…**. From a row, New song… opens the take's page first: the
+ * field stands in its line.
  */
 export function MoveSub({
   take,
@@ -71,7 +71,8 @@ export function MoveSub({
   onNew: () => void
 }) {
   const songs = useSongs().data?.songs ?? []
-  const { panel, open } = usePanel()
+  const navigate = useNavigate()
+  const here = useRouterState({ select: (s) => s.location.pathname === `/takes/${take.uid}` })
   const own = songOf(take)
   return (
     <DropdownMenuSub>
@@ -96,7 +97,7 @@ export function MoveSub({
         <DropdownMenuItem
           onSelect={() => {
             onNew()
-            if (row && !(panel?.kind === "take" && panel.uid === take.uid)) open({ kind: "take", uid: take.uid })
+            if (row && !here) void navigate({ to: "/takes/$uid", params: { uid: take.uid } })
             setNaming(take.uid)
           }}
         >

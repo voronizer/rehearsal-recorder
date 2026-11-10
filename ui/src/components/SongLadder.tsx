@@ -35,8 +35,6 @@ type Handlers = {
   onPlay: (take: PlacedTake) => void
   onOpen: (take: PlacedTake) => void
   onOpenAt: (take: PlacedTake, at: number) => void
-  /** Plays a take where it is from a spot: a press on its wave. */
-  onPlayAt?: (take: PlacedTake, at: number) => void
   onRename: (take: PlacedTake) => void
   onStar: (take: PlacedTake, starred: boolean) => void
   onShare: (take: PlacedTake) => void
@@ -117,7 +115,6 @@ function RungRow({
   onPlay,
   onOpen,
   onOpenAt,
-  onPlayAt,
   onRename,
   onStar,
   onShare,
@@ -200,28 +197,30 @@ function RungRow({
         </CollapsibleTrigger>
       </WholeTip>
 
-      {/* The rows start where the day does. */}
+      {/* The rows start where the day does, 24 px from a wave to the next
+          name with their own 4 px each. */}
       <CollapsibleContent className="flex flex-col gap-1 pt-1 pb-3 pl-7.5">
-        {rung.goes.map((take) => (
-          <TakeRow
-            key={take.take_number}
-            take={take}
-            unnamed={unnamed}
-            longest={longest}
-            missing={rung.missing}
-            here={hereFor(playback, rung.folder, take)}
-            onPlay={(t) => onPlay(at(t))}
-            onOpen={(t) => onOpen(at(t))}
-            onOpenAt={(t, sec) => onOpenAt(at(t), sec)}
-            onPlayAt={onPlayAt && ((t, sec) => onPlayAt(at(t), sec))}
-            folder={rung.folder}
-            onRename={(t) => onRename(at(t))}
-            onStar={(t, starred) => onStar(at(t), starred)}
-            onShare={(t) => onShare(at(t))}
-            onDelete={(t) => onDelete(at(t))}
-            sendTo={sendTo}
-          />
-        ))}
+        <div className="flex flex-col gap-4">
+          {rung.goes.map((take) => (
+            <TakeRow
+              key={take.take_number}
+              take={take}
+              unnamed={unnamed}
+              longest={longest}
+              missing={rung.missing}
+              here={hereFor(playback, rung.folder, take)}
+              onPlay={(t) => onPlay(at(t))}
+              onOpen={(t) => onOpen(at(t))}
+              onOpenAt={(t, sec) => onOpenAt(at(t), sec)}
+              folder={rung.folder}
+              onRename={(t) => onRename(at(t))}
+              onStar={(t, starred) => onStar(at(t), starred)}
+              onShare={(t) => onShare(at(t))}
+              onDelete={(t) => onDelete(at(t))}
+              sendTo={sendTo}
+            />
+          ))}
+        </div>
         <Button
           variant="link"
           onClick={() => onOpenRehearsal(rung.folder)}

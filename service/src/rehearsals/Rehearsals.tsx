@@ -1,7 +1,7 @@
 import { useNavigate } from "@tanstack/react-router"
 import { cn } from "@/lib/utils"
 import { useFrame, useRehearsals, type RehearsalItem } from "../api"
-import { Empty, Group, Groups, OPENS, Page, Rows, Trouble, useTitle } from "../shell/parts"
+import { Empty, Group, Groups, Page, Rows, Trouble, useTitle } from "../shell/parts"
 import { useSize } from "../shell/size"
 import { count, day, dayMonth, month } from "../shell/words"
 
@@ -32,7 +32,7 @@ function RehearsalRow({ r, table }: { r: RehearsalItem; table: boolean }) {
   const go = () => navigate({ to: "/rehearsals/$uid", params: { uid: r.uid } })
   const date = (
     <span className="flex items-center gap-2">
-      <span className={OPENS}>{day(r.date)}</span>
+      <span>{day(r.date)}</span>
     </span>
   )
   if (table)

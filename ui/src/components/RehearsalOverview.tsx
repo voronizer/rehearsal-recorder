@@ -63,13 +63,12 @@ export type OverviewPlayback = {
  * again at all: "this one is the take", "guitar drifts here".
  *
  * Play on a row plays the take right here, with no player on screen: the
- * wave darkens as it goes, and a press on the wave plays it from there
- * (`onPlayAt`). The name, or anywhere else on its row, opens the take in the
- * player, and a take that is playing carries on there from where it was. A
- * note opens its take at the spot it was left. ★ is on every row, faint on a
- * take with none (owner's pick B, 2026-11-02); Rename, the cloud and Delete
- * show on the row under the mouse, the same three the strip offers for an
- * open take.
+ * wave darkens as it goes. The name, the wave or anywhere else on its row
+ * opens the take in the player, and a take that is playing carries on there
+ * from where it was. A note opens its take at the spot it was left. ★ is on
+ * every row, faint on a take with none (owner's pick B, 2026-11-02); Rename,
+ * the cloud and Delete show on the row under the mouse, the same three the
+ * strip offers for an open take.
  *
  * It also stands in for the take strip while nothing is open, so a take
  * still waiting for the cloud says so here, as its pill did.
@@ -88,7 +87,6 @@ export function RehearsalOverview({
   onPlay,
   onOpen,
   onOpenAt,
-  onPlayAt,
   onRename,
   onStar,
   onShare,
@@ -111,8 +109,6 @@ export function RehearsalOverview({
   onPlay: (take: Take) => void
   onOpen: (take: Take) => void
   onOpenAt: (take: Take, at: number) => void
-  /** Plays a take here from a spot in it: a press on its wave. */
-  onPlayAt?: (take: Take, at: number) => void
   onRename?: (take: Take) => void
   onStar?: (take: Take, starred: boolean) => void
   onShare?: (take: Take) => void
@@ -221,13 +217,15 @@ export function RehearsalOverview({
               data-song-group
               // A line above each song, under the head or the song before.
               className={cn(
-                "flex flex-col gap-3 px-6 py-4",
+                // 16 px between rows and their own 4 px each: 24 from a wave
+                // to the next name. The heading keeps its 12 px.
+                "flex flex-col gap-4 px-6 py-4",
                 (i > 0 || head || set) && "border-t",
                 i === rows.length - 1 && "pb-6",
                 i === 0 && !head && !set && "pt-6"
               )}
             >
-              <div className="flex items-baseline gap-2">
+              <div className="-mb-1 flex items-baseline gap-2">
                 <h3
                   className={cn(
                     "text-base",
@@ -253,7 +251,6 @@ export function RehearsalOverview({
                     onPlay={onPlay}
                     onOpen={onOpen}
                     onOpenAt={onOpenAt}
-                    onPlayAt={onPlayAt}
                     folder={folder}
                     onRename={onRename}
                     onStar={onStar}
@@ -289,7 +286,7 @@ function NamePills({
 }) {
   if (choices.here.length + choices.other.length === 0) return null
   return (
-    <div data-name-pills={take.take_number} className="-mt-1 ml-11 flex items-center gap-2">
+    <div data-name-pills={take.take_number} className="-mt-2 ml-11 flex items-center gap-2">
       <span className="shrink-0 text-xs text-muted-foreground">Name:</span>
       <div className="min-w-0 flex-1">
         <SongPills
@@ -327,7 +324,6 @@ export function TakeRow({
   onPlay,
   onOpen,
   onOpenAt,
-  onPlayAt,
   onRename,
   onStar,
   onShare,
@@ -351,9 +347,6 @@ export function TakeRow({
    *  where it is, as the rehearsal screen's earlier takes do. */
   onOpen?: (take: Take) => void
   onOpenAt: (take: Take, at: number) => void
-  /** Plays it here from a spot: a press on its wave. Left out, the press
-   *  opens it, as the rest of the row does. */
-  onPlayAt?: (take: Take, at: number) => void
   onRename?: (take: Take) => void
   onStar?: (take: Take, starred: boolean) => void
   onShare?: (take: Take) => void
@@ -382,14 +375,13 @@ export function TakeRow({
       data-false-start={falseStart || undefined}
       className="@container/row flex flex-col gap-0.5"
     >
-      {/* The whole row opens the take, as its name does: a short take's
-          name is a small thing to aim at, and the row lights up under the
-          mouse all the way across. The buttons on it keep their own jobs,
-          and a press on the wave plays from there. The name stays the one
-          to reach with Tab. */}
+      {/* The whole row opens the take, as its name does, the wave too: a
+          short take's name is a small thing to aim at, and the row lights
+          up under the mouse all the way across. The buttons on it keep their
+          own jobs. The name stays the one to reach with Tab. */}
       <div
         onClick={(e) => {
-          if (!missing && !(e.target as HTMLElement).closest("button, [data-wave]")) open(take)
+          if (!missing && !(e.target as HTMLElement).closest("button")) open(take)
         }}
         className={cn(
           "group relative -mx-2 grid grid-cols-[2rem_minmax(0,1fr)_auto] items-center gap-x-3 rounded-lg px-2 py-1 transition-colors",
@@ -455,7 +447,6 @@ export function TakeRow({
                   at: m.at,
                   colour: labelOf(labels, m.label_id).colour,
                 }))}
-                onPress={missing ? undefined : (at) => (onPlayAt ? onPlayAt(take, at) : open(take))}
                 className="shrink"
                 // Of the row less the length's and a ✓'s, so that every
                 // row's is to the one scale.
