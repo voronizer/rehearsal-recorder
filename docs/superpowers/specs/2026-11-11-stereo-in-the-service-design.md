@@ -83,6 +83,11 @@ All on 11 November 2026 (UTC).
   draws it, one wave with the left side up from the line and the right side
   down; no DAW mockup.
 - 19:29:37 «ок» to this spec.
+- 19:52:09 Card «A. Барабаны стерео», asked after the plan's check: Drums is
+  a stereo track in the demo band's data, as the site's story says
+  (`site/content/stories/digital-mixer.md:100`), so the pictures and the
+  site's live pieces show two rings, two bars and a wave in two halves on
+  it.
 
 ## What the band sees
 
@@ -189,6 +194,9 @@ band that updates its service later still gets it.
 
 ## Pictures and the guide
 
+- Drums is stereo in the demo band's data (19:52:09): `ui/e2e/band.js`
+  for РЭХА's screens, the guide's pictures and the site's live pieces,
+  `service/pictures/seed.ts` for the service's pictures.
 - The guide's pictures with the player are taken again
   (`tests/docs_screenshots.py`), since every track now has rings.
 - The service's pictures with tracks are taken again

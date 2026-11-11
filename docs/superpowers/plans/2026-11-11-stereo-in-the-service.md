@@ -190,9 +190,13 @@ tests in `service/test/`.
 
 ## Task 5: Pictures, guide, CHANGELOG
 
-**Files:** `tests/docs_screenshots.py` outputs in `docs/screenshots/`,
+**Files:** `ui/e2e/band.js`, `service/pictures/seed.ts`, `tests/docs_screenshots.py` outputs in `docs/screenshots/`,
 `service/pictures/` outputs, `docs/using-it.md`, `CHANGELOG.md`.
 
+- [ ] Drums stereo in the demo band (Alex's card 19:52:09): `ui/e2e/band.js`
+  `PARTS` Drums `stereo: true`, its wave two rows; `service/pictures/seed.ts`
+  sends Drums as `t7.mp3`-like stereo with `sides`. Tests that count
+  Drums' rows or rings follow.
 - [ ] Retake the guide's player pictures (rings on every plate) and the
   service's pictures lanes, mark, three-weeks-ago, downloads. Show Alex the
   site's four pictures and its first screen (the live player, with rings)
