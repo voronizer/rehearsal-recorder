@@ -214,6 +214,42 @@ test.describe("the two columns", () => {
     expect(line.x + line.width).toBeLessThanOrEqual(room.x + room.width)
   })
 
+  test("at 768 px a mark's panel lies over the page, which keeps its width; at 820 px the page narrows beside it", async ({ page }) => {
+    await page.setViewportSize({ width: 768, height: 680 })
+    await page.goto("/marks")
+    const main = page.getByRole("main")
+    const panel = page.getByLabel("Panel", { exact: true })
+    const songs = page.getByRole("navigation", { name: "Sections" }).getByRole("link", { name: "Songs" })
+    await expect.poll(() => box(main)).toEqual({ x: 224, width: 768 - 224 })
+    await main.locator("[data-mark]").first().getByRole("button").first().click()
+    await expect(panel.getByRole("heading", { level: 2 }).first()).toHaveText(/^Mark at/)
+    // 448 px from the right over the page; the sections stay open, as the page keeps its room.
+    await expect.poll(() => box(panel)).toEqual({ x: 768 - 448, width: 448 })
+    expect(await box(main)).toEqual({ x: 224, width: 768 - 224 })
+    expect(await box(songs)).toEqual({ x: 12, width: 200 })
+
+    await page.setViewportSize({ width: 820, height: 680 })
+    await expect.poll(() => box(main)).toEqual({ x: 48, width: 820 - 48 - 448 })
+    await expect.poll(() => box(panel)).toEqual({ x: 820 - 447, width: 447 })
+  })
+
+  test("at 768 px on a take's page the panel lies over the page and its strip, and folds back", async ({ page }) => {
+    await page.setViewportSize({ width: 768, height: 680 })
+    await page.goto(take())
+    const main = page.getByRole("main")
+    const strip = page.getByLabel("Strip")
+    const panel = page.getByLabel("Panel", { exact: true })
+    await expect.poll(() => box(main)).toEqual({ x: 224, width: 768 - 224 - 48 })
+    await strip.getByRole("button", { name: "Open the panel" }).click()
+    await expect(panel.getByRole("heading", { name: "Marks", exact: true })).toBeVisible()
+    await expect.poll(() => box(panel)).toEqual({ x: 768 - 448, width: 448 })
+    expect(await box(strip)).toEqual({ x: 768 - 47, width: 47 })
+    expect(await box(main)).toEqual({ x: 224, width: 768 - 224 - 48 })
+    await panel.getByRole("button", { name: "Fold the panel" }).click()
+    await expect(panel).toHaveCount(0)
+    expect(await box(main)).toEqual({ x: 224, width: 768 - 224 - 48 })
+  })
+
   test("under Reduce motion both columns fold and open at once", async ({ page }) => {
     await page.emulateMedia({ reducedMotion: "reduce" })
     await page.setViewportSize({ width: 960, height: 680 })

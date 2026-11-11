@@ -14,7 +14,7 @@ import { PanelProvider, usePanel } from "./panel"
 import { InDrawer, InPanel } from "./parts"
 import { PhoneBar, PlayerBar } from "./PlayerBar"
 import { BandName, Side } from "./Side"
-import { PageRoom, PHONE_BELOW, useSize } from "./size"
+import { PageRoom, PHONE_BELOW, usePushes, useSize } from "./size"
 
 /** The column of sections: 224 px, 48 px folded to its icons. */
 const LEFT = { "--sidebar-width": "14rem", "--sidebar-width-icon": "3rem" } as CSSProperties
@@ -54,19 +54,24 @@ function PanelBody({ page }: { page?: string }) {
 }
 
 /**
- * The panel on a phone: over the page between the header and the player's
- * bar, the full width, with no veil, so the bar can still be used.
+ * The panel over the page from the right, with no veil, so the page and the
+ * player's bar can still be used: on a phone the full width between the
+ * header and the bar; in a window too small to make room for it (under
+ * `PUSH_FROM`), 448 px, over a take's strip too (Alex, 2026-11-11, 23:19:52).
  */
-function PhonePanel() {
+function OverPanel({ page, phone }: { page?: string; phone?: boolean }) {
   const { panel } = usePanel()
   if (!panel) return null
   return (
     <aside
       key={JSON.stringify(panel)}
       aria-label="Panel"
-      className="absolute inset-y-0 right-0 z-20 flex w-full flex-col overflow-y-auto bg-side p-5 text-sm shadow-lg animate-in slide-in-from-right duration-200"
+      className={cn(
+        "absolute inset-y-0 right-0 z-20 flex flex-col overflow-y-auto bg-side p-5 text-sm shadow-lg animate-in slide-in-from-right duration-200",
+        phone ? "w-full" : "w-[28rem] max-w-[calc(100%-3rem)] border-l"
+      )}
     >
-      <PanelBody />
+      <PanelBody page={page} />
     </aside>
   )
 }
@@ -76,10 +81,12 @@ function PhonePanel() {
  * panel: beside the page, which narrows by its width (Alex, 2026-11-11,
  * 21:52:04). On a take's page (`take`, its uid) it folds into the strip;
  * elsewhere it is gone when closed. Its top and bottom are the page's, above
- * the player's bar.
+ * the player's bar. In a window too small to push the page it stays folded,
+ * and the panel lies over the page (`OverPanel`).
  */
 function RightColumn({ take, children }: { take?: string; children: ReactNode }) {
   const { panel, open, close } = usePanel()
+  const beside = usePushes() && !!panel
   // A new panel in a column already open slides in, as one over the page
   // did; the first one comes with the column itself.
   const [was, setWas] = useState(panel)
@@ -91,7 +98,7 @@ function RightColumn({ take, children }: { take?: string; children: ReactNode })
   return (
     <SidebarProvider
       mobileBelow={PHONE_BELOW}
-      open={!!panel}
+      open={beside}
       onOpenChange={(opened) => {
         if (!opened) close()
         else if (take) open({ kind: "marks", uid: take })
@@ -102,7 +109,7 @@ function RightColumn({ take, children }: { take?: string; children: ReactNode })
       {children}
       {/* Anew between a take's page and another, so the strip comes and goes with its page instead of sliding. */}
       <Sidebar key={take ? "strip" : "page"} side="right" collapsible={take ? "icon" : "offcanvas"} className="absolute h-full">
-        {panel ? (
+        {beside ? (
           // The column's width less its line from the start: as the column
           // opens, the panel comes in from the edge with its lines unbroken.
           <aside
@@ -147,12 +154,14 @@ const takeOf = (path: string) => /^\/takes\/([^/]+)$/.exec(path)?.[1]
  * the page, the panel beside it on the right (on a take's page folded into
  * its strip), the player along the bottom once the band has a take. Below
  * 1100 px the column of sections folds to its icons while the panel is open
- * (Alex, 2026-11-11, 22:23:17), so the page keeps its room. On a phone the
- * column hides behind ☰, the panel lies over the page, and a take's page has
- * no strip.
+ * (Alex, 2026-11-11, 22:23:17), so the page keeps its room. Below
+ * `PUSH_FROM` the panel lies over the page instead, and the column stays
+ * open. On a phone the column hides behind ☰, the panel lies over the page,
+ * and a take's page has no strip.
  */
 function Frame() {
   const size = useSize()
+  const pushes = usePushes()
   const bar = !!useFrame().data?.has_takes
   const { panel } = usePanel()
   // A panel belongs to the page it was opened on: it is in that page's
@@ -172,7 +181,7 @@ function Frame() {
           <main className="h-full overflow-y-auto bg-background px-4 py-5 text-sm">
             <Outlet />
           </main>
-          <PhonePanel />
+          <OverPanel phone />
         </div>
         {bar && <PhoneBar />}
         <Side />
@@ -180,7 +189,7 @@ function Frame() {
     )
   return (
     <div className="flex h-full flex-col">
-      <SidebarProvider mobileBelow={PHONE_BELOW} open={size === "wide" || !panel} className="relative min-h-0 flex-1 overflow-clip" style={LEFT}>
+      <SidebarProvider mobileBelow={PHONE_BELOW} open={size === "wide" || !panel || !pushes} className="relative min-h-0 flex-1 overflow-clip" style={LEFT}>
         <Side />
         <RightColumn take={take}>
           {/* --screen-pad-y is the padding above and below, as in РЭХА's Shell: Master's row, stuck at the
@@ -197,6 +206,7 @@ function Frame() {
             </PageRoom.Provider>
           </main>
         </RightColumn>
+        {!pushes && <OverPanel page={take} />}
       </SidebarProvider>
       {bar && <PlayerBar />}
     </div>
