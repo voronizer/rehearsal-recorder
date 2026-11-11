@@ -163,7 +163,8 @@ export const accountRelations = relations(account, ({ one }) => ({
 
 // The service's own.
 
-export type Track = { position: number; name: string; icon: string | null; files: string[] }
+/** `kind` is "backing" for the take's Backing track; missing from РЭХА 0.24 and older. */
+export type Track = { position: number; name: string; icon: string | null; files: string[]; kind?: "backing" }
 /** `icon` is the track's, which РЭХА 0.21 and older did not send. */
 export type Notes = { position: number; name: string; file: string; icon?: string | null }
 /** A take's click as РЭХА keeps it: its tempo and signature, and whether it
@@ -463,4 +464,22 @@ export const level = sqliteTable(
     level: real("level").notNull(),
   },
   (table) => [primaryKey({ columns: [table.memberId, table.track] })]
+)
+
+/**
+ * Whether a member has heard a song's Backing track: the page opens a song's
+ * takes with it once, and a row is the answer after. Only they see it.
+ */
+export const backingHeard = sqliteTable(
+  "backing_heard",
+  {
+    memberId: text("member_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    songId: integer("song_id")
+      .notNull()
+      .references(() => song.id, { onDelete: "cascade" }),
+    heard: integer("heard", { mode: "boolean" }).notNull(),
+  },
+  (table) => [primaryKey({ columns: [table.memberId, table.songId] })]
 )

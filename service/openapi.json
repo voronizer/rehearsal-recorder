@@ -220,6 +220,12 @@
                   "items": {
                     "type": "string"
                   }
+                },
+                "kind": {
+                  "type": "string",
+                  "enum": [
+                    "backing"
+                  ]
                 }
               },
               "required": [
@@ -1260,6 +1266,24 @@
           "levels"
         ]
       },
+      "BackingHeard": {
+        "type": "object",
+        "properties": {
+          "heard": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "boolean"
+            },
+            "example": {
+              "3": true,
+              "7": false
+            }
+          }
+        },
+        "required": [
+          "heard"
+        ]
+      },
       "TakePage": {
         "type": "object",
         "properties": {
@@ -1352,6 +1376,15 @@
                 },
                 "peaks": {
                   "type": "string"
+                },
+                "kind": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "enum": [
+                    "backing"
+                  ]
                 }
               },
               "required": [
@@ -2193,7 +2226,7 @@
     },
     "/api/reha/takes/{uid}": {
       "put": {
-        "description": "A take's details: made, or brought up to date. A take РЭХА removed comes out of the trash; one the band deleted, or one that went with its song, only when sent `by_hand`. Its song and name come only when РЭХА changed them, and the first time; left out, the take keeps what it has here. `in_trash` says it is still there; `drift_gen` is the generation whose tempo the service has; `song_id` is its song's number. 409 for a song number the service does not have.",
+        "description": "A take's details: made, or brought up to date. A take РЭХА removed comes out of the trash; one the band deleted, or one that went with its song, only when sent `by_hand`. Its song and name come only when РЭХА changed them, and the first time; left out, the take keeps what it has here. `in_trash` says it is still there; `drift_gen` is the generation whose tempo the service has; `song_id` is its song's number; `kind: true` says the service keeps a track's `kind`. 409 for a song number the service does not have.",
         "security": [
           {
             "rehaKey": []
@@ -2257,13 +2290,20 @@
                         "number",
                         "null"
                       ]
+                    },
+                    "kind": {
+                      "type": "boolean",
+                      "enum": [
+                        true
+                      ]
                     }
                   },
                   "required": [
                     "ok",
                     "in_trash",
                     "drift_gen",
-                    "song_id"
+                    "song_id",
+                    "kind"
                   ]
                 }
               }
@@ -6155,6 +6195,101 @@
         }
       }
     },
+    "/api/me/backing": {
+      "get": {
+        "description": "Every song the member has chosen for, by its number. A song not listed has not been chosen.",
+        "responses": {
+          "200": {
+            "description": "Done",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BackingHeard"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in, or the key does not work",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "description": "Keeps whether the member hears this song's Backing track. 404 for a song the band does not have, or one in the Trash. Answers all of the member's songs after.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "song_id": {
+                    "type": "integer",
+                    "minimum": 1
+                  },
+                  "heard": {
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "song_id",
+                  "heard"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Done",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BackingHeard"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Not as the service expects",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in, or the key does not work",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not there",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/marks": {
       "get": {
         "description": "The Marks section: open, closed or all, with how many of each.",
@@ -7206,6 +7341,9 @@
                 }
               }
             }
+          },
+          "304": {
+            "description": "The wave is the one the browser has"
           },
           "401": {
             "description": "Not signed in, or the key does not work",

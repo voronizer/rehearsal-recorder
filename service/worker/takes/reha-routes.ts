@@ -34,13 +34,13 @@ export const rehaRoutes = newApp()
         "one the band deleted, or one that went with its song, only when sent `by_hand`. " +
         "Its song and name come only when РЭХА changed them, and the first time; left out, the take keeps " +
         "what it has here. `in_trash` says it is still there; `drift_gen` is the generation whose tempo the " +
-        "service has; `song_id` is its song's number. 409 for a song number the service does not have.",
+        "service has; `song_id` is its song's number; `kind: true` says the service keeps a track's `kind`. 409 for a song number the service does not have.",
       middleware: [needKey] as const,
       security: rehaKey,
       request: { headers: RehaHeaders, params: Params, body: body(TakeMeta) },
       responses: {
         200: json(
-          z.object({ ok: z.literal(true), in_trash: z.boolean(), drift_gen: z.number().nullable(), song_id: z.number().nullable() })
+          z.object({ ok: z.literal(true), in_trash: z.boolean(), drift_gen: z.number().nullable(), song_id: z.number().nullable(), kind: z.literal(true) })
         ),
         ...errors(400, 401, 409, 426),
       },
@@ -49,7 +49,7 @@ export const rehaRoutes = newApp()
       const done = await putTake(c.env, c.req.valid("param").uid, c.req.valid("json"))
       if (done === "no song") return fail(c, 409, NO_SONG)
       if (done === "no name") return fail(c, 400, "A new take comes with its name and song")
-      return c.json({ ok: true as const, in_trash: done.inTrash, drift_gen: done.driftGen, song_id: done.songId }, 200)
+      return c.json({ ok: true as const, in_trash: done.inTrash, drift_gen: done.driftGen, song_id: done.songId, kind: true as const }, 200)
     }
   )
   .openapi(

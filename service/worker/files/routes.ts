@@ -26,6 +26,7 @@ export const fileRoutes = newApp().openapi(
       query: z.object({ download: z.literal("1").optional() }),
     },
     responses: {
+      304: { description: "The wave is the one the browser has" },
       200: { description: "The file", content: { "application/octet-stream": { schema: z.string().openapi({ format: "binary" }) } } },
       206: { description: "A piece of the file", content: { "application/octet-stream": { schema: z.string().openapi({ format: "binary" }) } } },
       ...errors(401, 404),
@@ -40,14 +41,21 @@ export const fileRoutes = newApp().openapi(
       .limit(1)
     if (!t) return fail(c, 404, "No such file")
     const ranged = c.req.header("Range") !== undefined
-    const object = await c.env.FILES.get(`takes/${uid}/${gen}/${name}`, ranged ? { range: c.req.raw.headers } : {})
+    const wave = name.endsWith(".peaks")
+    // For a wave, R2 itself checks `If-None-Match` and sends no body when it matches.
+    const object = await c.env.FILES.get(`takes/${uid}/${gen}/${name}`, {
+      ...(ranged && { range: c.req.raw.headers }),
+      ...(wave && { onlyIf: c.req.raw.headers }),
+    })
     if (!object) return fail(c, 404, "No such file")
 
     const headers = new Headers()
     object.writeHttpMetadata(headers)
     headers.set("ETag", object.httpEtag)
     headers.set("Accept-Ranges", "bytes")
-    headers.set("Cache-Control", "private, max-age=86400")
+    // A wave can be sent again, so the browser asks each time and gets a 304 while it is the same.
+    headers.set("Cache-Control", wave ? "private, no-cache" : "private, max-age=86400")
+    if (!("body" in object)) return new Response(null, { status: 304, headers })
     if (c.req.valid("query").download) {
       const position = Number(name.slice(0, name.indexOf(".")))
       const track = t.tracks.find((k) => k.position === position)?.name ?? t.notes.find((n) => n.position === position)?.name
