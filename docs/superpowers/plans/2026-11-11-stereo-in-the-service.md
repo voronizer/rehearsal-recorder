@@ -194,7 +194,8 @@ tests in `service/test/`.
 `service/pictures/` outputs, `docs/using-it.md`, `CHANGELOG.md`.
 
 - [ ] Drums stereo in the demo band (Alex's card 19:52:09): `ui/e2e/band.js`
-  `PARTS` Drums `stereo: true`, its wave two rows; `service/pictures/seed.ts`
+  Drums' files two channels, its wave two rows; the start screen keeps
+  Drums mono on input 1 (Alex's card 21:52:50); `service/pictures/seed.ts`
   sends Drums as `t7.mp3`-like stereo with `sides`. Tests that count
   Drums' rows or rings follow.
 - [ ] Retake the guide's player pictures (rings on every plate) and the

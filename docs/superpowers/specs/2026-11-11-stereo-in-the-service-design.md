@@ -97,6 +97,9 @@ All on 11 November 2026 (UTC).
 - 21:18:01 Card «A. Как на странице», asked while building: a take played
   with ▶ from a list starts its Backing as its page does, muted unless
   you turned it on for that song.
+- 21:52:50 Card «A. Только в плеере», asked while building: Drums is a
+  stereo file in the demo data, and the start screen keeps it mono on
+  input 1, as now.
 
 ## What the band sees
 
