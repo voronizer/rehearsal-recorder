@@ -367,7 +367,11 @@ export function useMultitrackPlayer(
     const id = songRef.current?.id
     if (id != null && tracks?.some((t) => t.name === name && t.kind === "backing")) {
       heardBySong.set(id, heard)
-      void api().set_song_backing_heard(id, heard)
+      // A failure is not shown: M stays as pressed.
+      const kept = sound.keepBackingHeard
+        ? sound.keepBackingHeard(id, heard)
+        : api().set_song_backing_heard(id, heard)
+      void Promise.resolve(kept).catch(() => {})
     }
   }
 

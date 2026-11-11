@@ -1121,3 +1121,99 @@ test.describe("the lanes group with the rehearsal stress band", () => {
     await expect(page.locator("[data-whole][data-state$='open']")).toHaveText(HANNA)
   })
 })
+
+test.describe("the rings after a track's name", () => {
+  const rings = (page: Page, name: string) => plate(page, name).locator("[data-plate-file]")
+  const ringCount = (loc: Locator) => loc.locator("svg circle, svg ellipse").count()
+
+  test("one ring on a mono track, two on a stereo one, with the words in the tip", async ({ page }) => {
+    await stopped(page, band(3, "Bass"))
+    await settled(page)
+    await expect(rings(page, "Drums")).toHaveAccessibleName("Mono file")
+    await expect(rings(page, "Bass")).toHaveAccessibleName("Stereo file")
+    await expect(rings(page, "Guitar")).toHaveAccessibleName("Mono file")
+    // The rings are two circles apart in the stereo mark, one in the mono.
+    expect(await ringCount(rings(page, "Bass"))).toBeGreaterThan(await ringCount(rings(page, "Drums")))
+    // Master has none.
+    await expect(masterPlate(page).locator("[data-plate-file]")).toHaveCount(0)
+    // The tip says the words.
+    await rings(page, "Bass").hover()
+    await expect(page.getByRole("tooltip")).toHaveText("Stereo file")
+    await page.mouse.move(0, 0, { steps: 8 })
+    await rings(page, "Drums").hover()
+    await expect(page.getByRole("tooltip")).toHaveText("Mono file")
+  })
+
+  test("a notes row has none, while its audio row keeps one", async ({ page }) => {
+    await stopped(page, BOTH)
+    await settled(page)
+    await expect(notesPlate(page, "Drums").locator("[data-plate-file]")).toHaveCount(0)
+    await expect(notesPlate(page, "Keys").locator("[data-plate-file]")).toHaveCount(0)
+    await expect(rings(page, "Drums")).toHaveAccessibleName("Mono file")
+    await expect(rings(page, "Gtr")).toHaveAccessibleName("Mono file")
+  })
+
+  test("a file whose channels could not be read has no rings", async ({ page }) => {
+    await stopped(page, {
+      before: `window.__UNREADABLE_TRACKS__ = ['Bass'];`,
+      after: band(3).after,
+    })
+    await settled(page)
+    await expect(plate(page, "Bass")).toBeVisible()
+    await expect(rings(page, "Bass")).toHaveCount(0)
+    await expect(rings(page, "Drums")).toHaveCount(1)
+  })
+
+  test("Backing keeps its dashed frame and has rings like the others", async ({ page }) => {
+    await openBandApp(page)
+    await startRehearsal(page, 6)
+    await page.locator("#next-take-name").fill("Pałyn")
+    await page.locator("#next-take-name").press("Enter")
+    await recordTake(page, 6)
+    await settled(page)
+    const backing = plate(page, "Backing")
+    await expect(backing).toBeVisible()
+    await expect(rings(page, "Backing")).toHaveAccessibleName("Stereo file")
+    expect((await style(backing, "border-top-style"))["border-top-style"]).toBe("dashed")
+    expect((await style(plate(page, "Drums"), "border-top-style"))["border-top-style"]).not.toBe("dashed")
+    expect((await box(backing)).height).toBeCloseTo(56, 0)
+  })
+
+  test("a long name is still cut with its tip, and the row is 56 px", async ({ page }) => {
+    await openTake2(page)
+    await settled(page)
+    const hanna = plate(page, HANNA)
+    await expect(rings(page, HANNA)).toHaveCount(1)
+    await expect(hanna.locator("[data-plate-name]")).toHaveAttribute("data-cut")
+    expect((await box(hanna)).height).toBeCloseTo(56, 0)
+    expect((await box(cell(page, HANNA))).height).toBeCloseTo(56, 0)
+    // The rings are 16 px wide, after the name, inside the plate.
+    const r = await box(rings(page, HANNA))
+    const n = await box(hanna.locator("[data-plate-name]"))
+    const p = await box(hanna)
+    expect(r.width).toBeCloseTo(16, 0)
+    expect(r.x).toBeGreaterThanOrEqual(n.x + n.width - 0.5)
+    expect(r.x + r.width).toBeLessThanOrEqual(p.x + p.width)
+    await hanna.locator("[data-plate-name]").hover()
+    await expect(page.locator("[data-whole][data-state$='open']")).toHaveText(HANNA)
+  })
+
+  test("the MIDI-only track's notes plate has none", async ({ page }) => {
+    await openTake2(page)
+    await settled(page)
+    await expect(page.locator("[data-notes-plate] [data-plate-file]")).toHaveCount(0)
+  })
+
+  for (const theme of ["dark", "light"] as const) {
+    test(`the rings are in the muted text's colour in the ${theme} theme`, async ({ page }) => {
+      await stopped(page, band(2, "Bass"), themed(theme))
+      await settled(page)
+      for (const name of ["Drums", "Bass"]) {
+        await expect(rings(page, name)).toBeVisible()
+        expect(await style(rings(page, name).locator("svg"), "color")).toEqual({
+          color: await colour(page, "--muted-foreground"),
+        })
+      }
+    })
+  }
+})

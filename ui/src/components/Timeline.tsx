@@ -652,9 +652,9 @@ export function Timeline({
                       <LaneControls
                         name={m.name}
                         icon={m.icon}
-                        file={backing ? (m.peaks.length > 1 ? "Stereo file" : "Mono file") : undefined}
+                        backing={backing}
                         paired={paired}
-                        channels={m.peaks.length}
+                        channels={m.channels ?? m.peaks.length}
                         muted={muted}
                         soloed={soloed}
                         dimmed={dimmed}

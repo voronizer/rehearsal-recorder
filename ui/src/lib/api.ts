@@ -670,6 +670,9 @@ export type TrackMedia = {
   duration_sec: number
   /** One row per channel: a stereo track has two. */
   peaks: number[][]
+  /** How many channels the file has: 1, 2, or 0 when it could not be read.
+   *  Without it, the rows of `peaks` say. */
+  channels?: 0 | 1 | 2
   /** The take's Backing track, as its TrackFile says. */
   kind?: "backing"
 }
