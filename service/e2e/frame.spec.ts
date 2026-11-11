@@ -1,9 +1,15 @@
-import { expect, test, type Page } from "@playwright/test"
+import { expect, test, type Locator, type Page } from "@playwright/test"
 import { as, band } from "./band"
 
 test.use({ storageState: as("alex") })
 
 const fits = (page: Page) => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)
+
+/** Where a box starts from the left and how wide it is, in whole px: polled, as the columns open and fold over 200 ms. */
+const box = async (l: Locator) => {
+  const b = (await l.boundingBox())!
+  return { x: Math.round(b.x), width: Math.round(b.width) }
+}
 
 test("the frame has its sections, and a panel closes with its X, Esc and another section", async ({ page }) => {
   await page.goto("/")
@@ -74,6 +80,35 @@ test.describe("on a phone", () => {
     await expect(page.getByRole("main").getByRole("textbox", { name: "New song" })).toBeVisible()
     await expect(page.getByLabel("Panel", { exact: true })).toHaveCount(0)
   })
+
+  test("the menu comes out 256 px wide, named Menu, and Esc closes it", async ({ page }) => {
+    await page.goto("/")
+    const button = page.getByRole("button", { name: "Menu", exact: true })
+    await button.click()
+    const menu = page.getByRole("dialog", { name: "Menu" })
+    await expect(menu.getByRole("navigation", { name: "Sections" }).getByRole("link", { name: "Songs" })).toBeVisible()
+    await expect.poll(() => box(menu)).toEqual({ x: 0, width: 256 })
+    await page.keyboard.press("Escape")
+    await expect(menu).toHaveCount(0)
+    await expect(button).toBeFocused()
+    await expect(page).toHaveURL("/")
+  })
+
+  test("with a mark's panel open, the bar under it still plays", async ({ page }) => {
+    await page.goto(`/takes/${band().takes["Viasna 11"]}`)
+    const bar = page.getByLabel("Player", { exact: true })
+    await bar.getByRole("button", { name: "Mark", exact: true }).click()
+    const panel = page.getByLabel("Panel", { exact: true })
+    await expect(panel).toContainText(/New mark at \d:\d\d/)
+    // Between the header and the bar, the phone's whole width, with no veil over the bar.
+    const [over, under] = [(await panel.boundingBox())!, (await bar.boundingBox())!]
+    expect(Math.round(over.width)).toBe(390)
+    expect(over.y + over.height).toBeLessThanOrEqual(under.y)
+    await bar.getByRole("button", { name: "Play “Viasna 11”" }).click()
+    await expect(bar.getByTestId("bar-time")).toHaveText(/^0:0[1-9] \//, { timeout: 10_000 })
+    await expect(panel).toBeVisible()
+    await bar.getByRole("button", { name: "Pause “Viasna 11”" }).click()
+  })
 })
 
 test("Esc in a menu inside a panel closes the menu, not the panel", async ({ page }) => {
@@ -118,4 +153,73 @@ test("a phone keeps the sections behind the menu", async ({ page }) => {
     await expect(page.getByRole("heading", { level: 1 })).toBeVisible()
     expect(await fits(page), path).toBe(true)
   }
+})
+
+test.describe("the two columns", () => {
+  const take = () => `/takes/${band().takes["Kupalle 2"]}`
+
+  test("on a take's page the panel opens beside the page, 400 px past its strip, and folds back into it; no key folds either", async ({ page }) => {
+    await page.goto(take())
+    const main = page.getByRole("main")
+    const strip = page.getByLabel("Strip")
+    const panel = page.getByLabel("Panel", { exact: true })
+    await expect(strip.getByRole("button", { name: "Open the panel" })).toBeVisible()
+    // 48 px with the column's line on its left.
+    await expect.poll(() => box(strip)).toEqual({ x: 1180 - 47, width: 47 })
+    await expect.poll(() => box(main)).toEqual({ x: 224, width: 1180 - 224 - 48 })
+    const folded = await box(main)
+    // shadcn's own key for its sidebar is not ours.
+    for (const key of ["Control+b", "Meta+b"]) await page.keyboard.press(key)
+    await expect(panel).toHaveCount(0)
+    expect(await box(main)).toEqual(folded)
+
+    await strip.getByRole("button", { name: "Open the panel" }).click()
+    await expect(panel.getByRole("heading", { name: "Marks", exact: true })).toBeVisible()
+    await expect(strip).toHaveCount(0)
+    await expect.poll(() => box(panel)).toEqual({ x: 1180 - 447, width: 447 })
+    await expect.poll(() => box(main)).toEqual({ x: 224, width: folded.width - 400 })
+
+    await panel.getByRole("button", { name: "Fold the panel" }).click()
+    await expect(panel).toHaveCount(0)
+    await expect.poll(() => box(strip)).toEqual({ x: 1180 - 47, width: 47 })
+    await expect.poll(() => box(main)).toEqual(folded)
+  })
+
+  test("on Songs, Statuses takes 448 px from the page, and closed the panel is gone", async ({ page }) => {
+    await page.goto("/songs")
+    const main = page.getByRole("main")
+    await expect(main.getByRole("heading", { level: 1 })).toBeVisible()
+    await expect.poll(() => box(main)).toEqual({ x: 224, width: 1180 - 224 })
+    await page.getByRole("button", { name: "Statuses", exact: true }).click()
+    const panel = page.getByLabel("Panel", { exact: true })
+    await expect(panel.getByRole("heading", { name: "Statuses", exact: true })).toBeVisible()
+    // 448 px with the column's line on its left.
+    await expect.poll(() => box(panel)).toEqual({ x: 1180 - 447, width: 447 })
+    await expect.poll(() => box(main)).toEqual({ x: 224, width: 1180 - 224 - 448 })
+    await page.keyboard.press("Escape")
+    await expect(panel).toHaveCount(0)
+    await expect.poll(() => box(main)).toEqual({ x: 224, width: 1180 - 224 })
+  })
+
+  test("at 960 px the sections fold to their icons while the panel is open, names in tips, and open when it closes", async ({ page }) => {
+    await page.setViewportSize({ width: 960, height: 680 })
+    await page.goto(take())
+    const main = page.getByRole("main")
+    const songs = page.getByRole("navigation", { name: "Sections" }).getByRole("link", { name: "Songs" })
+    await expect.poll(() => box(main)).toEqual({ x: 224, width: 960 - 224 - 48 })
+    await expect.poll(() => box(songs)).toEqual({ x: 12, width: 200 })
+
+    await page.getByLabel("Strip").getByRole("button", { name: "Open the panel" }).click()
+    const panel = page.getByLabel("Panel", { exact: true })
+    await expect.poll(() => box(main)).toEqual({ x: 48, width: 960 - 48 - 448 })
+    await expect.poll(() => box(songs)).toEqual({ x: 6, width: 36 })
+    await expect(songs).toHaveAttribute("aria-current", "page")
+    await songs.hover()
+    await expect(page.getByRole("tooltip")).toHaveText("Songs")
+
+    await panel.getByRole("button", { name: "Fold the panel" }).click()
+    await expect(panel).toHaveCount(0)
+    await expect.poll(() => box(main)).toEqual({ x: 224, width: 960 - 224 - 48 })
+    await expect.poll(() => box(songs)).toEqual({ x: 12, width: 200 })
+  })
 })

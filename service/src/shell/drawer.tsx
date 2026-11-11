@@ -20,34 +20,33 @@ function Sign({ name, tip, onClick, children }: { name: string; tip: string; onC
 }
 
 /**
- * The panel on a take's page, on a computer (Alex, 2026-11-08: «шторка»,
- * a strip with icons): folded, a strip down the right edge, in the grey of
- * the column of sections on the left, with the sign that opens it and a
- * sign for each of its sections, now the take's marks with how many it
- * has. Open, `children`, the panel, lies over the lanes as anywhere else;
- * it folds back into the strip instead of going away.
+ * The right column folded on a take's page, on a computer (Alex,
+ * 2026-11-08: «шторка», a strip with icons): 48 px down the right edge, in
+ * the grey of the column of sections on the left, with the sign that opens
+ * the panel and a sign for each of its sections, now the take's marks with
+ * how many it has. Open, the column is the panel beside the page
+ * (shell/Shell.tsx); it folds back into this strip instead of going away.
+ * It keeps to the column's right edge, inside its line, so it stands still
+ * as the panel folds.
  */
-export function Drawer({ uid, children }: { uid: string; children: ReactNode }) {
+export function Strip({ uid }: { uid: string }) {
   const { open } = usePanel()
   const take = useTake(uid).data
   const list = () => open({ kind: "marks", uid })
   return (
-    <>
-      {/* There from the start, so the page does not move; its signs once the take has come. */}
-      <aside aria-label="Strip" className="flex w-12 shrink-0 flex-col items-center gap-1 border-l bg-panel pt-3">
-        {take && (
-          <>
-            <Sign name="Open the panel" tip="Open the panel" onClick={list}>
-              <PanelRightOpen className="size-4" />
-            </Sign>
-            <Sign name={`Marks: ${take.marks.length}`} tip="Marks" onClick={list}>
-              <Diamond className="size-4" />
-              <span className="tnum">{take.marks.length}</span>
-            </Sign>
-          </>
-        )}
-      </aside>
-      {children}
-    </>
+    // There from the start, so the page does not move; its signs once the take has come.
+    <aside aria-label="Strip" className="flex h-full w-[calc(var(--sidebar-width-icon)-1px)] shrink-0 flex-col items-center gap-1 self-end bg-panel pt-3">
+      {take && (
+        <>
+          <Sign name="Open the panel" tip="Open the panel" onClick={list}>
+            <PanelRightOpen className="size-4" />
+          </Sign>
+          <Sign name={`Marks: ${take.marks.length}`} tip="Marks" onClick={list}>
+            <Diamond className="size-4" />
+            <span className="tnum">{take.marks.length}</span>
+          </Sign>
+        </>
+      )}
+    </aside>
   )
 }

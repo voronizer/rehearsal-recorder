@@ -103,9 +103,8 @@ test("Labels and a mark's panel are one layer: one in the other's place, Back st
   const lines = page.getByRole("main").locator("[data-mark]")
   await lines.nth(0).getByRole("button").first().click()
   await expect(panel.getByRole("heading", { level: 2 }).first()).toHaveText(/^Mark at/)
-  // The panel covers the buttons at the top right: by keyboard.
-  await page.getByRole("button", { name: "Labels", exact: true }).focus()
-  await page.keyboard.press("Enter")
+  // The panel is beside the page, clear of the buttons at the top right.
+  await page.getByRole("button", { name: "Labels", exact: true }).click()
   await expect(labels).toBeVisible()
   await expect(panel).toHaveCount(1)
   await lines.nth(1).getByRole("button").first().click()

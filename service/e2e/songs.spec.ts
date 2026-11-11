@@ -119,17 +119,15 @@ test("Statuses opens in the panel over Songs, New song a dialog, one at a time; 
   await button.click()
   await panel.getByRole("button", { name: "Close", exact: true }).click()
   await expect(panel).toHaveCount(0)
-  // Statuses again closes it; the panel covers the buttons at the top right: by keyboard.
+  // Statuses again closes it; the panel is beside the page, clear of the buttons at the top right.
   await button.click()
-  await button.focus()
-  await page.keyboard.press("Enter")
+  await button.click()
   await expect(panel).toHaveCount(0)
 
   // New song over the open panel: the dialog in its place.
   await button.click()
   await expect(statuses).toBeVisible()
-  await page.getByRole("button", { name: "New song", exact: true }).focus()
-  await page.keyboard.press("Enter")
+  await page.getByRole("button", { name: "New song", exact: true }).click()
   const dialog = page.getByRole("dialog", { name: "New song" })
   await expect(dialog).toBeVisible()
   await expect(panel).toHaveCount(0)

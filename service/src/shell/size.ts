@@ -3,7 +3,12 @@ import { useSyncExternalStore } from "react"
 /** The window's width: a phone, a small window, a computer's. */
 export type Size = "phone" | "narrow" | "wide"
 
-const PHONE = "(max-width: 499px)"
+/** Below this many px the window is a phone's; both columns' Sidebars take it as `mobileBelow`. */
+export const PHONE_BELOW = 500
+
+// The same line the Sidebar draws (ui/src/components/ui/sidebar.tsx), so at
+// a width with a fraction (a zoomed page) the frame and its columns agree.
+const PHONE = `(max-width: ${PHONE_BELOW - 0.02}px)`
 const WIDE = "(min-width: 1100px)"
 
 const subscribe = (change: () => void) => {

@@ -437,6 +437,8 @@ test.describe("as Ira", () => {
     const player = page.locator("[data-take-player]")
     const guitar = player.getByRole("slider", { name: "Guitar volume" })
     await expect(guitar).toHaveAttribute("aria-valuetext", "100%")
+    // A key first: after the click on the link, focus() alone reads as the mouse's, and ← would move the take.
+    await page.keyboard.press("Shift")
     await guitar.focus()
     for (let i = 0; i < 3; i++) await page.keyboard.press("ArrowLeft")
     await expect(guitar).toHaveAttribute("aria-valuetext", "97%")
@@ -759,7 +761,7 @@ test.describe("the drawer on a take's page, as Alex", () => {
     const panel = page.getByLabel("Panel", { exact: true })
     await expect(panel).toContainText("Mark at 0:03")
     await expect(panel).toHaveCount(1)
-    await expect(page.getByLabel("Strip")).toBeVisible()
+    await expect(page.getByLabel("Strip")).toHaveCount(0)
   })
 
   test("a drawer a chat link opened folds with Back, and with its sign after another mark", async ({ page }) => {

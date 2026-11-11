@@ -1,12 +1,14 @@
+import { useEffect, type CSSProperties } from "react"
 import { Link, useLocation, useNavigate } from "@tanstack/react-router"
 import { Ellipsis } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
+import { Sidebar, SidebarMenu, SidebarMenuButton, SidebarMenuItem, useSidebar } from "@/components/ui/sidebar"
 import { cn } from "@/lib/utils"
 import { queryClient, useFrame, useMe } from "../api"
 import { authClient } from "../auth"
 import { Avatar, Logo } from "./parts"
-import { SECTIONS } from "./sections"
+import { SECTION, SECTIONS } from "./sections"
 import { count } from "./words"
 
 /** The band's logo and name, grey “Band name” until the owner gives one. */
@@ -21,7 +23,7 @@ export function BandName({ small }: { small?: boolean }) {
   )
 }
 
-/** Your name at the bottom: **Change your name** and **Sign out** (this sign-in only). */
+/** Your name at the bottom: **Change your name** and **Sign out** (this sign-in only). Folded, your letter alone. */
 function You() {
   const me = useMe().data
   const navigate = useNavigate()
@@ -35,11 +37,12 @@ function You() {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button variant="ghost" className="h-10 justify-start gap-2 px-2">
+        <Button variant="ghost" className="h-10 justify-start gap-2 px-2 group-data-[collapsible=icon]:w-9 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:px-0">
           <Avatar letter={(Array.from(me.name.trim())[0] ?? "?").toUpperCase()} />
-          <span className="min-w-0 flex-1 truncate text-left">{me.name}</span>
+          {/* Folded, the name is still the button's for a screen reader. */}
+          <span className="min-w-0 flex-1 truncate text-left group-data-[collapsible=icon]:sr-only">{me.name}</span>
           {/* Your name, Change your name and Sign out are behind it: ⋯ says there is more. */}
-          <Ellipsis className="text-muted-foreground" />
+          <Ellipsis className="text-muted-foreground group-data-[collapsible=icon]:hidden" />
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent side="top" align="start" className="w-52">
@@ -50,47 +53,58 @@ function You() {
   )
 }
 
-/** How a section in the column is lit while its page is open. */
-const LIT = "bg-selected hover:bg-selected dark:hover:bg-selected"
+/** The phone's menu, as wide as it was. On the Sidebar itself: the sheet it opens in hangs from the page's body. */
+const PHONE_WIDTH = { "--sidebar-width-mobile": "16rem" } as CSSProperties
 
 /**
- * The column down the left: the band, how many members, the sections
- * (Marks with how many are open), your name. `onGo`: on a phone, where the
- * column comes over the page, a section pressed closes it. A take's page
- * lights **Songs**, where the band finds its takes, also those with no song
- * (under **Not named**).
+ * The column down the left, shadcn's Sidebar: the band, how many members,
+ * the sections (Marks with how many are open), your name. Folded, their
+ * icons, each section's name in its tip. On a phone it is the sheet behind
+ * ☰, and a section pressed, or any move to another page, closes it. A
+ * take's page lights **Songs**, where the band finds its takes, also those
+ * with no song (under **Not named**).
  */
-export function Side({ onGo }: { onGo?: () => void }) {
+export function Side() {
   const frame = useFrame().data
-  const onTake = useLocation({ select: (l) => l.pathname.startsWith("/takes/") })
+  const path = useLocation({ select: (l) => l.pathname })
+  const { setOpenMobile } = useSidebar()
+  useEffect(() => setOpenMobile(false), [path, setOpenMobile])
+  const onTake = path.startsWith("/takes/")
+  const lit = (to: string) => (to === "/" ? path === "/" : path === to || path.startsWith(`${to}/`) || (onTake && to === "/songs"))
   return (
-    <aside className={cn("flex shrink-0 flex-col gap-5 overflow-y-auto bg-panel p-3", onGo ? "h-full w-64" : "w-56")}>
-      <div className="flex items-center gap-3 px-2 pt-1">
-        <Logo name={frame?.name ?? ""} picture={frame?.picture ?? null} />
-        <div className="min-w-0">
-          <div className={cn("truncate font-semibold", !frame?.name && "text-muted-foreground")}>{frame?.name || "Band name"}</div>
-          <div className="text-xs text-muted-foreground">{frame ? count(frame.members, "member") : ""}</div>
+    // Inside the frame's row, above the player's bar, not the window's height.
+    <Sidebar side="left" collapsible="icon" className="absolute h-full group-data-[side=left]:border-r-0" style={PHONE_WIDTH}>
+      <div className="flex h-full flex-col gap-5 overflow-y-auto p-3 group-data-[collapsible=icon]:overflow-hidden group-data-[collapsible=icon]:px-1.5">
+        <div className="flex items-center gap-3 px-2 pt-1 group-data-[collapsible=icon]:px-0">
+          <Logo name={frame?.name ?? ""} picture={frame?.picture ?? null} />
+          <div className="min-w-0 group-data-[collapsible=icon]:hidden">
+            <div className={cn("truncate font-semibold", !frame?.name && "text-muted-foreground")}>{frame?.name || "Band name"}</div>
+            <div className="truncate text-xs text-muted-foreground">{frame ? count(frame.members, "member") : ""}</div>
+          </div>
         </div>
+        <nav aria-label="Sections">
+          <SidebarMenu className="gap-0.5">
+            {SECTIONS.map(([to, label, Icon]) => (
+              <SidebarMenuItem key={to}>
+                <SidebarMenuButton asChild isActive={lit(to)} tooltip={label} className={SECTION}>
+                  <Link
+                    to={to}
+                    onClick={() => setOpenMobile(false)}
+                    activeOptions={{ exact: to === "/" }}
+                    {...(onTake && to === "/songs" && { "aria-current": "page" as const })}
+                  >
+                    <Icon className="text-muted-foreground" />
+                    <span>{label}</span>
+                    {to === "/marks" && !!frame?.open_marks && <span className="tnum ml-auto text-xs text-muted-foreground">{frame.open_marks}</span>}
+                  </Link>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            ))}
+          </SidebarMenu>
+        </nav>
+        <span className="flex-1" />
+        <You />
       </div>
-      <nav aria-label="Sections" className="flex flex-col gap-0.5">
-        {SECTIONS.map(([to, label, Icon]) => (
-          <Button key={to} asChild variant="ghost" className="h-9 justify-start gap-3 px-3">
-            <Link
-              to={to}
-              onClick={onGo}
-              activeOptions={{ exact: to === "/" }}
-              activeProps={{ className: LIT }}
-              {...(onTake && to === "/songs" && { className: LIT, "aria-current": "page" as const })}
-            >
-              <Icon className="text-muted-foreground" />
-              {label}
-              {to === "/marks" && !!frame?.open_marks && <span className="tnum ml-auto text-xs text-muted-foreground">{frame.open_marks}</span>}
-            </Link>
-          </Button>
-        ))}
-      </nav>
-      <span className="flex-1" />
-      <You />
-    </aside>
+    </Sidebar>
   )
 }
