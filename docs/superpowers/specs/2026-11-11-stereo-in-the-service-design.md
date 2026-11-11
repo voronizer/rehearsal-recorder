@@ -90,6 +90,8 @@ All on 11 November 2026 (UTC).
   it.
 - 19:53:19 Card «A. Ничего нового»: reha.stream says nothing new about
   Backing in the service; its pictures are only retaken, as for stereo.
+- 19:54:15 Card «A. Не менять»: `service/README.md` stays as it is; a
+  band gets this by **Sync fork**, and the deploy adds the new table.
 
 ## What the band sees
 
