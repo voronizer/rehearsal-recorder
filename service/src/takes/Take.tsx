@@ -5,12 +5,12 @@ import { TakePlayer as RehaPlayer } from "@/components/TakePlayer"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
-import { useMultitrackPlayer } from "@/hooks/useMultitrackPlayer"
+import { useMultitrackPlayer, type TakeSong } from "@/hooks/useMultitrackPlayer"
 import { usePlayerKeys, useSpacebar } from "@/hooks/useSpacebar"
 import type { Label as RehaLabel, Marker, NotesFile } from "@/lib/api"
 import { labelsChanged } from "@/lib/labels"
 import { cn } from "@/lib/utils"
-import { useLabels, useLevels, useLevelsTrouble, useRestore, useTake, type TakePage } from "../api"
+import { useBacking, useLabels, useLevels, useLevelsTrouble, useRestore, useTake, type TakePage } from "../api"
 import { TakeMarks } from "../marks/MarkItem"
 import { usePanel } from "../shell/panel"
 import { Group, Groups, Page, Pill, Tile, Trouble, useTitle } from "../shell/parts"
@@ -32,8 +32,10 @@ import { TakeMenu } from "./TakeMenu"
  * .mid, Master with its level and meter, a piece on repeat, the marks as
  * chips whose talk opens in the panel. On a phone, the take's wave, a row
  * per track as РЭХА's desk has them, the MIDI sign on a track that sent
- * notes, Master and its marks. **Download**, by the take's name, gives the
- * mix and the tracks (Download.tsx). A link from the band's chat carries
+ * notes, Master and its marks. The take's Backing track is last, muted the
+ * first time a take of its song opens, and after that as you last left its
+ * M for that song (useBackingSong). **Download**, by the take's name, gives
+ * the mix and the tracks (Download.tsx). A link from the band's chat carries
  * ?at= (the playhead goes there) and the mark or comment it is about.
  */
 export function Take() {
@@ -158,11 +160,34 @@ function useNotes(take: TakePage) {
   return useMemo(() => notesOf(take), [take.uid, take.gen, take.tracks, take.notes])
 }
 
+/**
+ * The take's song for its Backing track, as РЭХА's player takes it: its
+ * number, and whether you hear that song's Backing (muted until you turn
+ * its M off, and when the service could not say). Undefined while the
+ * service has not said yet: the player opens after it, so Backing is not
+ * heard before it is muted. Null for a take with no Backing, no song, or
+ * its song in the Trash: Backing opens muted and nothing is kept.
+ */
+function useBackingSong(take: TakePage): TakeSong | null | undefined {
+  const song = take.song
+  const wanted = !!song && take.tracks.some((t) => t.kind === "backing")
+  const yours = useBacking(wanted)
+  if (!wanted) return null
+  if (yours.isPending) return undefined
+  return { id: song.id, heard: yours.data?.heard[String(song.id)] ?? false }
+}
+
+/** РЭХА's player for the take, opened once the take's song says how its Backing track opens. */
+function useTakePlayer(take: TakePage, sound: ServiceSound) {
+  const song = useBackingSong(take)
+  return useMultitrackPlayer(song === undefined ? null : sound.tracks, take.duration_sec, song ?? null, sound)
+}
+
 /** РЭХА's player on the page itself, with no frame round it, as in РЭХА. */
 function Full({ take, notes, sound }: { take: TakePage; notes: NotesFile[]; sound: ServiceSound }) {
   // РЭХА counts it after the take's files are up: until then, the click alone.
   const drift = useMemo(() => ({ answer: take.drift, counting: false }), [take.drift])
-  const player = useMultitrackPlayer(sound.tracks, take.duration_sec, null, sound)
+  const player = useTakePlayer(take, sound)
   const { open } = usePanel()
   useRehaLabels()
   useSpacebar(player.toggle)
@@ -220,7 +245,7 @@ function TakePlayer({ take, height = 64 }: { take: TakePage; height?: number }) 
 
 /** On a phone: the take's wave with ▶, a row per track as on РЭХА's desk, then the marks. */
 function Phone({ take, notes, tracks, sound }: { take: TakePage; notes: NotesFile[]; tracks: number; sound: ServiceSound }) {
-  const player = useMultitrackPlayer(sound.tracks, take.duration_sec, null, sound)
+  const player = useTakePlayer(take, sound)
   return (
     <Groups>
       <Group>

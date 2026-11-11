@@ -1,4 +1,5 @@
 import { expect, test } from "vitest"
+import { laneOrder } from "@/lib/midi"
 import type { TakePage } from "../../api"
 import { notesAlone, notesOf } from "./lanes"
 
@@ -42,4 +43,23 @@ test("a track of notes alone has its own icon, so a kit on any channel is drawn 
 
 test("the lanes of notes alone are the ones with no track of sound of their name", () => {
   expect(notesAlone(take, notesOf(take)).map((n) => n.name)).toEqual(["Pads"])
+})
+
+test("a track of notes alone goes before the Backing track, which stays last, right above Master", () => {
+  const backing = { position: 3, name: "Backing", icon: null, mp3: "/files/t1/2/3.mp3", peaks: "/files/t1/2/3.peaks", kind: "backing" }
+  const withBacking = { ...take, tracks: [...take.tracks, backing] } as unknown as TakePage
+  const notes = notesOf(withBacking)
+  expect(notes.find((n) => n.name === "Pads")?.after).toBe("Keys")
+  // As РЭХА's player lays them out: the band's tracks, the notes alone, then Backing.
+  const media = withBacking.tracks.map((t) => ({ name: t.name, ...(t.kind === "backing" ? { kind: "backing" as const } : {}) }))
+  expect(laneOrder(media, notes, []).map((l) => `${l.kind} ${l.name}`)).toEqual([
+    "audio Drums",
+    "notes Drums",
+    "audio Keys",
+    "notes Pads",
+    "audio Backing",
+  ])
+  // A take whose only sound is Backing has its notes at the top.
+  const alone = { ...withBacking, tracks: [backing], notes: [{ position: 4, name: "Pads", icon: null }] } as unknown as TakePage
+  expect(notesOf(alone)[0].after).toBeNull()
 })

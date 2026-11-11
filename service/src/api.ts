@@ -13,6 +13,7 @@ import {
 import { hc, type InferResponseType } from "hono/client"
 // Only the routes' types: no Worker code reaches the pages.
 import type { AppType } from "../worker/index"
+import { parseFrames } from "./takes/player/mp3"
 
 /*
   The band's API, through Hono's client: its types come from the Worker's
@@ -175,32 +176,102 @@ export const takeQuery = (uid: string) =>
 /** A take's page; nothing is asked for while `uid` is "". */
 export const useTake = (uid: string) => useQuery({ ...takeQuery(uid), enabled: uid !== "" })
 
-/** A track's waveform, as РЭХА drew it: never changes for a generation. */
+/** A track's waveform as РЭХА drew it: `peaks`, the louder side in each slice, and for a stereo file a row a side. */
+export type Wave = { peaks: number[]; sides?: [number[], number[]] }
+
+const numbers = (row: unknown): row is number[] => Array.isArray(row) && row.every((v) => typeof v === "number")
+
+/**
+ * A track's waveform. РЭХА may send it again for the same generation (with
+ * both sides of a stereo file), so the browser asks the service each time
+ * and is told when its copy is still the one; the page keeps what came. A
+ * `sides` that is not two rows as long as `peaks` is left out.
+ */
 export const peaksQuery = (path: string) =>
   queryOptions({
     queryKey: ["peaks", path],
     staleTime: Infinity,
-    queryFn: async () => {
-      const res = await fetch(path)
+    queryFn: async (): Promise<Wave | null> => {
+      const res = await fetch(path, { cache: "no-cache" })
       if (res.status === 401) throw new SignedOut("Sign in first")
       if (!res.ok) return null
-      return ((await res.json()) as { peaks: number[] }).peaks
+      const { peaks, sides } = (await res.json()) as { peaks?: unknown; sides?: unknown }
+      if (!numbers(peaks)) return null
+      const both = Array.isArray(sides) && sides.length === 2 && sides.every((s) => numbers(s) && s.length === peaks.length)
+      return both ? { peaks, sides: sides as [number[], number[]] } : { peaks }
     },
   })
-export const usePeaks = (path: string) => useQuery(peaksQuery(path))
+
+/** How much of an MP3 is read for its channels: its first frames, and a tag before them. */
+const HEAD_BYTES = 16 * 1024
+
+/**
+ * How many channels a track's MP3 has, from its first frame: 1, 2, or 0
+ * when it cannot be read. A take sent before РЭХА sent both sides of a
+ * stereo wave says so only here. Never changes for a generation.
+ */
+export const channelsQuery = (path: string) =>
+  queryOptions({
+    queryKey: ["channels", path],
+    staleTime: Infinity,
+    // Asked again, the take's rows would wait for it: a file that cannot be read has no rings.
+    retry: false,
+    queryFn: async (): Promise<0 | 1 | 2> => {
+      try {
+        const res = await fetch(path, { headers: { Range: `bytes=0-${HEAD_BYTES - 1}` } })
+        if (res.status === 401) throw new SignedOut("Sign in first")
+        if (!res.ok) return 0
+        // From a server that sent the whole file, its first bytes alone.
+        const bytes = new Uint8Array(await res.arrayBuffer()).subarray(0, HEAD_BYTES)
+        const { sampleRate, channels } = parseFrames(bytes)
+        return sampleRate ? (channels === 1 ? 1 : 2) : 0
+      } catch (e) {
+        if (e instanceof SignedOut) throw e
+        return 0
+      }
+    },
+  })
+
+/**
+ * Whether the member hears each song's Backing track, by the song's
+ * number; a song not listed has its Backing muted. Only they have it, on
+ * any device, as with their levels. A failed read is not asked again: the
+ * take opens after it, with Backing muted.
+ */
+export const backingQuery = queryOptions({ queryKey: ["backing"], retry: false, queryFn: () => data(client.api.me.backing.$get()) })
+/** The same, asked for only while `enabled`. */
+export const useBacking = (enabled: boolean) => useQuery({ ...backingQuery, enabled })
+
+/**
+ * Keeps whether the member hears a song's Backing track. One change waits
+ * for the one before it, so the last press is the one kept, and the answer
+ * is what is read from then on.
+ */
+export function keepBackingHeard(song_id: number, heard: boolean) {
+  return new MutationObserver(queryClient, {
+    scope: { id: "backing" },
+    mutationFn: () => data(client.api.me.backing.$put({ json: { song_id, heard } })),
+    onSuccess: async (after) => {
+      // A read asked before this change would put the old answer back.
+      await queryClient.cancelQueries({ queryKey: backingQuery.queryKey })
+      queryClient.setQueryData(backingQuery.queryKey, after)
+    },
+  }).mutate()
+}
 
 /**
  * A change to the band: once the service has it, every page of the band is
- * read again (not who you are, and not the waveforms, which never change).
- * Changes with the same `scope` go one after another, so a later one cannot
- * reach the service before an earlier one.
+ * read again (not who you are, and not a track's waveform or channels,
+ * which no change in the band touches). Changes with the same `scope` go one
+ * after another, so a later one cannot reach the service before an earlier
+ * one.
  */
 export function useChange<T, R = unknown>(call: (arg: T) => Promise<R>, scope?: string) {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: call,
     ...(scope && { scope: { id: scope } }),
-    onSuccess: () => qc.invalidateQueries({ predicate: (q) => !["me", "peaks"].includes(String(q.queryKey[0])) }),
+    onSuccess: () => qc.invalidateQueries({ predicate: (q) => !["me", "peaks", "channels"].includes(String(q.queryKey[0])) }),
   })
 }
 

@@ -26,3 +26,14 @@ test("an ID3 tag and junk between frames are skipped", () => {
 test("a file with no MP3 frames has none", () => {
   expect(parseFrames(new Uint8Array(500)).frames).toEqual([])
 })
+
+test("a stereo file from REHA's own encoder has two channels, its first frame its Xing frame", () => {
+  // t7.mp3: 10.032 s of stereo at 48 kHz, as audio/encode.py writes it, with no tag.
+  const bytes = fixture("t7.mp3")
+  const mp3 = parseFrames(bytes)
+  expect(mp3.sampleRate).toBe(48000)
+  expect(mp3.channels).toBe(2)
+  expect(new TextDecoder().decode(mp3.frames[0].subarray(36, 40))).toBe("Xing")
+  // The first frame alone says it.
+  expect(parseFrames(bytes.subarray(0, mp3.frames[0].length)).channels).toBe(2)
+})

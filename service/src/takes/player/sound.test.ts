@@ -3,20 +3,29 @@ import type { TakePage } from "../../api"
 import type { One } from "./one"
 import type { Player } from "./player"
 
-// The service's API as the sound reaches it: your levels, the take's `.peaks`.
+type Wave = { peaks: number[]; sides?: [number[], number[]] }
+const flat = (v: number) => Array.from({ length: 1200 }, () => v)
+
+// The service's API as the sound reaches it: your levels, each track's
+// `.peaks` and the channels its MP3 says, Backing's M kept.
 const api = vi.hoisted(() => ({
   yours: {} as Record<string, number>,
+  waves: {} as Record<string, unknown>,
+  channels: {} as Record<string, 0 | 1 | 2 | Error>,
   keepLevels: vi.fn(async (_: Record<string, number | null>) => ({ levels: {} })),
+  keepBackingHeard: vi.fn(async (_song: number, _heard: boolean) => ({ heard: {} })),
+  fetchQuery: vi.fn(),
 }))
 vi.mock("../../api", () => ({
   keepLevels: api.keepLevels,
+  keepBackingHeard: api.keepBackingHeard,
   levelsQuery: { queryKey: ["levels"] },
   peaksQuery: (path: string) => ({ queryKey: ["peaks", path] }),
-  queryClient: {
-    getQueryData: () => ({ levels: api.yours }),
-    fetchQuery: async () => Array.from({ length: 1200 }, () => 0.5),
-  },
+  channelsQuery: (path: string) => ({ queryKey: ["channels", path] }),
+  queryClient: { getQueryData: () => ({ levels: api.yours }), fetchQuery: api.fetchQuery },
 }))
+const asked = (kind: string) =>
+  api.fetchQuery.mock.calls.map(([q]) => q as { queryKey: string[]; staleTime?: number }).filter((q) => q.queryKey[0] === kind)
 // The page's hooks are not used here: only the sound itself.
 vi.mock("./one", () => ({ useOne: () => null }))
 // Master's level on this device.
@@ -36,6 +45,12 @@ const take = {
   ],
 } as unknown as TakePage
 
+/** The take with its Backing track too, stereo, its wave sent with both sides. */
+const withBacking = {
+  ...take,
+  tracks: [...take.tracks, { name: "Backing", mp3: "/backing.mp3", peaks: "/backing.peaks", kind: "backing" }],
+} as unknown as TakePage
+
 /** The take's Player, as far as the sound reads it. */
 const player = (over: Partial<Record<keyof Player, unknown>> = {}) =>
   ({
@@ -46,11 +61,13 @@ const player = (over: Partial<Record<keyof Player, unknown>> = {}) =>
     time: () => 3,
     isMuted: () => false,
     gain: () => 1,
-    loudness: () => [0, 0],
+    loudness: () => [[0], [0]],
     setGain: vi.fn(),
     setLoop: vi.fn(),
     seek: vi.fn(),
-    stretch: vi.fn(async () => [1, 2, 3]),
+    stretch: vi.fn(async (_i: number, _f: number, _t: number, _b: number, _s: AbortSignal, rows = 1) =>
+      Array.from({ length: rows }, () => [1, 2, 3])
+    ),
     ...over,
   }) as unknown as Player
 
@@ -71,7 +88,17 @@ const one = (p: Player | null, out = 0): One => ({
 
 beforeEach(() => {
   api.yours = {}
+  api.waves = {}
+  api.channels = {}
   api.keepLevels.mockClear()
+  api.keepBackingHeard.mockClear()
+  api.fetchQuery.mockReset()
+  api.fetchQuery.mockImplementation(async ({ queryKey: [kind, path] }: { queryKey: string[] }) => {
+    if (kind === "peaks") return path in api.waves ? api.waves[path] : { peaks: flat(0.5) }
+    const said = api.channels[path] ?? 1
+    if (said instanceof Error) throw said
+    return said
+  })
   device.kept = []
 })
 
@@ -144,7 +171,7 @@ test("a zoom the take's .peaks can draw does not decode the MP3", async () => {
   // A third of it: 400 points would show, so the MP3 is decoded.
   const close = await sound.media(sound.tracks, 900, 20, 50)
   expect(p.stretch).toHaveBeenCalledTimes(2)
-  expect(close[0].peaks[0]).toEqual([1, 2, 3])
+  expect(close[0].peaks).toEqual([[1, 2, 3]])
 })
 
 test("a newer zoom stops the stretch before it", async () => {
@@ -157,12 +184,105 @@ test("a newer zoom stops the stretch before it", async () => {
   })
   const sound = serviceSound(take, one(p))
   const first = sound.media(sound.tracks, 900, 10, 20)
-  expect(signals).toHaveLength(2)
+  await vi.waitFor(() => expect(signals).toHaveLength(2))
   void sound.media(sound.tracks, 900, 12, 22)
   expect(signals.slice(0, 2).every((s) => s.aborted)).toBe(true)
+  await vi.waitFor(() => expect(signals).toHaveLength(4))
   expect(signals.slice(2).some((s) => s.aborted)).toBe(false)
   // The stopped one gives the coarse wave, which the player throws away.
   expect((await first)[0].peaks[0].length).toBeGreaterThan(0)
+})
+
+test("a stereo track sent with both sides has its wave in two rows; a mono one, one row and its MP3's channels", async () => {
+  api.waves["/bass.peaks"] = { peaks: flat(0.8), sides: [flat(0.8), flat(0.2)] } satisfies Wave
+  const sound = serviceSound(take, one(null))
+  const [bass, guitar] = await sound.media(sound.tracks)
+  expect(bass.peaks).toEqual([flat(0.8), flat(0.2)])
+  expect(bass.channels).toBe(2)
+  expect(guitar.peaks).toEqual([flat(0.5)])
+  expect(guitar.channels).toBe(1)
+})
+
+test("both sides say stereo, whatever the MP3 is read to say", async () => {
+  api.waves["/bass.peaks"] = { peaks: flat(0.8), sides: [flat(0.8), flat(0.2)] } satisfies Wave
+  api.channels["/bass.mp3"] = 0
+  const sound = serviceSound(take, one(null))
+  expect((await sound.media(sound.tracks))[0].channels).toBe(2)
+})
+
+test("a stereo track sent with one row has two channels from its MP3, and its wave in one piece", async () => {
+  api.channels["/guitar.mp3"] = 2
+  const sound = serviceSound(take, one(null))
+  const [, guitar] = await sound.media(sound.tracks)
+  expect(guitar.channels).toBe(2)
+  expect(guitar.peaks).toEqual([flat(0.5)])
+})
+
+test("an MP3 that cannot be read has no rings, and the take still opens", async () => {
+  api.channels["/bass.mp3"] = 0
+  api.channels["/guitar.mp3"] = new Error("Sign in first")
+  const sound = serviceSound(take, one(null))
+  expect((await sound.media(sound.tracks)).map((m) => m.channels)).toEqual([0, 0])
+})
+
+test("a wave that is not there has one empty row, and its channels from its MP3", async () => {
+  api.waves["/bass.peaks"] = null
+  const sound = serviceSound(take, one(null))
+  const [bass] = await sound.media(sound.tracks)
+  expect(bass.peaks).toEqual([[]])
+  expect(bass.channels).toBe(1)
+})
+
+test("zoomed in, the wave keeps as many rows as the take's own: two from both sides, one without", async () => {
+  api.waves["/bass.peaks"] = { peaks: flat(0.8), sides: [flat(0.8), flat(0.2)] } satisfies Wave
+  const p = player()
+  const sound = serviceSound(take, one(p))
+  // Half the take, from the take's own wave: each row cut to it.
+  const wide = await sound.media(sound.tracks, 900, 20, 70)
+  expect(wide[0].peaks.map((r) => r.length)).toEqual([600, 600])
+  expect(wide[1].peaks.map((r) => r.length)).toEqual([600])
+  // A third of it, from the MP3.
+  const close = await sound.media(sound.tracks, 900, 20, 50)
+  expect(p.stretch).toHaveBeenCalledWith(0, 20, 50, 900, expect.any(AbortSignal), 2)
+  expect(p.stretch).toHaveBeenCalledWith(1, 20, 50, 900, expect.any(AbortSignal), 1)
+  expect(close.map((m) => m.peaks.length)).toEqual([2, 1])
+})
+
+test("the waves are asked of the service once each time the page opens the take, not at every zoom", async () => {
+  const sound = serviceSound(take, one(null))
+  await sound.media(sound.tracks)
+  await sound.media(sound.tracks, 900, 20, 70)
+  // Past the page's own copy, so a wave sent again since shows.
+  expect(asked("peaks")).toEqual([
+    { queryKey: ["peaks", "/bass.peaks"], staleTime: 0 },
+    { queryKey: ["peaks", "/guitar.peaks"], staleTime: 0 },
+  ])
+  const again = serviceSound(take, one(null))
+  await again.media(again.tracks)
+  expect(asked("peaks")).toHaveLength(4)
+})
+
+test("the Backing track goes to the player with its mark and the backing track's icon, for its frame and its M", async () => {
+  api.waves["/backing.peaks"] = { peaks: flat(0.8), sides: [flat(0.8), flat(0.4)] } satisfies Wave
+  const sound = serviceSound(withBacking, one(null))
+  expect(sound.tracks.map((t) => t.kind ?? null)).toEqual([null, null, "backing"])
+  const media = await sound.media(sound.tracks)
+  expect(media.map((m) => m.kind ?? null)).toEqual([null, null, "backing"])
+  expect(media[2].icon).toBe("backing")
+  expect(media[2].channels).toBe(2)
+})
+
+test("a stereo track's level is a number a side, a mono one's one", async () => {
+  const sound = serviceSound(take, one(player({ playing: true, loudness: () => [[0.5, 0.25], [0.75]] })))
+  expect((await sound.state()).levels).toEqual({ Bass: [0.5, 0.25], Guitar: [0.75] })
+})
+
+test("Backing's M is kept for you and its song, and a failure says so without throwing", async () => {
+  const sound = serviceSound(withBacking, one(null))
+  expect(await sound.keepBackingHeard!(3, true)).toEqual({ ok: true })
+  expect(api.keepBackingHeard).toHaveBeenCalledWith(3, true)
+  api.keepBackingHeard.mockRejectedValueOnce(new Error("The band service is resting"))
+  expect(await sound.keepBackingHeard!(3, false)).toEqual({ ok: false, error: "The band service is resting" })
 })
 
 test("only the tracks that were turned are kept as yours", async () => {
