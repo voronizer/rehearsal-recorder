@@ -18,6 +18,9 @@ import { addMember, as, BASE, confirm, HEADERS, signIn, STATE, type Band } from 
     Alex     the owner's pages, labels, songs, the trash, the sets, and
              pages only looked at. The band has two sets: Club gig, with
              the three songs, and Vik's birthday, deleted and put back.
+
+  Viasna's Backing track is muted for each of them. Ira hears it for a
+  while (backing.spec.ts), and mutes it again after.
 */
 
 const REHEARSALS = {
@@ -26,10 +29,13 @@ const REHEARSALS = {
 }
 
 // The six tracks of test/fixtures, 10.032 s each, made by the playback
-// test's make_tracks.py.
+// test's make_tracks.py. t7.mp3 is as long in stereo, keys louder on the
+// left than on the right, made by РЭХА's own encoder (audio/encode.py).
 const TRACKS = ["Drums", "Bass", "Guitar", "Keys", "Vocals", "Shaker"]
 const ICONS = ["drums", "bass", "guitar", "keys", "vocals", "shaker"]
 const LENGTH = 10.032
+/** t7.mp3, the stereo one. */
+const STEREO = 7
 
 type Mark = { at: number; label: string; colour: string; note: string }
 /** A note of a .mid: when it starts and how long it lasts, in seconds, its note, and its channel from 0. */
@@ -50,24 +56,34 @@ type Seeded = {
   flac?: boolean
   marks?: Mark[]
   balance?: Record<string, number>
+  /** Its tracks recorded in stereo (t7.mp3), each wave sent with both sides, as this РЭХА sends it. */
+  stereo?: string[]
+  /** The song's backing track played into it: the take's Backing track, stereo (t7.mp3), after
+   *  the band's, its wave sent with both sides or, as an older РЭХА sent it, one row. */
+  backing?: { sides: boolean }
 }
 
 const TAKES: Seeded[] = [
   { name: "Viasna 4", song: "Viasna", number: 4, rehearsal: "first", tracks: 1 },
-  { name: "Viasna 5", song: "Viasna", number: 5, rehearsal: "first", tracks: 2 },
+  // The bass went stereo, and the song's backing track played along.
+  { name: "Viasna 5", song: "Viasna", number: 5, rehearsal: "first", tracks: 2, stereo: ["Bass"], backing: { sides: true } },
   { name: "Pałyn 3", song: "Pałyn", number: 3, rehearsal: "first", tracks: 2 },
   { name: "Kupalle 2", song: "Kupalle", number: 2, rehearsal: "second", tracks: 2, starred: true, flac: true,
     marks: [{ at: 2, label: "Again", colour: "red", note: "Count it in" }] },
   // РЭХА numbers the takes with no song as it numbers a song's, across the
   // whole library: the 7th take that evening is the 3rd with no song. The
-  // pages write “Take #3”.
-  { name: "Take 3", song: null, number: 7, rehearsal: "second", tracks: 1 },
+  // pages write “Take #3”. It was recorded to a song's backing track, and
+  // has been out of its song since.
+  { name: "Take 3", song: null, number: 7, rehearsal: "second", tracks: 1, backing: { sides: false } },
   // The keys recorded only their notes: a chord a bar.
   { name: "Pałyn 9", song: "Pałyn", number: 9, rehearsal: "second", tracks: 2,
     notes: [{ name: "Keys", icon: "keys", notes: [0, 2, 4, 6, 8].flatMap((at) => [60, 64, 67].map((n): Note => [at, 1.8, n])) }] },
   // РЭХА sends a take's number in its rehearsal, not at its song: the 10th
   // take that evening, and Viasna's 11th. The pages write “Viasna #11”.
-  { name: "Viasna 11", song: "Viasna", number: 10, rehearsal: "second", tracks: 2 },
+  // With the backing track, sent before РЭХА sent both sides of a wave; the
+  // keys recorded only their notes, a chord a bar.
+  { name: "Viasna 11", song: "Viasna", number: 10, rehearsal: "second", tracks: 2, backing: { sides: false },
+    notes: [{ name: "Keys", icon: "keys", notes: [0, 2, 4, 6, 8].flatMap((at) => [57, 60, 64].map((n): Note => [at, 1.8, n])) }] },
   // The kit sent its notes as well as its sound: kick, snare and hi-hat on
   // channel 10. To the click at 120, 4/4, a bar every 2 s; the band rushed
   // from the third bar on.
@@ -107,10 +123,15 @@ export function smf(notes: Note[]): Uint8Array {
 }
 
 /** A waveform as РЭХА draws it: 1200 numbers from 0 to 1. */
-const peaks = (seed: number) =>
-  JSON.stringify({
-    peaks: Array.from({ length: 1200 }, (_, i) => Math.round((0.15 + 0.7 * Math.abs(Math.sin(i / 40 + seed))) * 1000) / 1000),
-  })
+const wave = (seed: number) =>
+  Array.from({ length: 1200 }, (_, i) => Math.round((0.15 + 0.7 * Math.abs(Math.sin(i / 40 + seed))) * 1000) / 1000)
+const peaks = (seed: number) => JSON.stringify({ peaks: wave(seed) })
+/** A stereo file's, with a row a side beside it: the right side at a third of the left. */
+const sides = (seed: number) => {
+  const left = wave(seed)
+  const right = left.map((v) => Math.round((v / 3) * 1000) / 1000)
+  return JSON.stringify({ peaks: left, sides: [left, right] })
+}
 
 /** РЭХА with a key, as its sending module calls the service. */
 export function reha(api: APIRequestContext, key: string) {
@@ -171,18 +192,18 @@ export default async function seed() {
   for (const t of TAKES) {
     const uid = crypto.randomUUID()
     takes[t.name] = uid
-    const tracks = TRACKS.slice(0, t.tracks).map((name, i) => ({
-      position: i + 1,
-      name,
-      icon: ICONS[i],
-      files: [`${i + 1}.mp3`, `${i + 1}.flac`, `${i + 1}.peaks`],
-    }))
+    const tracks: { position: number; name: string; icon: string | null; files: string[]; kind?: "backing" }[] = [
+      ...TRACKS.slice(0, t.tracks).map((name, i) => ({ name, icon: ICONS[i] })),
+      ...(t.backing ? [{ name: "Backing", icon: null, kind: "backing" as const }] : []),
+    ].map((k, i) => ({ position: i + 1, ...k, files: [`${i + 1}.mp3`, `${i + 1}.flac`, `${i + 1}.peaks`] }))
+    const stereo = (k: (typeof tracks)[number]) => k.kind === "backing" || !!t.stereo?.includes(k.name)
+    const both = (k: (typeof tracks)[number]) => (k.kind === "backing" ? t.backing!.sides : stereo(k))
     // Numbered on from the tracks of sound, as РЭХА numbers them.
     const notes = (t.notes ?? []).map((n, i) => ({
-      position: t.tracks + 1 + i,
+      position: tracks.length + 1 + i,
       name: n.name,
       icon: n.icon,
-      file: `${t.tracks + 1 + i}.mid`,
+      file: `${tracks.length + 1 + i}.mid`,
     }))
     await send.put(`/api/reha/takes/${uid}`, {
       rehearsal: REHEARSALS[t.rehearsal],
@@ -201,8 +222,8 @@ export default async function seed() {
     })
     // As РЭХА sends them: every MP3 and waveform first, then the originals.
     for (const k of tracks) {
-      await send.file(uid, `${k.position}.mp3`, mp3(k.position))
-      await send.file(uid, `${k.position}.peaks`, peaks(k.position))
+      await send.file(uid, `${k.position}.mp3`, mp3(stereo(k) ? STEREO : k.position))
+      await send.file(uid, `${k.position}.peaks`, both(k) ? sides(k.position) : peaks(k.position))
     }
     for (const [i, n] of notes.entries()) await send.file(uid, n.file, smf(t.notes![i].notes))
     await send.post(`/api/reha/takes/${uid}/ready`, { gen: 1, what: "mp3" })
