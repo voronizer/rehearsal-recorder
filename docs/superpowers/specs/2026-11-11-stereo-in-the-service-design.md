@@ -160,4 +160,7 @@ plate has now. No other new words.
 ## Not in this
 
 - Pan or balance per track.
-- Showing the Backing track in the service.
+- How the take's Backing track shows in the service. РЭХА sends it as one
+  of the take's tracks (`sending/service_files.py:53`), so the service shows
+  it as an ordinary track: no dashed frame, and heard from the start, since
+  its M in РЭХА is not sent. It gets its rings with every other track.
