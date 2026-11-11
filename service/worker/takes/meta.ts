@@ -85,7 +85,7 @@ export const TakeMeta = z
         name: z.string(),
         icon: z.string().nullable(),
         files: z.array(z.string()),
-        /** "backing" for the take's Backing track. Missing from РЭХА 0.24 and older. */
+        /** "backing" for the take's Backing track. Missing from РЭХА 0.26 and older. */
         kind: z.literal("backing").optional(),
       })
     ),

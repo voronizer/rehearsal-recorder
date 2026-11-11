@@ -163,7 +163,7 @@ export const accountRelations = relations(account, ({ one }) => ({
 
 // The service's own.
 
-/** `kind` is "backing" for the take's Backing track; missing from РЭХА 0.24 and older. */
+/** `kind` is "backing" for the take's Backing track; missing from РЭХА 0.26 and older. */
 export type Track = { position: number; name: string; icon: string | null; files: string[]; kind?: "backing" }
 /** `icon` is the track's, which РЭХА 0.21 and older did not send. */
 export type Notes = { position: number; name: string; file: string; icon?: string | null }
@@ -467,7 +467,7 @@ export const level = sqliteTable(
 )
 
 /**
- * Whether a member has heard a song's Backing track: the page opens a song's
+ * Whether the member hears a song's Backing track: the page opens a song's
  * takes with it once, and a row is the answer after. Only they see it.
  */
 export const backingHeard = sqliteTable(

@@ -42,10 +42,12 @@ export const fileRoutes = newApp().openapi(
     if (!t) return fail(c, 404, "No such file")
     const ranged = c.req.header("Range") !== undefined
     const wave = name.endsWith(".peaks")
-    // For a wave, R2 itself checks `If-None-Match` and sends no body when it matches.
+    // For a wave, R2 itself checks `If-None-Match` and sends no body when it
+    // matches. Only that header: R2 answers a failed `If-Match` with no body too.
+    const unchanged = c.req.header("If-None-Match")
     const object = await c.env.FILES.get(`takes/${uid}/${gen}/${name}`, {
       ...(ranged && { range: c.req.raw.headers }),
-      ...(wave && { onlyIf: c.req.raw.headers }),
+      ...(wave && unchanged !== undefined && { onlyIf: new Headers({ "If-None-Match": unchanged }) }),
     })
     if (!object) return fail(c, 404, "No such file")
 

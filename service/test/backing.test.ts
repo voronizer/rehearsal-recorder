@@ -54,6 +54,10 @@ test("a wave is asked again each time and answers 304 while it is the same", asy
   expect(again.status).toBe(304)
   expect(again.headers.get("ETag")).toBe(etag)
   expect(again.headers.get("Cache-Control")).toBe("private, no-cache")
+  // Only If-None-Match is R2's to check: an If-Match that fails still gets the wave.
+  const other = await call(`/files/${uid}/1/1.peaks`, { headers: { "If-Match": '"another"' } }, owner)
+  expect(other.status).toBe(200)
+  await other.arrayBuffer()
 
   await env.FILES.put(`takes/${uid}/1/1.peaks`, JSON.stringify({ peaks: [0.9] }))
   expect((await call(`/files/${uid}/1/1.peaks`, { headers: { "If-None-Match": etag } }, owner)).status).toBe(200)

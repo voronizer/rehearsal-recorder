@@ -64,3 +64,9 @@ export function parseFrames(bytes: Uint8Array, start = true): Frames {
   }
   return { frames, samplesPerFrame: SAMPLES_PER_FRAME, sampleRate, channels, used }
 }
+
+/** How many channels an MP3 has, from its first bytes: 1, 2, or 0 when they hold no frame. */
+export function channelsOf(bytes: Uint8Array): 0 | 1 | 2 {
+  const { sampleRate, channels } = parseFrames(bytes)
+  return sampleRate ? (channels === 1 ? 1 : 2) : 0
+}

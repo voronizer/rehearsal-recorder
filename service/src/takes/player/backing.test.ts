@@ -6,15 +6,22 @@ const api = vi.hoisted(() => ({
   known: undefined as { heard: Record<string, boolean> } | undefined,
   fetchQuery: vi.fn(),
   keepBackingHeard: vi.fn(async (_song: number, _heard: boolean) => ({ heard: {} })),
+  // The page's query: asked on the first render it is enabled, answered by the next one.
+  asked: false,
+  answer: { heard: {} } as { heard: Record<string, boolean> },
 }))
 vi.mock("../../api", () => ({
   backingQuery: { queryKey: ["backing"] },
   keepBackingHeard: api.keepBackingHeard,
   queryClient: { getQueryData: () => api.known, fetchQuery: api.fetchQuery },
-  useBacking: () => ({ isPending: true }),
+  useBacking: (enabled: boolean) => {
+    if (api.asked) return { isPending: false, data: api.answer }
+    api.asked = enabled
+    return { isPending: true }
+  },
 }))
 
-const { firstDesk, keepHeard, whenHeard, withBacking } = await import("./backing")
+const { firstDesk, keepHeard, useBackingSong, whenHeard, withBacking } = await import("./backing")
 
 const track = (name: string, kind?: "backing") => ({ name, mp3: `/${name}.mp3`, peaks: `/${name}.peaks`, ...(kind ? { kind } : {}) })
 /** A take of the song `song`, its Backing track last. */
@@ -38,6 +45,7 @@ beforeEach(() => {
   api.known = undefined
   api.fetchQuery.mockReset()
   api.keepBackingHeard.mockClear()
+  api.asked = false
 })
 
 test("a take starts with Backing muted before any player had it, and a take without one with nothing muted", () => {
@@ -91,4 +99,16 @@ test("M pressed on Backing is how its song starts from then on, before the servi
   api.fetchQuery.mockRejectedValueOnce(new Error("The band service is resting"))
   const offline = heard(takeOf(7))
   await vi.waitFor(() => expect(offline()).toBe(true))
+})
+
+test("a take with Backing and no song asks the service already, so gaining a song keeps its player open", () => {
+  api.answer = { heard: { "8": true } }
+  // The page's first render: no song, the player opens at once.
+  expect(useBackingSong(takeOf(null))).toBeNull()
+  // The take gains a song while its page is open: the answer is there, never undefined.
+  expect(useBackingSong(takeOf(8))).toEqual({ id: 8, heard: true })
+  // A take without Backing does not ask.
+  api.asked = false
+  expect(useBackingSong(noBacking)).toBeNull()
+  expect(api.asked).toBe(false)
 })

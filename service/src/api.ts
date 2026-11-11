@@ -13,7 +13,7 @@ import {
 import { hc, type InferResponseType } from "hono/client"
 // Only the routes' types: no Worker code reaches the pages.
 import type { AppType } from "../worker/index"
-import { parseFrames } from "./takes/player/mp3"
+import { channelsOf } from "./takes/player/mp3"
 
 /*
   The band's API, through Hono's client: its types come from the Worker's
@@ -222,9 +222,7 @@ export const channelsQuery = (path: string) =>
       if (res.status === 401) throw new SignedOut("Sign in first")
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
       // From a server that sent the whole file, its first bytes alone.
-      const bytes = new Uint8Array(await res.arrayBuffer()).subarray(0, HEAD_BYTES)
-      const { sampleRate, channels } = parseFrames(bytes)
-      return sampleRate ? (channels === 1 ? 1 : 2) : 0
+      return channelsOf(new Uint8Array(await res.arrayBuffer()).subarray(0, HEAD_BYTES))
     },
   })
 

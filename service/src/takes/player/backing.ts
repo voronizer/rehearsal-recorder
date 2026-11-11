@@ -61,11 +61,13 @@ export function whenHeard(take: TakePage, then: (heard: boolean | null) => void)
  * (useMultitrackPlayer): its number, and whether you hear that song's
  * Backing. Undefined while the service has not said yet: the player opens
  * after it. Null for a take with no Backing, no song, or its song in the
- * Trash: Backing opens muted and nothing is kept.
+ * Trash: Backing opens muted and nothing is kept. Asked for any take with a
+ * Backing track, so a take that gains a song while its page is open has the
+ * answer already, and its player stays open.
  */
 export function useBackingSong(take: TakePage): TakeSong | null | undefined {
   const song = songOf(take)
-  const yours = useBacking(song !== null)
+  const yours = useBacking(backingOf(take) >= 0)
   if (song === null) return null
   if (yours.isPending) return undefined
   return { id: song, heard: heardFor(song, yours.data) }

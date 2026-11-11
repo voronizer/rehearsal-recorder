@@ -48,6 +48,9 @@ const watchBacking = (page: Page) =>
   })
 const heard = (page: Page) => page.evaluate(() => (window as unknown as { backing: Heard }).backing)
 
+/** The page asking the service whether the member hears Backing. */
+const asked = (page: Page) => page.waitForRequest((r) => r.method() === "GET" && r.url().endsWith("/api/me/backing"))
+
 /** Every change of Backing's M the page sends from now on. */
 function kept(page: Page) {
   const sent: unknown[] = []
@@ -122,9 +125,10 @@ test.describe("as Ira", () => {
     })
     const on = await page.request.put("/api/me/backing", { data: { song_id: band().songs["Viasna"], heard: true }, headers: HEADERS })
     expect(on.ok()).toBe(true)
+    const asking = asked(page)
     await page.goto(`/takes/${band().takes["Viasna 11"]}`)
     await expect(page.getByRole("heading", { level: 1 })).toContainText("Viasna")
-    await page.waitForTimeout(500)
+    await asking
     // No lanes yet: nothing of the take plays before Backing is muted.
     await expect(lanes(page)).toHaveCount(0)
     letThrough()
@@ -183,6 +187,25 @@ test.describe("as Ira", () => {
     // Back as it was, for the tests after this one.
     const off = await page.request.put("/api/me/backing", { data: { song_id: band().songs["Viasna"], heard: false }, headers: HEADERS })
     expect(off.ok()).toBe(true)
+  })
+
+  test("M on Backing the service could not keep stays as pressed, and nothing is said", async ({ page }) => {
+    await page.route("**/api/me/backing", (route) =>
+      route.request().method() === "PUT" ? route.fulfill({ status: 500, json: { error: "The band service is resting" } }) : route.fallback()
+    )
+    await page.goto(`/takes/${band().takes["Viasna 11"]}`)
+    await opened(page)
+    await expect(mute(page)).toHaveAttribute("aria-pressed", "true")
+    const failed = page.waitForResponse((r) => r.request().method() === "PUT" && r.url().endsWith("/api/me/backing"))
+    await mute(page).click()
+    expect((await failed).status()).toBe(500)
+    await expect(mute(page)).toHaveAttribute("aria-pressed", "false")
+    // Two frames on, with the failure in: still nothing said.
+    await page.evaluate(() => new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done))))
+    await expect(mute(page)).toHaveAttribute("aria-pressed", "false")
+    await expect(page.getByRole("alert")).toHaveCount(0)
+    await expect(page.getByText("The band service is resting")).toHaveCount(0)
+    await page.unrouteAll({ behavior: "ignoreErrors" })
   })
 
   test("the mix leaves Backing out while it is muted", async ({ page }) => {
@@ -252,6 +275,32 @@ test.describe("as Ira on a phone", () => {
     expect(last.height).toBeCloseTo(56, 0)
   })
 
+  test("Backing turned on opens heard on the next take of its song", async ({ page }) => {
+    await watchBacking(page)
+    const sent = kept(page)
+    const main = page.getByRole("main")
+    const m = main.getByRole("region", { name: "Tracks" }).getByRole("button", { name: "Mute Backing" })
+    await page.goto(`/takes/${band().takes["Viasna 11"]}`)
+    // Pressed once the take has opened: muted the first time.
+    await expect(m).toHaveAttribute("aria-pressed", "true")
+    const answered = page.waitForResponse((r) => r.request().method() === "PUT" && r.url().endsWith("/api/me/backing"))
+    await m.click()
+    await expect(m).toHaveAttribute("aria-pressed", "false")
+    expect((await answered).ok()).toBe(true)
+    expect(sent).toEqual([{ song_id: band().songs["Viasna"], heard: true }])
+
+    // The next take of the song, the page opened afresh: Backing plays heard.
+    await page.goto(`/takes/${band().takes["Viasna 5"]}`)
+    await main.getByRole("button", { name: "Play “Viasna 5”" }).first().click()
+    await expect(main.getByRole("button", { name: "Pause “Viasna 5”" }).first()).toBeVisible()
+    await expect.poll(async () => (await heard(page)).now).toBeGreaterThan(0)
+    await expect(m).toHaveAttribute("aria-pressed", "false")
+    await main.getByRole("button", { name: "Pause “Viasna 5”" }).first().click()
+    // Back as it was, for the tests after this one.
+    const off = await page.request.put("/api/me/backing", { data: { song_id: band().songs["Viasna"], heard: false }, headers: HEADERS })
+    expect(off.ok()).toBe(true)
+  })
+
   test("Play pressed before the take has opened waits for the service, and plays Backing muted", async ({ page }) => {
     await watchBacking(page)
     let letThrough = () => {}
@@ -260,10 +309,11 @@ test.describe("as Ira on a phone", () => {
       if (route.request().method() === "GET") await held
       await route.fallback()
     })
+    const asking = asked(page)
     await page.goto(`/takes/${band().takes["Viasna 11"]}`)
     const main = page.getByRole("main")
     await main.getByRole("button", { name: "Play “Viasna 11”" }).first().click()
-    await page.waitForTimeout(500)
+    await asking
     // No player yet: nothing of the take plays before Backing is muted.
     expect((await heard(page)).now).toBeNull()
     letThrough()
