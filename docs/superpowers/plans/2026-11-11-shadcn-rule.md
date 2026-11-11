@@ -70,8 +70,7 @@ the new components' imports already fixed, are in
 
 1. The right panel on a take's page: folded to the 48 px strip; open beside
    the page, which narrows by 400 px (448 on a page with no strip); the
-   address still opens and closes it; ↑/↓ to the next take keeps it as it
-   was. Test in Task 3.
+   address still opens and closes it. Test in Task 3.
 2. Below 1100 px the left column folds to its icons while the right panel is
    open and opens again when it closes (Alex, 22:23:17); no key folds either
    column. Test in Task 3.
@@ -384,7 +383,9 @@ check"; `CLAUDE.md`; `.claude/skills/check-plan/SKILL.md`.
 
 - [ ] **Step 1: CHANGELOG.** Under "Unreleased", one item for РЭХА and one
   for the service, each starting bold, naming what the spec's "What the band
-  sees" lists for it. Humanizer.
+  sees" lists for it. Humanizer. Then close "Unreleased" as 0.27.0 with
+  today's date (Alex, 23:23:41), the items already there from PR #166 and
+  PR #161 included.
 - [ ] **Step 2: Guide and README.** `grep -n` `docs/using-it.md` and
   `service/README.md` for the code from the email, a question's click
   outside, the folder field, the tempo field, the menu and the panel; bring
@@ -405,3 +406,5 @@ check"; `CLAUDE.md`; `.claude/skills/check-plan/SKILL.md`.
   start the checks; subscribe to its activity.
 - [ ] **Step 3:** Send Alex the link and the site screenshots; merge only on
   his word, with a merge commit.
+- [ ] **Step 4:** After the merge, give Alex the prefilled GitHub Release
+  link for 0.27.0 (English, under 7,000 characters).

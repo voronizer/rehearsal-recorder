@@ -60,6 +60,24 @@ shadcn».
   every width, or the panel over the page below 1100 px.)
 - 22:24:16 «А. Только картинки»: on reha.stream only the band service
   story's pictures are retaken where the frame shows; no words change.
+- 22:27:57 «ок» on the spec and the plan.
+- 23:17:30 «А. Как в окне 960 px», asked once the code showed it: with a
+  panel open in a window 1100 px or wider the page has 508 px at 1180 but
+  kept its wide layout (Marks lost the mark's words, Home's columns were
+  crushed). Now the page takes the layout it has in a 960 px window while a
+  panel is open; the frame, the columns and the panel keep the window's
+  size. (Claude's recommendation; the others were the left column in icons
+  whenever a panel is open, the panel over the page except on a take's
+  page, or new wide layouts for each page.)
+- 23:19:52 «А. Поверх, как сейчас»: in windows from 500 to 819 px (an iPad
+  held upright is 768 to 834) the panel lies over the page as it does now,
+  and the left column stays open; from 820 px it narrows the page, which
+  keeps at least 324 px. (Claude's recommendation; the others were the
+  panel over the whole page as on a phone, or narrowing at every width,
+  which left the page 272 px at 768 and 104 px at 600.)
+- 23:23:41 «Как доделаешь - нарезаем релиз в этом же пр»: this pull request
+  also closes "Unreleased" in CHANGELOG as 0.27.0, with PR #166's stereo
+  and PR #161's MIDI fold.
 
 ## What the band sees
 
@@ -107,7 +125,10 @@ are the ones the band will notice.
   panel is open, the left column folds to its icons (48 px, each with its
   section's name as a tip) and opens again when the panel closes. At 960 px
   the page keeps about 462 px; at 1180 px, where nothing folds, about 506 px
-  (the left column is 224 px, `shell/Side.tsx:67`).
+  (the left column is 224 px, `shell/Side.tsx:67`). While a panel is open
+  the page takes the layout it has in a 960 px window (Alex, 23:17:30).
+  From 500 to 819 px the panel lies over the page as now and the left
+  column stays open (Alex, 23:19:52).
 - **Tips** (S4) are the shared Tooltip, and a name cut short shows in full in
   WholeTip, as in РЭХА. On a phone neither shows, as the browser's never did.
 - **The bar of the take playing** at the bottom (S5) moves with ← and → once
