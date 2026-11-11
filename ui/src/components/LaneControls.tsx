@@ -118,8 +118,9 @@ function MeteredFader({
 /**
  * One track's controls, beside its lane: its icon and name on a row of their
  * own, then the fader, with how loud that track is coming out in it, and mute
- * and solo after the fader. The name has the plate's whole width, and is cut
- * past it, whole in the shared tip on hover and, with Tab, on keyboard focus.
+ * and solo after the fader. The name has the rest of its row, between the
+ * icon and the rings, and is cut past it, whole in the shared tip on hover
+ * and, with Tab, on keyboard focus.
  *
  * After the name, one ring says the file is mono and two say it is stereo,
  * the words in their tip (“Mono file”, “Stereo file”); a file that could not
@@ -202,6 +203,7 @@ export function LaneControls({
   /** On the plate's grey in the player (above). */
   onWell?: boolean
 }) {
+  const file = channels === 2 ? "Stereo file" : channels === 1 ? "Mono file" : null
   return (
     <LanePlate
       data-plate={name}
@@ -221,20 +223,15 @@ export function LaneControls({
           data-plate-name={name}
           className={cn("min-w-0 flex-1 truncate text-sm leading-4", dimmed && "text-muted-foreground")}
         />
-        {(channels === 1 || channels === 2) && (
+        {file && (
           <Tooltip>
             <TooltipTrigger asChild>
-              <span
-                data-plate-file
-                role="img"
-                aria-label={channels === 2 ? "Stereo file" : "Mono file"}
-                className="flex shrink-0"
-              >
+              <span data-plate-file role="img" aria-label={file} className="flex shrink-0">
                 <ChannelsIcon stereo={channels === 2} className="size-4 text-muted-foreground" />
               </span>
             </TooltipTrigger>
             <TooltipContent>
-              <span aria-hidden>{channels === 2 ? "Stereo file" : "Mono file"}</span>
+              <span aria-hidden>{file}</span>
             </TooltipContent>
           </Tooltip>
         )}

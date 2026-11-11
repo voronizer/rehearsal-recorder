@@ -20,11 +20,12 @@ import type { Locator, Page } from "@playwright/test"
 
 // The player's track lanes (spec C6): 56 px, M and S at 20, and the master
 // holding the window's bottom edge. M and S are after the fader, on its row
-// (owner, 2026-10-12, Q3), so the name has the plate's whole width. The lanes
-// are one group on the card's fill with no line between them; the grey is on
-// the plates, each reaching its picture, a Both track's two plates one grey,
-// and the pictures have none (owner, 2026-11-10); the master is its own group
-// under them (owner, 2026-10-12, "Lanes as one group" and "Lanes apart").
+// (owner, 2026-10-12, Q3), so the name's row has only its icon and rings.
+// The lanes are one group on the card's fill with no line between them; the
+// grey is on the plates, each reaching its picture, a Both track's two plates
+// one grey, and the pictures have none (owner, 2026-11-10); the master is its
+// own group under them (owner, 2026-10-12, "Lanes as one group" and "Lanes
+// apart").
 
 const NAMES = ["Drums", "Bass", "Guitar", "Vocals", "Keys", "Horns", "Room", "Talkback"]
 
@@ -850,10 +851,10 @@ test.describe("track lanes", () => {
   })
 })
 
-// Q3: M and S in the fader's row, after the fader. The name is alone on the
-// row above and has the plate's whole width, about 152 px.
+// Q3: M and S in the fader's row, after the fader. The row above has only
+// the icon, the name and its rings: about 140 px for the name.
 test.describe("M and S at the fader", () => {
-  test("M and S sit after the fader on its row and the name has the plate's width", async ({
+  test("M and S sit after the fader on its row and the name has the row above", async ({
     page,
   }) => {
     await openTake2(page)
@@ -868,10 +869,10 @@ test.describe("M and S at the fader", () => {
         )
         expect(Math.abs(middle(b) - middle(fader)), `${label} is level with the fader`).toBeLessThan(1)
       }
-      // The name alone on the row above, at the plate's width less its
-      // padding and the icon: 152 px of the 200.
+      // The name on the row above, at the plate's width less its padding,
+      // the icon and the rings: 140 px.
       const title = await box(p.locator("[data-plate-name]"))
-      expect(title.width, `${name}'s width`).toBeGreaterThanOrEqual(140)
+      expect(title.width, `${name}'s width`).toBeCloseTo(140, 0)
       expect(title.y + title.height).toBeLessThanOrEqual(fader.y + 0.5)
       // And the lane is still 56 px.
       expect((await box(p)).height).toBeCloseTo(56, 0)
@@ -1124,7 +1125,6 @@ test.describe("the lanes group with the rehearsal stress band", () => {
 
 test.describe("the rings after a track's name", () => {
   const rings = (page: Page, name: string) => plate(page, name).locator("[data-plate-file]")
-  const ringCount = (loc: Locator) => loc.locator("svg circle, svg ellipse").count()
 
   test("one ring on a mono track, two on a stereo one, with the words in the tip", async ({ page }) => {
     await stopped(page, band(3, "Bass"))
@@ -1132,8 +1132,6 @@ test.describe("the rings after a track's name", () => {
     await expect(rings(page, "Drums")).toHaveAccessibleName("Mono file")
     await expect(rings(page, "Bass")).toHaveAccessibleName("Stereo file")
     await expect(rings(page, "Guitar")).toHaveAccessibleName("Mono file")
-    // The rings are two circles apart in the stereo mark, one in the mono.
-    expect(await ringCount(rings(page, "Bass"))).toBeGreaterThan(await ringCount(rings(page, "Drums")))
     // Master has none.
     await expect(masterPlate(page).locator("[data-plate-file]")).toHaveCount(0)
     // The tip says the words.

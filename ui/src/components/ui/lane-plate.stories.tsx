@@ -85,9 +85,9 @@ export const Single: Story = {
 /** The same on the light theme, whatever the toolbar says. */
 export const SingleLight: Story = { ...Single, globals: { theme: "light" } }
 
-/** A name past the plate's width (about 152 px) is cut to its row and whole in
- *  the shared tip on hover; Tab reaches it while it is cut. The notes plate's
- *  name and port are the same. */
+/** A name past its room on the row, between the icon and the ring, is cut
+ *  and whole in the shared tip on hover; Tab reaches it while it is cut. The
+ *  notes plate's name and port are the same. */
 export const LongName: Story = {
   render: () => (
     <Fill>

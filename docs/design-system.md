@@ -325,9 +325,9 @@ the shared one when it is redone.
   mono file or two for a stereo one (`ChannelsIcon`), the words “Mono file”
   or “Stereo file” in its tip, and the MIDI sign comes after them. A notes
   plate and Master have none, nor has a file whose channels could not be
-  read. The name has the plate's whole width, and a name cut
-  at its end shows whole on hover and on keyboard focus (`Whole reach`).
-  Under it is the fader, with M and S after it. M and S are
+  read. The name has the rest of its row, between the icon and the rings,
+  and a name cut at its end shows whole on hover and on keyboard focus
+  (`Whole reach`). Under it is the fader, with M and S after it. M and S are
   `Toggle size="lane"`: 20 px, 12 px text and 4 px corners, 6 px apart,
   which keeps their 24 px touch areas apart (WCAG 2.5.8). Pressed, M is the
   accent blue with a white letter and S amber with a dark one (`tone="mute"`

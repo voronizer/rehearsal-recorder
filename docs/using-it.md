@@ -834,11 +834,14 @@ frame (see [In the player](#in-the-player)). The first time you open a take
 of a song, Backing is muted. Turn its **M** off, and every take of that song
 opens with the backing track heard, on your phone and on your computer,
 until you turn **M** on again. A take you play with **▶** in a list starts
-the same way. The others keep their own. Backing's **M** in the service and
-in РЭХА don't follow each other. A take with no song, or whose song is
-in the Trash, always opens with Backing muted. On takes that were already in
-the service, Backing shows this way once РЭХА has been through them in the
-background, even when their files are no longer on this computer.
+the same way.
+
+Your **M** on Backing is for you only: each member has their own. Backing's
+**M** in the service and in РЭХА don't follow each other. A take with no
+song, or whose song is in the Trash, always opens with Backing muted. On
+takes that were already in the service, Backing shows this way once РЭХА has
+been through them in the background, even when their files are no longer on
+this computer.
 
 On a computer, Master's row also shows where the band drifted, as in РЭХА
 (see [Where the band drifted](#where-the-band-drifted)), with the click's
