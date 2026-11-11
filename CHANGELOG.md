@@ -7,6 +7,26 @@ opening.
 
 ## Unreleased
 
+- **Every track shows mono or stereo.** After each track's name in РЭХА's
+  player, one ring means a mono file and two rings a stereo one, as on the
+  Backing track before. The band service shows them too, on a computer and
+  on a phone. The rings go by the file, so a take recorded before the
+  keyboard went stereo keeps one ring.
+- **The band service shows stereo as РЭХА does.** A stereo track's meter has
+  two bars, left above right, and on a computer its waveform has two
+  halves, the left side above the middle and the right side below. Takes
+  already in the service show the rings and the two bars at once. For the
+  two halves, РЭХА sends their waveforms again in the background, one take
+  at a time; a take whose files are no longer on the computer keeps its
+  waveform in one piece.
+- **The band service shows the Backing track.** It used to play as one of
+  the band's tracks. Now it is the last track, right above Master, in a
+  dashed frame, as in РЭХА, and it is muted the first time you open a take
+  of its song. Turn its **M** off, and every take of that song opens with it
+  heard, on your phone and on your computer, until you turn **M** on again.
+  A take played with **▶** in a list starts the same way. Each member has
+  their own **M** for it, separate from РЭХА's. Takes already in the service
+  get this in the same background pass.
 - **In the band service a take opens its page from anywhere on its row**,
   the wave too, and the take's panel is gone. Under a take's title its song
   and its rehearsal are buttons that open their pages; on a rehearsal's page

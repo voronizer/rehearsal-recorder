@@ -1,4 +1,4 @@
-import { expect, test, type Page } from "@playwright/test"
+import { expect, test, type Locator, type Page } from "@playwright/test"
 import { as, band, HEADERS } from "./band"
 import { roomBetween } from "./rows"
 
@@ -318,6 +318,159 @@ test.describe("as Alex on a phone", () => {
   })
 })
 
+test.describe("stereo, as Alex", () => {
+  test.use({ storageState: as("alex") })
+
+  /** The rings after a track's name: their words, or none. */
+  const rings = (row: Locator) => row.locator("[data-plate-file]")
+  /** How many bars a track's meter has: two for a stereo file. */
+  const bars = (row: Locator, name: string) => row.getByRole("meter", { name: `${name} level` }).locator("[data-fill]")
+
+  /**
+   * How far a lane's wave reaches above its middle line and below it, in
+   * px, along the lane: a stereo wave has its left side up and its right
+   * down, and the right is a third of the left in the seed, so it reaches
+   * less far down; a wave in one piece reaches as far each way.
+   */
+  const reach = (page: Page, name: string) =>
+    page.locator(`[data-lane="${name}"] canvas`).evaluate((c: HTMLCanvasElement) => {
+      const { data } = c.getContext("2d")!.getImageData(0, 0, c.width, c.height)
+      const mid = c.height / 2
+      let up = 0
+      let down = 0
+      for (let y = 0; y < c.height; y++)
+        for (let x = 0; x < c.width; x += 4)
+          if (data[(y * c.width + x) * 4 + 3] > 0) {
+            up = Math.max(up, mid - y)
+            down = Math.max(down, y + 1 - mid)
+          }
+      return { up: up / devicePixelRatio, down: down / devicePixelRatio }
+    })
+
+  /** The colour the band's muted text has in the theme on now. */
+  const muted = (page: Page) =>
+    page.evaluate(() => {
+      const probe = document.body.appendChild(document.createElement("span"))
+      probe.style.color = "var(--muted-foreground)"
+      const colour = getComputedStyle(probe).color
+      probe.remove()
+      return colour
+    })
+
+  for (const theme of ["light", "dark"] as const) {
+    for (const [width, height] of [
+      [1180, 820],
+      [960, 680],
+    ]) {
+      test(`a stereo track has two rings, two bars and its wave in two halves, at ${width}x${height} in the ${theme} theme`, async ({ page }) => {
+        await page.setViewportSize({ width, height })
+        await page.emulateMedia({ colorScheme: theme })
+        await page.goto(`/takes/${band().takes["Viasna 5"]}`)
+        const player = page.locator("[data-take-player]")
+        const lanes = player.locator("[data-lane-row]")
+        await expect(lanes).toHaveCount(3)
+        const plate = (name: string) => player.locator(`[data-plate="${name}"]`)
+        // Its wave sent with both sides: two rings, two bars, left above the line and right below.
+        await expect(rings(plate("Bass"))).toHaveAccessibleName("Stereo file")
+        await expect(bars(plate("Bass"), "Bass")).toHaveCount(2)
+        await expect(rings(plate("Drums"))).toHaveAccessibleName("Mono file")
+        await expect(bars(plate("Drums"), "Drums")).toHaveCount(1)
+        await expect(rings(plate("Backing"))).toHaveAccessibleName("Stereo file")
+        await expect.poll(async () => (await reach(page, "Bass")).up).toBeGreaterThan(10)
+        for (const name of ["Bass", "Backing"]) {
+          const { up, down } = await reach(page, name)
+          expect(up).toBeGreaterThan(down * 2)
+        }
+        const drums = await reach(page, "Drums")
+        expect(drums.up).toBeGreaterThan(10)
+        expect(Math.abs(drums.up - drums.down)).toBeLessThanOrEqual(1)
+        // The rings in the muted text's colour, whatever the theme.
+        const colour = await muted(page)
+        for (const name of ["Drums", "Bass"]) await expect(rings(plate(name)).locator("svg")).toHaveCSS("color", colour)
+        // The rings take their 16 px after the name, and the row stays 56 px.
+        expect((await rings(plate("Bass")).boundingBox())!.width).toBeCloseTo(16, 0)
+        for (const name of ["Drums", "Bass", "Backing"]) expect((await plate(name).boundingBox())!.height).toBeCloseTo(56, 0)
+        await rings(plate("Bass")).hover()
+        await expect(page.getByRole("tooltip")).toHaveText("Stereo file")
+
+        // A take sent before РЭХА sent both sides: its MP3 says stereo, and its wave is in one piece.
+        await page.goto(`/takes/${band().takes["Viasna 11"]}`)
+        await expect(player.locator("[data-lane-row]")).toHaveCount(4)
+        await expect(rings(plate("Backing"))).toHaveAccessibleName("Stereo file")
+        await expect(bars(plate("Backing"), "Backing")).toHaveCount(2)
+        await expect(rings(plate("Bass"))).toHaveAccessibleName("Mono file")
+        await expect.poll(async () => (await reach(page, "Backing")).up).toBeGreaterThan(5)
+        const one = await reach(page, "Backing")
+        expect(Math.abs(one.up - one.down)).toBeLessThanOrEqual(1)
+      })
+    }
+
+    test(`on a phone, a stereo track has two rings and two bars on the desk in the ${theme} theme`, async ({ page }) => {
+      await page.setViewportSize({ width: 390, height: 844 })
+      await page.emulateMedia({ colorScheme: theme })
+      await page.goto(`/takes/${band().takes["Viasna 5"]}`)
+      const tracks = page.getByRole("main").getByRole("region", { name: "Tracks" })
+      const row = (name: string) => tracks.locator(`[data-desk-row="${name}"]`)
+      await expect(rings(row("Bass"))).toHaveAccessibleName("Stereo file")
+      await expect(bars(row("Bass"), "Bass")).toHaveCount(2)
+      await expect(rings(row("Drums"))).toHaveAccessibleName("Mono file")
+      await expect(bars(row("Drums"), "Drums")).toHaveCount(1)
+      await expect(rings(row("Backing"))).toHaveAccessibleName("Stereo file")
+      const colour = await muted(page)
+      await expect(rings(row("Bass")).locator("svg")).toHaveCSS("color", colour)
+      for (const name of ["Drums", "Bass", "Backing"]) expect((await row(name).boundingBox())!.height).toBeCloseTo(56, 0)
+
+      await page.goto(`/takes/${band().takes["Viasna 11"]}`)
+      await expect(rings(row("Backing"))).toHaveAccessibleName("Stereo file")
+      await expect(bars(row("Backing"), "Backing")).toHaveCount(2)
+      await expect(rings(row("Bass"))).toHaveAccessibleName("Mono file")
+    })
+  }
+
+  test("a stereo track's level comes in two bars as it plays, the right side lower here", async ({ page }) => {
+    await page.goto(`/takes/${band().takes["Viasna 5"]}`)
+    const player = page.locator("[data-take-player]")
+    await expect(bars(player, "Bass")).toHaveCount(2)
+    await page.getByRole("toolbar", { name: "Transport" }).getByRole("button", { name: "Play", exact: true }).click()
+    const widths = (name: string) => bars(player, name).evaluateAll((els) => els.map((e) => e.getBoundingClientRect().width))
+    await expect
+      .poll(async () => {
+        const [left, right] = await widths("Bass")
+        return left > 0 && right > 0 && right < left
+      }, { timeout: 10_000 })
+      .toBe(true)
+    await expect.poll(async () => (await widths("Drums"))[0], { timeout: 10_000 }).toBeGreaterThan(0)
+    await page.getByRole("toolbar", { name: "Transport" }).getByRole("button", { name: "Pause", exact: true }).click()
+  })
+
+  test("on a phone, a track's row comes with its rings, and no row moves when they come", async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 })
+    // The waves are held back until the test lets them through.
+    let letThrough = () => {}
+    const held = new Promise<void>((done) => (letThrough = done))
+    await page.route("**/*.peaks", async (route) => {
+      await held
+      await route.fallback()
+    })
+    await page.goto(`/takes/${band().takes["Viasna 11"]}`)
+    const tracks = page.getByRole("main").getByRole("region", { name: "Tracks" })
+    const rows = tracks.locator("[data-desk-row]")
+    await expect(rows).toHaveCount(4)
+    const master = tracks.locator("[data-master-plate]")
+    await expect(master).toBeVisible()
+    const before = await rows.evaluateAll((els) => els.map((e) => e.getBoundingClientRect().top))
+    const masterAt = (await master.boundingBox())!.y
+    // Each row is there, empty: no name without its rings.
+    await expect(rows.locator("[data-plate]")).toHaveCount(0)
+    letThrough()
+    await expect(rows.locator("[data-plate]")).toHaveCount(3)
+    await expect(rows.locator("[data-plate-file]")).toHaveCount(3)
+    expect(await rows.evaluateAll((els) => els.map((e) => e.getBoundingClientRect().top))).toEqual(before)
+    expect((await master.boundingBox())!.y).toBe(masterAt)
+    await page.unrouteAll({ behavior: "ignoreErrors" })
+  })
+})
+
 test.describe("as Ira", () => {
   test.use({ storageState: as("ira") })
 
@@ -471,11 +624,12 @@ test.describe("as Ira", () => {
   })
 
   test("Play shows Pause at once while the files come, and a second press pauses", async ({ page }) => {
-    // The take's files are held back until the test lets them through.
+    // The take's files are held back until the test lets them through: all
+    // but the first bytes of each, which say its channels as the page opens.
     let letThrough = () => {}
     const held = new Promise<void>((done) => (letThrough = done))
     await page.route("**/*.mp3*", async (route) => {
-      await held
+      if (route.request().headers()["range"] !== "bytes=0-16383") await held
       await route.fallback()
     })
     await page.goto(`/takes/${band().takes["Viasna 12"]}`)

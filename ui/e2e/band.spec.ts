@@ -113,6 +113,42 @@ test("the band's past takes have their own length and music", async ({ page }) =
   expect(wrong).toEqual([])
 })
 
+// The drums are a stereo file, as the site's story has them: the pictures
+// and the site's player show two rings, two bars and a wave in two rows on
+// them, and one of each on the others.
+test("the band's drums are a stereo file: two rings, two bars and a wave in two rows", async ({ page }) => {
+  await openBandApp(page)
+  await page.locator("#rehearsal-name").fill("Tuesday jam")
+  await startButton(page).click()
+  await takeButton(page, "Pałyn #2").click()
+  const rings = (name: string) => page.locator(`[data-plate='${name}'] [data-plate-file]`)
+  await expect(rings("Drums")).toHaveAccessibleName("Stereo file")
+  await expect(rings("Bass")).toHaveAccessibleName("Mono file")
+  const rows = await page.evaluate(async () => {
+    const api = (window as unknown as {
+      pywebview: { api: { take_media: (...a: unknown[]) => Promise<{ name: string; peaks: number[][] }[]> } }
+    }).pywebview.api
+    const media = await api.take_media(
+      ["Drums", "Bass", "Guitar", "Vocals"].map((name) => ({ name, file: `/rec/tonight/2/${name}.wav` })),
+      100
+    )
+    return Object.fromEntries(media.map((m) => [m.name, m.peaks.length]))
+  })
+  expect(rows).toEqual({ Drums: 2, Bass: 1, Guitar: 1, Vocals: 1 })
+  const fills = (name: string) => page.getByRole("meter", { name: `${name} level` }).locator("[data-fill]")
+  await expect(fills("Drums")).toHaveCount(2)
+  await expect(fills("Bass")).toHaveCount(1)
+  // Playing, both sides have a level, the right a little lower.
+  await page.locator("button[aria-label='Play']").click()
+  const sides = () => fills("Drums").evaluateAll((els) => els.map((el) => parseFloat((el as HTMLElement).style.width)))
+  await expect
+    .poll(async () => {
+      const [left, right] = await sides()
+      return right > 0 && right < left
+    })
+    .toBe(true)
+})
+
 test("the band's click output offers its desk on ASIO", async ({ page }) => {
   await openBandApp(page)
   const outputs = await page.evaluate(() =>

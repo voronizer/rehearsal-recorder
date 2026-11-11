@@ -34,7 +34,7 @@ const TakePage = z
     gen: z.number(),
     balance: z.record(z.string(), z.number()),
     tracks: z.array(
-      z.object({ position: z.number(), name: z.string(), icon: z.string().nullable(), mp3: z.string(), peaks: z.string() })
+      z.object({ position: z.number(), name: z.string(), icon: z.string().nullable(), mp3: z.string(), peaks: z.string(), kind: z.literal("backing").nullable().optional() })
     ),
     stars: z.array(z.object({ member_id: z.string(), initial: z.string(), name: z.string() })),
     starred_by_me: z.boolean(),
@@ -171,6 +171,7 @@ export const takeRoutes = newApp()
               icon: k.icon,
               mp3: path(`${k.position}.mp3`),
               peaks: path(`${k.position}.peaks`),
+              kind: k.kind ?? null,
             })),
           stars: stars.map((s) => ({ member_id: s.memberId, initial: initial(s.name, s.email), name: shownName(s.name, s.email) })),
           starred_by_me: stars.some((s) => s.memberId === c.var.member.id),

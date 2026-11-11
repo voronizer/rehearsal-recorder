@@ -118,13 +118,16 @@ function MeteredFader({
 /**
  * One track's controls, beside its lane: its icon and name on a row of their
  * own, then the fader, with how loud that track is coming out in it, and mute
- * and solo after the fader. The name has the plate's whole width, and is cut
- * past it, whole in the shared tip on hover and, with Tab, on keyboard focus.
+ * and solo after the fader. The name has the rest of its row, between the
+ * icon and the rings, and is cut past it, whole in the shared tip on hover
+ * and, with Tab, on keyboard focus.
  *
- * Nothing says whether the file is one channel or two: a lane at 56 px has no
- * room for the line, and the meter shows it, in two bars for a stereo file.
- * That is read from the file, not from how the band is set up today: a take
- * recorded before the keyboard went stereo is still one channel.
+ * After the name, one ring says the file is mono and two say it is stereo,
+ * the words in their tip (“Mono file”, “Stereo file”); a file that could not
+ * be read (`channels` 0) has none. That is read from the file, not from how
+ * the band is set up today: a take recorded before the keyboard went stereo
+ * is still one channel. The meter shows it too, in two bars for a stereo
+ * file.
  *
  * The level is measured in Python, in the mix, after this track's gain — so
  * it is what came out, not what is on disk, and mute and solo are already in
@@ -144,12 +147,11 @@ function MeteredFader({
  * notes' plate (midi/NotesPlate) on the row under it.
  *
  * The take's Backing track is the song's file, not one of the band's tracks
- * (backing-track spec Part 7): its plate has a dashed frame, and after its
- * name one ring or two say whether the file is mono or stereo, the words
- * ("Stereo file", `file`) in its tip.
+ * (backing-track spec Part 7): its plate has a dashed frame (`backing`) and
+ * the same rings as any track.
  *
  * On the band service's desk for a phone, which has no lanes, the MIDI sign
- * after the name says the track recorded its notes too (`midi`).
+ * after the rings says the track recorded its notes too (`midi`).
  *
  * In the player the plate is on its grey (`onWell`, Timeline's PlateGrey):
  * the name and the fader's row are 2 px apart, so the grey has 8 px over the
@@ -161,7 +163,7 @@ function MeteredFader({
 export function LaneControls({
   name,
   icon,
-  file,
+  backing = false,
   paired = false,
   midi = false,
   channels,
@@ -179,13 +181,13 @@ export function LaneControls({
   name: string
   /** The band's icon for this name; none draws the neutral one. */
   icon?: string
-  /** A Backing track's words for its file; a band's track has none. */
-  file?: string
+  /** The take's Backing track: the plate has a dashed frame. */
+  backing?: boolean
   /** The track records its notes too: its notes' row is under this one. */
   paired?: boolean
   /** The track recorded its notes too, and no row under it says so. */
   midi?: boolean
-  /** In the file: 1, 2, or 0 when it could not be read. */
+  /** In the file: 1, 2, or 0 when it could not be read (no rings). */
   channels: number
   muted: boolean
   soloed: boolean
@@ -201,6 +203,7 @@ export function LaneControls({
   /** On the plate's grey in the player (above). */
   onWell?: boolean
 }) {
+  const file = channels === 2 ? "Stereo file" : channels === 1 ? "Mono file" : null
   return (
     <LanePlate
       data-plate={name}
@@ -209,7 +212,7 @@ export function LaneControls({
       // The frame is 1 px inside the plate's 56: 7 px above and below.
       className={cn(
         onWell ? "gap-0.5" : "gap-1",
-        file && "rounded-md border border-dashed border-muted-foreground/50 py-[7px]"
+        backing && "rounded-md border border-dashed border-muted-foreground/50 py-[7px]"
       )}
     >
       <div className="flex h-4 items-center gap-2">
@@ -224,7 +227,7 @@ export function LaneControls({
           <Tooltip>
             <TooltipTrigger asChild>
               <span data-plate-file role="img" aria-label={file} className="flex shrink-0">
-                <ChannelsIcon stereo={channels > 1} className="size-4 text-muted-foreground" />
+                <ChannelsIcon stereo={channels === 2} className="size-4 text-muted-foreground" />
               </span>
             </TooltipTrigger>
             <TooltipContent>

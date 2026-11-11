@@ -20,11 +20,12 @@ import type { Locator, Page } from "@playwright/test"
 
 // The player's track lanes (spec C6): 56 px, M and S at 20, and the master
 // holding the window's bottom edge. M and S are after the fader, on its row
-// (owner, 2026-10-12, Q3), so the name has the plate's whole width. The lanes
-// are one group on the card's fill with no line between them; the grey is on
-// the plates, each reaching its picture, a Both track's two plates one grey,
-// and the pictures have none (owner, 2026-11-10); the master is its own group
-// under them (owner, 2026-10-12, "Lanes as one group" and "Lanes apart").
+// (owner, 2026-10-12, Q3), so the name's row has only its icon and rings.
+// The lanes are one group on the card's fill with no line between them; the
+// grey is on the plates, each reaching its picture, a Both track's two plates
+// one grey, and the pictures have none (owner, 2026-11-10); the master is its
+// own group under them (owner, 2026-10-12, "Lanes as one group" and "Lanes
+// apart").
 
 const NAMES = ["Drums", "Bass", "Guitar", "Vocals", "Keys", "Horns", "Room", "Talkback"]
 
@@ -850,10 +851,10 @@ test.describe("track lanes", () => {
   })
 })
 
-// Q3: M and S in the fader's row, after the fader. The name is alone on the
-// row above and has the plate's whole width, about 152 px.
+// Q3: M and S in the fader's row, after the fader. The row above has only
+// the icon, the name and its rings: about 140 px for the name.
 test.describe("M and S at the fader", () => {
-  test("M and S sit after the fader on its row and the name has the plate's width", async ({
+  test("M and S sit after the fader on its row and the name has the row above", async ({
     page,
   }) => {
     await openTake2(page)
@@ -868,10 +869,10 @@ test.describe("M and S at the fader", () => {
         )
         expect(Math.abs(middle(b) - middle(fader)), `${label} is level with the fader`).toBeLessThan(1)
       }
-      // The name alone on the row above, at the plate's width less its
-      // padding and the icon: 152 px of the 200.
+      // The name on the row above, at the plate's width less its padding,
+      // the icon and the rings: 140 px.
       const title = await box(p.locator("[data-plate-name]"))
-      expect(title.width, `${name}'s width`).toBeGreaterThanOrEqual(140)
+      expect(title.width, `${name}'s width`).toBeCloseTo(140, 0)
       expect(title.y + title.height).toBeLessThanOrEqual(fader.y + 0.5)
       // And the lane is still 56 px.
       expect((await box(p)).height).toBeCloseTo(56, 0)
@@ -1120,4 +1121,97 @@ test.describe("the lanes group with the rehearsal stress band", () => {
     await expect(hanna).toBeFocused()
     await expect(page.locator("[data-whole][data-state$='open']")).toHaveText(HANNA)
   })
+})
+
+test.describe("the rings after a track's name", () => {
+  const rings = (page: Page, name: string) => plate(page, name).locator("[data-plate-file]")
+
+  test("one ring on a mono track, two on a stereo one, with the words in the tip", async ({ page }) => {
+    await stopped(page, band(3, "Bass"))
+    await settled(page)
+    await expect(rings(page, "Drums")).toHaveAccessibleName("Mono file")
+    await expect(rings(page, "Bass")).toHaveAccessibleName("Stereo file")
+    await expect(rings(page, "Guitar")).toHaveAccessibleName("Mono file")
+    // Master has none.
+    await expect(masterPlate(page).locator("[data-plate-file]")).toHaveCount(0)
+    // The tip says the words.
+    await rings(page, "Bass").hover()
+    await expect(page.getByRole("tooltip")).toHaveText("Stereo file")
+    await page.mouse.move(0, 0, { steps: 8 })
+    await rings(page, "Drums").hover()
+    await expect(page.getByRole("tooltip")).toHaveText("Mono file")
+  })
+
+  test("a notes row has none, while its audio row keeps one", async ({ page }) => {
+    await stopped(page, BOTH)
+    await settled(page)
+    await expect(notesPlate(page, "Drums").locator("[data-plate-file]")).toHaveCount(0)
+    await expect(notesPlate(page, "Keys").locator("[data-plate-file]")).toHaveCount(0)
+    await expect(rings(page, "Drums")).toHaveAccessibleName("Mono file")
+    await expect(rings(page, "Gtr")).toHaveAccessibleName("Mono file")
+  })
+
+  test("a file whose channels could not be read has no rings", async ({ page }) => {
+    await stopped(page, {
+      before: `window.__UNREADABLE_TRACKS__ = ['Bass'];`,
+      after: band(3).after,
+    })
+    await settled(page)
+    await expect(plate(page, "Bass")).toBeVisible()
+    await expect(rings(page, "Bass")).toHaveCount(0)
+    await expect(rings(page, "Drums")).toHaveCount(1)
+  })
+
+  test("Backing keeps its dashed frame and has rings like the others", async ({ page }) => {
+    await openBandApp(page)
+    await startRehearsal(page, 6)
+    await page.locator("#next-take-name").fill("Pałyn")
+    await page.locator("#next-take-name").press("Enter")
+    await recordTake(page, 6)
+    await settled(page)
+    const backing = plate(page, "Backing")
+    await expect(backing).toBeVisible()
+    await expect(rings(page, "Backing")).toHaveAccessibleName("Stereo file")
+    expect((await style(backing, "border-top-style"))["border-top-style"]).toBe("dashed")
+    expect((await style(plate(page, "Drums"), "border-top-style"))["border-top-style"]).not.toBe("dashed")
+    expect((await box(backing)).height).toBeCloseTo(56, 0)
+  })
+
+  test("a long name is still cut with its tip, and the row is 56 px", async ({ page }) => {
+    await openTake2(page)
+    await settled(page)
+    const hanna = plate(page, HANNA)
+    await expect(rings(page, HANNA)).toHaveCount(1)
+    await expect(hanna.locator("[data-plate-name]")).toHaveAttribute("data-cut")
+    expect((await box(hanna)).height).toBeCloseTo(56, 0)
+    expect((await box(cell(page, HANNA))).height).toBeCloseTo(56, 0)
+    // The rings are 16 px wide, after the name, inside the plate.
+    const r = await box(rings(page, HANNA))
+    const n = await box(hanna.locator("[data-plate-name]"))
+    const p = await box(hanna)
+    expect(r.width).toBeCloseTo(16, 0)
+    expect(r.x).toBeGreaterThanOrEqual(n.x + n.width - 0.5)
+    expect(r.x + r.width).toBeLessThanOrEqual(p.x + p.width)
+    await hanna.locator("[data-plate-name]").hover()
+    await expect(page.locator("[data-whole][data-state$='open']")).toHaveText(HANNA)
+  })
+
+  test("the MIDI-only track's notes plate has none", async ({ page }) => {
+    await openTake2(page)
+    await settled(page)
+    await expect(page.locator("[data-notes-plate] [data-plate-file]")).toHaveCount(0)
+  })
+
+  for (const theme of ["dark", "light"] as const) {
+    test(`the rings are in the muted text's colour in the ${theme} theme`, async ({ page }) => {
+      await stopped(page, band(2, "Bass"), themed(theme))
+      await settled(page)
+      for (const name of ["Drums", "Bass"]) {
+        await expect(rings(page, name)).toBeVisible()
+        expect(await style(rings(page, name).locator("svg"), "color")).toEqual({
+          color: await colour(page, "--muted-foreground"),
+        })
+      }
+    })
+  }
 })

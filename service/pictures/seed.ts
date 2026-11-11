@@ -13,7 +13,7 @@ import { member, reha, smf } from "../e2e/seed"
 
   Who plays what, and whose pictures:
     Vik      drums, on a kit that sends its notes too: each take has
-             a .mid of them.
+             a .mid of them. Its sound is stereo.
     Alex     bass; the owner.
     Ivan     guitar. The pictures of a take, a song and the marks are
              his; he marked Viasna 12.
@@ -39,6 +39,8 @@ const TRACKS = [
   { name: "Vocals", icon: "vocals" },
 ] as const
 type Part = (typeof TRACKS)[number]["name"]
+/** The kit's sound is stereo: its MP3 is the stereo fixture (t7.mp3), and its wave has both sides. */
+const STEREO: readonly Part[] = ["Drums"]
 
 type Seeded = {
   song: string
@@ -161,7 +163,8 @@ function kit(length: number, played: { start: number; tempo: number }[]): Uint8A
 
 /** A made-up waveform for a part over a take: 1200 numbers from 0 to 1, a
  *  song's parts in it (intro, verses, choruses, a bridge, a solo, the end),
- *  the same every time it is drawn. */
+ *  the same every time it is drawn. A stereo part's has a row a side beside
+ *  it, as РЭХА sends it, the right side a little quieter. */
 function peaks(part: Part, length: number, seed: number): string {
   let state = seed * 7919 + part.length * 104729
   const noise = () => ((state = (state * 1103515245 + 12345) % 2147483648) / 2147483648)
@@ -185,7 +188,9 @@ function peaks(part: Part, length: number, seed: number): string {
     }
     return Math.round(Math.max(0, Math.min(1, v)) * 1000) / 1000
   })
-  return JSON.stringify({ peaks: values })
+  if (!STEREO.includes(part)) return JSON.stringify({ peaks: values })
+  const right = values.map((v) => Math.round(v * 0.85 * 1000) / 1000)
+  return JSON.stringify({ peaks: values, sides: [values, right] })
 }
 
 const mp3 = (i: number) => new Uint8Array(readFileSync(new URL(`../test/fixtures/t${i}.mp3`, import.meta.url)))
@@ -239,7 +244,7 @@ export default async function seed() {
     })
     // The pictures play nothing, so the page tests' short tracks stand in for the sound.
     for (const k of tracks) {
-      await send.file(uid, `${k.position}.mp3`, mp3(k.position))
+      await send.file(uid, `${k.position}.mp3`, mp3(STEREO.includes(k.name) ? 7 : k.position))
       await send.file(uid, `${k.position}.peaks`, peaks(TRACKS[k.position - 1].name, length, n))
     }
     await send.file(uid, `${TRACKS.length + 1}.mid`, kit(length, played))

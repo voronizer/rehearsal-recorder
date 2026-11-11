@@ -405,6 +405,11 @@ rehearsal into the next.
   lines between them: each track's name and fader sit on a grey plate that
   runs up to its waveform, the drawing of its sound. A name too long for its
   place is cut, and shows whole when you point at it or reach it with Tab.
+- After a track's name, one ring means a mono file and two rings a stereo
+  one. The rings go by the file: a take recorded before the keyboard went
+  stereo keeps one ring. A stereo track's meter has two bars, left above
+  right, and its waveform two halves, the left side above the middle and
+  the right side below.
 - Balance the band with the fader under each track name. **M**, after the
   fader, mutes a track, and **S**, after **M**, plays it on its own. A
   pressed **M** is blue and a pressed **S** yellow, so you see at a glance
@@ -815,6 +820,29 @@ you move a fader. On a computer, a track that recorded MIDI shows its notes as
 in РЭХА's player, and they are not played; on a phone its row has the MIDI
 sign.
 
+The tracks have their rings there too, one for a mono file and two for a
+stereo one, and a stereo track's meter has two bars, on a phone as well. On
+a computer its waveform has two halves, as in РЭХА. Takes that were already
+in the service before you updated РЭХА show the rings and the two bars
+straight away. Their waveforms get the two halves once РЭХА has sent them
+again, which it does in the background, one take at a time; a take whose
+files are no longer on this computer keeps its waveform in one piece.
+
+A take recorded with the song's backing track shows its **Backing** track in
+the service as РЭХА does: the last track, right above Master, in a dashed
+frame (see [In the player](#in-the-player)). The first time you open a take
+of a song, Backing is muted. Turn its **M** off, and every take of that song
+opens with the backing track heard, on your phone and on your computer,
+until you turn **M** on again. A take you play with **▶** in a list starts
+the same way.
+
+Your **M** on Backing is for you only: each member has their own. Backing's
+**M** in the service and in РЭХА don't follow each other. A take with no
+song, or whose song is in the Trash, always opens with Backing muted. On
+takes that were already in the service, Backing shows this way once РЭХА has
+been through them in the background, even when their files are no longer on
+this computer.
+
 On a computer, Master's row also shows where the band drifted, as in РЭХА
 (see [Where the band drifted](#where-the-band-drifted)), with the click's
 bars behind the line. РЭХА works the tempo out once all of a take's files are
@@ -926,7 +954,7 @@ in РЭХА is put back, with the reason in its line in the list.
 
 The rest of a song stays on its own side. Its status, key, notes and files
 are the service's, and nothing of them comes to РЭХА. Its backing track is
-РЭХА's only.
+РЭХА's only, apart from the Backing track of each take recorded with it.
 
 ### Sets on both sides
 

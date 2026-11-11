@@ -15,10 +15,12 @@ import math
 import os
 import shutil
 import uuid
+import wave
 from pathlib import Path
 
 from rehearsal_recorder.audio.encode import encode
 from rehearsal_recorder.audio.waveform import wav_peaks
+from rehearsal_recorder.store.models import BACKING_FILE
 
 # How many numbers a waveform has: the same for a take of a minute or of
 # ten, which the pages stretch to their width.
@@ -68,6 +70,38 @@ def names(take):
             "notes": {n["name"]: f"{len(audio) + i}.mid" for i, n in enumerate(_notes(take), 1)}}
 
 
+def has_backing(take):
+    """Whether one of the tracks that go is the take's Backing track."""
+    return any(t.get("kind") == BACKING_FILE for t in _audio(take))
+
+
+def stereo_waves(take):
+    """
+    The waveforms of the take's stereo tracks, as `plan` has them: each
+    track whose WAV is on disk and has two channels or more. A WAV that is
+    gone, or cannot be read, has none.
+    """
+    out = []
+    for item in plan(take, {"peaks"}):
+        try:
+            with wave.open(str(item["source"]), "rb") as wf:
+                if wf.getnchannels() >= 2:
+                    out.append(item)
+        except (OSError, EOFError, wave.Error):
+            continue
+    return out
+
+
+def has_sides(path):
+    """Whether the waveform `make` wrote at `path` has a row per side: one
+    an older РЭХА made, before it sent them, has not, nor has a file gone
+    or broken."""
+    try:
+        return "sides" in json.loads(Path(path).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return False
+
+
 def plan(take, kinds):
     """
     The take's files of the kinds asked for, in the order they go up: every
@@ -115,8 +149,12 @@ def meta(take, rehearsal, labels, volumes, gen, cut_start, tempo=None):
         "cut_start": round(float(cut_start or 0), 2),
         "starred": bool(take.get("starred")),
         "balance": {t["name"]: float(volumes.get(t["name"], 1.0)) for t in audio},
+        # The Backing track says so, in the word the library keeps, which is
+        # the service's too, for its dashed frame and its M in the service;
+        # the others say nothing.
         "tracks": [{"position": i, "name": t["name"], "icon": t.get("icon"),
-                    "files": [f"{i}.mp3", f"{i}.flac", f"{i}.peaks"]}
+                    "files": [f"{i}.mp3", f"{i}.flac", f"{i}.peaks"],
+                    **({"kind": BACKING_FILE} if t.get("kind") == BACKING_FILE else {})}
                    for i, t in enumerate(audio, 1)],
         "notes": [{"position": len(audio) + i, "name": n["name"], "file": f"{len(audio) + i}.mid",
                    "icon": n.get("icon")}
@@ -203,8 +241,14 @@ def make(item, dst, stop=None):
     if kind == "peaks":
         rows, _, _ = wav_peaks(source, buckets=PEAKS)
         peaks = [round(float(max(column)), 3) for column in zip(*rows)] if rows else [0.0] * PEAKS
+        drawn = {"peaks": peaks}
+        if len(rows) == 2:
+            # A stereo track's sides too, left then right, for its wave in two
+            # halves. "peaks" stays: an older service reads only that, and the
+            # take's wave in the lists is made from it.
+            drawn["sides"] = [[round(float(v), 3) for v in row] for row in rows]
         writing = dst.with_name(dst.name + ".writing")
-        writing.write_text(json.dumps({"peaks": peaks}), encoding="utf-8")
+        writing.write_text(json.dumps(drawn), encoding="utf-8")
         os.replace(writing, dst)
         return
     copy = dst.with_name(dst.name + ".wav")

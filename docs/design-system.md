@@ -321,9 +321,13 @@ the shared one when it is redone.
 - **C6. Track lane.** A rehearsal lane is 56 px, 3.5 rem so it grows with
   the Appearance scale (`LANE_REM` in `components/Timeline.tsx`). At 96,
   five tracks took a laptop's whole screen. The Mono or Stereo line under a
-  track's name is gone. The name has the plate's whole width, and a name cut
-  at its end shows whole on hover and on keyboard focus (`Whole reach`).
-  Under it is the fader, with M and S after it. M and S are
+  track's name is gone: every audio plate has one ring after its name for a
+  mono file or two for a stereo one (`ChannelsIcon`), the words “Mono file”
+  or “Stereo file” in its tip, and the MIDI sign comes after them. A notes
+  plate and Master have none, nor has a file whose channels could not be
+  read. The name has the rest of its row, between the icon and the rings,
+  and a name cut at its end shows whole on hover and on keyboard focus
+  (`Whole reach`). Under it is the fader, with M and S after it. M and S are
   `Toggle size="lane"`: 20 px, 12 px text and 4 px corners, 6 px apart,
   which keeps their 24 px touch areas apart (WCAG 2.5.8). Pressed, M is the
   accent blue with a white letter and S amber with a dark one (`tone="mute"`
@@ -359,11 +363,11 @@ the shared one when it is redone.
   lane (`MasterClickLane`).
   A take's Backing track, the last lane above Master, has no grey and a
   dashed border round its plate and its waveform, in the muted text's colour
-  at half strength, and after its name one ring or two (`ChannelsIcon`, the words
-  "Mono file" or "Stereo file" in its tip): a file played into the take,
-  not an input the band recorded. One ring is mono and two are stereo
-  wherever the app says it: a track's Stereo toggle on the start screen,
-  this plate, and a song's backing line.
+  at half strength, and it is told apart by that frame alone: its rings are
+  every audio plate's. It is a file played into the take, not an input the
+  band recorded. One ring is mono and two are stereo wherever the app says
+  it: a track's Stereo toggle on the start screen, every plate, and a song's
+  backing line.
 - **C7. Group**, `Card`: a panel set apart as F4 says, with 12 px
   corners, 16 px inside, and no border or shadow. A screen gives it more air
   with `className`. It takes the place of about 21 hand-made bordered boxes

@@ -14,7 +14,9 @@ It can be told to drop the connection unanswered, to keep a part and then
 drop it, to forget its uploads, to refuse with words, or to say РЭХА is too
 old. A test can delete a take as someone in the band does, and press
 Restore on it. It can be a service from before the tempo along Master,
-which neither keeps a take's tempo nor says which it has.
+which neither keeps a take's tempo nor says which it has, and one from
+before Backing's mark, which drops it from a take's tracks and says
+nothing of it.
 
 It keeps songs by number as the service does (service/worker/songs/sync.ts),
 and a test can rename one, give it a tempo, make one, delete one or move a
@@ -68,6 +70,8 @@ class FakeBandService:
         self.drifts = {}
         # False: a service from before the tempo along Master.
         self.keeps_tempo = True
+        # False: a service from before Backing's mark on a take's tracks.
+        self.keeps_kind = True
         # upload_id: {"uid", "gen", "name", "size", "parts": {number: bytes}}
         self.uploads = {}
         # "uid/gen/name": the file's bytes, once its upload is done.
@@ -386,6 +390,9 @@ class FakeBandService:
         rest = parts[2:]
         if method == "PUT" and not rest:
             meta = json.loads(body)
+            if not self.keeps_kind:
+                # As the service drops a key it does not know.
+                meta = {**meta, "tracks": [{k: v for k, v in t.items() if k != "kind"} for t in meta["tracks"]]}
             with self._lock:
                 was = self.takes.get(uid) or {}
                 if "song_id" in meta or "song" in meta:
@@ -408,7 +415,8 @@ class FakeBandService:
                 self.takes[uid] = {**meta, "trashed": bool(stays), "trashed_by": was.get("trashed_by") if stays else None}
                 gen = self._drift_gen(uid)
             self._said(f"put {uid}")
-            return 200, {"ok": True, "in_trash": bool(stays), "song_id": meta.get("song_id"), **gen}
+            return 200, {"ok": True, "in_trash": bool(stays), "song_id": meta.get("song_id"), **gen,
+                         **({"kind": True} if self.keeps_kind else {})}
         if method == "PUT" and rest == ["drift"] and self.keeps_tempo:
             data = json.loads(body)
             if self.refuse_drift is not None:

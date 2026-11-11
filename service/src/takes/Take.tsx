@@ -19,6 +19,7 @@ import { clock, count, longDay, takeText } from "../shell/words"
 import { chipsOf } from "./chips"
 import { Desk } from "./Desk"
 import { Download } from "./Download"
+import { useBackingSong } from "./player/backing"
 import { notesAlone, notesOf } from "./player/lanes"
 import { CANNOT_PLAY, usePlayer, useTime } from "./player/one"
 import { useServiceSound, type ServiceSound } from "./player/sound"
@@ -32,8 +33,10 @@ import { TakeMenu } from "./TakeMenu"
  * .mid, Master with its level and meter, a piece on repeat, the marks as
  * chips whose talk opens in the panel. On a phone, the take's wave, a row
  * per track as РЭХА's desk has them, the MIDI sign on a track that sent
- * notes, Master and its marks. **Download**, by the take's name, gives the
- * mix and the tracks (Download.tsx). A link from the band's chat carries
+ * notes, Master and its marks. The take's Backing track is last, muted the
+ * first time a take of its song opens, and after that as you last left its
+ * M for that song (player/backing.ts). **Download**, by the take's name, gives
+ * the mix and the tracks (Download.tsx). A link from the band's chat carries
  * ?at= (the playhead goes there) and the mark or comment it is about.
  */
 export function Take() {
@@ -158,11 +161,17 @@ function useNotes(take: TakePage) {
   return useMemo(() => notesOf(take), [take.uid, take.gen, take.tracks, take.notes])
 }
 
+/** РЭХА's player for the take, opened once the take's song says how its Backing track opens. */
+function useTakePlayer(take: TakePage, sound: ServiceSound) {
+  const song = useBackingSong(take)
+  return useMultitrackPlayer(song === undefined ? null : sound.tracks, take.duration_sec, song ?? null, sound)
+}
+
 /** РЭХА's player on the page itself, with no frame round it, as in РЭХА. */
 function Full({ take, notes, sound }: { take: TakePage; notes: NotesFile[]; sound: ServiceSound }) {
   // РЭХА counts it after the take's files are up: until then, the click alone.
   const drift = useMemo(() => ({ answer: take.drift, counting: false }), [take.drift])
-  const player = useMultitrackPlayer(sound.tracks, take.duration_sec, null, sound)
+  const player = useTakePlayer(take, sound)
   const { open } = usePanel()
   useRehaLabels()
   useSpacebar(player.toggle)
@@ -220,7 +229,7 @@ function TakePlayer({ take, height = 64 }: { take: TakePage; height?: number }) 
 
 /** On a phone: the take's wave with ▶, a row per track as on РЭХА's desk, then the marks. */
 function Phone({ take, notes, tracks, sound }: { take: TakePage; notes: NotesFile[]; tracks: number; sound: ServiceSound }) {
-  const player = useMultitrackPlayer(sound.tracks, take.duration_sec, null, sound)
+  const player = useTakePlayer(take, sound)
   return (
     <Groups>
       <Group>

@@ -156,7 +156,10 @@ export class Player {
   private fetching: AbortController | null = null
   private context: AudioContext | null = null
   private gains: GainNode[] = []
-  private meters: AnalyserNode[] = []
+  /** Each track's level split into its sides, for its meters. */
+  private splits: ChannelSplitterNode[] = []
+  /** Each track's meters after its level: its left side and its right. */
+  private meters: AnalyserNode[][] = []
   private master: GainNode | null = null
   /** The whole mix after Master, as it goes out. */
   private mixMeter: AnalyserNode | null = null
@@ -239,9 +242,17 @@ export class Player {
     return this.solo
   }
 
-  /** How loud each track comes out now, 0 to 1: after its level, M and S; 0 while paused. */
-  loudness(): number[] {
-    return this.tracks.map((_, i) => this.peak(this.meters[i]))
+  /**
+   * How loud each track comes out now, 0 to 1: after its level, M and S; 0
+   * while paused. A stereo file has a number a side, left then right, so a
+   * side that went quiet shows; a mono file, or one whose first frame has
+   * not come, has one.
+   */
+  loudness(): number[][] {
+    return this.tracks.map((_, i) => {
+      const [left, right] = this.meters[i] ?? []
+      return this.sources[i].channels === 2 ? [this.peak(left), this.peak(right)] : [this.peak(left)]
+    })
   }
 
   /** How loud the whole take comes out now, 0 to 1: every track together, after Master; 0 while paused. */
@@ -341,10 +352,11 @@ export class Player {
    * Track `i`'s wave from `from` to `to` seconds, as `buckets` numbers, from
    * the MP3 itself: the files are asked for if they were not, and it waits
    * until that stretch of this one has come. Only the wave is kept as the
-   * sound is decoded. Null if it cannot be had, or `signal` says it is no
-   * longer wanted.
+   * sound is decoded. In `rows` rows, as many as the take's own wave has:
+   * one, the louder side in each slice, or two, left then right. Null if it
+   * cannot be had, or `signal` says it is no longer wanted.
    */
-  async stretch(i: number, from: number, to: number, buckets: number, signal?: AbortSignal): Promise<number[] | null> {
+  async stretch(i: number, from: number, to: number, buckets: number, signal?: AbortSignal, rows = 1): Promise<number[][] | null> {
     const source = this.sources[i]
     if (!source || typeof AudioDecoder === "undefined") return null
     this.reach = Math.max(this.reach, to)
@@ -363,7 +375,7 @@ export class Player {
     const stop = Math.round(to * sampleRate)
     const first = Math.max(0, Math.floor(start / FRAME) - WARM_UP_FRAMES)
     const last = Math.min(frames.length, Math.ceil(stop / FRAME) + 1)
-    const fold = new Fold(Math.max(0, stop - start), buckets)
+    const folds = Array.from({ length: rows > 1 ? 2 : 1 }, () => new Fold(Math.max(0, stop - start), buckets))
     let cursor = first * FRAME
     const decoder = new AudioDecoder({
       output: (data) => {
@@ -373,7 +385,11 @@ export class Player {
         const lo = Math.max(0, start - cursor)
         const hi = Math.min(n, stop - cursor)
         cursor += n
-        if (hi > lo) fold.add(p.map((c) => c.subarray(lo, hi)))
+        if (hi <= lo) return
+        const piece = p.map((c) => c.subarray(lo, hi))
+        // Two rows are a side each; one row is the louder side in each slice.
+        if (folds.length === 1) folds[0].add(piece)
+        else folds.forEach((fold, side) => fold.add([piece[Math.min(side, piece.length - 1)]]))
       },
       error: (e) => console.error(e),
     })
@@ -398,7 +414,7 @@ export class Player {
       signal?.removeEventListener("abort", shut)
       shut()
     }
-    return signal?.aborted ? null : fold.peaks
+    return signal?.aborted ? null : folds.map((fold) => fold.peaks)
   }
 
   /** Lets go of the files and the decoders; the sound stays for the next take. */
@@ -407,7 +423,7 @@ export class Player {
     this.fetching?.abort()
     this.master?.disconnect()
     this.mixMeter?.disconnect()
-    for (const meter of this.meters) meter.disconnect()
+    for (const node of [...this.gains, ...this.splits, ...this.meters.flat()]) node.disconnect()
     this.context = null
     // A wave still waiting for its stretch gets none; a file waiting to go on stops.
     this.shut = true
@@ -430,12 +446,24 @@ export class Player {
       g.connect(master)
       return g
     })
-    this.meters = this.gains.map((g) => {
-      const meter = context.createAnalyser()
-      meter.fftSize = 1024
-      g.connect(meter)
-      return meter
+    // Each track's level split into its sides, a meter on each. The files
+    // may not have said yet how many channels they have, so every track is
+    // split: a mono file's sound is all on the first side (the splitter
+    // puts a channel on the output of its number), and loudness() reads
+    // that one alone.
+    this.splits = this.gains.map((g) => {
+      const split = context.createChannelSplitter(2)
+      g.connect(split)
+      return split
     })
+    this.meters = this.splits.map((split) =>
+      [0, 1].map((side) => {
+        const meter = context.createAnalyser()
+        meter.fftSize = 1024
+        split.connect(meter, side)
+        return meter
+      })
+    )
     this.mix(true)
   }
 
