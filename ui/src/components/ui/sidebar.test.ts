@@ -1,0 +1,58 @@
+import { createElement, type ReactNode } from "react"
+import { renderToStaticMarkup } from "react-dom/server"
+import { afterEach, describe, expect, it } from "vitest"
+import { SidebarProvider, useSidebar } from "@/components/ui/sidebar"
+
+/* The tests run in Node, with no window: a matchMedia of the given width is
+   put in its place for the render. */
+function windowOf(width: number) {
+  Object.defineProperty(globalThis, "window", {
+    configurable: true,
+    value: {
+      matchMedia: (query: string) => {
+        const max = Number(/max-width: ([\d.]+)px/.exec(query)?.[1])
+        return { matches: width <= max, addEventListener() {}, removeEventListener() {} }
+      },
+    },
+  })
+}
+
+function Probe({ name, children }: { name: string; children?: ReactNode }) {
+  const { isMobile, open } = useSidebar()
+  return createElement("p", { "data-name": name }, `${name}:${isMobile ? "mobile" : "wide"}:${open ? "open" : "folded"}`, children)
+}
+
+afterEach(() => {
+  Reflect.deleteProperty(globalThis, "window")
+})
+
+describe("SidebarProvider", () => {
+  it("is mobile below mobileBelow, and not at it", () => {
+    windowOf(700)
+    expect(renderToStaticMarkup(createElement(SidebarProvider, { mobileBelow: 768 }, createElement(Probe, { name: "a" })))).toContain("a:mobile")
+    windowOf(768)
+    expect(renderToStaticMarkup(createElement(SidebarProvider, { mobileBelow: 768 }, createElement(Probe, { name: "a" })))).toContain("a:wide")
+  })
+
+  it("takes the width it is given", () => {
+    windowOf(1000)
+    const html = (below: number) =>
+      renderToStaticMarkup(createElement(SidebarProvider, { mobileBelow: below }, createElement(Probe, { name: "a" })))
+    expect(html(1100)).toContain("a:mobile")
+    expect(html(900)).toContain("a:wide")
+  })
+
+  it("keeps the state of nested providers apart", () => {
+    windowOf(1000)
+    const html = renderToStaticMarkup(
+      createElement(
+        SidebarProvider,
+        { defaultOpen: true },
+        createElement(Probe, { name: "outer" }),
+        createElement(SidebarProvider, { defaultOpen: false, mobileBelow: 1100 }, createElement(Probe, { name: "inner" }))
+      )
+    )
+    expect(html).toContain("outer:wide:open")
+    expect(html).toContain("inner:mobile:folded")
+  })
+})

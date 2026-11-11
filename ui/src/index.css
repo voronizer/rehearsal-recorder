@@ -119,6 +119,19 @@
     var(--tw-ease, var(--ease-smooth)) var(--tw-animation-delay, 0s)
     var(--tw-animation-iteration-count, 1) var(--tw-animation-direction, normal)
     var(--tw-animation-fill-mode, none);
+  /* The code box's caret (InputOTP): on, off, on, once every 1.25 s. */
+  --animate-caret-blink: caret-blink 1.25s ease-out infinite;
+  @keyframes caret-blink {
+    0%,
+    70%,
+    100% {
+      opacity: 1;
+    }
+    20%,
+    50% {
+      opacity: 0;
+    }
+  }
   --animate-out: exit var(--tw-animation-duration, var(--tw-duration, 220ms))
     var(--tw-ease, var(--ease-smooth)) var(--tw-animation-delay, 0s)
     var(--tw-animation-iteration-count, 1) var(--tw-animation-direction, normal)
@@ -128,6 +141,7 @@
 /* In the sheet whether or not a screen has used it yet: the site and
    Storybook import this file too. */
 @source inline("animate-rise");
+@source inline("animate-caret-blink");
 
 /* Motion gives way (F11). Under the system's Reduce motion, and while a take
    is being recorded (Recording.tsx sets data-recording on <html>), these do
@@ -148,12 +162,14 @@
       .animate-spin,
       .animate-ping,
       .animate-pulse,
+      .animate-caret-blink,
       [class*=":animate-rise"],
       [class*=":animate-in"],
       [class*=":animate-out"],
       [class*=":animate-spin"],
       [class*=":animate-ping"],
-      [class*=":animate-pulse"]
+      [class*=":animate-pulse"],
+      [class*=":animate-caret-blink"]
     ) {
     animation: none;
   }
@@ -166,12 +182,14 @@ html[data-recording]
     .animate-spin,
     .animate-ping,
     .animate-pulse,
+    .animate-caret-blink,
     [class*=":animate-rise"],
     [class*=":animate-in"],
     [class*=":animate-out"],
     [class*=":animate-spin"],
     [class*=":animate-ping"],
-    [class*=":animate-pulse"]
+    [class*=":animate-pulse"],
+    [class*=":animate-caret-blink"]
   ) {
   animation: none;
 }
