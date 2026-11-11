@@ -94,6 +94,9 @@ All on 11 November 2026 (UTC).
   band gets this by **Sync fork**, and the deploy adds the new table.
 - 19:54:59 «ок» to the plan
   (`docs/superpowers/plans/2026-11-11-stereo-in-the-service.md`).
+- 21:18:01 Card «A. Как на странице», asked while building: a take played
+  with ▶ from a list starts its Backing as its page does, muted unless
+  you turned it on for that song.
 
 ## What the band sees
 
@@ -145,7 +148,8 @@ too, last before Master.
 The first time you open a take of a song, Backing is muted, so you hear
 the band on its own. Turn **M** off, and every take of that song opens for
 you with the backing track heard, on the phone and on the computer, until
-you turn **M** on again. The others keep their own. A take with no song,
+you turn **M** on again. The others keep their own. The same holds when you
+play a take with ▶ from a list, without opening it (21:18:01). A take with no song,
 or whose song is in the Trash, opens with Backing muted, and nothing is
 kept. If M cannot be kept, nothing is said: M stays as pressed on this
 page.
