@@ -31,7 +31,7 @@ test("a track with a kind that is not backing is refused", async () => {
   expect((await r.put(`/api/reha/takes/${TAKE}`, takeMeta({ tracks }))).status).toBe(400)
 })
 
-test("an older РЭХА sends no kind and the page says null", async () => {
+test("an older Reha sends no kind and the page says null", async () => {
   const owner = await signInOwner()
   const uid = await shownTake()
   const page = await read(`/api/takes/${uid}`, owner)
