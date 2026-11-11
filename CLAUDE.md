@@ -20,4 +20,8 @@ The repository's rules beat the skills:
 - Double quotes curly “ ” in the guide, README, site and CHANGELOG; apostrophes straight. A quoted message that has quotes of its own goes in italics instead.
 - Test labels: cp1252 characters only.
 
-Skills in `.claude/skills/`, unchanged, MIT: humanizer from blader/humanizer@8c307f3, sokrati from iamursky/sokrati@6255b82.
+Skills in `.claude/skills/`, unchanged, MIT: humanizer from blader/humanizer@8c307f3, sokrati from iamursky/sokrati@6255b82. Ours: check-plan, modelled on the analyze and checklist commands of github/spec-kit@v1.4.0 (MIT).
+
+## Plans
+
+Before asking the person you work with for their OK on a plan, run the check-plan skill: a fresh agent checks the spec and the plan against their answers, against each other and against these rules, and looks for cases the spec leaves out. Fix what needs no decision of theirs, then send them the plan with the findings, their questions first. This holds when they have said to code at once, too. They can run it themselves as `/check-plan`.
