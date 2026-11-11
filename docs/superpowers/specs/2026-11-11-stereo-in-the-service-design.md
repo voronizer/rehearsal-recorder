@@ -92,6 +92,8 @@ All on 11 November 2026 (UTC).
   Backing in the service; its pictures are only retaken, as for stereo.
 - 19:54:15 Card «A. Не менять»: `service/README.md` stays as it is; a
   band gets this by **Sync fork**, and the deploy adds the new table.
+- 19:54:59 «ок» to the plan
+  (`docs/superpowers/plans/2026-11-11-stereo-in-the-service.md`).
 
 ## What the band sees
 
