@@ -54,13 +54,17 @@ the new components' imports already fixed, are in
   double quotes in the guide, README and CHANGELOG, button names in bold,
   each CHANGELOG item starting bold. Check CHANGELOG and guide text with the
   humanizer skill.
-- The thread «Показывать стерео и Backing в сервисе» (branch
+- The thread «Показывать стерео и Backing в сервисе» (PR #166, branch
   `claude/project-thread-wdz2ie`) changes `ui/src/components/LaneControls.tsx`,
-  `ui/e2e/lanes.spec.ts`, `service/src/takes/Take.tsx`,
-  `service/pictures/seed.ts`, `site/src/stories/band-service/*.webp` and
-  CHANGELOG. If this merges first, its new code must pass the six new rules. If it merges first, rebase on main before Task 2 and build R3 on
-  its fader (two meters for a stereo track). If this merges first, tell that
-  thread; it rebases and retakes.
+  `ui/src/components/Timeline.tsx`, `ui/e2e/lanes.spec.ts`,
+  `service/src/takes/Take.tsx`, `service/e2e/takes.spec.ts`,
+  `service/pictures/seed.ts`, `site/src/stories/band-service/*.webp`,
+  `docs/design-system.md` (C6), `docs/using-it.md` and CHANGELOG. Tasks 3
+  and 5 touch none of them and go first; Tasks 2 and 4 wait for #166 to
+  merge, then the branch is rebased on main and R3 is built on its fader
+  (two meters for a stereo track). New tests for the service's frame go in
+  `service/e2e/frame.spec.ts`, not `takes.spec.ts`. If this merges first,
+  tell that thread; it rebases and retakes.
 
 ## Review Focus
 

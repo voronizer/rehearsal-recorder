@@ -370,9 +370,12 @@ same diamond does in `Timeline.tsx`.
 
 - Option Г, the hook that checks each file as Claude writes it.
 - The three earlier decisions under «Решено раньше» in the audit.
-- The thread «Показывать стерео и Backing в сервисе» changes
-  `LaneControls.tsx`, `ui/e2e/lanes.spec.ts`, `service/src/takes/Take.tsx`
-  (S11 touches it), `service/pictures/seed.ts`, the band service story's
-  pictures and CHANGELOG. Whichever of the two merges second rebases,
-  settles the conflicts and retakes the pictures; if this merges first, the
-  stereo branch's new code must pass the six new rules too.
+- The thread «Показывать стерео и Backing в сервисе» (PR #166) changes
+  ten of the files this one does: `ui/src/components/LaneControls.tsx`,
+  `ui/src/components/Timeline.tsx`, `ui/e2e/lanes.spec.ts`,
+  `service/src/takes/Take.tsx` (S11 touches it), `service/e2e/takes.spec.ts`,
+  `service/pictures/seed.ts`, the band service story's pictures,
+  `docs/design-system.md` (C6 only), `docs/using-it.md` and CHANGELOG.
+  Whichever of the two merges second rebases, settles the conflicts and
+  retakes the pictures; if this merges first, the stereo branch's new code
+  must pass the six new rules too (checked on b273ef6: it adds no hit).
