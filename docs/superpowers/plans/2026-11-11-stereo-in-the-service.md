@@ -24,7 +24,7 @@ zod-openapi + Drizzle on D1/R2 (service Worker), Web Audio + WebCodecs
 (service page), Vitest, Playwright, pytest.
 
 **Spec:** `docs/superpowers/specs/2026-11-11-stereo-in-the-service-design.md`
-(waits Alex's «ок»).
+(Alex's «ок» 2026-11-11 19:29Z).
 
 ## Global Constraints
 
@@ -73,14 +73,20 @@ zod-openapi + Drizzle on D1/R2 (service Worker), Web Audio + WebCodecs
   a mono file as now.
 - [ ] `meta()` tracks: `"kind": "backing"` on the Backing track
   (`t.get("kind") == "backing"`), nothing on others.
-- [ ] The background pass (`band_service.py:1076 _catch_up`): for a take up
-  before this release, once: if it has a Backing track, PUT its details
-  again with `kind` (kept fields as the tempo pass keeps them); for each
-  stereo track whose WAV is on disk, upload `<position>.peaks` again
-  through the upload route. A marker in the service row's `sent` says it
-  is done; a take whose files are gone gets the details and no waves. Same
-  rules as the tempo pass: one take at a time, nothing in the list, waits
-  while sound plays (`_sound_busy`).
+- [ ] The background pass beside the tempo's (`band_service.py:696-698`,
+  `_catch_up` at `:1076`): a take is owed it when its row's `sent` details
+  have no `stereo` mark (РЭХА's own record; no change to the service's
+  listing). For such a take, once: if it has a Backing track, PUT its
+  details again with `kind`, its song and name left out as the tempo pass
+  does (`:1100-1104`); for each stereo track whose WAV is on disk, make and
+  upload `<position>.peaks` again through `_make`/the upload route; then
+  set `sent["stereo"] = 1`. A take whose files are gone gets the details
+  and no waves, and is marked done. An all-mono take with no Backing is
+  marked done with no request. Same rules as the tempo pass: one take at a
+  time, nothing in the list, waits while sound plays (`_sound_busy`),
+  offline tries later (`RETRY_SEC`), a take changed meanwhile is left to
+  its own pass. A take sent fresh by this РЭХА gets the mark with its
+  first details.
 - [ ] pytest: sides for stereo, none for mono; `kind` only on Backing; the
   pass sends `.peaks` once for a take with a stereo track, never for an
   all-mono take, skips missing files; sends details for a take with Backing
@@ -94,8 +100,11 @@ zod-openapi + Drizzle on D1/R2 (service Worker), Web Audio + WebCodecs
 `service/worker/backing/routes.ts` (or beside `levels/`), `service/openapi.json`,
 worker tests in `service/test/`.
 
-- [ ] Take PUT and the take page accept and return `kind?: "backing"` on a
-  track (JSON column, no table change); older РЭХА sends none.
+- [ ] Take PUT (`service/worker/takes/meta.ts:82-89`) accepts
+  `kind?: "backing"` on a track; the take page (`band-routes.ts:37`)
+  returns it (tracks are JSON in the take's row, no table change). Zod
+  strips unknown keys, so an older service takes the new РЭХА's details
+  as before; an older РЭХА sends none.
 - [ ] `.peaks` answers `Cache-Control: private, no-cache` with its ETag and a
   304 on `If-None-Match`; other files as now (`files/routes.ts:50`).
 - [ ] Table `backing_heard` (member_id, song_id, heard), primary key both,
@@ -120,9 +129,10 @@ worker tests in `service/test/`.
   `number[][]`; `sound.ts:74` passes them; Master one bar as now.
 - [ ] `Desk.tsx`: `channels` from the media, not `1`; Backing's row with
   `file` words and the dashed frame, last before Master.
-- [ ] `Take.tsx`: passes `{id: song id, heard}` from `GET /api/me/backing`
-  (false when no row) to `useMultitrackPlayer`; the service sound's
-  `keepBackingHeard` PUTs it. A take with no song passes `null`.
+- [ ] `Take.tsx` (`:165`, `:223`, now `null`): passes `{id: take.song.id,
+  heard}` from `GET /api/me/backing` (false when no row) to
+  `useMultitrackPlayer`; the service sound's `keepBackingHeard` PUTs it. A
+  take with no song (`song` null) passes `null`.
 - [ ] Download mix: unchanged code; a test that muted Backing is left out.
 - [ ] Vitest: two levels for stereo, one for mono; channels from `sides` and
   from an MP3 with no `sides`; stretch rows. e2e: rings, two bars and

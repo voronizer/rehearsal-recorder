@@ -71,6 +71,7 @@ All on 11 November 2026 (UTC).
 - 19:27 Card «A. Как в РЭХА сейчас»: the stereo wave stays as РЭХА draws
   it, one wave with the left side up from the line and the right side
   down; no DAW mockup.
+- 19:29 «ок» to this spec.
 - 19:21 Card «A. Только картинки»: on reha.stream the pictures with tracks
   are taken again, and the rings show on them; no new text.
 - 19:22 «кстати про Backing. он до сервиса доезжает?»
