@@ -329,8 +329,15 @@ when the window closes and goes as it closes, goes once released or ten
 minutes after Stop, and unticked while held never goes, nor to the service's
 trash (the cloud folder takes its copy off the queue rather than refusing,
 and a mark after does not send it again); and a copy waiting for the cloud
-folder is written down, so the app opened again makes it. The parts are 16
-KiB here, so a short take has several.
+folder is written down, so the app opened again makes it. Then a stereo
+track's waveform with a row for each side, and the Backing track marked in a
+take's details. A take up from before gets both after the next look, with no
+line in the list: its stereo waveforms once, and its details once if it has
+Backing. An all-mono take, or one whose files are gone, sends no waveform
+and is marked all the same. A service that does not keep Backing's mark is
+asked again at the look after. Sound playing makes it wait, no internet
+tries again, and a refusal sets the take aside. The parts are 16 KiB here,
+so a short take has several.
 Needs `pip install openapi-core==0.23.1`; without it the suite stops at once
 and says so. Run with `python tests/test_sending.py`.
 
