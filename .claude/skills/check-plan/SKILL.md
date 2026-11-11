@@ -75,8 +75,8 @@ rest.
 - The same thing said twice, in different ways.
 
 ### D. The project's rules
-- Each rule in CLAUDE.md and in the memory's `feedback-*` files that the
-  spec or the plan touches: how tests run while developing, test labels,
+- Each rule in CLAUDE.md, and in the project memory if the session has one,
+  that the spec or the plan touches: how tests run while developing, test labels,
   the writing rules for what people read, how the feature shows on
   reha.stream, pictures and the guide. Report the rules broken, not the ones
   kept.
