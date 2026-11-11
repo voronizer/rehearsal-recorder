@@ -207,28 +207,24 @@ const HEAD_BYTES = 16 * 1024
 
 /**
  * How many channels a track's MP3 has, from its first frame: 1, 2, or 0
- * when it cannot be read. A take sent before РЭХА sent both sides of a
- * stereo wave says so only here. Never changes for a generation.
+ * when its first bytes are no MP3. A take sent before РЭХА sent both sides
+ * of a stereo wave says so only here. Never changes for a generation; a
+ * file that did not come fails, and is asked for again the next time.
  */
 export const channelsQuery = (path: string) =>
   queryOptions({
     queryKey: ["channels", path],
     staleTime: Infinity,
-    // Asked again, the take's rows would wait for it: a file that cannot be read has no rings.
+    // Asked again now, the take's rows would wait for it: a file that did not come has no rings this time.
     retry: false,
     queryFn: async (): Promise<0 | 1 | 2> => {
-      try {
-        const res = await fetch(path, { headers: { Range: `bytes=0-${HEAD_BYTES - 1}` } })
-        if (res.status === 401) throw new SignedOut("Sign in first")
-        if (!res.ok) return 0
-        // From a server that sent the whole file, its first bytes alone.
-        const bytes = new Uint8Array(await res.arrayBuffer()).subarray(0, HEAD_BYTES)
-        const { sampleRate, channels } = parseFrames(bytes)
-        return sampleRate ? (channels === 1 ? 1 : 2) : 0
-      } catch (e) {
-        if (e instanceof SignedOut) throw e
-        return 0
-      }
+      const res = await fetch(path, { headers: { Range: `bytes=0-${HEAD_BYTES - 1}` } })
+      if (res.status === 401) throw new SignedOut("Sign in first")
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      // From a server that sent the whole file, its first bytes alone.
+      const bytes = new Uint8Array(await res.arrayBuffer()).subarray(0, HEAD_BYTES)
+      const { sampleRate, channels } = parseFrames(bytes)
+      return sampleRate ? (channels === 1 ? 1 : 2) : 0
     },
   })
 

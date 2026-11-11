@@ -3,7 +3,6 @@ import type { PlayerState, TakeNotes, TrackFile, TrackMedia } from "@/lib/api"
 import type { PlayerSound } from "@/lib/playerSound"
 import {
   channelsQuery,
-  keepBackingHeard,
   keepLevels,
   levelsQuery,
   peaksQuery,
@@ -11,6 +10,7 @@ import {
   type TakePage,
   type Wave,
 } from "../../api"
+import { firstDesk, keepHeard } from "./backing"
 import { levelOf } from "./levels"
 import { withMute, withSolo } from "./desk"
 import { keepMaster } from "./master"
@@ -52,8 +52,8 @@ export function serviceSound(take: TakePage, one: One): ServiceSound {
   }))
   let position = 0
   let loop: { a: number; b: number } | null = null
-  let muted: number[] = []
-  let solo: number | null = null
+  // Backing muted, as every take starts until its page has opened it as you hear it (backing.ts).
+  let { muted, solo } = firstDesk(take)
   /** Levels turned and not kept yet. */
   let moved: Record<string, number> = {}
   /** Levels sent to be kept, not answered yet: yours once they are. */
@@ -171,16 +171,13 @@ export function serviceSound(take: TakePage, one: One): ServiceSound {
       const fine = zoomed && (COARSE * (to - from)) / Math.max(take.duration_sec, 0.001) < buckets / 2
       const p = fine ? mine() : null
       const media = take.tracks.map(async (t, i): Promise<TrackMedia> => {
-        // Both sides sent say stereo; else the MP3's first frame says: a mono
-        // file, or a stereo one in a take sent before РЭХА sent both sides.
-        // Read at the same time as the wave, so the take opens no later. A
-        // file that cannot be read has no rings, and the take still opens.
-        const [wave, read] = await Promise.all([
-          waveOf(t.peaks),
-          queryClient.fetchQuery(channelsQuery(t.mp3)).catch(() => 0 as const),
-        ])
+        // Both sides sent say stereo. Without them, the MP3's first frame
+        // says: a mono file, or a stereo one in a take sent before РЭХА sent
+        // both sides. A file that cannot be read has no rings, and the take
+        // still opens.
+        const wave = await waveOf(t.peaks)
         const rows = wave?.sides ?? [wave?.peaks ?? []]
-        const channels = wave?.sides ? 2 : read
+        const channels = wave?.sides ? 2 : await queryClient.fetchQuery(channelsQuery(t.mp3)).catch(() => 0 as const)
         // Zoomed in, as many rows as the whole take's wave has.
         const peaks = (p && (await p.stretch(i, from!, to!, buckets, wanted.signal, rows.length))) || part(rows, from, to)
         return {
@@ -289,7 +286,7 @@ export function serviceSound(take: TakePage, one: One): ServiceSound {
     // M on the Backing track, kept for you and that song: every take of it opens so.
     async keepBackingHeard(songId, heard) {
       try {
-        await keepBackingHeard(songId, heard)
+        await keepHeard(songId, heard)
         return { ok: true }
       } catch (e) {
         return { ok: false, error: e instanceof Error ? e.message : String(e) }

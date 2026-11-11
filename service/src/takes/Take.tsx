@@ -5,12 +5,12 @@ import { TakePlayer as RehaPlayer } from "@/components/TakePlayer"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
-import { useMultitrackPlayer, type TakeSong } from "@/hooks/useMultitrackPlayer"
+import { useMultitrackPlayer } from "@/hooks/useMultitrackPlayer"
 import { usePlayerKeys, useSpacebar } from "@/hooks/useSpacebar"
 import type { Label as RehaLabel, Marker, NotesFile } from "@/lib/api"
 import { labelsChanged } from "@/lib/labels"
 import { cn } from "@/lib/utils"
-import { useBacking, useLabels, useLevels, useLevelsTrouble, useRestore, useTake, type TakePage } from "../api"
+import { useLabels, useLevels, useLevelsTrouble, useRestore, useTake, type TakePage } from "../api"
 import { TakeMarks } from "../marks/MarkItem"
 import { usePanel } from "../shell/panel"
 import { Group, Groups, Page, Pill, Tile, Trouble, useTitle } from "../shell/parts"
@@ -19,6 +19,7 @@ import { clock, count, longDay, takeText } from "../shell/words"
 import { chipsOf } from "./chips"
 import { Desk } from "./Desk"
 import { Download } from "./Download"
+import { useBackingSong } from "./player/backing"
 import { notesAlone, notesOf } from "./player/lanes"
 import { CANNOT_PLAY, usePlayer, useTime } from "./player/one"
 import { useServiceSound, type ServiceSound } from "./player/sound"
@@ -34,7 +35,7 @@ import { TakeMenu } from "./TakeMenu"
  * per track as РЭХА's desk has them, the MIDI sign on a track that sent
  * notes, Master and its marks. The take's Backing track is last, muted the
  * first time a take of its song opens, and after that as you last left its
- * M for that song (useBackingSong). **Download**, by the take's name, gives
+ * M for that song (player/backing.ts). **Download**, by the take's name, gives
  * the mix and the tracks (Download.tsx). A link from the band's chat carries
  * ?at= (the playhead goes there) and the mark or comment it is about.
  */
@@ -158,23 +159,6 @@ function useNotes(take: TakePage) {
   // The page is read again after every change; its files keep their identity unless they changed.
   // eslint-disable-next-line react-hooks/exhaustive-deps
   return useMemo(() => notesOf(take), [take.uid, take.gen, take.tracks, take.notes])
-}
-
-/**
- * The take's song for its Backing track, as РЭХА's player takes it: its
- * number, and whether you hear that song's Backing (muted until you turn
- * its M off, and when the service could not say). Undefined while the
- * service has not said yet: the player opens after it, so Backing is not
- * heard before it is muted. Null for a take with no Backing, no song, or
- * its song in the Trash: Backing opens muted and nothing is kept.
- */
-function useBackingSong(take: TakePage): TakeSong | null | undefined {
-  const song = take.song
-  const wanted = !!song && take.tracks.some((t) => t.kind === "backing")
-  const yours = useBacking(wanted)
-  if (!wanted) return null
-  if (yours.isPending) return undefined
-  return { id: song.id, heard: yours.data?.heard[String(song.id)] ?? false }
 }
 
 /** РЭХА's player for the take, opened once the take's song says how its Backing track opens. */

@@ -11,6 +11,7 @@ import { as, band, HEADERS } from "./band"
 const border = (at: Locator) => at.evaluate((el) => getComputedStyle(el).borderTopStyle)
 const lanes = (page: Page) => page.locator("[data-take-player] [data-lane-row]")
 const mute = (page: Page) => page.locator("[data-take-player]").getByRole("button", { name: "Mute Backing" })
+const pause = (page: Page) => page.getByRole("toolbar", { name: "Transport" }).getByRole("button", { name: "Pause", exact: true })
 
 /** The take has opened in the player and set Backing's M: its lanes are there, and the
  *  transport, off while the take opens, is on. */
@@ -18,6 +19,34 @@ async function opened(page: Page) {
   await expect(lanes(page).last()).toHaveAttribute("data-lane-row", "Backing")
   await expect(page.getByRole("toolbar", { name: "Transport" }).getByRole("button", { name: "To start" })).toBeEnabled()
 }
+
+type Heard = { most: number; now: number | null }
+
+/**
+ * Backing's level as the take's player sends it out, read every few
+ * milliseconds from the moment the player makes it: the loudest it has
+ * been, and now. The player makes Master, then each track's level in the
+ * take's order, so Backing's, last, is the last made.
+ */
+const watchBacking = (page: Page) =>
+  page.addInitScript(() => {
+    const made: GainNode[] = []
+    const make = BaseAudioContext.prototype.createGain
+    BaseAudioContext.prototype.createGain = function (this: BaseAudioContext) {
+      const g = make.call(this)
+      made.push(g)
+      return g
+    }
+    const backing: Heard = { most: 0, now: null }
+    Object.assign(window, { backing })
+    setInterval(() => {
+      const g = made.at(-1)
+      if (!g) return
+      backing.now = g.gain.value
+      backing.most = Math.max(backing.most, g.gain.value)
+    }, 5)
+  })
+const heard = (page: Page) => page.evaluate(() => (window as unknown as { backing: Heard }).backing)
 
 /** Every change of Backing's M the page sends from now on. */
 function kept(page: Page) {
@@ -72,9 +101,11 @@ test.describe("as Ira", () => {
     await expect(mute(page)).toHaveAttribute("aria-pressed", "false")
 
     // M on it again is kept as muted.
+    const again = page.waitForResponse((r) => r.request().method() === "PUT" && r.url().endsWith("/api/me/backing"))
     await mute(page).click()
     await expect(mute(page)).toHaveAttribute("aria-pressed", "true")
-    await expect.poll(() => sent.length).toBe(2)
+    expect((await again).ok()).toBe(true)
+    expect(sent).toHaveLength(2)
     expect(sent[1]).toEqual({ song_id: band().songs["Viasna"], heard: false })
     await page.goto(`/takes/${band().takes["Viasna 5"]}`)
     await expect(mute(page)).toHaveAttribute("aria-pressed", "true")
@@ -116,6 +147,42 @@ test.describe("as Ira", () => {
     expect(sent).toEqual([])
     await page.reload()
     await expect(mute(page)).toHaveAttribute("aria-pressed", "true")
+  })
+
+  test("Play in a list plays Backing muted, and heard once its M is off for the song; the page opening changes neither", async ({ page }) => {
+    await watchBacking(page)
+    const bar = page.getByLabel("Player", { exact: true })
+    const row = page.locator('[data-take="Viasna 11"]')
+    await page.goto(`/rehearsals/${band().rehearsals.second}`)
+    await row.getByRole("button", { name: "Play “Viasna 11”" }).click()
+    await expect(bar.getByRole("button", { name: "Pause “Viasna 11”" })).toBeVisible()
+    await expect.poll(async () => (await heard(page)).now).toBe(0)
+    await page.waitForTimeout(300)
+    // To its page while it plays: Backing stays as it began, muted.
+    await row.getByRole("link", { name: "Viasna 11", exact: true }).click()
+    await opened(page)
+    await expect(mute(page)).toHaveAttribute("aria-pressed", "true")
+    await page.waitForTimeout(300)
+    expect(await heard(page)).toEqual({ most: 0, now: 0 })
+    // It played on all the while.
+    await pause(page).click()
+
+    // Ira has it on for the song: Play in the list plays it heard from the start.
+    const on = await page.request.put("/api/me/backing", { data: { song_id: band().songs["Viasna"], heard: true }, headers: HEADERS })
+    expect(on.ok()).toBe(true)
+    await page.goto(`/rehearsals/${band().rehearsals.second}`)
+    await row.getByRole("button", { name: "Play “Viasna 11”" }).click()
+    await expect(bar.getByRole("button", { name: "Pause “Viasna 11”" })).toBeVisible()
+    await expect.poll(async () => (await heard(page)).now).toBeGreaterThan(0)
+    await row.getByRole("link", { name: "Viasna 11", exact: true }).click()
+    await opened(page)
+    await expect(mute(page)).toHaveAttribute("aria-pressed", "false")
+    await page.waitForTimeout(300)
+    expect((await heard(page)).now).toBeGreaterThan(0)
+    await pause(page).click()
+    // Back as it was, for the tests after this one.
+    const off = await page.request.put("/api/me/backing", { data: { song_id: band().songs["Viasna"], heard: false }, headers: HEADERS })
+    expect(off.ok()).toBe(true)
   })
 
   test("the mix leaves Backing out while it is muted", async ({ page }) => {
@@ -183,5 +250,29 @@ test.describe("as Ira on a phone", () => {
     const last = (await rows.nth(3).boundingBox())!
     expect((await tracks.locator("[data-master-plate]").boundingBox())!.y).toBeGreaterThanOrEqual(last.y + last.height)
     expect(last.height).toBeCloseTo(56, 0)
+  })
+
+  test("Play pressed before the take has opened waits for the service, and plays Backing muted", async ({ page }) => {
+    await watchBacking(page)
+    let letThrough = () => {}
+    const held = new Promise<void>((done) => (letThrough = done))
+    await page.route("**/api/me/backing", async (route) => {
+      if (route.request().method() === "GET") await held
+      await route.fallback()
+    })
+    await page.goto(`/takes/${band().takes["Viasna 11"]}`)
+    const main = page.getByRole("main")
+    await main.getByRole("button", { name: "Play “Viasna 11”" }).first().click()
+    await page.waitForTimeout(500)
+    // No player yet: nothing of the take plays before Backing is muted.
+    expect((await heard(page)).now).toBeNull()
+    letThrough()
+    await expect(main.getByRole("button", { name: "Pause “Viasna 11”" }).first()).toBeVisible()
+    await expect.poll(async () => (await heard(page)).now).toBe(0)
+    await expect(main.getByRole("region", { name: "Tracks" }).getByRole("button", { name: "Mute Backing" })).toHaveAttribute("aria-pressed", "true")
+    await page.waitForTimeout(300)
+    expect(await heard(page)).toEqual({ most: 0, now: 0 })
+    await main.getByRole("button", { name: "Pause “Viasna 11”" }).first().click()
+    await page.unrouteAll({ behavior: "ignoreErrors" })
   })
 })

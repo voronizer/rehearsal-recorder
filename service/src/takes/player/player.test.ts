@@ -134,19 +134,22 @@ test("a stretch no longer wanted gives up waiting for its file", async () => {
   expect(await wave).toBeNull()
 })
 
-/** A node of the fake sound: what it is joined to, from which output, its gain as last set, and what a meter reads. */
+/** A node of the fake sound: what it is joined to, from which output, its gain as last set, what a meter reads, and whether it was let go. */
 class FakeNode {
   readonly to: unknown[] = []
   readonly outputs: (number | undefined)[] = []
   fftSize = 0
   reads = 0
+  gone = false
   gain = { value: 1, setTargetAtTime: (v: number) => void (this.gain.value = v) }
   connect(node: unknown, output?: number) {
     this.to.push(node)
     this.outputs.push(output)
     return node
   }
-  disconnect() {}
+  disconnect() {
+    this.gone = true
+  }
   getFloatTimeDomainData(wave: Float32Array) {
     wave.fill(this.reads)
   }
@@ -225,7 +228,7 @@ test("Master's level is on the whole take as it goes out: set before it plays, a
   p.close()
 })
 
-test("a stereo track's level is two numbers, left then right, after its level; a mono track's is one", async () => {
+test("a stereo track's level is two numbers, left then right, after its level; a mono track's is one; closed, all let go", async () => {
   withDecoder()
   vi.stubGlobal("AudioContext", FakeSound)
   vi.stubGlobal("fetch", async (url: string) => new Response(fixture(url)))
@@ -245,5 +248,7 @@ test("a stereo track's level is two numbers, left then right, after its level; a
   // Paused, each side reads 0.
   p.pause()
   expect(p.loudness()).toEqual([[0, 0], [0]])
+  // Closed, no node of the take stays joined to the sound the next take plays through.
   p.close()
+  expect([...gains, ...splitters, ...sides.flat()].filter((n) => !n.gone)).toEqual([])
 })

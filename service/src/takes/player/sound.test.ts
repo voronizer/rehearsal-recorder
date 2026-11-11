@@ -203,11 +203,12 @@ test("a stereo track sent with both sides has its wave in two rows; a mono one, 
   expect(guitar.channels).toBe(1)
 })
 
-test("both sides say stereo, whatever the MP3 is read to say", async () => {
+test("both sides say stereo, and the MP3 is not read for it; without them it is", async () => {
   api.waves["/bass.peaks"] = { peaks: flat(0.8), sides: [flat(0.8), flat(0.2)] } satisfies Wave
   api.channels["/bass.mp3"] = 0
   const sound = serviceSound(take, one(null))
   expect((await sound.media(sound.tracks))[0].channels).toBe(2)
+  expect(asked("channels").map((q) => q.queryKey[1])).toEqual(["/guitar.mp3"])
 })
 
 test("a stereo track sent with one row has two channels from its MP3, and its wave in one piece", async () => {
@@ -275,6 +276,15 @@ test("the Backing track goes to the player with its mark and the backing track's
 test("a stereo track's level is a number a side, a mono one's one", async () => {
   const sound = serviceSound(take, one(player({ playing: true, loudness: () => [[0.5, 0.25], [0.75]] })))
   expect((await sound.state()).levels).toEqual({ Bass: [0.5, 0.25], Guitar: [0.75] })
+})
+
+test("before the page has opened the take, Backing is muted, as a player made then starts it", async () => {
+  const sound = serviceSound(withBacking, one(null))
+  expect(sound.setup()).toMatchObject({ muted: [2], solo: null })
+  expect((await sound.state()).muted).toEqual(["Backing"])
+  // Turned on while another take plays, it goes with the take when it plays.
+  await sound.setMuted("Backing", false)
+  expect(sound.setup()).toMatchObject({ muted: [], solo: null })
 })
 
 test("Backing's M is kept for you and its song, and a failure says so without throwing", async () => {

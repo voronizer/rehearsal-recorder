@@ -65,18 +65,27 @@ test("a track's channels are read from its MP3's first bytes, once for the page"
   expect(await queryClient.fetchQuery(channelsQuery("/files/t/1/3.mp3"))).toBe(2)
 })
 
-test("an MP3 that cannot be read, or did not come, has 0 channels, and is not asked for again", async () => {
-  const fetch = vi.fn(async () => new Response(new Uint8Array(2000)))
-  vi.stubGlobal("fetch", fetch)
+test("an MP3 that is no MP3 has 0 channels for good; one that did not come is asked for again next time", async () => {
+  const junk = vi.fn(async () => new Response(new Uint8Array(2000)))
+  vi.stubGlobal("fetch", junk)
   expect(await queryClient.fetchQuery(channelsQuery("/junk.mp3"))).toBe(0)
-  vi.stubGlobal("fetch", async () => new Response("gone", { status: 404 }))
-  expect(await queryClient.fetchQuery(channelsQuery("/gone.mp3"))).toBe(0)
+  expect(await queryClient.fetchQuery(channelsQuery("/junk.mp3"))).toBe(0)
+  expect(junk).toHaveBeenCalledTimes(1)
+  // Not there, or no connection: no answer, and not tried again at once.
+  const gone = vi.fn(async () => new Response("gone", { status: 404 }))
+  vi.stubGlobal("fetch", gone)
+  await expect(queryClient.fetchQuery(channelsQuery("/gone.mp3"))).rejects.toThrow("HTTP 404")
+  expect(gone).toHaveBeenCalledTimes(1)
   const offline = vi.fn(async () => {
     throw new TypeError("Failed to fetch")
   })
   vi.stubGlobal("fetch", offline)
-  expect(await queryClient.fetchQuery(channelsQuery("/offline.mp3"))).toBe(0)
+  await expect(queryClient.fetchQuery(channelsQuery("/offline.mp3"))).rejects.toThrow("Failed to fetch")
   expect(offline).toHaveBeenCalledTimes(1)
+  // The next time the page asks, the file is read again.
+  vi.stubGlobal("fetch", ranged(fixture("t7.mp3")))
+  expect(await queryClient.fetchQuery(channelsQuery("/gone.mp3"))).toBe(2)
+  expect(await queryClient.fetchQuery(channelsQuery("/offline.mp3"))).toBe(2)
   // Signed out, the page goes to sign-in.
   vi.stubGlobal("fetch", async () => new Response("", { status: 401 }))
   await expect(queryClient.fetchQuery(channelsQuery("/out.mp3"))).rejects.toBeInstanceOf(SignedOut)

@@ -156,6 +156,8 @@ export class Player {
   private fetching: AbortController | null = null
   private context: AudioContext | null = null
   private gains: GainNode[] = []
+  /** Each track's level split into its sides, for its meters. */
+  private splits: ChannelSplitterNode[] = []
   /** Each track's meters after its level: its left side and its right. */
   private meters: AnalyserNode[][] = []
   private master: GainNode | null = null
@@ -421,7 +423,7 @@ export class Player {
     this.fetching?.abort()
     this.master?.disconnect()
     this.mixMeter?.disconnect()
-    for (const meter of this.meters.flat()) meter.disconnect()
+    for (const node of [...this.gains, ...this.splits, ...this.meters.flat()]) node.disconnect()
     this.context = null
     // A wave still waiting for its stretch gets none; a file waiting to go on stops.
     this.shut = true
@@ -449,16 +451,19 @@ export class Player {
     // split: a mono file's sound is all on the first side (the splitter
     // puts a channel on the output of its number), and loudness() reads
     // that one alone.
-    this.meters = this.gains.map((g) => {
+    this.splits = this.gains.map((g) => {
       const split = context.createChannelSplitter(2)
       g.connect(split)
-      return [0, 1].map((side) => {
+      return split
+    })
+    this.meters = this.splits.map((split) =>
+      [0, 1].map((side) => {
         const meter = context.createAnalyser()
         meter.fftSize = 1024
         split.connect(meter, side)
         return meter
       })
-    })
+    )
     this.mix(true)
   }
 
