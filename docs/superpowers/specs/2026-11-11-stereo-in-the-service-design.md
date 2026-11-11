@@ -88,6 +88,8 @@ All on 11 November 2026 (UTC).
   (`site/content/stories/digital-mixer.md:100`), so the pictures and the
   site's live pieces show two rings, two bars and a wave in two halves on
   it.
+- 19:53:19 Card «A. Ничего нового»: reha.stream says nothing new about
+  Backing in the service; its pictures are only retaken, as for stereo.
 
 ## What the band sees
 
