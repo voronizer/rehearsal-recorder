@@ -74,11 +74,14 @@ NOTHING_NEW = "Nothing new in the band service."
 # does not undo a move made there. The song's tempo is the song's, sent with
 # it (service_songs.py), and is kept here only to see that it moved.
 SONG_FIELDS = ("song", "song_id", "name")
+# Two marks a take's details keep for РЭХА alone. "sides": the take's waves
+# are as this РЭХА writes them, with a row per side of a stereo track.
+# "kind": the service said it keeps which track is Backing, or the take has
+# none.
+MARKS = ("sides", "kind")
 # What a take's details keep for РЭХА alone, never sent: the song's tempo,
-# and two marks. "sides": the take's waves are as this РЭХА writes them, with
-# a row per side of a stereo track. "kind": the service said it keeps which
-# track is Backing, or the take has none.
-KEPT_HERE = ("tempo", "sides", "kind")
+# and the marks.
+KEPT_HERE = ("tempo", *MARKS)
 
 
 def staging_root():
@@ -882,7 +885,7 @@ class BandService:
                     self._owed.add(row["take_id"])
                 sent = row["sent"]
                 if (sent is not None and not row["due"] and row["error"] is None
-                        and row["mp3_gen"] == row["gen"] and not all(sent.get(k) for k in ("sides", "kind"))
+                        and row["mp3_gen"] == row["gen"] and not all(sent.get(k) for k in MARKS)
                         and row["take_id"] not in self._marks_aside):
                     # Up from before РЭХА sent both sides of a stereo wave or
                     # marked Backing, or from a service that did not keep the
@@ -1002,15 +1005,18 @@ class BandService:
                     shutil.rmtree(old, ignore_errors=True)
         if row["mp3_gen"] != gen:
             files = self._make(take_id, uid, gen, take, {"mp3", "peaks", "mid"}, entry)
+            sides = self._both_sides(take, files)
             self._phase(client, take_id, uid, gen, files, entry,
                         lambda done: f"MP3s: {min(done, mp3s)} of {mp3s}", ".mp3")
             client.ready(uid, gen, "mp3")
             # The service shows this generation now, its comments moved back
             # by `cut`; a crop that came meanwhile is the next one's. Its
-            # waves are this РЭХА's, a stereo track's with both sides.
+            # waves are this РЭХА's, a stereo track's with both sides, unless
+            # one went as an older РЭХА made it.
             lib.change_service_row(take_id, lambda r: {
                 "mp3_gen": gen, "pending_cut": float(r["pending_cut"] or 0) - cut,
-                **({} if r["removed"] or r["sent"] is None else {"sent": {**r["sent"], "sides": True}})})
+                **({} if not sides or r["removed"] or r["sent"] is None
+                   else {"sent": {**r["sent"], "sides": True}})})
         if row["flac_gen"] != gen:
             # Read again: a rename meanwhile moved the WAVs.
             take = lib.take(folder, number) or take
@@ -1134,18 +1140,9 @@ class BandService:
             if take is None:
                 raise _Changed()
             client = self._client()
-            sent = row["sent"]
-            if sent is not None and "meter" not in sent:
+            if row["sent"] is not None and "meter" not in row["sent"]:
                 fresh = self._details(take, row["folder"], gen, 0)
-                # Nothing to move: the service shows this generation already.
-                details = {**sent, "cut_start": 0, "meter": fresh["meter"], "notes": fresh["notes"]}
-                # Its song and name as they were: left out, so a move made there stays.
-                put = {k: v for k, v in details.items() if k not in (*SONG_FIELDS, *KEPT_HERE)}
-                answer = client.put_take(row["uid"], {**put, "by_hand": False})
-                self._lib.change_service_row(take_id, lambda r: {"sent": details} if r["gen"] == gen else {})
-                if isinstance(answer, dict) and answer.get("in_trash"):
-                    self._taken_out(take_id)
-                    raise _Changed()
+                self._put_as_sent(client, take_id, row, gen, {"meter": fresh["meter"], "notes": fresh["notes"]})
             self._send_drift(client, take_id, row["uid"], gen, row["folder"], row["take_number"])
             self._owed.discard(take_id)
         except _Paused:
@@ -1189,7 +1186,7 @@ class BandService:
                 self._send_sides(client, take_id, row["uid"], gen, take)
                 self._mark(take_id, gen, "sides")
             if not row["sent"].get("kind"):
-                if not service_files.has_backing(take) or self._send_kind(client, take_id, row["uid"], gen, take):
+                if not service_files.has_backing(take) or self._send_kind(client, take_id, gen, take):
                     self._mark(take_id, gen, "kind")
             self._owed_marks.discard(take_id)
         except _Paused:
@@ -1205,17 +1202,45 @@ class BandService:
             self._marks_aside.add(take_id)
         return True
 
+    def _put_as_sent(self, client, take_id, row, gen, changes):
+        """A take's details again, as they were last sent, with `changes`, and
+        kept so. Nothing to move: the service shows this generation already.
+        Its song and name as they were: left out, so a move made there
+        stays. One the band put in the service's trash is taken out here too.
+        What the service answered."""
+        details = {**row["sent"], "cut_start": 0, **changes}
+        put = {k: v for k, v in details.items() if k not in (*SONG_FIELDS, *KEPT_HERE)}
+        answer = client.put_take(row["uid"], {**put, "by_hand": False})
+        if isinstance(answer, dict) and answer.get("in_trash"):
+            self._taken_out(take_id)
+            raise _Changed()
+        self._lib.change_service_row(take_id, lambda r: {"sent": {**r["sent"], "cut_start": 0, **changes}}
+                                     if r["gen"] == gen and r["sent"] is not None and not r["removed"] else {})
+        return answer
+
+    def _stereo(self, take):
+        """The names of the take's stereo waveforms (service_files.stereo_waves),
+        read while the names pass waits, as the files are made: it moves
+        folders."""
+        self.making = True
+        try:
+            return {i["name"] for i in service_files.stereo_waves(take)}
+        finally:
+            self.making = False
+
+    def _both_sides(self, take, files):
+        """Whether each stereo track's waveform among the take's staged
+        `files` has both sides: one an older РЭХА made, for an upload cut
+        short, has not."""
+        staged = {f["name"]: staging_root() / f["path"] for f in files}
+        return all(name in staged and service_files.has_sides(staged[name]) for name in self._stereo(take))
+
     def _send_sides(self, client, take_id, uid, gen, take):
         """The waveform of each stereo track of a take up already, made again
         with both sides and sent as any file is (_upload). Being small, what
         is made for it goes once the pass ends, however it ends, and is made
         again next time."""
-        self.making = True
-        try:
-            # Read while the names pass waits, as the files are made: it moves folders.
-            names = {i["name"] for i in service_files.stereo_waves(take)}
-        finally:
-            self.making = False
+        names = self._stereo(take)
         if not names:
             return
         try:
@@ -1229,7 +1254,7 @@ class BandService:
                 self._lib.drop_service_file(take_id, gen, name)
             shutil.rmtree(staging_root() / uid, ignore_errors=True)
 
-    def _send_kind(self, client, take_id, uid, gen, take):
+    def _send_kind(self, client, take_id, gen, take):
         """A take's details again, as they were last sent, with its tracks as
         they are now, which mark Backing. Whether the service said it keeps
         the mark."""
@@ -1237,16 +1262,7 @@ class BandService:
         if row["sent"] is None:
             raise _Changed()
         tracks = self._details(take, row["folder"], gen, 0)["tracks"]
-        # Nothing to move: the service shows this generation already.
-        details = {**row["sent"], "cut_start": 0, "tracks": tracks}
-        # Its song and name as they were: left out, so a move made there stays.
-        put = {k: v for k, v in details.items() if k not in (*SONG_FIELDS, *KEPT_HERE)}
-        answer = client.put_take(uid, {**put, "by_hand": False})
-        if isinstance(answer, dict) and answer.get("in_trash"):
-            self._taken_out(take_id)
-            raise _Changed()
-        self._lib.change_service_row(take_id, lambda r: {"sent": {**r["sent"], "cut_start": 0, "tracks": tracks}}
-                                     if r["gen"] == gen and r["sent"] is not None and not r["removed"] else {})
+        answer = self._put_as_sent(client, take_id, row, gen, {"tracks": tracks})
         return isinstance(answer, dict) and answer.get("kind") is True
 
     def _mark(self, take_id, gen, mark):

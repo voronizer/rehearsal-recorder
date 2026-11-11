@@ -20,6 +20,7 @@ from pathlib import Path
 
 from rehearsal_recorder.audio.encode import encode
 from rehearsal_recorder.audio.waveform import wav_peaks
+from rehearsal_recorder.store.models import BACKING_FILE
 
 # How many numbers a waveform has: the same for a take of a minute or of
 # ten, which the pages stretch to their width.
@@ -29,8 +30,6 @@ PEAKS = 1200
 # The most bars the service keeps for a take: an hour at 240 a minute is 3600 of 4/4.
 MAX_BARS = 20000
 SIGNATURES = ("4/4", "3/4", "2/4", "6/8")
-# What a take's Backing track says it is, among its tracks and in its details.
-BACKING = "backing"
 
 
 class CannotMake(Exception):
@@ -73,7 +72,7 @@ def names(take):
 
 def has_backing(take):
     """Whether one of the tracks that go is the take's Backing track."""
-    return any(t.get("kind") == BACKING for t in _audio(take))
+    return any(t.get("kind") == BACKING_FILE for t in _audio(take))
 
 
 def stereo_waves(take):
@@ -91,6 +90,16 @@ def stereo_waves(take):
         except (OSError, EOFError, wave.Error):
             continue
     return out
+
+
+def has_sides(path):
+    """Whether the waveform `make` wrote at `path` has a row per side: one
+    an older РЭХА made, before it sent them, has not, nor has a file gone
+    or broken."""
+    try:
+        return "sides" in json.loads(Path(path).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return False
 
 
 def plan(take, kinds):
@@ -140,11 +149,12 @@ def meta(take, rehearsal, labels, volumes, gen, cut_start, tempo=None):
         "cut_start": round(float(cut_start or 0), 2),
         "starred": bool(take.get("starred")),
         "balance": {t["name"]: float(volumes.get(t["name"], 1.0)) for t in audio},
-        # The Backing track says so, for its dashed frame and its M in the
-        # service; the others say nothing.
+        # The Backing track says so, in the word the library keeps, which is
+        # the service's too, for its dashed frame and its M in the service;
+        # the others say nothing.
         "tracks": [{"position": i, "name": t["name"], "icon": t.get("icon"),
                     "files": [f"{i}.mp3", f"{i}.flac", f"{i}.peaks"],
-                    **({"kind": BACKING} if t.get("kind") == BACKING else {})}
+                    **({"kind": BACKING_FILE} if t.get("kind") == BACKING_FILE else {})}
                    for i, t in enumerate(audio, 1)],
         "notes": [{"position": len(audio) + i, "name": n["name"], "file": f"{len(audio) + i}.mid",
                    "icon": n.get("icon")}

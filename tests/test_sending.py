@@ -58,6 +58,7 @@ def write_stereo(path, tones, seconds=2.0):
         for left, right in tones:
             w.writeframes(struct.pack("<hh", left, right) * int(SR * seconds))
 
+
 # Several parts to a file, so a file can be cut short in the middle.
 band_service.PART_BYTES = 16 * 1024
 # A take that met no internet is tried again at once, not in 30 seconds.
@@ -1526,6 +1527,83 @@ def stereo_and_backing(api, fake, service, drain, entries, keep, uid_of, take, f
     ok("nothing of it is a line in the list, nor left to send",
        not [e for e in entries() if e["take_number"] in (n1, n2, n3, n5, n6, n7) and e["state"] != "done"]
        and api.sending_left() == {"takes": 0, "bytes": 0})
+
+    # A take whose MP3s were cut short under an older REHA: its stereo wave
+    # is sent again only as that REHA made it, with one row.
+    drain()
+    service()._next_check = time.monotonic() + 3600
+    n8 = keep("Viasna", band=["Drums"], stereo=("Drums",))
+    uid8, id8 = uid_of(n8), row_of(n8)["take_id"]
+
+    def drop_first_file(words):
+        if words == f"put {uid8}":
+            fake.drop = 1
+
+    fake.on_call = drop_first_file
+    service().run_next()
+    fake.on_call = None
+    staged = band_service.staging_root() / uid8 / "1" / "1.peaks"
+    old = json.dumps({"peaks": json.loads(staged.read_text(encoding="utf-8"))["peaks"]})
+    staged.write_text(old, encoding="utf-8")
+    api._lib.drop_service_file(id8, 1, "1.peaks")
+    api._lib.add_service_file(id8, 1, "1.peaks", f"{uid8}/1/1.peaks", staged.stat().st_size)
+    service()._later.clear()
+    drain()
+    ok("a wave an older REHA made, sent now, leaves the take without the mark of both sides",
+       take(n8)["service"]["up"] and "sides" not in json.loads(fake.files[f"{uid8}/1/1.peaks"])
+       and marks(n8) == (None, True))
+    look()
+    ok("and the next look sends it with both sides, and marks it",
+       len(json.loads(fake.files[f"{uid8}/1/1.peaks"]).get("sides") or []) == 2 and marks(n8) == (True, True))
+
+    # Cropped while its marks go: left to its own send.
+    n9 = keep("Viasna", band=["Drums"], stereo=("Drums",), backing=True)
+    drain()
+    uid9, id9 = from_before(n9)
+    service()._compare()
+    service()._next_check = time.monotonic() + 3600
+    puts = fake.count(f"put {uid9}")
+    cropped = []
+
+    def crop_on_start(words):
+        if words == f"start {uid9} 1.peaks" and not cropped:
+            cropped.append(api.crop_take(folder(), n9, 2.0, 10.0))
+
+    fake.on_call = crop_on_start
+    service().run_next()
+    fake.on_call = None
+    ok("a take cropped while its marks go stops there, and is no longer owed them",
+       cropped and cropped[0]["ok"] and id9 not in service()._owed_marks
+       and fake.count(f"file {uid9} 1.peaks") == 1 and fake.count(f"put {uid9}") == puts
+       and row_of(n9)["due"] and marks(n9) == (None, None))
+    drain()
+    ok("its own send takes the new generation up with both marks",
+       fake.takes[uid9]["gen"] == 2 and kinds(uid9) == [None, "backing"] and marks(n9) == (True, True)
+       and len(json.loads(fake.files[f"{uid9}/2/1.peaks"]).get("sides") or []) == 2)
+    api.end_trash(cropped[0]["undo"])
+
+    # Taken out while it is owed its marks.
+    n10 = keep("Viasna", band=["Drums"], stereo=("Drums",))
+    drain()
+    uid10, id10 = from_before(n10)
+    service()._compare()
+    service()._next_check = time.monotonic() + 3600
+    owed = id10 in service()._owed_marks
+    starts = fake.count(f"start {uid10} 1.peaks")
+    api.unshare_take(folder(), n10)
+    ok("a take taken out of the service is no longer owed its marks", owed and id10 not in service()._owed_marks)
+    drain()
+    ok("and nothing of them goes", fake.count(f"start {uid10} 1.peaks") == starts)
+
+    # A service from before Backing's mark, a take with no Backing.
+    fake.keeps_kind = False
+    n11 = keep("Viasna", band=["Drums"])
+    drain()
+    puts = fake.count(f"put {uid_of(n11)}")
+    look()
+    ok("a take with no Backing sent to a service from before the mark is marked, and asked nothing more",
+       marks(n11) == (True, True) and fake.count(f"put {uid_of(n11)}") == puts)
+    fake.keeps_kind = True
 
 
 if __name__ == "__main__":
