@@ -23,6 +23,11 @@ numbers (R1–R15, S1–S18, W1–W3, C1–C4) are the audit's,
 https://claude.ai/artifact/4pxLtR5eZhGjVfVg5w86vL; its file:line were taken
 on a57de94, so find each place again before changing it.
 
+**Mockup Alex saw:** https://claude.ai/artifact/8EmLqkwzaFGYasCHKRXLjK, built
+from the real components and the shadcn registry's files; its sources, with
+the new components' imports already fixed, are in
+`/mnt/project-files/band-service/shadcn/mock/` (a starting point only).
+
 ## Global Constraints
 
 - While developing, run only the tests a change touches, once each; never
@@ -34,6 +39,8 @@ on a57de94, so find each place again before changing it.
   `tests/docs_screenshots.py` (`executable_path`) and `npm run pictures` in
   `service/`.
 - Test titles and check labels: cp1252 characters only (Windows CI).
+- Commit messages end with the Co-Authored-By line only: no session link
+  (CLAUDE.md).
 - A swapped piece keeps its look, size and behaviour unless the spec's "What
   the band sees" names the change. Rows keep their heights; nothing moves
   when a piece swaps (B4). Both themes; windows 1180×820 and 960×680; the
@@ -49,22 +56,26 @@ on a57de94, so find each place again before changing it.
   humanizer skill.
 - The thread «Показывать стерео и Backing в сервисе» (branch
   `claude/project-thread-wdz2ie`) changes `ui/src/components/LaneControls.tsx`,
-  `ui/e2e/lanes.spec.ts`, `site/src/stories/band-service/*.webp` and
-  CHANGELOG. If it merges first, rebase on main before Task 2 and build R3 on
+  `ui/e2e/lanes.spec.ts`, `service/src/takes/Take.tsx`,
+  `service/pictures/seed.ts`, `site/src/stories/band-service/*.webp` and
+  CHANGELOG. If this merges first, its new code must pass the six new rules. If it merges first, rebase on main before Task 2 and build R3 on
   its fader (two meters for a stereo track). If this merges first, tell that
   thread; it rebases and retakes.
 
 ## Review Focus
 
-1. The right panel on a take's page: folded to the strip, open beside the
-   page with the page narrower by 448 px; the address still opens and closes
-   it; ↑/↓ to the next take keeps it as it was. Test in Task 3.
-2. Ctrl/⌘+B folds only the left column; the two Sidebars remember apart.
-   Test in Task 3.
+1. The right panel on a take's page: folded to the 48 px strip; open beside
+   the page, which narrows by 400 px (448 on a page with no strip); the
+   address still opens and closes it; ↑/↓ to the next take keeps it as it
+   was. Test in Task 3.
+2. Below 1100 px the left column folds to its icons while the right panel is
+   open and opens again when it closes (Alex, 22:23:17); no key folds either
+   column. Test in Task 3.
 3. A question (AlertDialog) no longer closes on a click outside; Enter
-   presses Cancel; Esc closes it. Test in Task 2.
-4. The fader over its meter: same look, keys, double-click to 0 dB if it has
-   one, commit on let go. Test in Task 2.
+   presses Cancel; Esc closes it; Space and ⌘Z with a question open do not
+   reach the screen behind. Test in Task 2.
+4. The fader over its meter: same look, keys, commit on let go. Test in
+   Task 2.
 5. An error under a field holds its room: the line below does not move when
    it shows. Test in Task 4.
 6. The check finds a `title=` two lines under its tag, and lets pass a file
@@ -80,10 +91,10 @@ on a57de94, so find each place again before changing it.
   `input-group.tsx`, `button-group.tsx`, `field.tsx`, `avatar.tsx`,
   `sidebar.tsx`, `skeleton.tsx`, `accordion.tsx`, `input-otp.tsx`,
   `command.tsx`, each with `NAME.stories.tsx`.
-- Modify: `ui/src/components/ui/slider.tsx`, `toggle.tsx`,
-  `toggle-group.tsx`, `button.tsx` (export `OPENS`), `item.tsx` (export
-  `ITEM_CHOSEN` if not), `ui/src/index.css` (tokens), `ui/package.json`
-  (`input-otp`, `cmdk`), `docs/design-system.md` C8.
+- Modify: `ui/src/components/ui/slider.tsx`, `toggle-group.tsx`,
+  `ui/src/index.css` (tokens), `ui/package.json` (`input-otp`, `cmdk`),
+  `docs/design-system.md` C8. (`OPENS` and `ITEM_CHOSEN` are exported
+  already, and Toggle's on state is already `bg-selected`.)
 - Move: `ShareOption` from `ui/src/components/ShareDialog.tsx` into a shared
   place both ShareDialog and the service's Download can import (C3).
 
@@ -95,13 +106,16 @@ on a57de94, so find each place again before changing it.
 - [ ] **Step 2: On the theme.** Each new file uses the theme's colours,
   radii and the five text sizes; run `npm run design-check` in `ui/` (it
   still walks only `ui/src` until Task 6) and fix what it lists inside
-  `components/ui/`.
-- [ ] **Step 3: Sidebar's props.** In our `sidebar.tsx`, `SidebarProvider`
-  takes `shortcut?: string | null` (default `"b"`, null for none),
-  `cookie?: string | null` (the cookie's name, null for none) and
-  `mobileBelow?: number` (px; default 768), and reads the mobile state from a
-  `matchMedia` on `mobileBelow` inside the file. `--sidebar-width` is set by
-  the caller. Two providers nest without sharing state.
+  `components/ui/`. AlertDialogContent takes `dialog.tsx`'s frame (12 px
+  corners, 16 px title, the same veil); its footer is left to the caller.
+- [ ] **Step 3: Sidebar.** In our `sidebar.tsx`: no Ctrl/⌘+B listener and
+  no cookie; `SidebarProvider` takes `mobileBelow?: number` (px; default
+  768) and reads the mobile state from a `matchMedia` on it inside the file;
+  the phone Sheet's hidden title is a prop (`mobileTitle`, default "Menu")
+  with no description; `--sidebar-width`, `--sidebar-width-mobile` and
+  `--sidebar-width-icon` are set by the caller. Two providers nest without
+  sharing state. The container's position is the caller's (`className`), so
+  it can sit inside the page's area rather than the viewport.
 - [ ] **Step 4: Variants.**
   - Slider `variant="fader"`: clear track and range, the thumb as the fader
     draws it now (`size-3.5 rounded-full bg-foreground ring-2 ring-card`,
@@ -111,12 +125,15 @@ on a57de94, so find each place again before changing it.
     thumb shown only on keyboard focus, for S5.
   - Textarea `variant="line"`: no frame, a line under it, as
     `components/NameField.tsx` draws it now (R4).
-  - Toggle and ToggleGroup: the on state is `ITEM_CHOSEN`'s grey.
   - ToggleGroup passes `rovingFocus` through, so a grid can keep its own
     arrow keys (R5, S15).
 - [ ] **Step 5: Tokens.** `--signal-foreground` and `--mark-foreground` in
   both themes in `ui/src/index.css`, each the white used now, with
-  `--color-…` lines beside the others.
+  `--color-…` lines beside the others. `--sidebar-*` from our tokens in both
+  themes (`--sidebar: var(--panel)`, `--sidebar-foreground:
+  var(--foreground)`, `--sidebar-accent: var(--accent)`, `--sidebar-border:
+  var(--border)`, `--sidebar-ring: var(--ring)`, the primary pair from
+  `--primary`), and remove whatever values `npx shadcn add sidebar` wrote.
 - [ ] **Step 6: C3.** `ShareOption` becomes shared (in `components/` if only
   the two use it); ShareDialog imports it back unchanged.
 - [ ] **Step 7: Stories and C8.** A story per new file and variant; one line
@@ -131,11 +148,19 @@ on a57de94, so find each place again before changing it.
 `ui/e2e/*.spec.ts` that read a changed piece; `tests/test_*.py` only if one
 reads a changed piece.
 
-- [ ] **Step 1: R1.** `ConfirmDialog` on AlertDialog: AlertDialogCancel gets
-  the first focus, so Enter presses it; Esc closes; a click outside does not.
-  `PromptDialog` and `RenameTakeDialog` in the same file stay on Dialog. Add an e2e test
-  in the spec that already tests a question (find it with
-  `grep -rln "Cancel" ui/e2e`): a click outside leaves it open.
+- [ ] **Step 1: R1.** `ConfirmDialog` on AlertDialog, keeping
+  `DialogButtons`' order (P3) with AlertDialogCancel and AlertDialogAction
+  around our Buttons: Cancel gets the first focus, so Enter presses it; Esc
+  closes; a click outside does not. `PromptDialog` and `RenameTakeDialog`
+  in the same file stay on Dialog. Add `[role="alertdialog"]` to `LAYERS`
+  (`ui/src/hooks/useSpacebar.ts:56`), to the dialog lookup at
+  `useSpacebar.ts:400` and to `hooks/useUndoKey.ts`. Change every e2e lookup
+  of a question from `getByRole("dialog")` to `getByRole("alertdialog")` in
+  `ui/e2e` and `service/e2e` (`grep -rn 'getByRole("dialog"'`, then keep the
+  ones that find a PromptDialog, a RenameTakeDialog or another Dialog). Add
+  e2e tests in the spec that already tests a question (find it with `grep
+  -rln "Cancel" ui/e2e`): a click outside leaves it open; Space with
+  “Finish this rehearsal?” open does not start a take.
 - [ ] **Step 2: R2, R4, R11.** TakeNameField on InputGroup (InputGroupInput
   or InputGroupTextarea, ✕ as an InputGroupAddon with a Button) and Label;
   NameField on Textarea `line`, keeping its own growing (spec call 17);
@@ -147,9 +172,9 @@ reads a changed piece.
   `lanes.spec.ts`.
 - [ ] **Step 4: R5, R6, C4.** IconPicker on ToggleGroup `type="single"`
   with `rovingFocus={false}` and its own ↑/↓; StarButton and RegionTag on
-  Toggle (`pressed`, `onPressedChange`), their names unchanged; the seven
-  hand-written chosen greys on `ITEM_CHOSEN` (or Toggle's on state where the
-  row became a Toggle).
+  Toggle (`pressed`, `onPressedChange`), their names unchanged; the six
+  hand-written chosen greys in РЭХА on `ITEM_CHOSEN` (or Toggle's on state
+  where the row became a Toggle).
 - [ ] **Step 5: R7, R8, R9, R12.** Spinner in ActivityButton and App;
   ErrorBar on Alert `destructive`, where it is now; the six groups on Card,
   their padding and gap as now through `className`; the two bars on
@@ -172,27 +197,37 @@ reads a changed piece.
 panel or the strip.
 
 - [ ] **Step 1: Left.** The column of sections in a `SidebarProvider`
-  (`shortcut="b"`, its own cookie name, `mobileBelow={500}`) with `Sidebar
-  side="left" collapsible="offcanvas"`, `--sidebar-width` 14rem (224 px, as
-  `w-56` now). Its look as now (`bg-panel`, `p-3`, gaps). On a phone it is
-  the Sidebar's Sheet: the hand-made backdrop button and `bg-black/30` go;
-  the ☰ button is a SidebarTrigger or calls `setOpenMobile`.
+  (`mobileBelow={500}`) with `Sidebar side="left" collapsible="icon"`,
+  `--sidebar-width` 14rem (224 px, as `w-56` now), `--sidebar-width-icon`
+  3rem. Its look as now (`bg-panel`, `p-3`, gaps); each section a
+  SidebarMenuButton with `isActive` in `ITEM_CHOSEN` (replaces `LIT`, C4),
+  its name as the tip when folded. It is open, except below 1100 px
+  (`useSize() === "narrow"`) while the right panel is open: then it folds to
+  its icons, and opens again when the panel closes (Alex, 22:23:17). On a
+  phone it is the Sidebar's Sheet, `--sidebar-width-mobile` 16rem (256 px,
+  as now), titled “Menu”: the hand-made backdrop button and `bg-black/30`
+  go; the ☰ button calls `setOpenMobile`.
 - [ ] **Step 2: Right.** The panel in a second `SidebarProvider`
-  (`shortcut={null}`, another cookie name or none, `mobileBelow={500}`),
-  `open` and `onOpenChange` tied to `usePanel()`. `Sidebar side="right"`,
+  (`mobileBelow={500}`), `open` and `onOpenChange` tied to `usePanel()`. `Sidebar side="right"`,
   `--sidebar-width` 28rem, `--sidebar-width-icon` 3rem (the strip's `w-12`).
   On a take's page `collapsible="icon"`: folded, the strip's buttons as in
   `drawer.tsx`; open, the panel. Elsewhere `collapsible="offcanvas"`. The
   container's top and bottom stay where the panel's are now (inside the
   page's area, above the player bar), not the viewport's. The Back button in
   the panel (S1) is a Button.
-- [ ] **Step 3: Phone.** Under 500 px a mark's panel is the right Sidebar's
-  Sheet at full width; a take opens its page as now.
+- [ ] **Step 3: Phone.** Under 500 px the right panel (a mark's, Statuses,
+  Labels) does not become a Sheet: it keeps today's place between the header
+  and the player bar, full width, no veil, the bar usable (render the
+  panel as now there instead of the right Sidebar); a take opens its page as
+  now.
 - [ ] **Step 4: Tests.** New in the spec that tests the panel (`grep -rln
-  'aria-label="Panel"\|"Panel"' service/e2e`): on a take's page the strip
-  shows; opening the panel narrows the page by 448 px (compare the main
-  area's width before and after); Ctrl+B folds the left column and not the
-  right; the phone menu closes on Esc. Run the changed specs once each.
+  'aria-label="Panel"\|"Panel"' service/e2e`): on a take's page the 48 px
+  strip shows; opening the panel narrows the main area by 400 px and closing
+  folds it back to the strip (compare widths); on Songs with Statuses open
+  the main area is 448 px narrower; at 960 px the left column folds to icons
+  while the panel is open and opens when it closes; the phone menu closes on
+  Esc; on a phone the player bar still plays with a mark's panel open. Run
+  the changed specs once each.
 - [ ] **Step 5: Commit** "Service: both columns on shadcn's Sidebar".
 
 ### Task 4: The rest of the service (S1, S4–S17, C1–C3, sizes, colours)
@@ -203,7 +238,11 @@ panel or the strip.
 - [ ] **Step 1: S1.** The remaining hand-made buttons on Button (`ghost`,
   `link`, the sizes in use) or Toggle where pressed; the grip in
   `shell/EditList.tsx` a ghost Button with the ref (`asChild` if the drag
-  library needs the element).
+  library needs the element). S1b: **Statuses** and **Labels**
+  (`songs/Songs.tsx`, `marks/Marks.tsx`) on Toggle `outline` `row`, pressed
+  while their panel is open, and a press while pressed keeps it open
+  (`onPressedChange` always opens); the service's star (`takes/parts.tsx`) on
+  Toggle. S6b: the track rows' `<label>` in `takes/Download.tsx` on Label.
 - [ ] **Step 2: S4.** Each `title=` tip: Tooltip, or WholeTip where it shows a
   name cut short; the take link's too (`takes/parts.tsx`). StarButton's
   "Starred by …" wraps the Toggle in a Tooltip.
@@ -212,26 +251,46 @@ panel or the strip.
   `service/src/shell/` on InputGroup (input, ✓ and ✕ as addons) used by
   `songs/edit.tsx`, `sets/SetPage.tsx` and `takes/move.tsx`.
 - [ ] **Step 4: S8, S9, S10, S13, S14, C1, C2, C3.** Avatar for `Avatar`,
-  `Logo` and `Initials` (letters `text-xs`, the circles' size as now); the
-  shared Empty for `Empty`; Spinner for `Waiting`; Badge for the pills,
+  `Logo` and `Initials` (letters `text-xs`; in the star stack the circles
+  keep `h-5 min-w-5 px-1`, so two letters, “Iv” and “Ir”, still fit); the
+  shared Empty for `Empty`, the first sentence of each page's words as
+  EmptyTitle and the rest as EmptyDescription, no new words; `Waiting`:
+  nothing for 1 s, then Spinner, and from 10 s “Opening…” beside it (B5); Badge for the pills,
   their look as now through a variant if Badge's differs; Card for `Groups`
   and `signin/Frame.tsx`; `OPENS` from `button.tsx` (`text-left` stays at the
   call); MarkLine for the three mark lines; the shared ShareOption in
   Download.
-- [ ] **Step 5: S11.** Under a field: Field with FieldError, whose line keeps
-  its room when empty; a whole page's trouble (`Trouble`) on Alert. All 21,
-  one size.
+- [ ] **Step 5: S11.** All 21 in `text-sm` (FieldError's size), by the
+  spec's three kinds:
+  - under a field, a Field with the error in a `min-h-5` line that is there
+    when empty: `songs/parts.tsx:141`, `songs/NewSong.tsx:87`,
+    `takes/move.tsx:156`, `marks/MarkItem.tsx:98` and `:254`,
+    `shell/EditList.tsx:104`, `signin/SignIn.tsx:108`, `signin/Name.tsx:48`,
+    `sets/SetPage.tsx:114`, and the set length's error, now only a `title=`
+    on its Input (`sets/SetPage.tsx:207`);
+  - in a row, FieldError in place: `songs/parts.tsx:221` and `:275`,
+    `songs/edit.tsx:41`, `takes/TakeMenu.tsx:43`, `sets/SetPage.tsx:166`,
+    `takes/Take.tsx:141`;
+  - under a list or a button, FieldError in place: `songs/parts.tsx:196`,
+    `sets/Sets.tsx:79`, `sets/SetPage.tsx:387`, `members/Members.tsx:32`,
+    `trash/Trash.tsx:66`;
+  - `Trouble` (`shell/parts.tsx:450`) on Alert, **Try again** as now.
 - [ ] **Step 6: S12.** The list rows on Item and ItemGroup; a press anywhere
   on the row still opens what it opened, and the buttons inside still work.
 - [ ] **Step 7: S15, S16, S17.** The colour row as a ToggleGroup in a Popover
   by the swatch (`rovingFocus={false}`, own ↑/↓ as R5; the check on the
-  chosen one in `text-mark-foreground`); Move to song as Command in the
-  submenu, a search field at the top; the code on InputOTP, six slots,
-  `autoComplete="one-time-code"`, a pasted code filling all six.
+  chosen one in `text-mark-foreground`); Move to song as Command inside the
+  `DropdownMenuSubContent` that is there now, its search field focused when
+  the submenu opens and stopping the menu's own typeahead, **Not named** and
+  **New song…** outside the search (`forceMount`), so a search with no match
+  still shows them; the code on InputOTP, six slots,
+  `autoComplete="one-time-code"`, a pasted code filling all six, **Sign in**
+  still pressed by the member.
 - [ ] **Step 8: Sizes and colours.** `text-lg` to `text-base` (F5) in
   `MarkPanel.tsx`, `EditList.tsx`, `SetPage.tsx` (three), `Name.tsx`,
   `SignIn.tsx`; `text-[10px]` to `text-xs` in `songs/parts.tsx` and
-  `takes/parts.tsx`; the stage title sized from the window's width with
+  `takes/parts.tsx`; the stage title `text-[clamp(1.75rem,8.5vw,3.5rem)]`
+  (28 px at 330 px wide, 56 px from 660 px; wraps balanced as now) with
   `design-ok(text-size)` and a reason; FirstDay's done step
   `text-signal-foreground`; the diamond under `design-ok(radius)` with the
   same reason as `Timeline.tsx`'s; `sets/Print.tsx` under the paper kind of
@@ -249,8 +308,10 @@ panel or the strip.
 `site/e2e/`.
 
 - [ ] **Step 1: W1.** FAQ on Accordion `type="multiple"`, styled by
-  `page.css` as `<details>` is now; the e2e test that opens a question still
-  passes, and ↑/↓ move between questions.
+  `page.css` as `<details>` is now; AccordionContent with `forceMount` and
+  hidden while closed, so every answer stays in the page; opening in 250 ms
+  (F10), at once under Reduce motion (F11); the e2e test that opens a
+  question still passes, and ↑/↓ move between questions.
 - [ ] **Step 2: W2.** The pieces under a story's window on Toggle (they carry
   `aria-pressed`), the steps on Button; `page.css` keeps their look (its
   `.item button` and `.rail button` rules sit outside Tailwind's layers, so
@@ -299,10 +360,14 @@ check"; `CLAUDE.md`; `.claude/skills/check-plan/SKILL.md`.
   ui/scripts/design-check.mjs site`. Each with a comment in the style of the
   file's others.
 - [ ] **Step 8: The rule in words.** CLAUDE.md "Features" gets the spec's
-  line; `/check-plan` section D gets the spec's line; K3 and "The check" in
-  `docs/design-system.md` name the three parts, the six rules (in its
-  table) and the third kind of `design-ok`; "Where things stand" says the
-  service and the site are checked too.
+  line; `/check-plan` section D gets the spec's line; in
+  `docs/design-system.md`: K3 and "The check" name the three parts, the six
+  rules (in its table) and the third kind of `design-ok`; C3 says a question
+  is AlertDialog; B2 says a click outside does not close it; B5 says the
+  service waits the same second; C8 lists the new components and drops
+  InputGroup and the side panel from the ones "added by the first screen's
+  pull request that needs them"; "Where things stand" says the service and
+  the site are checked too.
 - [ ] **Step 9: Commit** "design-check over РЭХА, the service and the site,
   with six more rules".
 

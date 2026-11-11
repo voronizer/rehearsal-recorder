@@ -48,6 +48,18 @@ shadcn».
   its width, as shadcn's Sidebar does, instead of lying over it as it has
   since 8 November. (Claude had recommended keeping it over the page; not
   picked.)
+- 22:14:13 «и хочу увидеть что мы поменяем и как это будет выглядеть и
+  работать»: the mockup https://claude.ai/artifact/8EmLqkwzaFGYasCHKRXLjK
+  (sources in /mnt/project-files/band-service/shadcn/mock/), every visible
+  change before and after. It showed that at 960 px wide, with both columns
+  open, a take's page kept 286 px.
+- 22:23:17 «Б. Левая в значки»: in a window narrower than 1100 px (the
+  service's `narrow`, `shell/size.ts`), while the right panel is open, the
+  left column folds to its icons, 48 px wide; the page kept 462 px at 960
+  in the mockup. (Claude's recommendation; the others were narrowing at
+  every width, or the panel over the page below 1100 px.)
+- 22:24:16 «А. Только картинки»: on reha.stream only the band service
+  story's pictures are retaken where the frame shows; no words change.
 
 ## What the band sees
 
@@ -63,7 +75,8 @@ are the ones the band will notice.
   РЭХА's start (“Connecting to the audio engine…” shows at once, the spinner
   after a second) and in the service where a panel's take or song is still
   on its way. There the words “Opening…” after
-  0.3 s give way to the shared Spinner after 1 s. On a job in РЭХА's
+  0.3 s go: nothing shows for the first second, then the shared Spinner, and
+  from 10 s “Opening…” beside it, as History does (B5). On a job in РЭХА's
   activity list the spinner waits a second too.
 
 ### РЭХА
@@ -78,45 +91,73 @@ are the ones the band will notice.
 ### The service
 
 - **The left column** (S3) is shadcn's Sidebar. On a computer it looks as it
-  does now. On a phone the menu (S2) slides out as a Sidebar does there: Esc
-  closes it, the focus stays in it until it closes, and the page behind dims
-  in the shared colour.
+  does now. On a phone the menu (S2) slides out as a Sidebar does there, 256
+  px wide as now, named “Menu” as the ☰ button is: Esc closes it, the focus
+  stays in it until it closes, and the page behind dims in the shared
+  colour. Neither column has a key of its own (shadcn's Ctrl/⌘+B is off).
 - **The right panel** (S18) is a Sidebar on the right. On a take's page,
-  folded, it is the strip of icons it is now; open, it takes 448 px beside the
-  page and the page narrows by as much (Alex, 21:52:04). On a page with no
-  strip it is gone when closed and narrows the page when open. On a phone a
-  take still opens its own page, as before, and a mark's panel lies over the
-  page at its full width, as now.
-- **A narrow window**: with both columns open, the page keeps 1180 − 224 −
-  448 = 508 px at 1180 px wide, and 960 − 224 − 448 = 288 px at 960 px (the
-  left column is 224 px, `shell/Side.tsx:67`).
+  folded, it is the strip of icons it is now, 48 px; open, it takes 448 px
+  beside the page, 400 more than the strip, and the page narrows by as much
+  (Alex, 21:52:04). On a page with no strip (Songs with Statuses or Labels
+  open) it is gone when closed and narrows the page by 448 px when open. On
+  a phone a take still opens its own page, as before, and the panel (a
+  mark's, Statuses, Labels) keeps today's place: between the header and the
+  player bar, at full width, with no veil, the bar still usable.
+- **A narrow window** (Alex, 22:23:17): below 1100 px wide, while the right
+  panel is open, the left column folds to its icons (48 px, each with its
+  section's name as a tip) and opens again when the panel closes. At 960 px
+  the page keeps about 462 px; at 1180 px, where nothing folds, about 506 px
+  (the left column is 224 px, `shell/Side.tsx:67`).
 - **Tips** (S4) are the shared Tooltip, and a name cut short shows in full in
   WholeTip, as in РЭХА. On a phone neither shows, as the browser's never did.
 - **The bar of the take playing** at the bottom (S5) moves with ← and → once
   it has the focus, and a screen reader names it.
-- **An error under a field** (S11) is one size everywhere and keeps its room,
-  so nothing below it moves when it shows (B4). What went wrong with a whole
-  page is the shared Alert.
+- **Errors** (S11) are 14 px everywhere (FieldError's size), in three kinds:
+  - under a field (a song's notes, New song, a mark's note, a comment, a
+    label's or status's name, the sign-in pages, your name, a set's length,
+    and a name edited in place): the field keeps an empty 20 px line under
+    it, and the error fills it, so nothing below moves (B4). These fields
+    grow by that line; nothing else does. A set's length said its error only
+    as a browser tip on the field (`sets/SetPage.tsx:207`); it moves to that
+    line.
+  - in a row, after a button or a menu (removing a song's file, a take's
+    menu, a song's tempo, deleting a set or a song, a take's levels): in
+    place as now, one size.
+  - under a list or a page's button (removing from a list, New set, a set's
+    songs, Members, Trash): in place as now, one size.
+  - A page that could not be read (`Trouble`) is the shared Alert, with
+    **Try again** as now.
 - **An empty section** (S9) is the shared Empty, as in РЭХА: centred, its
-  title and a line of text.
+  title and a line of text. The words are today's: the first sentence of each
+  (Songs, Marks, Rehearsals, Sets) becomes the title, the rest the line.
 - **A label's or status's colour** (S15) opens as a grid of colours in a
   pop-up by its swatch, as the icons do in РЭХА, instead of a row under it.
-- **Move to song** (S16) has a search field at the top of its list.
+- **Move to song** (S16) has a search field at the top of its list, focused
+  when the list opens. **Not named** and **New song…** stay where they are
+  and outside the search, so a search that finds nothing still shows them.
 - **The code from the email** (S17) is six boxes, a digit in each. It still
   fills itself from the email where the phone offers it, and pasting the
-  whole code fills all six.
+  whole code fills all six. **Sign in** is still pressed, as now.
+- **A name edited in place** (S7: a song's, a set's, a new song's) has ✓ and
+  ✕ inside its field's frame instead of beside it.
+- **The dotted line under a word that opens** (C1) is 1 px, as in РЭХА.
 - **Headings** that were 18 px become 16 px (a mark's panel, Statuses,
   Labels, a set's name and song, the two sign-in pages), as F5 sends 18 to
   16. The letters in the star circles and “GP”/“PDF” on a file become 12 px
   from 10 px, as F5 sends 10 to 12.
 - **The stage view's song title** (`sets/Stage.tsx`) is sized from the
-  window's width instead of a fixed 36 px, so a long title fits a phone held
-  upright and stays big on a tablet.
+  window's width instead of a fixed 36 px: 8.5 % of the width, from 28 px
+  (reached at 330 px wide) to 56 px (reached at 660 px), so a long title
+  fits a phone held upright and stays big on a tablet. A title too long for
+  a line wraps, balanced, as now.
 
 ### The site
 
 - **Questions and answers** (W1) open and close with the shared Accordion:
-  the same look, a short slide, and ↑/↓ between the questions.
+  the same look, opening in 250 ms (F10), at once under Reduce motion (F11),
+  and ↑/↓ between the questions. A closed answer stays in the page, hidden,
+  so search engines still read it; the browser's Find no longer opens a
+  closed question, as `<details>` did.
 - The pieces under a story's window and the steps (W2), and the app's icon in
   the menu (W3), look as they do now.
 
@@ -154,8 +195,14 @@ are the ones the band will notice.
   text sized from the window) and gets a third: a sheet made for paper, which
   is black on white whatever the theme and sized for A4 (`sets/Print.tsx`,
   Alex's set list for the stage of 9 November).
-- `docs/design-system.md` K3 and "The check" list the new rules, the three
-  parts and the third kind of `design-ok`.
+- `docs/design-system.md` (K1: a PR that adds a shared component or changes
+  a rule changes it too): K3 and "The check" list the new rules, the three
+  parts and the third kind of `design-ok`; C3 says a question is
+  AlertDialog; B2 says a click outside does not close it; B5 says the
+  service waits the same second; C8 drops InputGroup and the side panel from
+  "added by the first screen's pull request that needs them" and lists the
+  new components; "Where things stand" says the service and the site are
+  checked too.
 
 ### New shadcn components
 
@@ -167,13 +214,22 @@ AlertDialog, Textarea, InputGroup, ButtonGroup, Field, Avatar, Sidebar (with
 the Skeleton it needs), Accordion, InputOTP (the `input-otp` package) and
 Command (the `cmdk` package). shadcn's own Combobox is built on Base UI, not
 Radix (its registry entry needs `@base-ui/react`), so Move to song's search
-is shadcn's older Radix pattern, Command in a Popover.
+is shadcn's older Radix pattern: Command, here inside the Move to song
+submenu that is there now.
 
-Two Sidebars on one page need two of its providers, each with its own state;
-shadcn's copy toggles on Ctrl/⌘+B and keeps its state in one cookie. Ours
-takes the shortcut and the cookie's name as props, so only the left column
-answers Ctrl/⌘+B and the two remember apart. The right one's open state is
-the panel's, from the address as now. shadcn's Sidebar turns into a Sheet
+AlertDialog takes Dialog's frame (12 px corners, the 16 px title, the veil,
+C3), and ConfirmDialog keeps `DialogButtons` in the system's order (P3), so a
+question looks as it does now. Its role is `alertdialog`, so РЭХА's key
+guards that look for an open dialog (`LAYERS` and the dialog's own arrow
+keys in `hooks/useSpacebar.ts`, `hooks/useUndoKey.ts`) look for it too:
+with a question open, Space, Esc and ⌘Z do not reach the screen behind.
+
+Two Sidebars on one page need two of its providers, each with its own state.
+shadcn's copy toggles on Ctrl/⌘+B anywhere in the window and keeps its state
+in a cookie; ours has neither, so the left column stays as it is now and the
+right one's open state is the panel's, from the address as now. Its colours
+(`--sidebar-*`) are our tokens in both themes: the left on `--panel`, the
+right on the service's `--side`, as the panel is now. shadcn's Sidebar turns into a Sheet
 under 768 px; ours takes that width as a prop too, and the service passes its
 phone's, under 500 px (`shell/size.ts`), so the columns keep the widths at
 which they change now.
@@ -182,7 +238,7 @@ which they change now.
 
 | Row | Where | Becomes |
 |---|---|---|
-| R1 | `components/ConfirmDialog.tsx` | AlertDialog, Cancel focused first |
+| R1 | `components/ConfirmDialog.tsx`, `ConfirmDialog` only (`PromptDialog` and `RenameTakeDialog` stay on Dialog) | AlertDialog, Cancel focused first |
 | R2 | `components/TakeNameField.tsx` | InputGroup (its input or text box, ✕ as an addon) and Label |
 | R3 | `components/LaneControls.tsx`, the fader | Slider, a variant whose track is clear so the meter shows through |
 | R4 | `components/NameField.tsx` | Textarea, a variant with a line under it |
@@ -198,10 +254,12 @@ which they change now.
 | R14 | `backing/FileStart.tsx`, bar one's mark | Slider, a variant drawn as the mark |
 | R15 | `metronome/TempoField.tsx`, `backing/BarOneField.tsx` | ButtonGroup |
 | S1 | the 14 hand-made buttons | Button or Toggle |
-| S2, S3 | `shell/Side.tsx`, `shell/Shell.tsx` (the phone menu) | Sidebar, left |
+| S1b | **Statuses** and **Labels** on Songs and Marks (`songs/Songs.tsx`, `marks/Marks.tsx`), the service's star (`takes/parts.tsx`), all `Button` with `aria-pressed` | Toggle (`outline`, `row` for the two), pressed while their panel is open; pressing again keeps it open, as now |
+| S2, S3 | `shell/Side.tsx`, `shell/Shell.tsx` (the phone menu) | Sidebar, left; the lit section through SidebarMenuButton's `isActive`, in `ITEM_CHOSEN` (C4) |
 | S4 | the 8 `title=` tips, and the take link's | Tooltip, WholeTip |
 | S5 | `shell/PlayerBar.tsx` | Slider, a variant drawn as the bar |
 | S6 | the `TEXTAREA` class | Textarea |
+| S6b | the track rows' `<label>` in `takes/Download.tsx` | Label |
 | S7 | song, set and new-song names edited in place | one shared piece in `service/src/shell/` on InputGroup |
 | S8 | `Avatar`, `Logo`, `Initials` | Avatar |
 | S9 | `Empty` in `shell/parts.tsx` | the shared Empty |
@@ -211,7 +269,7 @@ which they change now.
 | S13 | `Pill`, the mark's and file's pills | Badge |
 | S14 | `Groups`, `signin/Frame.tsx` | Card |
 | S15 | the colour row in `shell/EditList.tsx` | ToggleGroup in a Popover |
-| S16 | `takes/move.tsx` | Command in a Popover |
+| S16 | `takes/move.tsx` | Command inside the Move to song submenu |
 | S17 | `signin/SignIn.tsx`, the code | InputOTP |
 | S18 | `shell/Shell.tsx` panel, `shell/drawer.tsx` strip | Sidebar, right, `collapsible="icon"` on a take's page |
 | W1 | `site/src/page/Faq.tsx` | Accordion, in the site's look |
@@ -220,7 +278,7 @@ which they change now.
 | C1 | `OPENS` copied in `service/src/shell/parts.tsx` | the one in `button.tsx` |
 | C2 | the service's three mark lines | `MarkLine` from `mark.tsx` |
 | C3 | `Choice` in `service/src/takes/Download.tsx` | `ShareOption`, made shared |
-| C4 | the seven hand-written "chosen" greys | `ITEM_CHOSEN` from `item.tsx` |
+| C4 | the seven hand-written "chosen" greys (six in РЭХА, `LIT` in `service/src/shell/Side.tsx`) | `ITEM_CHOSEN` from `item.tsx` |
 
 The rest the check finds in the service goes as follows: the colours
 `text-white` (`home/FirstDay.tsx`, the check on a colour) become a theme
@@ -240,9 +298,10 @@ same diamond does in `Timeline.tsx`.
 
 ## Where it shows
 
-- **reha.stream**: W1–W3 change nothing in the look. The band service story's
-  pictures (`site/src/stories/band-service/`) are retaken where the frame
-  shows, and Alex sees the site before merge.
+- **reha.stream** (Alex, 22:24:16): W1–W3 change nothing in the look and no
+  words change. The band service story's pictures
+  (`site/src/stories/band-service/`) are retaken where the frame shows, and
+  Alex sees them and the site before merge.
 - **Guide pictures** (`tests/docs_screenshots.py`): retaken where R8, R10 or
   R15 show.
 - **The service's pictures** (`service/pictures/`): retaken.
@@ -260,11 +319,14 @@ same diamond does in `Timeline.tsx`.
   paths from the root, and a part given by name.
 - The e2e tests that read a changed piece by its old shape: the fader's
   value (`ui/e2e/volume.spec.ts` reads it as an input's value), the service's
-  menu, panel and strip, the code boxes, Move to song.
-- New: a question does not close on a click outside it; the phone menu closes
-  on Esc; the right panel narrows the page on a take's page and folds to the
-  strip; Move to song finds a song by typing; an error under a field moves
-  nothing below it.
+  menu, panel and strip, the code boxes, Move to song, and every lookup of a
+  question as `getByRole("dialog")` in `ui/e2e` and `service/e2e`, which
+  becomes `alertdialog`.
+- New: a question does not close on a click outside it, and Space with a
+  question open does not start a take; the phone menu closes on Esc; on a
+  take's page the panel, opened, narrows the page by 400 px and, closed,
+  folds to the 48 px strip; Move to song finds a song by typing; an error
+  under a field moves nothing below it.
 
 ## Calls Claude made
 
@@ -274,7 +336,8 @@ same diamond does in `Timeline.tsx`.
 3. The spinner waits a second everywhere, the service's panels included (B5
    was settled for РЭХА only).
 4. The Sidebar becomes a Sheet below the service's phone width (500 px),
-   not shadcn's 768 px.
+   not shadcn's 768 px; on a phone the right panel keeps today's place
+   rather than a Sheet's.
 5. The stage title sized from the window, with `design-ok(text-size)`.
 6. A third kind of `design-ok`, for a sheet made for paper.
 7. `text-white` on FirstDay's done step and on a colour's check mark becomes
@@ -291,19 +354,25 @@ same diamond does in `Timeline.tsx`.
 13. S7's shared piece lives in the service, as only the service edits in
     place this way.
 14. C4 on the existing `ITEM_CHOSEN`, not a new variant.
-15. The Sidebar's providers take their shortcut and cookie as props; only the
-    left one has Ctrl/⌘+B.
-16. One pull request for all of it, the check's commit last.
+15. Neither Sidebar has shadcn's Ctrl/⌘+B or its cookie.
+16. One pull request for all of it; the check's commit after the last fix,
+    words and pictures after it.
 17. NameField's text box keeps its own way of growing with the text: the
     CSS that shadcn's Textarea grows with, `field-sizing`, came to WebKit only
     in Safari 26.2 (https://webkit.org/?p=17640), and РЭХА on an older Mac
     draws with that system's WebKit.
+18. W3: the icon as an image of `ui/public/logo.svg` (the same three
+    colours), not a `design-ok` mark as the audit offered.
+19. Errors are 14 px, FieldError's size; the line is reserved only under a
+    field; the stage title's 8.5 % and its 28–56 px range.
 
 ## Not in this
 
 - Option Г, the hook that checks each file as Claude writes it.
 - The three earlier decisions under «Решено раньше» in the audit.
 - The thread «Показывать стерео и Backing в сервисе» changes
-  `LaneControls.tsx`, `ui/e2e/lanes.spec.ts`, the band service story's
-  pictures and CHANGELOG. Whichever of the two merges second rebases, settles
-  the conflicts and retakes the pictures.
+  `LaneControls.tsx`, `ui/e2e/lanes.spec.ts`, `service/src/takes/Take.tsx`
+  (S11 touches it), `service/pictures/seed.ts`, the band service story's
+  pictures and CHANGELOG. Whichever of the two merges second rebases,
+  settles the conflicts and retakes the pictures; if this merges first, the
+  stereo branch's new code must pass the six new rules too.
