@@ -24,4 +24,4 @@ Skills in `.claude/skills/`, unchanged, MIT: humanizer from blader/humanizer@8c3
 
 ## Plans
 
-Before asking Alex for «ок» on a plan, run the check-plan skill: a fresh agent checks the spec and the plan against his answers, against each other and against these rules, and looks for cases the spec leaves out. Fix what needs no decision of his, then send him the plan with the findings, his questions first. This holds under «делай сразу» too. He can run it himself as `/check-plan`.
+Before asking Alex for his OK on a plan, run the check-plan skill: a fresh agent checks the spec and the plan against his answers, against each other and against these rules, and looks for cases the spec leaves out. Fix what needs no decision of his, then send him the plan with the findings, his questions first. This holds when he has said to code at once, too. He can run it himself as `/check-plan`.

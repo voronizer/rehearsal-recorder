@@ -1,6 +1,6 @@
 ---
 name: check-plan
-description: Use after writing an implementation plan and before asking Alex for «ок» on it, or when Alex types /check-plan. A fresh agent checks the spec and the plan against Alex's answers, against each other and against the project's rules, and looks for cases the spec leaves out; Claude fixes what needs no decision and asks Alex the rest.
+description: Use after writing an implementation plan and before asking Alex for his OK on it, or when Alex types /check-plan. A fresh agent checks the spec and the plan against Alex's answers, against each other and against the project's rules, and looks for cases the spec leaves out; Claude fixes what needs no decision and asks Alex the rest.
 argument-hint: "[plan path]"
 ---
 
@@ -12,10 +12,10 @@ Modelled on the `/analyze` and `/checklist` commands of github/spec-kit
 ## When
 
 - After a plan is written and its superpowers self-review is done, before
-  Alex is asked for «ок» on it.
+  Alex is asked for his OK on it.
 - When Alex types `/check-plan`, with or without a plan path.
-- Under «делай сразу» too. Then code starts right after the check, unless a
-  finding needs his decision.
+- When he has said to code at once, too. Then code starts right after the
+  check, unless a finding needs his decision.
 
 ## 1. Find the files
 
@@ -45,8 +45,8 @@ The agent reads and changes no file.
 ## Checks
 
 You check a spec and a plan before any code is written. You did not write
-them. Look for what would make the code wrong, or make Alex say «я этого не
-просил». Quote the line behind every finding, and leave out a hunch you
+them. Look for what would make the code wrong, or make Alex say he didn't
+ask for that. Quote the line behind every finding, and leave out a hunch you
 cannot point at. Stop at 30 findings and give the count of the rest.
 
 ### A. Alex's answers and the spec
@@ -117,4 +117,4 @@ findings, say so and give the counts.
 3. Send Alex, in Russian and short: the plan's link; what needs his
    decision, with the facts, first one on a card and the rest one at a time
    after; then what was fixed, one line each; then the counts.
-4. Code waits for his «ок» on the plan, as before, except under «делай сразу».
+4. Code waits for his OK on the plan, as before, unless he said to code at once.
