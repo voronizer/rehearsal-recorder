@@ -1,12 +1,13 @@
 ---
 name: check-plan
-description: Use after writing an implementation plan and before asking Alex for «ок» on it, or when Alex types /check-plan. A fresh agent checks the spec and the plan against Alex's answers, against each other and against the project's rules; Claude fixes what needs no decision and asks Alex the rest.
+description: Use after writing an implementation plan and before asking Alex for «ок» on it, or when Alex types /check-plan. A fresh agent checks the spec and the plan against Alex's answers, against each other and against the project's rules, and looks for cases the spec leaves out; Claude fixes what needs no decision and asks Alex the rest.
 argument-hint: "[plan path]"
 ---
 
 # Check the plan before code
 
-Modelled on the `/analyze` command of github/spec-kit (v1.4.0, MIT).
+Modelled on the `/analyze` and `/checklist` commands of github/spec-kit
+(v1.4.0, MIT).
 
 ## When
 
@@ -79,6 +80,13 @@ cannot point at. Stop at 30 findings and give the count of the rest.
   the writing rules for what people read, how the feature shows on
   reha.stream, pictures and the guide. Report the rules broken, not the ones
   kept.
+
+### E. Cases the spec leaves out
+- Each screen or step the spec changes says what the band sees when it is
+  empty, on the first day, with many items or long names, when something
+  fails to load or send, in both themes, and in windows 1180×820 and
+  960×680. A case left out on purpose is named as left out.
+- Report only the cases that apply to this feature.
 
 ### Not checked
 
