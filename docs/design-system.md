@@ -413,6 +413,26 @@ the shared one when it is redone.
   few words looks and works alike. The metronome's Sound and Count-in are
   `PickRow`s as well, behind the gear on the rehearsal screen and in
   Settings, so it is in `components/ui/` (U3).
+  Added from shadcn for the rows of the audit (each with a story):
+  `AlertDialog` is a question that needs an answer, in `Dialog`'s frame, and
+  a click outside does not close it; `Textarea` is a text area, and its
+  `line` look is a name written in a row with no frame (R4); `InputGroup`
+  puts one frame round an input and what stands beside it; `ButtonGroup`
+  joins buttons into one bar; `Field` is a label, a control and the line
+  under it, with the room of an error held; `Avatar` is a member's picture or
+  their initials; `Sidebar` is a column that folds to its icons or opens as
+  a sheet on a narrow window, with no key and no memory of its own and its
+  widths and place set by the caller; `Skeleton` stands in for a row still
+  coming; `Accordion` is sections that fold; `InputOTP` is a short code, a
+  box to a character; `Command` is a list filtered by typing. `Slider` has
+  three more looks for sliders that sit over something: `fader` over a
+  meter (R3), `mark` with a thumb the caller draws (R14) and `bar` for the
+  player's bar, its thumb shown only on keyboard focus (S5). `ToggleGroup`
+  passes `rovingFocus` on, for a grid that keeps its own arrow keys (R5,
+  S15). `--signal-foreground` and `--mark-foreground` are the text on a
+  signal fill and on a mark's colour, and `--sidebar-*` follow the theme's
+  own tokens. `ShareOption` (`components/ShareOption.tsx`) is the row that
+  hands a take on, in Share's dialog and in the service's Download.
   The rest are added by the first screen's pull request that needs them: one
   ✕, one link, one size of icon button, a field with a button (InputGroup),
   screen header and side panel. A take's name is written by

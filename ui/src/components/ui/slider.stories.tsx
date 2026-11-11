@@ -52,3 +52,22 @@ function Committed() {
 /** Moved, and let go: `onValueCommit` is the value a setting saves, and a
  *  bar of the click plays at it. */
 export const LetGo: Story = { render: () => <Committed /> }
+
+/** No track: the fader's thumb over something else, here a meter's bar. */
+export const Fader: Story = {
+  args: { variant: "fader", defaultValue: [0.6] },
+  render: (args) => (
+    <div className="relative h-6 w-64 overflow-hidden rounded-sm bg-muted">
+      <div className="absolute inset-y-0 left-0 w-1/2 bg-signal/60" />
+      <Slider {...args} className="absolute inset-0" />
+    </div>
+  ),
+}
+
+/** No track either; the caller draws the thumb. */
+export const Mark: Story = {
+  args: { variant: "mark", defaultValue: [0.4], thumbClassName: "h-4 w-1 rounded-sm bg-primary" },
+}
+
+/** The player's bar: the thumb shows only while the keyboard is on it. */
+export const Bar: Story = { args: { variant: "bar", "aria-label": "Position" } }

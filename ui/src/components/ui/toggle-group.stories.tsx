@@ -97,3 +97,16 @@ export const IconsOnly: Story = {
     </ToggleGroup>
   ),
 }
+
+/** `rovingFocus={false}`: every item stays in the Tab order, for a grid that keeps its own arrow keys. */
+export const OwnArrowKeys: Story = {
+  render: () => (
+    <ToggleGroup type="single" rovingFocus={false} aria-label="Pick one">
+      {["A", "B", "C"].map((v) => (
+        <ToggleGroupItem key={v} value={v}>
+          {v}
+        </ToggleGroupItem>
+      ))}
+    </ToggleGroup>
+  ),
+}

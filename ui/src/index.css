@@ -41,12 +41,24 @@
   --color-strong-foreground: var(--strong-foreground);
   /* The veil behind a dialog. */
   --color-overlay: var(--overlay);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
 
   /* The app's own semantics: signal fine / silent / clipping */
   --color-signal: var(--signal);
+  /* Text on a signal-green fill, and on a mark's label colour: white in
+     both themes. */
+  --color-signal-foreground: var(--signal-foreground);
+  --color-mark-foreground: var(--mark-foreground);
   --color-warn: var(--warn);
   /* Text on yellow is dark in both themes: white on yellow is unreadable
      in the light one. */
@@ -209,6 +221,16 @@ html[data-recording]
   --input: oklch(0.87 0.004 286.3);
   --ring: oklch(0.56 0.24 266);
   --signal: oklch(0.72 0.18 149);
+  --signal-foreground: oklch(1 0 0);
+  --mark-foreground: oklch(1 0 0);
+  --sidebar: var(--panel);
+  --sidebar-foreground: var(--foreground);
+  --sidebar-primary: var(--primary);
+  --sidebar-primary-foreground: var(--primary-foreground);
+  --sidebar-accent: var(--accent);
+  --sidebar-accent-foreground: var(--accent-foreground);
+  --sidebar-border: var(--border);
+  --sidebar-ring: var(--ring);
   --warn: oklch(0.79 0.16 76);
   --warn-foreground: oklch(0.24 0.04 76);
 
@@ -260,6 +282,16 @@ html[data-recording]
   --input: oklch(0.32 0.009 286.3);
   --ring: oklch(0.56 0.24 266);
   --signal: oklch(0.75 0.18 149);
+  --signal-foreground: oklch(1 0 0);
+  --mark-foreground: oklch(1 0 0);
+  --sidebar: var(--panel);
+  --sidebar-foreground: var(--foreground);
+  --sidebar-primary: var(--primary);
+  --sidebar-primary-foreground: var(--primary-foreground);
+  --sidebar-accent: var(--accent);
+  --sidebar-accent-foreground: var(--accent-foreground);
+  --sidebar-border: var(--border);
+  --sidebar-ring: var(--ring);
   --warn: oklch(0.79 0.16 76);
   --warn-foreground: oklch(0.22 0.04 76);
 

@@ -1,4 +1,4 @@
-import { useEffect, useId, useState, type ReactNode } from "react"
+import { useEffect, useState, type ReactNode } from "react"
 import { CloudOff, CloudUpload, FolderOpen, Layers, Music4, TriangleAlert } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import {
@@ -9,9 +9,9 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
-import { Item } from "@/components/ui/item"
 import { Spinner } from "@/components/ui/spinner"
 import { cn } from "@/lib/utils"
+import { ShareOption } from "@/components/ShareOption"
 import { api, type ShareWhat, type Take } from "@/lib/api"
 import { pollSoon } from "@/lib/activity"
 import { dismiss } from "@/lib/notices"
@@ -202,66 +202,5 @@ export function ShareDialog({
         />
       </DialogContent>
     </Dialog>
-  )
-}
-
-function ShareOption({
-  icon,
-  title,
-  hint,
-  done,
-  busy,
-  disabled,
-  onClick,
-}: {
-  icon: React.ReactNode
-  title: string
-  hint: string
-  done: boolean
-  busy: boolean
-  disabled: boolean
-  onClick: () => void
-}) {
-  // The icon stays for the first second of a copy (B5).
-  const slow = useAfter(busy, SPINNER_AFTER_MS)
-  // The button is named by its title alone. "Already there" and the hint are
-  // what a screen reader says after the name, in that order.
-  const id = useId()
-  const thereId = `${id}-there`
-  const hintId = `${id}-hint`
-  return (
-    <Item
-      asChild
-      variant="outline"
-      size="sm"
-      className={cn("flex-nowrap items-start", done && "border-signal/40 bg-signal/5")}
-    >
-      <Button
-        type="button"
-        variant="ghost"
-        onClick={onClick}
-        disabled={disabled}
-        aria-label={title}
-        aria-describedby={done ? `${thereId} ${hintId}` : hintId}
-        className="h-auto w-full justify-start text-left whitespace-normal"
-      >
-        <span className="mt-0.5 shrink-0 text-muted-foreground [&>svg]:size-4">
-          {slow ? <Spinner after={0} /> : icon}
-        </span>
-        <span className="min-w-0 flex-1">
-          <span className="flex items-center gap-2 text-sm font-semibold">
-            {title}
-            {done && (
-              <span id={thereId} className="text-xs font-normal text-signal">
-                already there
-              </span>
-            )}
-          </span>
-          <span id={hintId} className="mt-0.5 block text-xs text-muted-foreground">
-            {hint}
-          </span>
-        </span>
-      </Button>
-    </Item>
   )
 }
