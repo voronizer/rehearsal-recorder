@@ -115,6 +115,14 @@ const PARTS = [{name: 'Drums', channel: 1, icon: 'drums'},
                {name: 'Bass', channel: 2, icon: 'bass'},
                {name: 'Guitar', channel: 3, icon: 'guitar-electric'},
                {name: 'Vocals', channel: 4, icon: 'vocals'}];
+// The drums' files are stereo, as the site's story has them, so the player
+// shows them with two rings, their level in two bars and their wave in two
+// halves. The start screen still has them on input 1 alone: a stereo track
+// there would take input 2 from the bass.
+const STEREO = new Set(['Drums']);
+// A take's file that is two channels: the drums', or a Backing track's whose
+// song had a stereo file.
+const isStereo = t => STEREO.has(t.name) || backingStereo.has(t.file);
 
 // ---- The takes ---------------------------------------------------------
 // seed makes each take a little different; end is where the song stopped,
@@ -296,9 +304,12 @@ api.get_levels = async () => meters();
 levels = function () {
   if (!P || !P.playing) return {};
   const t = position();
+  // A stereo file's right side a little quieter than its left, as its wave.
+  const two = new Set(P.tracks.filter(isStereo).map(tr => tr.name));
   return Object.fromEntries(Object.keys(P.volumes).map(n => {
     const silent = P.muted.includes(n) || (P.soloed && P.soloed !== n);
-    return [n, [silent ? 0 : VOICE[n](t, {seed: 2, end: SONG_END}) * P.volumes[n]]];
+    const v = silent ? 0 : VOICE[n](t, {seed: 2, end: SONG_END}) * P.volumes[n];
+    return [n, two.has(n) ? [v, v * 0.85] : [v]];
   }));
 };
 
@@ -331,10 +342,10 @@ api.take_media = async (tracks, buckets, from, to) => tracks.map(t => {
   // Backing track has the backing track's, and says what it is.
   const own = t.kind === 'backing' ? {icon: 'backing', kind: 'backing'}
     : {icon: t.icon || (PARTS.find(p => p.name === t.name) || {}).icon};
-  // A stereo Backing track has two rows, the second a little quieter.
+  // A stereo file has two rows, the right side a little quieter.
   const row = peaksOf(t.file, buckets || 900, a, b);
   return {name: t.name, ...own, url: 'about:blank', frames: 48000 * dur, samplerate: 48000,
-          duration_sec: dur, peaks: backingStereo.has(t.file) ? [row, row.map(v => v * 0.85)] : [row]};
+          duration_sec: dur, peaks: isStereo(t) ? [row, row.map(v => v * 0.85)] : [row]};
 });
 
 // ---- History ----------------------------------------------------------
