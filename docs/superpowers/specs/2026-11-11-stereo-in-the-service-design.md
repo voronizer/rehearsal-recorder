@@ -1,4 +1,4 @@
-# Stereo in the band service's player, and a ring on every track
+# Stereo and the Backing track in the band service's player, and a ring on every track
 
 On 11 November 2026 Alex asked whether the band service plays a mono track
 in the middle. It does: a mono track sounds in both speakers at the level
@@ -29,7 +29,19 @@ What Claude found in the code (main at a57de94):
    upload route takes any file the take's generation lists
    (`service/worker/uploads/routes.ts:37`). РЭХА already sends takes that are
    up the tempo line in the background (`sending/band_service.py:1076`).
-5. A file in the service is kept by the browser for a day
+5. The take's Backing track goes to the service as one of the take's
+   tracks: РЭХА sends every track that has a file
+   (`sending/service_files.py:53`), and the library lists Backing among
+   them (`store/library.py:294`). The service draws it as a band's track,
+   with no dashed frame, and plays it from the start: РЭХА sends the
+   tracks' levels (`service_files.py:117`) but not Backing's M. Claude
+   first told Alex the service had no Backing at all, and corrected it.
+6. In РЭХА, Backing is muted the first time a take of its song opens; after
+   that it opens as M was last left for that song
+   (`ui/src/hooks/useMultitrackPlayer.ts:65`). The service keeps each
+   member's level for a track by its name (`service/worker/shared/schema.ts:456`)
+   and keeps no M.
+7. A file in the service is kept by the browser for a day
    (`service/worker/files/routes.ts:50`); a page keeps a wave for as long as
    it is open (`service/src/api.ts:179`).
 
@@ -58,6 +70,14 @@ All on 11 November 2026 (UTC).
   draws them; no answer yet.
 - 19:21 Card «A. Только картинки»: on reha.stream the pictures with tracks
   are taken again, and the rings show on them; no new text.
+- 19:22 «кстати про Backing. он до сервиса доезжает?»
+- 19:24 «да» to showing Backing in the service as in РЭХА: its dashed
+  frame, and muted when a take opens. Claude put it in this same work: the
+  same files and the same release of РЭХА.
+- 19:25 Card «A. Как в РЭХА, у каждого»: in the service, Backing is muted
+  the first time you open a take of its song; after that it opens as you
+  last left M for that song. Each member has their own, on any device, as
+  with the levels.
 
 ## What the band sees
 
@@ -94,6 +114,27 @@ rings and two bars.
 A band whose service is older than this РЭХА sees no change: the new wave
 file still holds the one row an older service reads.
 
+### The Backing track
+
+A take recorded with the song's backing track shows **Backing** in the
+service as РЭХА shows it: the last track, right above Master, its plate and
+wave in a dashed frame, with its rings. On the phone's desk its row has
+the dashed frame too.
+
+The first time you open a take of a song, Backing is muted, so you hear
+the band on its own. Turn **M** off, and every take of that song opens for
+you with the backing track heard, on the phone and on the computer, until
+you turn **M** on again. The others keep their own. A take with no song
+opens with Backing muted, and nothing is kept.
+
+Its level, S, and the mix you download work as for any track: muted, it is
+not in the mix.
+
+Takes already in the service get this too: РЭХА marks Backing among the
+take's tracks when it sends a take, and adds the mark to takes already up
+in the same background pass that sends the waves. That needs no files, so
+every take gets it.
+
 ## How it is built
 
 - РЭХА: a stereo track's `.peaks` gets a row per side beside the row it has
@@ -111,6 +152,15 @@ file still holds the one row an older service reads.
   when the take's page opens.
 - Service: each track's meter is split into its sides after its level, so
   a stereo track reports two numbers; Master stays one bar.
+- РЭХА: each track in a take's details says `kind: "backing"` for the
+  Backing track; the background pass sends the details again for takes
+  already up that have one, as it did for the tempo.
+- Service: a take's tracks keep `kind` (they are JSON in the take's row,
+  so no change to the table's shape). The page passes it to the player as
+  РЭХА's own does, so the dashed frame and the M rule come from the shared
+  hook (`useMultitrackPlayer.ts`).
+- Service: a new table keeps, per member and song, whether Backing is
+  heard, with a route for the page to read and set it.
 - Shared (`ui/src`): `LaneControls` draws the rings for every track with
   sound, from the channels it is given. Its comment on why nothing said
   mono or stereo goes.
@@ -120,10 +170,12 @@ file still holds the one row an older service reads.
 - The guide's pictures with the player are taken again
   (`tests/docs_screenshots.py`), since every track now has rings.
 - The service's pictures with tracks are taken again
-  (`service/pictures/`): lanes, mark, three-weeks-ago, downloads.
+  (`service/pictures/`): lanes, mark, three-weeks-ago, downloads. None of
+  them has a Backing track, and Alex's pick keeps it so.
 - `docs/using-it.md`: the player's tracks get a line on the rings; the
-  band service part says the service shows stereo as РЭХА does and that
-  takes already up get their waves in two halves after the update.
+  band service part says the service shows stereo and Backing as РЭХА
+  does, that Backing's M is each member's own, and that takes already up
+  get their waves in two halves after the update.
 - The Backing track's text about its rings stays (`docs/using-it.md:1577`).
 - CHANGELOG, under Unreleased: the rings in РЭХА's player; stereo in the
   service; the waves sent again.
@@ -140,9 +192,15 @@ plate has now. No other new words.
 - Service page: a stereo track's two bars and two-half wave, from `sides`
   and from an MP3 with no `sides`; the phone's desk the same.
 - Service player: two levels for a stereo track, one for mono.
+- Service Backing: dashed and last on a computer and a phone; muted the
+  first time a take of its song opens; M kept for that member and song and
+  read on the next take; another member unaffected; a take with no song
+  muted and nothing kept; muted Backing left out of the downloaded mix.
 - РЭХА Python: `.peaks` with `sides` for a stereo file, without for mono;
   the background pass sends `.peaks` once for a take with a stereo track
-  and not for an all-mono take, and skips a take whose files are gone.
+  and not for an all-mono take, and skips a take whose files are gone;
+  the details mark Backing, and the pass sends them again once for a take
+  that has one, files or not.
 
 ## Calls Claude made
 
@@ -156,11 +214,14 @@ plate has now. No other new words.
 5. Wave files are revalidated on every request (ETag), so a wave sent again
    shows without waiting a day.
 6. Master keeps one bar.
+7. The service knows Backing by the mark РЭХА sends, not by its name, so
+   a band's track called “Backing” stays a band's track.
+8. A take with no song opens with Backing muted and keeps nothing.
+9. Backing's level is kept by name like any track's, so one level serves
+   every song's Backing.
 
 ## Not in this
 
 - Pan or balance per track.
-- How the take's Backing track shows in the service. РЭХА sends it as one
-  of the take's tracks (`sending/service_files.py:53`), so the service shows
-  it as an ordinary track: no dashed frame, and heard from the start, since
-  its M in РЭХА is not sent. It gets its rings with every other track.
+- The song's backing track file itself stays РЭХА's only
+  (`docs/using-it.md:928`).
