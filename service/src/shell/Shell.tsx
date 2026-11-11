@@ -14,7 +14,7 @@ import { PanelProvider, usePanel } from "./panel"
 import { InDrawer, InPanel } from "./parts"
 import { PhoneBar, PlayerBar } from "./PlayerBar"
 import { BandName, Side } from "./Side"
-import { PHONE_BELOW, useSize } from "./size"
+import { PageRoom, PHONE_BELOW, useSize } from "./size"
 
 /** The column of sections: 224 px, 48 px folded to its icons. */
 const LEFT = { "--sidebar-width": "14rem", "--sidebar-width-icon": "3rem" } as CSSProperties
@@ -191,7 +191,10 @@ function Frame() {
               size === "wide" ? "px-8 [--screen-pad-y:2rem]" : "px-6 [--screen-pad-y:1.5rem]"
             )}
           >
-            <Outlet />
+            {/* The page lays out by the room it has: beside an open panel on a wide window, as in a narrow one. */}
+            <PageRoom.Provider value={size === "wide" && panel ? "narrow" : null}>
+              <Outlet />
+            </PageRoom.Provider>
           </main>
         </RightColumn>
       </SidebarProvider>

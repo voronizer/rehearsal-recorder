@@ -1,7 +1,7 @@
 import { createElement, type ReactNode } from "react"
 import { renderToStaticMarkup } from "react-dom/server"
 import { afterEach, describe, expect, it } from "vitest"
-import { SidebarProvider, useSidebar } from "@/components/ui/sidebar"
+import { Sidebar, SidebarProvider, useSidebar } from "@/components/ui/sidebar"
 
 /* The tests run in Node, with no window: a matchMedia of the given width is
    put in its place for the render. */
@@ -17,13 +17,22 @@ function windowOf(width: number) {
   })
 }
 
+/* The system's Reduce motion as motionOff() reads it, with a page that is not recording. */
+function reduceMotion(on: boolean) {
+  Object.defineProperty(globalThis, "matchMedia", {
+    configurable: true,
+    value: (query: string) => ({ matches: on && query.includes("prefers-reduced-motion") }),
+  })
+  Object.defineProperty(globalThis, "document", { configurable: true, value: { documentElement: { hasAttribute: () => false } } })
+}
+
 function Probe({ name, children }: { name: string; children?: ReactNode }) {
   const { isMobile, open } = useSidebar()
   return createElement("p", { "data-name": name }, `${name}:${isMobile ? "mobile" : "wide"}:${open ? "open" : "folded"}`, children)
 }
 
 afterEach(() => {
-  Reflect.deleteProperty(globalThis, "window")
+  for (const name of ["window", "matchMedia", "document"]) Reflect.deleteProperty(globalThis, name)
 })
 
 describe("SidebarProvider", () => {
@@ -54,5 +63,14 @@ describe("SidebarProvider", () => {
     )
     expect(html).toContain("outer:wide:open")
     expect(html).toContain("inner:mobile:folded")
+  })
+
+  it("opens and folds at once under Reduce motion", () => {
+    windowOf(1000)
+    const html = () => renderToStaticMarkup(createElement(SidebarProvider, null, createElement(Sidebar, { collapsible: "icon" }, "Sections")))
+    reduceMotion(false)
+    expect(html()).toContain("transition-[left,right,width]")
+    reduceMotion(true)
+    expect(html()).not.toContain("transition-")
   })
 })

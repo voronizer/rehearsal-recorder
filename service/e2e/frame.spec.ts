@@ -201,6 +201,35 @@ test.describe("the two columns", () => {
     await expect.poll(() => box(main)).toEqual({ x: 224, width: 1180 - 224 })
   })
 
+  test("on Marks at 1180 px, a mark's words stay in the page beside its open panel", async ({ page }) => {
+    await page.goto("/marks")
+    const main = page.getByRole("main")
+    const words = main.locator("[data-mark]").first().getByRole("button").first()
+    await words.click()
+    await expect(page.getByLabel("Panel", { exact: true }).getByRole("heading", { level: 2 }).first()).toHaveText(/^Mark at/)
+    await expect.poll(() => box(main)).toEqual({ x: 224, width: 1180 - 224 - 448 })
+    await expect(words).toBeVisible()
+    const [line, room] = [await box(words), await box(main)]
+    expect(line.width).toBeGreaterThan(0)
+    expect(line.x + line.width).toBeLessThanOrEqual(room.x + room.width)
+  })
+
+  test("under Reduce motion both columns fold and open at once", async ({ page }) => {
+    await page.emulateMedia({ reducedMotion: "reduce" })
+    await page.setViewportSize({ width: 960, height: 680 })
+    await page.goto(take())
+    const main = page.getByRole("main")
+    const panel = page.getByLabel("Panel", { exact: true })
+    await expect.poll(() => box(main)).toEqual({ x: 224, width: 960 - 224 - 48 })
+    await page.getByLabel("Strip").getByRole("button", { name: "Open the panel" }).click()
+    await expect(panel).toBeVisible()
+    // Not polled: with motion off the page has its new room as soon as the panel is there.
+    expect(await box(main)).toEqual({ x: 48, width: 960 - 48 - 448 })
+    await panel.getByRole("button", { name: "Fold the panel" }).click()
+    await expect(panel).toHaveCount(0)
+    expect(await box(main)).toEqual({ x: 224, width: 960 - 224 - 48 })
+  })
+
   test("at 960 px the sections fold to their icons while the panel is open, names in tips, and open when it closes", async ({ page }) => {
     await page.setViewportSize({ width: 960, height: 680 })
     await page.goto(take())

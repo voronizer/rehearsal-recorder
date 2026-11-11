@@ -1,4 +1,4 @@
-import { useSyncExternalStore } from "react"
+import { createContext, useContext, useSyncExternalStore } from "react"
 
 /** The window's width: a phone, a small window, a computer's. */
 export type Size = "phone" | "narrow" | "wide"
@@ -19,5 +19,16 @@ const subscribe = (change: () => void) => {
 
 const read = (): Size => (window.matchMedia(PHONE).matches ? "phone" : window.matchMedia(WIDE).matches ? "wide" : "narrow")
 
-/** Two columns on a computer, one under another in a small window, a menu behind ☰ on a phone. */
-export const useSize = () => useSyncExternalStore(subscribe, read)
+/** The page's room, where it is not the window's: beside an open panel on a wide window, a narrow one's (shell/Shell.tsx). */
+export const PageRoom = createContext<Size | null>(null)
+
+/**
+ * Two columns on a computer, one under another in a small window, a menu
+ * behind ☰ on a phone. Inside the page, the page's room; the frame, its
+ * columns and the panel go by the window.
+ */
+export const useSize = () => {
+  const room = useContext(PageRoom)
+  const own = useSyncExternalStore(subscribe, read)
+  return room ?? own
+}
