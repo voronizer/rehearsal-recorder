@@ -120,7 +120,6 @@ export function InPlaceTitle({ song, children }: { song: Song; children: ReactNo
       leave="Leave the title as it was"
       onLeave={stop}
       className="w-80 max-w-full"
-      inputClassName="text-xl font-semibold"
     />
   )
 }

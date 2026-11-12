@@ -76,7 +76,7 @@ export function InPlace({
   onLeave: () => void
   /**
    * 28 px, in a line of words; else 32 px, as tall as a heading's row, so
-   * opening it moves nothing.
+   * opening it moves nothing, its name in the heading's own letters.
    */
   small?: boolean
   className?: string
@@ -104,7 +104,8 @@ export function InPlace({
             onLeave()
           }
         }}
-        className={cn("h-full min-w-0 px-2", !small && "py-0", inputClassName)}
+        // In a heading, the heading's size at every width, over the shared field's 14 px from 768 px.
+        className={cn("h-full min-w-0 px-2", !small && "py-0 text-[length:inherit] md:text-[length:inherit]", inputClassName)}
       />
       <InputGroupAddon align="inline-end" className="gap-0.5 py-0">
         <InputGroupButton size="icon-xs" aria-label={ok.label} disabled={ok.disabled} onClick={onOk}>

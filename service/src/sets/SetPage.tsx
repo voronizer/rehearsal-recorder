@@ -108,7 +108,6 @@ function SetHead({ set, songs, big }: { set: BandSet; songs: SongItem[]; big?: b
       leave="Leave the name as it was"
       onLeave={stop}
       className="w-80 max-w-full"
-      inputClassName={cn("font-semibold", big ? "text-xl md:text-xl" : "text-base md:text-base")}
     />
   ) : (
     <span className="flex min-w-0 items-center gap-1">
