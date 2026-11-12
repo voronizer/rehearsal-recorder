@@ -275,7 +275,7 @@ which they change now.
 | R14 | `backing/FileStart.tsx`, bar one's mark | Slider, a variant drawn as the mark |
 | R15 | `metronome/TempoField.tsx`, `backing/BarOneField.tsx` | ButtonGroup |
 | S1 | the 14 hand-made buttons | Button or Toggle |
-| S1b | **Statuses** and **Labels** on Songs and Marks (`songs/Songs.tsx`, `marks/Marks.tsx`), the service's star (`takes/parts.tsx`), all `Button` with `aria-pressed` | Toggle (`outline`, `row` for the two), pressed while their panel is open; pressing again keeps it open, as now |
+| S1b | **Statuses** and **Labels** on Songs and Marks (`songs/Songs.tsx`, `marks/Marks.tsx`), the service's star (`takes/parts.tsx`), all `Button` with `aria-pressed` | Toggle (`outline`, `row` for the two), pressed while their panel is open; pressing again closes it, as now |
 | S2, S3 | `shell/Side.tsx`, `shell/Shell.tsx` (the phone menu) | Sidebar, left; the lit section through SidebarMenuButton's `isActive`, in `ITEM_CHOSEN` (C4) |
 | S4 | the 8 `title=` tips, and the take link's | Tooltip, WholeTip |
 | S5 | `shell/PlayerBar.tsx` | Slider, a variant drawn as the bar |
@@ -386,6 +386,19 @@ same diamond does in `Timeline.tsx`.
     colours), not a `design-ok` mark as the audit offered.
 19. Errors are 14 px, FieldError's size; the line is reserved only under a
     field; the stage title's 8.5 % and its 28–56 px range.
+20. When a panel opens or closes and the page changes its layout, the row
+    that opened the panel is scrolled back into view.
+21. R8, the error bar, takes the shared red Alert as it is, without today's
+    light red wash behind it.
+22. The service's mark lines (C2) are a `service` kind of MarkLine that keeps
+    their words and look: the note alone, or the label's name, with the time
+    to hours.
+23. Sign-in's two errors that run to two lines keep a room two lines high,
+    so nothing below them moves.
+24. Trouble, the page that could not be read, is the red Alert, as a failure.
+25. A set's length row no longer grows 4 px when it opens.
+26. The song page's status, key and menu leave the title's heading; “No key”
+    loses the title's weight and matches the status beside it.
 
 ## Not in this
 
