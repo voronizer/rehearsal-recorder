@@ -150,21 +150,34 @@ function MenuButton() {
   )
 }
 
+/** How long after a press a panel that comes is taken as opened by it. */
+const PRESS_MS = 1000
+
 /**
  * The row that opened the panel stays in view as the page takes its new room
  * beside the panel, opened or closed: on a wide window the page lays out
  * anew (PageRoom), and Home's Latest marks goes under its songs. The row is
- * what was pressed in the page, by pointer or key, as the panel came; one
- * opened from elsewhere, such as the strip or another panel, keeps the row
- * before. Kept at once, not smoothly, so it is still under Reduce motion.
+ * what was pressed in the page, by pointer or key, in the second before the
+ * panel came; one opened from elsewhere, such as the strip, another panel
+ * or Back, keeps the row before. A panel closed after the band has scrolled
+ * the row out of view leaves the page where it is. Kept at once, not
+ * smoothly, so it is still under Reduce motion.
  */
 function useOpenerInView(main: RefObject<HTMLElement | null>, panel: string | null) {
-  const pressed = useRef<Element | null>(null)
+  const pressed = useRef<{ row: Element; at: number } | null>(null)
   const opener = useRef<Element | null>(null)
+  // Whether the opener was in the page's view at the last press.
+  const seen = useRef(true)
   const was = useRef(!!panel)
   useEffect(() => {
     const press = (e: Event) => {
-      pressed.current = e.target instanceof Element ? e.target : null
+      pressed.current = e.target instanceof Element ? { row: e.target, at: performance.now() } : null
+      const page = main.current
+      const row = opener.current
+      if (!page || !row?.isConnected) return void (seen.current = false)
+      const view = page.getBoundingClientRect()
+      const box = row.getBoundingClientRect()
+      seen.current = box.bottom > view.top && box.top < view.bottom
     }
     document.addEventListener("pointerdown", press, true)
     document.addEventListener("keydown", press, true)
@@ -172,12 +185,16 @@ function useOpenerInView(main: RefObject<HTMLElement | null>, panel: string | nu
       document.removeEventListener("pointerdown", press, true)
       document.removeEventListener("keydown", press, true)
     }
-  }, [])
+  }, [main])
   useLayoutEffect(() => {
     const page = main.current
-    const row = pressed.current
+    const last = pressed.current
+    pressed.current = null
+    // Only a press of the last second can have opened this panel; an older one was for something else, and Back or an address came after it.
+    const row = last && performance.now() - last.at < PRESS_MS ? last.row : null
     if (panel && page && row && row !== page && page.contains(row)) opener.current = row
     else if (panel && !was.current) opener.current = null
+    else if (!panel && !seen.current) opener.current = null
     const moved = was.current !== !!panel
     was.current = !!panel
     if (!moved || !page) return

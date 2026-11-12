@@ -295,6 +295,31 @@ test.describe("the two columns", () => {
     await expect(mark).toBeInViewport({ ratio: 1 })
   })
 
+  test("a panel closed after the page was scrolled away from the row that opened it leaves the page where it is", async ({ page }) => {
+    for (const [width, height, left] of [
+      [1180, 820, 224],
+      [960, 680, 48],
+    ]) {
+      await page.setViewportSize({ width, height })
+      await page.goto("/")
+      const main = page.getByRole("main")
+      const panel = page.getByLabel("Panel", { exact: true })
+      const mark = page.getByRole("region", { name: "Latest marks" }).getByRole("button", { name: /Too quiet here/ })
+      await mark.click()
+      await expect(panel.getByRole("heading", { level: 2 }).first()).toHaveText(/^Mark at 0:03$/)
+      // The page has its room beside the panel, Latest marks under the songs, the mark kept in view.
+      await expect.poll(() => box(main)).toEqual({ x: left, width: width - left - 448 })
+      await expect(mark).toBeInViewport()
+      // Up to the last rehearsal, past the songs: the mark is out of view.
+      await main.evaluate((m) => m.scrollTo({ top: 0, behavior: "instant" }))
+      await expect(mark).not.toBeInViewport()
+      await panel.getByRole("button", { name: "Close", exact: true }).click()
+      await expect(panel).toHaveCount(0)
+      await expect.poll(() => box(main)).toEqual({ x: 224, width: width - 224 })
+      expect(await main.evaluate((m) => m.scrollTop), `at ${width}`).toBe(0)
+    }
+  })
+
   test("under Reduce motion both columns fold and open at once", async ({ page }) => {
     await page.emulateMedia({ reducedMotion: "reduce" })
     await page.setViewportSize({ width: 960, height: 680 })
