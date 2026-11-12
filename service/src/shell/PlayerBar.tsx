@@ -36,11 +36,17 @@ function MarkHere({ take, at }: { take: TakePage | undefined; at: number }) {
   )
 }
 
+/** The bar's keys, in seconds; Shift makes an arrow's ten, as Page Up and Page Down are. */
+const KEY_SECONDS: Record<string, number> = { ArrowRight: 1, ArrowUp: 1, ArrowLeft: -1, ArrowDown: -1, PageUp: 10, PageDown: -10 }
+
+/** The bar's own step, in seconds: fine enough that a press or a drag lands where it is, as before the Slider. */
+const FINE = 0.01
+
 /**
  * Where the take is (S5), the shared Slider drawn as the bar: a press or a
  * drag moves the take there, and once it has the focus ← and → move it a
- * second, with Shift ten. A screen reader hears the take's name and where
- * it is, “0:05 of 3:12”.
+ * second, with Shift ten; Home and End go to its ends. A screen reader
+ * hears the take's name and where it is, “0:05 of 3:12”.
  */
 function Line({ take, at, className, trackClassName, ...rest }: { take: TakePage; at: number; className?: string; trackClassName?: string; "data-testid": string }) {
   const p = usePlayer()
@@ -52,9 +58,17 @@ function Line({ take, at, className, trackClassName, ...rest }: { take: TakePage
       variant="bar"
       min={0}
       max={length}
-      step={1}
+      step={FINE}
       value={[now]}
       onValueChange={([to]) => p.seek(take.uid, to)}
+      // The Slider would step by its fine step; these keys go by whole seconds here, and its own handler is skipped.
+      onKeyDown={(e) => {
+        const by = KEY_SECONDS[e.key]
+        if (by === undefined) return
+        e.preventDefault()
+        const far = e.shiftKey && Math.abs(by) === 1 ? by * 10 : by
+        p.seek(take.uid, Math.max(0, Math.min(length, now + far)))
+      }}
       aria-label={take.name}
       aria-valuetext={`${clock(now)} of ${clock(take.duration_sec)}`}
       className={cn("cursor-pointer", className)}

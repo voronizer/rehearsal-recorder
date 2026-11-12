@@ -48,6 +48,42 @@ test("a press on a take's wave opens its page and plays nothing", async ({ page 
   await expect(page.getByLabel("Player", { exact: true }).getByRole("button", { name: /^Pause/ })).toHaveCount(0)
 })
 
+test("a press on the bar moves the take to that spot, between whole seconds; the arrows move it a second, Shift ten, Home and End to its ends", async ({ page }) => {
+  await page.goto("/")
+  await page.getByRole("region", { name: "The last rehearsal" }).locator('[data-take="Viasna 11"]').getByRole("button", { name: "Play “Viasna 11”" }).click()
+  const bar = page.getByLabel("Player", { exact: true })
+  await bar.getByRole("button", { name: "Pause “Viasna 11”" }).click()
+  await expect(bar.getByRole("button", { name: "Play “Viasna 11”" })).toBeVisible()
+  const line = bar.getByTestId("bar-line")
+  const where = line.getByRole("slider", { name: "Viasna 11" })
+  const now = async () => Number(await where.getAttribute("aria-valuenow"))
+  // 37% of the take's 10.032 s is 3.71 s, where a whole second's step would give 4.
+  const b = (await line.boundingBox())!
+  await page.mouse.click(b.x + b.width * 0.37, b.y + b.height / 2)
+  await expect.poll(now).toBeCloseTo(3.71, 1)
+  const pressed = await now()
+  await expect(where).toBeFocused()
+  for (const [key, to] of [
+    ["ArrowRight", pressed + 1],
+    ["ArrowLeft", pressed],
+    ["Shift+ArrowLeft", 0],
+  ] as const) {
+    await page.keyboard.press(key)
+    await expect.poll(now, key).toBeCloseTo(to, 2)
+  }
+  await page.keyboard.press("End")
+  await expect.poll(now, "End").toBeCloseTo(10.032, 1)
+  const end = await now()
+  for (const [key, to] of [
+    ["Shift+ArrowLeft", end - 10],
+    ["ArrowRight", end - 9],
+    ["Home", 0],
+  ] as const) {
+    await page.keyboard.press(key)
+    await expect.poll(now, key).toBeCloseTo(to, 2)
+  }
+})
+
 test.describe("on a phone", () => {
   test.use({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true })
 
