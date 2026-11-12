@@ -156,7 +156,8 @@ export function EditRow({
   }
   return (
     <div className="flex flex-col gap-2 py-1.5">
-      {/* The name's line for what went wrong under the row (S11), there when empty. */}
+      {/* What went wrong with the name, under the row (S11): only while there is something to say,
+          so the rows stand as close together as they did before. */}
       <Field className="gap-1">
         <div className="flex items-center gap-1.5">
           {/* As in РЭХА's Settings › Marks: drag by the grip, or Space on it and the arrows. */}
@@ -190,7 +191,7 @@ export function EditRow({
             </Button>
           )}
         </div>
-        <ErrorLine error={error} className="pl-6" />
+        {error && <ErrorLine error={error} className="pl-6" />}
       </Field>
       {ask && (
         <div className="flex flex-col gap-2 pl-6">
