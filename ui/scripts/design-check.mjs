@@ -4,8 +4,10 @@
 // parts and reports.
 //
 // Given parts by name, it walks only those: `npm run design-check -- ui`, or
-// `node ui/scripts/design-check.mjs service` from anywhere. With none, all
-// three. Each part's workflow checks its own part.
+// `node ../ui/scripts/design-check.mjs service` from service/. With none, all
+// three. Each part's workflow checks its own part. It finds the repository's
+// root from its own place (ui/scripts/), not from the directory it is started
+// in, so the paths it reads and prints are from the root wherever it runs.
 //
 // design-check.allow.json let a screen not yet redone break a rule, as
 // { "ui/src/screens/X.tsx": ["radius", ...] }, while the screens were redone
