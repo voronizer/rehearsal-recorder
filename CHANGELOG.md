@@ -5,7 +5,7 @@ versioning](https://semver.org/): until 1.0 the shape of things can still
 move, though recordings on disk are never left behind — old rehearsals keep
 opening.
 
-## Unreleased
+## 0.27.0
 
 - **Every track shows mono or stereo.** After each track's name in РЭХА's
   player, one ring means a mono file and two rings a stereo one, as on the
@@ -49,6 +49,58 @@ opening.
   **M** and no name of their own, so you see whose notes they are. The grey
   that was under the waveforms is now on the plates with each track's name
   and fader.
+- **A question stays open until you answer it.** In РЭХА and in the band
+  service, a question before something that cannot be undone, such as
+  “Finish this rehearsal?” in РЭХА or deleting a take in the service, no
+  longer closes when you click the screen around it. Esc still closes it,
+  and Enter still presses **Cancel**. In РЭХА a folder and its button now
+  share one frame: the recordings folder and **Browse** in
+  **Settings › Folders**, and the cloud folder and **Change** in the dialog
+  the cloud button opens. So do − and + with the number between them, for
+  the tempo on the rehearsal screen and on a song's page, and for a
+  backing track's **Bar 1 at**. The bar across the top of the window that
+  says something went wrong keeps its red words and icon, now on a plain
+  background with no red tint. A spinner now shows only after a second:
+  when РЭХА starts, “Connecting to the audio engine…” comes at once and the
+  spinner a second later, and the same goes for a job in the list of work
+  running in the background.
+- **The band service's panel stands beside the page.** A mark's talk, a
+  take's marks, **Statuses** and **Labels** open in the panel on the right
+  as before, and the page now narrows to make room for it instead of going
+  under it. While the panel is open, the page lays out as it does in a
+  small window: **Marks** keeps each mark's words, and **Home** puts Latest
+  marks under its songs. The row you opened the panel from stays in view.
+  On a take's page the panel still folds into the strip along the right
+  edge. In a window narrower than 1100 px, the column of sections on the
+  left folds to its icons while the panel is open and opens again when it
+  closes; point at an icon for its section's name. Under 820 px the panel
+  lies over the page as before, and the column stays open. On a phone the
+  panel is as it was, and the menu behind ☰ now closes with Esc too. The
+  code from the email is six boxes, a digit in each: the phone still offers
+  it from the letter, pasting the whole code fills all six, and you still
+  press **Sign in**. Under a field, an error has a line kept free for it,
+  so nothing below moves when one shows, and errors everywhere are one size.
+  Pressing a set's length no longer makes its row taller, and what is wrong
+  with a length you type shows under the field, where a browser tip said it
+  before. A page that could not be read says so in red, in a box with
+  **Try again**. Empty **Songs**, **Marks**, **Rehearsals** and **Sets** say
+  so in the middle of the page, in the same words. You pick a label's or
+  status's colour from a grid that opens by its swatch, as icons are picked
+  in РЭХА. ⋯ › **Move to song** has a search at the top of its list;
+  **Not named** and **New song…** stay whatever you type. When you rename a
+  song or a set where it stands, ✓ and ✕ sit inside the field. Tips look as
+  they do in РЭХА. The bar of the take playing at the bottom can be dragged,
+  and once it has the focus ← and → move the take a second at a time, ten
+  with Shift. **On stage** sizes a song's title to the screen, so a long one
+  fits a phone held upright and stays big on a tablet. While a panel waits
+  for its take or song, nothing shows for the first second, then a
+  spinner, and after 10 seconds “Opening…” beside it. A few headings are a
+  size smaller, the letters in a star's circle and on a file a size
+  bigger, and “No key” beside a song's title is no longer bold.
+- **The questions on reha.stream slide open.** An answer opens over a
+  quarter of a second, or at once with Reduce motion on, and ↑ and ↓ move
+  between the questions. The browser's Find no longer opens a closed
+  question.
 
 ## 0.26.0
 
