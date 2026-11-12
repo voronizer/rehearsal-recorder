@@ -2,6 +2,13 @@ import { useImperativeHandle, useRef, useState, type ReactNode, type Ref } from 
 import { X } from "lucide-react"
 import { SongPills } from "@/components/SongPills"
 import { Button } from "@/components/ui/button"
+import {
+  InputGroup,
+  InputGroupAddon,
+  InputGroupInput,
+  InputGroupTextarea,
+} from "@/components/ui/input-group"
+import { Label } from "@/components/ui/label"
 import { Popover, PopoverAnchor, PopoverContent } from "@/components/ui/popover"
 import { Whole } from "@/components/ui/whole"
 import type { SongChoices } from "@/lib/api"
@@ -310,9 +317,9 @@ export function TakeNameField({
   return (
     <div role="group" aria-label={label} className="relative flex min-w-0 flex-col gap-2">
       <div className="flex items-center justify-between gap-2">
-        <label htmlFor={id} className="text-xs font-semibold text-muted-foreground">
+        <Label htmlFor={id} className="text-xs font-semibold text-muted-foreground">
           {label}
-        </label>
+        </Label>
         {labelAside}
       </div>
       {/* With the songs listed beside the field, the old name's line hangs
@@ -321,94 +328,108 @@ export function TakeNameField({
           the keys. Not a dialog, either (role="note"): Escape in the field
           leaves it, as anywhere (hooks/useSpacebar.ts, LAYERS). */}
       <Popover open={songs === "none" && oldLine !== null} modal={false}>
-        <PopoverAnchor
-          className={cn(
-            "relative w-full max-w-md rounded-lg border border-input",
-            size === "big" && "grid",
-            onPanel ? "bg-card" : "bg-muted/45",
-            "focus-within:border-ring focus-within:ring-[3px] focus-within:ring-ring/50"
-          )}
-        >
-          {/* The go this name will be, after the text: drawn over the field,
-              behind an invisible copy of the text, so it sits where the text
-              ends — on the last line of a name that wraps. It is never part
-              of the name, so it cannot be selected or typed over (songs in
-              the store, D2). In the big size this copy is also what the
-              field takes its height from. */}
-          <div
-            aria-hidden
+        {/* The shared field's frame, at this field's own size and colours:
+            the big one a grid, as tall as the copy in it; the text clear of
+            ✕ at the right. */}
+        <PopoverAnchor asChild>
+          <InputGroup
             className={cn(
-              "pointer-events-none pr-11 pl-3.5 font-semibold",
-              size === "big"
-                ? "col-start-1 row-start-1 py-1.5 text-2xl leading-8 break-words whitespace-pre-wrap"
-                : "absolute inset-0 flex items-center overflow-hidden text-base whitespace-pre"
+              "h-auto w-full max-w-md rounded-lg shadow-none has-[>[data-align=inline-end]]:[&>input]:pr-11",
+              size === "big" && "grid items-stretch",
+              onPanel ? "bg-card dark:bg-card" : "bg-muted/45 dark:bg-muted/45"
             )}
           >
-            <span className="invisible">{shown}</span>
-            {old ? (
-              <span data-take-go className="tnum text-muted-foreground">
-                {" → "}
-                {old.song}
-                {go !== null && `${GO_SPACE}${goMark(go)}`}
-              </span>
-            ) : (
-              go !== null && (
-                // After a space that can break, as the typed text's own can:
-                // the copy wraps where the field does.
+            {/* The go this name will be, after the text: drawn over the field,
+                behind an invisible copy of the text, so it sits where the text
+                ends — on the last line of a name that wraps. It is never part
+                of the name, so it cannot be selected or typed over (songs in
+                the store, D2). In the big size this copy is also what the
+                field takes its height from. */}
+            <div
+              aria-hidden
+              className={cn(
+                "pointer-events-none pr-11 pl-3.5 font-semibold",
+                size === "big"
+                  ? "col-start-1 row-start-1 py-1.5 text-2xl leading-8 break-words whitespace-pre-wrap"
+                  : "absolute inset-0 flex items-center overflow-hidden text-base whitespace-pre"
+              )}
+            >
+              <span className="invisible">{shown}</span>
+              {old ? (
                 <span data-take-go className="tnum text-muted-foreground">
-                  {" "}
-                  {goMark(go)}
+                  {" → "}
+                  {old.song}
+                  {go !== null && `${GO_SPACE}${goMark(go)}`}
                 </span>
-              )
+              ) : (
+                go !== null && (
+                  // After a space that can break, as the typed text's own can:
+                  // the copy wraps where the field does.
+                  <span data-take-go className="tnum text-muted-foreground">
+                    {" "}
+                    {goMark(go)}
+                  </span>
+                )
+              )}
+            </div>
+            <span id={`${id}-go`} className="sr-only">
+              {old
+                ? `${old.song}${go !== null ? `${GO_SPACE}${goMark(go)}` : ""}`
+                : go !== null
+                  ? `${isUnnamed(shown) || empty ? NO_SONG : (via?.choice.song ?? shown.trim())}${GO_SPACE}${goMark(go)}`
+                  : ""}
+            </span>
+            {size === "big" ? (
+              // One line all the same: a line break pasted in is a space.
+              <InputGroupTextarea
+                {...props}
+                rows={1}
+                onChange={(e) => {
+                  const field = e.target
+                  const typed = field.value
+                  const text = typed.replace(LINE_BREAKS, " ")
+                  // Rewritten, the value puts the caret at its end: it goes back
+                  // to where the paste ended, once the field is drawn.
+                  const caret = typed.slice(0, field.selectionStart).replace(LINE_BREAKS, " ").length
+                  change(text)
+                  if (text !== typed) queueMicrotask(() => field.setSelectionRange(caret, caret))
+                }}
+                // As tall as the copy, not its own text (field-sizing), which
+                // older WebKit cannot measure.
+                className="col-start-1 row-start-1 block size-full min-h-0 field-sizing-fixed overflow-hidden py-1.5 pr-11 pl-3.5 text-2xl leading-8 font-semibold break-words whitespace-pre-wrap md:text-2xl"
+              />
+            ) : (
+              <InputGroupInput
+                {...props}
+                onChange={(e) => change(e.target.value)}
+                className="h-9 pr-11 pl-3.5 text-base font-semibold md:text-base"
+              />
             )}
-          </div>
-          <span id={`${id}-go`} className="sr-only">
-            {old
-              ? `${old.song}${go !== null ? `${GO_SPACE}${goMark(go)}` : ""}`
-              : go !== null
-                ? `${isUnnamed(shown) || empty ? NO_SONG : (via?.choice.song ?? shown.trim())}${GO_SPACE}${goMark(go)}`
-                : ""}
-          </span>
-          {size === "big" ? (
-            // One line all the same: a line break pasted in is a space.
-            <textarea
-              {...props}
-              rows={1}
-              onChange={(e) => {
-                const field = e.target
-                const typed = field.value
-                const text = typed.replace(LINE_BREAKS, " ")
-                // Rewritten, the value puts the caret at its end: it goes back
-                // to where the paste ended, once the field is drawn.
-                const caret = typed.slice(0, field.selectionStart).replace(LINE_BREAKS, " ").length
-                change(text)
-                if (text !== typed) queueMicrotask(() => field.setSelectionRange(caret, caret))
-              }}
-              className="col-start-1 row-start-1 block size-full resize-none overflow-hidden bg-transparent py-1.5 pr-11 pl-3.5 text-2xl leading-8 font-semibold break-words whitespace-pre-wrap outline-none"
-            />
-          ) : (
-            <input
-              {...props}
-              onChange={(e) => change(e.target.value)}
-              className="h-9 w-full bg-transparent pr-11 pl-3.5 text-base font-semibold outline-none"
-            />
-          )}
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon-row"
-            aria-label={`Put back “${said(fallback)}”`}
-            // Takes no focus of its own, as the songs take none: `put` says
-            // whether the field keeps it.
-            onMouseDown={(e) => e.preventDefault()}
-            onClick={() => put(fallback)}
-            className={cn(
-              "absolute right-1.5 rounded-full text-muted-foreground hover:text-foreground",
-              size === "big" ? "top-2" : "top-1/2 size-7 -translate-y-1/2"
-            )}
-          >
-            <X className="size-4" />
-          </Button>
+            <InputGroupAddon
+              align="inline-end"
+              className={cn(
+                "absolute right-1.5 p-0 has-[>button]:mr-0",
+                size === "big" ? "top-2" : "top-1/2 -translate-y-1/2"
+              )}
+            >
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon-row"
+                aria-label={`Put back “${said(fallback)}”`}
+                // Takes no focus of its own, as the songs take none: `put`
+                // says whether the field keeps it.
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => put(fallback)}
+                className={cn(
+                  "rounded-full text-muted-foreground hover:text-foreground",
+                  size === "compact" && "size-7"
+                )}
+              >
+                <X className="size-4" />
+              </Button>
+            </InputGroupAddon>
+          </InputGroup>
         </PopoverAnchor>
         {songs === "none" && oldLine && (
           <PopoverContent

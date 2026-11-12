@@ -49,7 +49,7 @@ test("Escape with takes in the rehearsal asks to finish, on Cancel, and Enter le
   await twoTakesKept(page)
   const finishes = await callCount(page, "finish_rehearsal")
   await page.keyboard.press("Escape")
-  const dialog = page.getByRole("dialog", { name: "Finish this rehearsal?" })
+  const dialog = page.getByRole("alertdialog", { name: "Finish this rehearsal?" })
   await expect(dialog).toBeVisible()
   // Nothing in it can be undone: it opens on the answer that changes nothing.
   await expect.poll(() => focusedText(page)).toBe("Cancel")
@@ -66,10 +66,41 @@ test("Escape with takes in the rehearsal asks to finish, on Cancel, and Enter le
   expect(await callCount(page, "finish_rehearsal")).toBe(finishes)
 })
 
+test("a click outside the question leaves it open, and Escape closes it", async ({ page }) => {
+  await twoTakesKept(page)
+  await page.keyboard.press("Escape")
+  const question = page.getByRole("alertdialog", { name: "Finish this rehearsal?" })
+  await expect(question).toBeVisible()
+  // On the veil, well away from the question: it has to be answered.
+  await page.mouse.click(10, 10)
+  await page.waitForTimeout(200)
+  await expect(question).toBeVisible()
+  await page.keyboard.press("Escape")
+  await expect(question).toHaveCount(0)
+  await expect(recordButton(page, 3)).toBeVisible()
+  expect(await callCount(page, "finish_rehearsal")).toBe(0)
+})
+
+test("Space with the question to finish open does not start a take", async ({ page }) => {
+  await twoTakesKept(page)
+  const takes = await callCount(page, "start_take")
+  await page.keyboard.press("Escape")
+  const question = page.getByRole("alertdialog", { name: "Finish this rehearsal?" })
+  await expect(question).toBeVisible()
+  // A click on its words puts the focus on the question itself, a DIV, not
+  // on Cancel, which Space would press the way any button is pressed.
+  await question.getByText(/You cannot add to this rehearsal afterwards/).click()
+  await expect.poll(() => question.evaluate((q) => q === document.activeElement)).toBe(true)
+  await page.keyboard.press("Space")
+  await page.waitForTimeout(200)
+  expect(await callCount(page, "start_take")).toBe(takes)
+  await expect(question).toBeVisible()
+})
+
 test("Finish is the answer that finishes, when it is pressed", async ({ page }) => {
   await twoTakesKept(page)
   await page.keyboard.press("Escape")
-  const dialog = page.getByRole("dialog", { name: "Finish this rehearsal?" })
+  const dialog = page.getByRole("alertdialog", { name: "Finish this rehearsal?" })
   await dialog.getByRole("button", { name: "Finish", exact: true }).click()
   await expect.poll(() => callCount(page, "finish_rehearsal")).toBe(1)
 })
@@ -93,14 +124,14 @@ test("a rehearsal is renamed by typing its name and pressing Enter", async ({ pa
 test("on a Mac and on anything but Windows the action is right of Cancel", async ({ page }) => {
   await twoTakesKept(page)
   await page.keyboard.press("Escape")
-  const dialog = page.getByRole("dialog", { name: "Finish this rehearsal?" })
+  const dialog = page.getByRole("alertdialog", { name: "Finish this rehearsal?" })
   expect(await left(dialog, "Finish")).toBeGreaterThan(await left(dialog, "Cancel"))
 })
 
 test("on a Mac it is the same", async ({ page }) => {
   await twoTakesKept(page, MAC)
   await page.keyboard.press("Escape")
-  const dialog = page.getByRole("dialog", { name: "Finish this rehearsal?" })
+  const dialog = page.getByRole("alertdialog", { name: "Finish this rehearsal?" })
   expect(await left(dialog, "Finish")).toBeGreaterThan(await left(dialog, "Cancel"))
 })
 
@@ -109,7 +140,7 @@ test("on Windows the action comes first, and the arrows follow what is on screen
 }) => {
   await twoTakesKept(page, WINDOWS)
   await page.keyboard.press("Escape")
-  const dialog = page.getByRole("dialog", { name: "Finish this rehearsal?" })
+  const dialog = page.getByRole("alertdialog", { name: "Finish this rehearsal?" })
   await expect(dialog).toBeVisible()
   expect(await left(dialog, "Finish")).toBeLessThan(await left(dialog, "Cancel"))
   // Cancel still has the Enter: where the buttons stand does not change that.
@@ -184,7 +215,7 @@ test("the title and the text stay while the dialog closes", async ({ page }) => 
   await openApp(page, { before: "window.__CANCEL_LOCATE__ = true;" })
   await openHistory(page, "Missing jam")
   await page.getByRole("button", { name: "Remove from history" }).click()
-  const dialog = page.getByRole("dialog")
+  const dialog = page.getByRole("alertdialog")
   await expect(dialog.getByRole("heading")).toHaveText("Remove “Missing jam” from history?")
   // Looked at one frame after Cancel, with the dialog on its way out: what
   // it asked about is already forgotten, and it still says it.
@@ -194,8 +225,8 @@ test("the title and the text stay while the dialog closes", async ({ page }) => 
         ;(cancel as HTMLElement).click()
         requestAnimationFrame(() =>
           done({
-            title: document.querySelector('[data-slot="dialog-title"]')?.textContent ?? "(gone)",
-            text: document.querySelector('[data-slot="dialog-description"]')?.textContent ?? "(gone)",
+            title: document.querySelector('[data-slot="alert-dialog-title"]')?.textContent ?? "(gone)",
+            text: document.querySelector('[data-slot="alert-dialog-description"]')?.textContent ?? "(gone)",
           })
         )
       })
@@ -215,22 +246,26 @@ test("a label in use asks Delete with its name in quotes", async ({ page }) => {
   await page.getByRole("button", { name: "Marks", exact: true }).first().click()
   await page.locator("[data-label='Fix']").hover()
   await page.getByRole("button", { name: "Delete Fix" }).click()
-  await expect(page.getByRole("dialog", { name: "Delete “Fix”?" })).toBeVisible()
+  await expect(page.getByRole("alertdialog", { name: "Delete “Fix”?" })).toBeVisible()
 })
 
 // ---------- no dialog on the page that is not the shared one ----------
 
 /**
  * Every Radix dialog is the shared DialogContent, which marks itself
- * data-slot="dialog-content": one built by hand beside it would not carry
- * the mark. (A popover has the role too, and is not open in these.)
+ * data-slot="dialog-content", or a question's AlertDialogContent, marked
+ * data-slot="alert-dialog-content": one built by hand beside them would not
+ * carry the mark. (A popover has the role too, and is not open in these.)
  */
+const SHARED = '[data-slot="dialog-content"], [data-slot="alert-dialog-content"]'
 async function onlyTheSharedDialog(page: Page) {
-  await expect(page.locator('[data-slot="dialog-content"]')).toHaveCount(1)
-  const strays = await page.evaluate(() =>
-    [...document.querySelectorAll('[role="dialog"]')]
-      .filter((el) => !el.matches('[data-slot="dialog-content"]'))
-      .map((el) => el.outerHTML.slice(0, 120))
+  await expect(page.locator(SHARED)).toHaveCount(1)
+  const strays = await page.evaluate(
+    (shared) =>
+      [...document.querySelectorAll('[role="dialog"], [role="alertdialog"]')]
+        .filter((el) => !el.matches(shared))
+        .map((el) => el.outerHTML.slice(0, 120)),
+    SHARED
   )
   expect(strays).toEqual([])
 }

@@ -1,8 +1,9 @@
 import { useEffect, useState } from "react"
-import { Check, ListChecks, Loader2, X } from "lucide-react"
+import { Check, ListChecks, X } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Progress } from "@/components/ui/progress"
+import { Spinner } from "@/components/ui/spinner"
 import { api, type ActivityEntry } from "@/lib/api"
 import { onListAsked, pollSoon, setListOpen, useActivity } from "@/lib/activity"
 import { notify } from "@/lib/notices"
@@ -170,7 +171,8 @@ function Running({ entry, recording }: { entry: ActivityEntry; recording: boolea
   return (
     <div className="flex flex-col gap-1.5">
       <div className="flex items-center gap-2">
-        {!waiting && <Loader2 className="size-3.5 shrink-0 animate-spin text-muted-foreground" />}
+        {/* After a second, as every spinner (B5). */}
+        {!waiting && <Spinner className="size-3.5 shrink-0 text-muted-foreground" />}
         <span className="min-w-0 flex-1 truncate">{entry.title}</span>
         {!waiting && <span className="tnum text-xs text-muted-foreground">{pct}%</span>}
       </div>

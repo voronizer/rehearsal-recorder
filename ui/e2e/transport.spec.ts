@@ -727,8 +727,10 @@ test.describe("the marks and the region", () => {
     const loop = page.getByRole("button", { name: "Loop the region" })
     const clear = page.getByRole("button", { name: "Clear the loop region" })
     const crop = page.getByRole("button", { name: "Crop to the region" })
-    // The shared Button's own marks (a tip on a button keeps its slot).
-    await expect(loop).toHaveAttribute("data-variant", "ghost")
+    // The shared pieces' own marks: the loop is the Toggle, off, with its
+    // own state over the tip's; the others the Button (a tip on a button
+    // takes its slot, and its variant stays).
+    await expect(loop).toHaveAttribute("data-state", "off")
     await expect(clear).toHaveAttribute("data-variant", "ghost")
     await expect(crop).toHaveAttribute("data-variant", "outline")
     // The shared focus ring on the keys: Crop is reached with Tab.
@@ -741,6 +743,7 @@ test.describe("the marks and the region", () => {
     // raw black.
     await loop.click()
     await expect(loop).toHaveAttribute("aria-pressed", "true")
+    await expect(loop).toHaveAttribute("data-state", "on")
     await page.mouse.move(0, 0)
     const ink = await mixed(page, "--warn-foreground", 15)
     await expect

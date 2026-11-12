@@ -52,8 +52,9 @@ const PRESSED_BY_SPACE =
   '[role="button"], [role="switch"], [role="checkbox"], [role="radio"], [role="tab"]'
 
 /** What is on top of the screen and has the keyboard while it is open: a
- *  dialog, or the list of a dropdown. */
-export const LAYERS = '[role="dialog"], [role="listbox"], [role="menu"]'
+ *  dialog, a question (ConfirmDialog, an alertdialog), or the list of a
+ *  dropdown. */
+export const LAYERS = '[role="dialog"], [role="alertdialog"], [role="listbox"], [role="menu"]'
 
 // The element the mouse last put focus on, or null when the keyboard did.
 let pointerFocused: Element | null = null
@@ -153,6 +154,43 @@ function letGoOfLeftover(el: Element | null): boolean {
  */
 export function focusIsLeftover(el: Element | null): boolean {
   return el !== null && el === pointerFocused && !isTyping(el)
+}
+
+// The keys useKey and usePlayerKeys take from a slider the mouse left
+// focused, while they are on, with how many of them take each: useKey's in
+// small letters, usePlayerKeys' ← and → as ARROWS.
+const screenKeys = new Map<string, number>()
+const ARROWS = "arrows"
+
+function takeKey(key: string): () => void {
+  screenKeys.set(key, (screenKeys.get(key) ?? 0) + 1)
+  return () => {
+    const left = (screenKeys.get(key) ?? 1) - 1
+    if (left > 0) screenKeys.set(key, left)
+    else screenKeys.delete(key)
+  }
+}
+
+/**
+ * Whether this key goes to the screen rather than to the slider that has
+ * focus, because the mouse left the focus there: the screen lets go of the
+ * slider and does its own thing with ←, → or Home, as useKey and
+ * usePlayerKeys below say. A slider that answers its keys before the window
+ * hears them (the shared Slider) asks this first, and leaves such a key
+ * alone; a native range answered after the window, which could stop it.
+ */
+export function screenTakesKey(e: {
+  key: string
+  repeat: boolean
+  ctrlKey: boolean
+  metaKey: boolean
+  altKey: boolean
+}): boolean {
+  const el = document.activeElement
+  if (!keysOn("player") || !focusIsLeftover(el) || keyIsClaimed(el)) return false
+  if ((e.key === "ArrowLeft" || e.key === "ArrowRight") && screenKeys.has(ARROWS)) return true
+  if (e.repeat || e.ctrlKey || e.metaKey || e.altKey) return false
+  return screenKeys.has(e.key.toLowerCase())
 }
 
 /**
@@ -317,6 +355,7 @@ export function useKey(key: string, handler: () => void, enabled = true) {
     if (!enabled) return
 
     watchFocus()
+    const free = takeKey(key.toLowerCase())
 
     const onKeyDown = (e: KeyboardEvent) => {
       if (!keysOn("player")) return
@@ -330,7 +369,10 @@ export function useKey(key: string, handler: () => void, enabled = true) {
     }
 
     window.addEventListener("keydown", onKeyDown)
-    return () => window.removeEventListener("keydown", onKeyDown)
+    return () => {
+      window.removeEventListener("keydown", onKeyDown)
+      free()
+    }
   }, [key, enabled])
 }
 
@@ -349,6 +391,7 @@ export function usePlayerKeys(skip: (delta: number) => void, enabled = true) {
   useEffect(() => {
     if (!enabled) return
     watchFocus()
+    const free = takeKey(ARROWS)
 
     const onKeyDown = (e: KeyboardEvent) => {
       if (!keysOn("player")) return
@@ -362,7 +405,10 @@ export function usePlayerKeys(skip: (delta: number) => void, enabled = true) {
     }
 
     window.addEventListener("keydown", onKeyDown)
-    return () => window.removeEventListener("keydown", onKeyDown)
+    return () => {
+      window.removeEventListener("keydown", onKeyDown)
+      free()
+    }
   }, [enabled])
 }
 
@@ -397,7 +443,7 @@ export function useDialogFocusKeys() {
 
       // The topmost dialog, which is the last one opened: a confirmation
       // raised from inside another dialog owns the keyboard while it stands.
-      const dialogs = document.querySelectorAll<HTMLElement>('[role="dialog"]')
+      const dialogs = document.querySelectorAll<HTMLElement>('[role="dialog"], [role="alertdialog"]')
       const dialog = dialogs[dialogs.length - 1]
       if (!dialog) return
 

@@ -205,9 +205,14 @@ function DialogDescription({
  *
  * With no `action` the one button is the way out, and `cancel` is its word
  * (Close, for a dialog whose options act at once).
+ *
+ * A question (ConfirmDialog) is an AlertDialog, whose Cancel and action are
+ * its own: it hands in its Cancel as `cancelButton`, and only the order is
+ * this one's.
  */
 function DialogButtons({
   cancel = "Cancel",
+  cancelButton,
   action,
   aside,
   irreversible = false,
@@ -215,6 +220,8 @@ function DialogButtons({
   system,
 }: {
   cancel?: string
+  /** The way out made by the caller, in place of this dialog's Cancel. */
+  cancelButton?: React.ReactElement<Record<string, unknown>>
   /** The action's Button, which says a verb. */
   action?: React.ReactNode
   aside?: React.ReactNode
@@ -228,13 +235,14 @@ function DialogButtons({
   const windows = (system ?? own) === "windows"
   const enterOnCancel = irreversible || !action
 
-  const cancelButton = (
+  const way = cancelButton ?? (
     <DialogClose asChild>
-      <Button variant="ghost" disabled={cancelDisabled} {...(enterOnCancel ? { [ENTER]: "" } : {})}>
+      <Button variant="ghost" disabled={cancelDisabled}>
         {cancel}
       </Button>
     </DialogClose>
   )
+  const cancelOne = enterOnCancel ? React.cloneElement(way, { [ENTER]: "" }) : way
   const actionButton =
     !enterOnCancel && React.isValidElement(action)
       ? React.cloneElement(action as React.ReactElement<Record<string, unknown>>, { [ENTER]: "" })
@@ -246,11 +254,11 @@ function DialogButtons({
       {windows ? (
         <>
           {actionButton}
-          {cancelButton}
+          {cancelOne}
         </>
       ) : (
         <>
-          {cancelButton}
+          {cancelOne}
           {actionButton}
         </>
       )}

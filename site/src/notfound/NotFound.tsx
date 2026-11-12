@@ -49,7 +49,6 @@ function EmptyTake({ player }: { player: MultitrackPlayer }) {
             isOpenGo={() => true}
             onPick={nothing}
             onRow={nothing}
-            onToggle={nothing}
           />
         </div>
         <TakePlayer player={player} />

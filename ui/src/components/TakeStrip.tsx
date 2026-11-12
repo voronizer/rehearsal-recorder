@@ -1,4 +1,4 @@
-import { useEffect } from "react"
+import { useEffect, useId } from "react"
 import {
   ChevronDown,
   ChevronLeft,
@@ -10,6 +10,7 @@ import {
   Trash2,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { Collapsible, CollapsibleTrigger } from "@/components/ui/collapsible"
 import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty"
 import { Toggle } from "@/components/ui/toggle"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
@@ -65,6 +66,10 @@ export function takeButtonLabel(take: Take, status: string | null): string {
  * tab of its own, opening out into a column of goes under each. It does not
  * wrap: a rehearsal with thirty songs would otherwise push the player off
  * the screen, and the player is the thing you came for.
+ *
+ * Opening out is the shared Collapsible, round the whole strip: Songs and
+ * the open tab's number are its triggers. The columns are each tab's own
+ * (SongTab), so the triggers say they control the row of tabs.
  */
 export function TakeStrip({
   takes,
@@ -109,6 +114,7 @@ export function TakeStrip({
   sendTo?: SendTo
   emptyHint?: string
 }) {
+  const tabsId = useId()
   const live = liveTake(takes, selected)
   const isShared = live !== null && isUp(live, sendTo)
   const button = live && sendButton(live, sendTo)
@@ -175,115 +181,120 @@ export function TakeStrip({
   }
 
   return (
-    <div
-      role="group"
-      aria-label="Take strip"
-      className={cn("flex gap-2", expanded ? "items-start" : "items-center")}
-    >
-      {/* A word, not an icon, so it needs no tip. Grey while the columns are
-          out, as everything that stays pressed is. */}
-      <Toggle
-        pressed={expanded}
-        aria-expanded={expanded}
-        onPressedChange={onExpandedChange}
-        // Space would press it again rather than play.
-        onClick={(e) => e.currentTarget.blur()}
-        className={cn("-ml-2 text-muted-foreground", expanded && "mt-4")}
+    <Collapsible open={expanded} onOpenChange={onExpandedChange} asChild>
+      <div
+        role="group"
+        aria-label="Take strip"
+        className={cn("flex gap-2", expanded ? "items-start" : "items-center")}
       >
-        Songs
-        {expanded ? <ChevronUp className="size-3.5" /> : <ChevronDown className="size-3.5" />}
-      </Toggle>
-
-      <div className="relative flex min-w-0 flex-1">
-        <div
-          ref={rowRef}
-          // No scrollbar of its own: the wheel, the fade and ‹ › stand for it.
-          className={cn(
-            "peer/row flex min-w-0 flex-1 gap-1 overflow-x-auto border-b [scrollbar-width:none] [&::-webkit-scrollbar]:hidden",
-            expanded ? "items-stretch" : "items-end"
-          )}
+        {/* A word, not an icon, so it needs no tip. Grey while the columns are
+            out, as everything that stays pressed is: the Toggle's look and
+            state on the fold's trigger, which opens and shuts them. */}
+        <Toggle
+          asChild
+          pressed={expanded}
+          // Space would press it again rather than play.
+          onClick={(e) => e.currentTarget.blur()}
+          className={cn("-ml-2 text-muted-foreground", expanded && "mt-4")}
         >
-          {tabs.map((tab) => {
-            const open = tab === openTab
-            const goes = goesOf(tab, open)
-            const shown = open
-              ? (goes.find(isOpenGo) ?? { take: live! })
-              : goes[goes.length - 1]
-            return (
-              <SongTab
-                key={tab.key}
-                tabKey={tab.key}
-                song={tab.song}
-                goes={goes}
-                shown={shown}
-                open={open}
-                expanded={expanded}
-                isOpenGo={isOpenGo}
-                cloudStates={cloudStates}
-                sendTo={sendTo}
-                onPick={() => onSelect(lastPlayed(tab))}
-                onRow={(go) => (open ? onGo(go.take, go.folder) : onSelect(go.take))}
-                onToggle={() => onExpandedChange(!expanded)}
-              />
-            )
-          })}
-        </div>
-        <Edge side="before" onPage={() => page(-1)} />
-        <Edge side="after" onPage={() => page(1)} />
-      </div>
+          <CollapsibleTrigger aria-controls={tabsId}>
+            Songs
+            {expanded ? <ChevronUp className="size-3.5" /> : <ChevronDown className="size-3.5" />}
+          </CollapsibleTrigger>
+        </Toggle>
 
-      {live && (
-        <div className={cn("flex shrink-0 items-center gap-1", expanded && "mt-4")}>
-          {onStar && <StarButton take={live} onStar={onStar} />}
-          {onRename && (
-            <Button
-              variant="ghost"
-              size="icon-row"
-              aria-label={`Rename take ${live.name}`}
-              onClick={() => onRename(live)}
-              className="text-muted-foreground hover:text-foreground"
-            >
-              <Pencil />
-            </Button>
-          )}
-          {onShare && (
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="icon-row"
-                  // One icon whatever the take's state: the colour says it.
-                  aria-label={button?.label}
-                  onClick={() => onShare(live)}
-                  className={cn(
-                    isShared
-                      ? "text-signal hover:text-signal"
-                      : "text-muted-foreground hover:text-foreground"
-                  )}
-                >
-                  <CloudUpload />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>
-                {button?.tip}
-              </TooltipContent>
-            </Tooltip>
-          )}
-          {onDelete && (
-            // Set apart from the other three, so a slip of the pointer does not land on it.
-            <Button
-              variant="ghost"
-              size="icon-row"
-              aria-label={`Delete take ${live.name}`}
-              onClick={() => onDelete(live)}
-              className="ml-2 text-muted-foreground hover:text-destructive"
-            >
-              <Trash2 />
-            </Button>
-          )}
+        <div className="relative flex min-w-0 flex-1">
+          <div
+            ref={rowRef}
+            id={tabsId}
+            // No scrollbar of its own: the wheel, the fade and ‹ › stand for it.
+            className={cn(
+              "peer/row flex min-w-0 flex-1 gap-1 overflow-x-auto border-b [scrollbar-width:none] [&::-webkit-scrollbar]:hidden",
+              expanded ? "items-stretch" : "items-end"
+            )}
+          >
+            {tabs.map((tab) => {
+              const open = tab === openTab
+              const goes = goesOf(tab, open)
+              const shown = open
+                ? (goes.find(isOpenGo) ?? { take: live! })
+                : goes[goes.length - 1]
+              return (
+                <SongTab
+                  key={tab.key}
+                  tabKey={tab.key}
+                  song={tab.song}
+                  goes={goes}
+                  shown={shown}
+                  open={open}
+                  expanded={expanded}
+                  isOpenGo={isOpenGo}
+                  cloudStates={cloudStates}
+                  sendTo={sendTo}
+                  onPick={() => onSelect(lastPlayed(tab))}
+                  onRow={(go) => (open ? onGo(go.take, go.folder) : onSelect(go.take))}
+                  controls={tabsId}
+                />
+              )
+            })}
+          </div>
+          <Edge side="before" onPage={() => page(-1)} />
+          <Edge side="after" onPage={() => page(1)} />
         </div>
-      )}
-    </div>
+
+        {live && (
+          <div className={cn("flex shrink-0 items-center gap-1", expanded && "mt-4")}>
+            {onStar && <StarButton take={live} onStar={onStar} />}
+            {onRename && (
+              <Button
+                variant="ghost"
+                size="icon-row"
+                aria-label={`Rename take ${live.name}`}
+                onClick={() => onRename(live)}
+                className="text-muted-foreground hover:text-foreground"
+              >
+                <Pencil />
+              </Button>
+            )}
+            {onShare && (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon-row"
+                    // One icon whatever the take's state: the colour says it.
+                    aria-label={button?.label}
+                    onClick={() => onShare(live)}
+                    className={cn(
+                      isShared
+                        ? "text-signal hover:text-signal"
+                        : "text-muted-foreground hover:text-foreground"
+                    )}
+                  >
+                    <CloudUpload />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>
+                  {button?.tip}
+                </TooltipContent>
+              </Tooltip>
+            )}
+            {onDelete && (
+              // Set apart from the other three, so a slip of the pointer does not land on it.
+              <Button
+                variant="ghost"
+                size="icon-row"
+                aria-label={`Delete take ${live.name}`}
+                onClick={() => onDelete(live)}
+                className="ml-2 text-muted-foreground hover:text-destructive"
+              >
+                <Trash2 />
+              </Button>
+            )}
+          </div>
+        )}
+      </div>
+    </Collapsible>
   )
 }
 

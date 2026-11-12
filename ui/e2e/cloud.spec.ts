@@ -99,7 +99,7 @@ test("a take is copied to the cloud from its row, and taken back out again", asy
   // Deleting a take takes its copy out of the cloud folder too, at once; its
   // Undo puts both back.
   await page.getByRole("button", { name: "Delete take Pałyn 1" }).click()
-  await expect(page.getByRole("dialog")).toHaveCount(0)
+  await expect(page.getByRole("alertdialog")).toHaveCount(0)
   await expect(page.getByRole("button", { name: "Cloud copies of Pałyn 1" })).toHaveCount(0)
   await notices(page)
     .filter({ hasText: "“Pałyn #1” went to the Trash." })

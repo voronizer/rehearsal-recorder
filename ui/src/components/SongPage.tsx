@@ -1,5 +1,6 @@
 import { useCallback, useState, type ReactNode } from "react"
 import { Button } from "@/components/ui/button"
+import { Card } from "@/components/ui/card"
 import { MarkLine } from "@/components/ui/mark"
 import { PlayButton } from "@/components/ui/play-button"
 import { useCut, WholeTip } from "@/components/ui/whole"
@@ -259,9 +260,9 @@ export function SongPage({
       />
 
       {parts.length > 0 && (
-        <div
+        <Card
           data-song-parts
-          className="flex animate-rise flex-col rounded-xl bg-card"
+          className="animate-rise gap-0 p-0"
           style={rise(1)}
         >
           {parts.map((part, i) => (
@@ -274,7 +275,7 @@ export function SongPage({
               {part.body}
             </section>
           ))}
-        </div>
+        </Card>
       )}
     </div>
   )

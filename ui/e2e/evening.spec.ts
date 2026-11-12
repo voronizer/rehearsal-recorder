@@ -138,7 +138,7 @@ test("Clear false starts removes only them at once, and Undo puts them back", as
   const clear = overview.getByRole("button", { name: /Clear false starts/ })
   await expect(clear).toHaveText(/Clear false starts\s*2/)
   await clear.click()
-  await expect(page.getByRole("dialog")).toHaveCount(0)
+  await expect(page.getByRole("alertdialog")).toHaveCount(0)
   expect((await calls(page, "delete_takes")).at(-1)?.args).toEqual([await folderOf(page), [4, 10]])
   await expect(row(overview, 4)).toHaveCount(0)
   await expect(row(overview, 10)).toHaveCount(0)

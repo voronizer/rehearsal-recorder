@@ -1,4 +1,5 @@
 import { Button } from "@/components/ui/button"
+import { Card } from "@/components/ui/card"
 import { Empty, EmptyDescription } from "@/components/ui/empty"
 import { Item } from "@/components/ui/item"
 import { LabelDot } from "@/components/ui/mark"
@@ -107,7 +108,7 @@ export function MarksPage({
         lines={<p className="text-sm text-muted-foreground">{headLine(marks)}</p>}
       />
 
-      <div data-marks-group className="flex animate-rise flex-col rounded-xl bg-card" style={rise(1)}>
+      <Card data-marks-group className="animate-rise gap-0 p-0" style={rise(1)}>
         {/* Where the row has no room for both, the words go above the switch.
             Arrows along the switch move along it; up and down are left to
             the list of labels, as on History's own switch. */}
@@ -176,7 +177,7 @@ export function MarksPage({
             </div>
           ))
         )}
-      </div>
+      </Card>
     </div>
   )
 }

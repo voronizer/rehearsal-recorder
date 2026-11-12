@@ -1,6 +1,7 @@
 import { useLayoutEffect, useRef, useState } from "react"
 import { GoTitle } from "@/components/TakeTitle"
 import { Button } from "@/components/ui/button"
+import { ITEM_CHOSEN } from "@/components/ui/item"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import type { SongChoice, SongChoices } from "@/lib/api"
 import { songFor, songNamed } from "@/lib/goes"
@@ -135,7 +136,7 @@ export function SongPills({
             aria-current={isChoice(c) ? "true" : undefined}
             onMouseDown={(e) => e.preventDefault()}
             onClick={() => onPick(c.song)}
-            className={cn(PILL_BUTTON, isChoice(c) && "bg-selected hover:bg-selected dark:hover:bg-selected")}
+            className={cn(PILL_BUTTON, isChoice(c) && ITEM_CHOSEN)}
           >
             <GoTitle title={c.song} go={goes ? c.go : null} />
           </Button>
@@ -244,7 +245,7 @@ function AllSongsPill({
               className={cn(
                 "block h-auto w-full truncate rounded-md border-0 px-1.5 py-0.5 text-left break-inside-avoid transition-colors hover:bg-accent dark:hover:bg-accent",
                 "focus-visible:ring-0 focus-visible:ring-transparent focus-visible:outline-2 focus-visible:outline-solid focus-visible:-outline-offset-2 focus-visible:outline-ring",
-                isChoice(c) && "bg-selected hover:bg-selected dark:hover:bg-selected"
+                isChoice(c) && ITEM_CHOSEN
               )}
             >
               <GoTitle title={c.song} go={goes ? c.go : null} />

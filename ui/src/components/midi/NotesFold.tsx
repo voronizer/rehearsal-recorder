@@ -1,5 +1,6 @@
 import { ChevronRight } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { CollapsibleTrigger } from "@/components/ui/collapsible"
 import { motionOff } from "@/lib/motion"
 import { cn } from "@/lib/utils"
 
@@ -9,19 +10,23 @@ import { cn } from "@/lib/utils"
  * History's song days, SongLadder). It points right while they are folded and
  * down while they are open. Its name stays "Drums notes" either way, and
  * aria-expanded says which; no tip, as the chevron says it.
+ *
+ * It is the trigger of the shared Collapsible round the notes' row
+ * (Timeline). Folded, the lane stays as a strip, so it is no
+ * CollapsibleContent: `controls` names the lane.
  */
-export function NotesFold({ name, open, onToggle }: { name: string; open: boolean; onToggle: () => void }) {
+export function NotesFold({ name, open, controls }: { name: string; open: boolean; controls: string }) {
   return (
-    <Button
-      variant="ghost"
-      size="icon-tiny"
-      data-notes-fold
-      aria-label={`${name} notes`}
-      aria-expanded={open}
-      onClick={onToggle}
-      className="size-5 rounded-sm text-muted-foreground"
-    >
-      <ChevronRight className={cn("size-3.5", !motionOff() && "transition-transform", open && "rotate-90")} />
-    </Button>
+    <CollapsibleTrigger asChild aria-controls={controls}>
+      <Button
+        variant="ghost"
+        size="icon-tiny"
+        data-notes-fold
+        aria-label={`${name} notes`}
+        className="size-5 rounded-sm text-muted-foreground"
+      >
+        <ChevronRight className={cn("size-3.5", !motionOff() && "transition-transform", open && "rotate-90")} />
+      </Button>
+    </CollapsibleTrigger>
   )
 }

@@ -49,7 +49,7 @@ test("with Space and Esc off, they do nothing on the start, rehearsal and record
   page,
 }) => {
   await openApp(page, { before: withKeys({ space: false }) })
-  const dialog = page.getByRole("dialog")
+  const dialog = page.getByRole("alertdialog")
 
   // The start screen: Space would start the rehearsal.
   await expect(startButton(page)).toBeVisible()
@@ -183,7 +183,7 @@ test("with the keys off, Esc still closes a dialog and leaves a field, and Ctrl+
   // Esc leaves the field, and asks nothing.
   await press(page, "Escape")
   await expect(nextTake(page)).not.toBeFocused()
-  await expect(page.getByRole("dialog")).toHaveCount(0)
+  await expect(page.getByRole("alertdialog")).toHaveCount(0)
   await expect(nextTake(page)).toBeVisible()
 
   // The take Stop opened, thrown away by its trash: Ctrl+Z brings it back.

@@ -11,6 +11,7 @@ import {
   recordTake,
   scaled,
   settled,
+  sliderOf,
   startRehearsal,
   style,
   test,
@@ -861,7 +862,7 @@ test.describe("M and S at the fader", () => {
     await settled(page)
     for (const name of [HANNA, "Drums"]) {
       const p = plate(page, name)
-      const fader = await box(p.getByRole("slider", { name: `${name} volume` }))
+      const fader = await box(sliderOf(p.getByRole("slider", { name: `${name} volume` })))
       for (const label of ["Mute", "Solo"]) {
         const b = await box(p.getByRole("button", { name: `${label} ${name}` }))
         expect(b.x, `${label} is right of the fader's right edge`).toBeGreaterThanOrEqual(
@@ -967,14 +968,13 @@ test.describe("M and S at the fader", () => {
       }
     })
 
-    // The thumb is the engine's own pseudo-element, which getComputedStyle
-    // does not answer for: so it is read where it is drawn. A fader at its top
+    // The thumb is read where it is drawn, over the meter: a fader at its top
     // has its thumb at the right end.
     test(`the fader thumbs are in the text colour, in the ${theme} theme`, async ({ page }) => {
       await stopped(page, band(2), themed(theme))
       const text = await colour(page, "--foreground")
       for (const name of ["Drums volume", "Master volume"]) {
-        const fader = await box(page.getByRole("slider", { name }))
+        const fader = await box(sliderOf(page.getByRole("slider", { name })))
         const thumb = await pixelAt(page, fader.x + fader.width - 7, middle(fader))
         // The probe is painted by a canvas and the thumb by the page, so a
         // channel may differ by a step or two of rounding.
@@ -987,7 +987,7 @@ test.describe("M and S at the fader", () => {
   test("the master's figure sits after its fader, under the name", async ({ page }) => {
     await stopped(page, band(2))
     const master = strip(page)
-    const fader = await box(master.getByRole("slider", { name: "Master volume" }))
+    const fader = await box(sliderOf(master.getByRole("slider", { name: "Master volume" })))
     const figure = await box(master.getByText(/^\d+%$/))
     const name = await box(master.getByText("Master", { exact: true }))
     expect(figure.x).toBeGreaterThanOrEqual(fader.x + fader.width - 0.5)
@@ -995,7 +995,7 @@ test.describe("M and S at the fader", () => {
     expect(figure.y).toBeGreaterThanOrEqual(name.y + name.height - 0.5)
     // Where a track has M and S, so every fader in the column is as long as
     // the others and ends in the same place.
-    const track = await box(plate(page, "Drums").getByRole("slider", { name: "Drums volume" }))
+    const track = await box(sliderOf(plate(page, "Drums").getByRole("slider", { name: "Drums volume" })))
     expect(Math.abs(fader.x - track.x)).toBeLessThan(0.5)
     expect(Math.abs(fader.width - track.width)).toBeLessThan(0.5)
   })

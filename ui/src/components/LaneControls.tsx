@@ -4,9 +4,11 @@ import { ChannelsIcon } from "@/components/ChannelsIcon"
 import { InstrumentIcon } from "@/components/InstrumentIcon"
 import { MidiGlyph } from "@/components/midi/MidiGlyph"
 import { LanePlate } from "@/components/ui/lane-plate"
+import { Slider } from "@/components/ui/slider"
 import { Toggle } from "@/components/ui/toggle"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { Whole } from "@/components/ui/whole"
+import { screenTakesKey } from "@/hooks/useSpacebar"
 import { CLIP_THRESHOLD } from "@/lib/levels"
 import { cn } from "@/lib/utils"
 
@@ -17,9 +19,10 @@ import { cn } from "@/lib/utils"
  * could not say that; side by side they only invited being mistaken for each
  * other.
  *
- * The slider stays a native range input, so it keeps its keyboard
- * behaviour; only its track is made transparent so the meter shows through,
- * which means the thumb has to be drawn here rather than left to the engine.
+ * The slider is the shared one's `fader`, whose track is clear so the meter
+ * shows through. Its volume is kept when the pointer or the key is let go,
+ * not on Radix's own commit: that comes in the same keydown as the step,
+ * before the screen holds the new volume, and would keep the one before.
  *
  * A stereo track's meter is in two along its length, left above right, the
  * way the setup screen's check draws it: one bar for the louder side would
@@ -86,30 +89,24 @@ function MeteredFader({
         ))}
       </div>
 
-      <input
-        type="range"
+      <Slider
+        variant="fader"
         min={0}
         max={1}
         step={0.01}
-        value={volume}
-        onChange={(e) => onVolume(Number(e.target.value))}
+        value={[volume]}
+        onValueChange={([v]) => onVolume(v)}
         onPointerUp={onVolumeCommit}
         onKeyUp={onVolumeCommit}
+        onKeyDown={(e) => {
+          // Left focused by the mouse, it hands the screen its keys (← and →
+          // move through the take, Home to its start), as a clicked button
+          // does Space.
+          if (screenTakesKey(e)) e.preventDefault()
+        }}
         aria-label={`${name} volume`}
         aria-valuetext={`${Math.round(volume * 100)}%`}
-        className={cn(
-          "absolute inset-0 w-full cursor-pointer appearance-none bg-transparent",
-          "focus-visible:outline-none",
-          "[&::-webkit-slider-thumb]:size-3.5 [&::-webkit-slider-thumb]:appearance-none",
-          "[&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-foreground",
-          "[&::-webkit-slider-thumb]:ring-2 [&::-webkit-slider-thumb]:ring-card",
-          "[&::-moz-range-thumb]:size-3.5 [&::-moz-range-thumb]:border-0",
-          "[&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:bg-foreground",
-          // The focus is the thumb's, in the shared ring: the input's own
-          // outline is off, and it would be round the whole track.
-          "focus-visible:[&::-webkit-slider-thumb]:ring-[3px] focus-visible:[&::-webkit-slider-thumb]:ring-ring/50",
-          "focus-visible:[&::-moz-range-thumb]:ring-[3px] focus-visible:[&::-moz-range-thumb]:ring-ring/50"
-        )}
+        className="absolute inset-0 cursor-pointer"
       />
     </div>
   )

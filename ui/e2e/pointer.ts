@@ -93,7 +93,7 @@ export function pointers(): { checked: number; wrong: string[] } {
     const own = typeof el.className === "string" ? OWN.exec(el.className)?.[2] : undefined
     if (dead ? cursor !== "pointer" : cursor === (own ?? "pointer")) continue
     const name = (el.getAttribute("aria-label") || el.getAttribute("title") || el.textContent || "").replace(/\s+/g, " ").trim().slice(0, 40)
-    const place = el.closest("[role=dialog],[role=menu],[role=listbox],aside,header,nav,main,footer")
+    const place = el.closest("[role=dialog],[role=alertdialog],[role=menu],[role=listbox],aside,header,nav,main,footer")
     const where = place ? place.getAttribute("aria-label") || place.tagName.toLowerCase() : ""
     wrong.push(`${el.getAttribute("role") || el.tagName.toLowerCase()} "${name}"${where ? ` in ${where}` : ""}: ${cursor}`)
   }

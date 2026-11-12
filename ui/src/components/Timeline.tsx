@@ -7,6 +7,7 @@ import { TakeMap } from "@/components/TakeMap"
 import { Waveform } from "@/components/Waveform"
 import { NotesLane } from "@/components/midi/NotesLane"
 import { NotesPlate } from "@/components/midi/NotesPlate"
+import { Collapsible } from "@/components/ui/collapsible"
 import { cn } from "@/lib/utils"
 import { formatMMSS } from "@/lib/format"
 import { labelLook, labelOf, useLabels } from "@/lib/labels"
@@ -577,49 +578,57 @@ export function Timeline({
                   // names and the room round them need (NotesPlate); folded,
                   // a strip.
                   const open = openNotes.has(lane.name)
+                  // What the fold opens: the lane, which folded is a strip.
+                  const laneId = `${surfaceId}-notes-${i}`
                   return (
-                    <div
+                    <Collapsible
                       key={`notes:${lane.name}`}
-                      data-lane-row={lane.name}
-                      data-paired={paired || undefined}
-                      data-folded={!open || undefined}
-                      className="grid"
-                      style={{
-                        gridTemplateColumns: COLUMNS,
-                        columnGap: COLUMN_GAP_PX,
-                        ...(!open && {
-                          height: paired ? NOTES_STRIP.paired : NOTES_STRIP.alone,
-                          gridTemplateRows: "minmax(0, 1fr)",
-                        }),
-                      }}
+                      open={open}
+                      onOpenChange={() => toggleNotes(lane.name)}
+                      asChild
                     >
-                      <PlateCell>
-                        <PlateGrey join={paired ? "bottom" : "alone"} />
-                        <NotesPlate
-                          name={lane.name}
-                          icon={read?.icon}
-                          port={port}
-                          paired={paired}
-                          missing={lane.kind === "missing"}
-                          fold={{ open, onToggle: () => toggleNotes(lane.name) }}
-                        />
-                      </PlateCell>
-                      <div className={cn("min-w-0", paired ? "pb-[3px]" : "py-[3px]")}>
-                        {/* On the group's fill; under its audio, under the
-                            line. */}
-                        <NotesLane
-                          name={lane.name}
-                          data={read ?? null}
-                          missing={lane.kind === "missing"}
-                          duration={duration}
-                          view={{ from, to }}
-                          playhead={position}
-                          dimmed={dimmed}
-                          ground="card"
-                          className={cn("h-full", paired && "rounded-t-none border-t", dimmed && "opacity-60")}
-                        />
+                      <div
+                        data-lane-row={lane.name}
+                        data-paired={paired || undefined}
+                        data-folded={!open || undefined}
+                        className="grid"
+                        style={{
+                          gridTemplateColumns: COLUMNS,
+                          columnGap: COLUMN_GAP_PX,
+                          ...(!open && {
+                            height: paired ? NOTES_STRIP.paired : NOTES_STRIP.alone,
+                            gridTemplateRows: "minmax(0, 1fr)",
+                          }),
+                        }}
+                      >
+                        <PlateCell>
+                          <PlateGrey join={paired ? "bottom" : "alone"} />
+                          <NotesPlate
+                            name={lane.name}
+                            icon={read?.icon}
+                            port={port}
+                            paired={paired}
+                            missing={lane.kind === "missing"}
+                            fold={{ open, controls: laneId }}
+                          />
+                        </PlateCell>
+                        <div id={laneId} className={cn("min-w-0", paired ? "pb-[3px]" : "py-[3px]")}>
+                          {/* On the group's fill; under its audio, under the
+                              line. */}
+                          <NotesLane
+                            name={lane.name}
+                            data={read ?? null}
+                            missing={lane.kind === "missing"}
+                            duration={duration}
+                            view={{ from, to }}
+                            playhead={position}
+                            dimmed={dimmed}
+                            ground="card"
+                            className={cn("h-full", paired && "rounded-t-none border-t", dimmed && "opacity-60")}
+                          />
+                        </div>
                       </div>
-                    </div>
+                    </Collapsible>
                   )
                 }
                 const m = lane.track

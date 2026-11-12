@@ -375,6 +375,13 @@ html[data-recording]
 [data-tight] [data-footer-actions] {
   min-width: 0;
 }
+/* The tempo's − and + gone, its number keeps a whole frame: the button group
+   gave its left edge and its corners to the buttons beside it. */
+[data-tight="2"] [data-slot="button-group"]:has(> [data-squeeze="2"]) > input,
+[data-tight="3"] [data-slot="button-group"]:has(> [data-squeeze="2"]) > input {
+  border-left-width: 1px;
+  border-radius: var(--radius-md);
+}
 [data-tight="2"] [data-squeeze-quiet="2"],
 [data-tight="3"] [data-squeeze-quiet="2"],
 [data-tight="3"] [data-squeeze-quiet="3"] {

@@ -5,6 +5,7 @@ import { SongPills } from "@/components/SongPills"
 import { useSongChoices } from "@/hooks/useSongChoices"
 import { Badge } from "@/components/ui/badge"
 import { Button, OPENS } from "@/components/ui/button"
+import { Card } from "@/components/ui/card"
 import { LabelDot, MarkLine } from "@/components/ui/mark"
 import { PlayButton } from "@/components/ui/play-button"
 import { TakeWave } from "@/components/ui/take-wave"
@@ -182,7 +183,7 @@ export function RehearsalOverview({
 
   return (
     <section aria-label="Rehearsal overview" className="flex flex-col">
-      <div data-songs-group className="flex animate-rise flex-col rounded-xl bg-card" style={rise(place)}>
+      <Card data-songs-group className="animate-rise gap-0 p-0" style={rise(place)}>
         {head}
         {/* The set the evening was played by is the group's first part: what
             was played of it, each song played going to its own below. The
@@ -265,7 +266,7 @@ export function RehearsalOverview({
             </div>
           )
         })}
-      </div>
+      </Card>
     </section>
   )
 }

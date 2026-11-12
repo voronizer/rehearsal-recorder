@@ -3,6 +3,7 @@ import { FooterRow } from "@/components/FooterRow"
 import { HealthLine } from "@/components/HealthLine"
 import { Shell } from "@/components/Shell"
 import { StopTake } from "@/components/StopTake"
+import { Card } from "@/components/ui/card"
 import { BackingTakeRow } from "@/components/backing/BackingTakeRow"
 import { CountIn } from "@/components/metronome/CountIn"
 import { EdgeLight } from "@/components/metronome/EdgeLight"
@@ -606,10 +607,10 @@ export function Recording({
             its own with 3 px of the group's round it («Волна на подложке»).
             Their least height is 12.5rem: the clock and the name give way
             first (the fit above). */}
-        <div
+        <Card
           ref={tilesRef}
           data-tiles
-          className="grid min-h-0 w-full flex-1 gap-1.5 rounded-xl bg-card p-[3px] [--tile-min:12.5rem]"
+          className="grid min-h-0 w-full flex-1 gap-1.5 p-[3px] [--tile-min:12.5rem]"
           style={{
             gridTemplateColumns: `repeat(${Math.max(1, tracks.length)}, minmax(0, 1fr))`,
           }}
@@ -663,7 +664,7 @@ export function Recording({
               />
             )
           })}
-        </div>
+        </Card>
       </div>
       <EdgeLight
         accent={

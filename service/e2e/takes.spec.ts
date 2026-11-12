@@ -545,7 +545,8 @@ test.describe("as Ira", () => {
     await expect(guitar).toHaveAttribute("aria-valuetext", "97%")
 
     // Let go, take it again at once, and hold it while the answer to the first comes.
-    const box = (await guitar.boundingBox())!
+    // Along the whole fader, not its thumb, which is what its name finds.
+    const box = (await guitar.locator("xpath=ancestor::*[@data-slot='slider'][1]").boundingBox())!
     const y = box.y + box.height / 2
     await page.mouse.move(box.x + box.width * 0.96, y)
     await page.mouse.down()
@@ -710,7 +711,7 @@ test.describe("as Dzima", () => {
     // Deleting your mark, under its ⋯, says what goes with it.
     await kept.getByRole("button", { name: "What to do with the mark at 0:05" }).click()
     await page.getByRole("menuitem", { name: "Delete" }).click()
-    const ask = page.getByRole("dialog")
+    const ask = page.getByRole("alertdialog")
     await expect(ask).toContainText("Its comment goes with it.")
     await ask.getByRole("button", { name: "Cancel" }).click()
   })
@@ -775,7 +776,7 @@ test.describe("deleting a take, as Alex", () => {
   async function deleteTake(page: import("@playwright/test").Page, where: import("@playwright/test").Locator, name: string) {
     await where.getByRole("button", { name: `What to do with ${name}`, exact: true }).click()
     await page.getByRole("menuitem", { name: "Delete take" }).click()
-    await page.getByRole("dialog").getByRole("button", { name: "Delete take" }).click()
+    await page.getByRole("alertdialog").getByRole("button", { name: "Delete take" }).click()
   }
 
   test("an old take's panel address opens the take's page", async ({ page }) => {

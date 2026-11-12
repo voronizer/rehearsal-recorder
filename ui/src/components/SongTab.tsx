@@ -2,6 +2,8 @@ import { Fragment, useLayoutEffect, useRef } from "react"
 import { Star } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
+import { CollapsibleTrigger } from "@/components/ui/collapsible"
+import { ITEM_CHOSEN } from "@/components/ui/item"
 import { LabelDot } from "@/components/ui/mark"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { Whole, WholeTip, useCut } from "@/components/ui/whole"
@@ -54,7 +56,9 @@ function GoLine({
   take: Take
   status: string | null
   ghost?: boolean
-  toggle?: { song: string; expanded: boolean; onToggle: () => void }
+  /** The open tab's number, a trigger of the strip's Collapsible:
+   *  `controls` is the row of tabs (TakeStrip). */
+  toggle?: { song: string; expanded: boolean; controls: string }
 }) {
   // ↑ and ↓ go through the song's takes while Settings › Keys has the
   // player's keys on; off, the button and its tip do not say them.
@@ -65,28 +69,22 @@ function GoLine({
     toggle && !ghost ? (
       <Tooltip>
         <TooltipTrigger asChild>
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon-tiny"
-            aria-label={`Every take of ${toggle.song}`}
-            aria-expanded={toggle.expanded}
-            aria-keyshortcuts={arrows ? "ArrowUp ArrowDown" : undefined}
-            onClick={(e) => {
-              toggle.onToggle()
+          <CollapsibleTrigger asChild aria-controls={toggle.controls}>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-tiny"
+              aria-label={`Every take of ${toggle.song}`}
+              aria-keyshortcuts={arrows ? "ArrowUp ArrowDown" : undefined}
               // Space would press it again rather than play.
-              e.currentTarget.blur()
-            }}
-            // Grey while the column is out, and the pointer over it does not
-            // change that.
-            className={cn(
-              NUMBER,
-              "w-auto",
-              toggle.expanded && "bg-selected hover:bg-selected dark:hover:bg-selected"
-            )}
-          >
-            {take.go != null && goMark(take.go)}
-          </Button>
+              onClick={(e) => e.currentTarget.blur()}
+              // Grey while the column is out, and the pointer over it does
+              // not change that.
+              className={cn(NUMBER, "w-auto", toggle.expanded && ITEM_CHOSEN)}
+            >
+              {take.go != null && goMark(take.go)}
+            </Button>
+          </CollapsibleTrigger>
         </TooltipTrigger>
         {/* The button's name and its keys, which it says as its own: for
             the eyes, not read out twice. */}
@@ -142,7 +140,7 @@ export function SongTab({
   sendTo = "cloud",
   onPick,
   onRow,
-  onToggle,
+  controls,
 }: {
   tabKey: string
   song: string | null
@@ -160,7 +158,9 @@ export function SongTab({
   sendTo?: SendTo
   onPick: () => void
   onRow: (go: TabGo) => void
-  onToggle: () => void
+  /** The row of tabs, which the strip's fold opens out (TakeStrip); none
+   *  where the tab stands in no strip, and its number then opens nothing. */
+  controls?: string
 }) {
   // A tab is as wide as the widest of its goes' lines, and a line's status
   // comes and goes on its own: "Waiting for the cloud", then nothing once
@@ -204,7 +204,7 @@ export function SongTab({
         take={shown.take}
         status={status}
         toggle={
-          open && song && goes.length > 1 ? { song, expanded, onToggle } : undefined
+          open && song && goes.length > 1 && controls ? { song, expanded, controls } : undefined
         }
       />
       {goes
@@ -355,7 +355,7 @@ function Column({
         const current = !ghost && isOpenGo(go)
         const row = cn(
           "flex items-center gap-2 rounded-md px-2.5 py-1 text-sm whitespace-nowrap",
-          current ? "bg-selected" : "hover:bg-accent"
+          current ? ITEM_CHOSEN : "hover:bg-accent"
         )
         const inner = (
           <>
@@ -393,13 +393,8 @@ function Column({
                   e.currentTarget.blur()
                 }}
                 // The unseen copy is a span in the same box: a Button's
-                // frame, height and room beside a ★ are put aside, and the
-                // open row keeps its fill under the pointer.
-                className={cn(
-                  row,
-                  "h-auto justify-start border-0 has-[>svg]:px-2.5",
-                  current && "hover:bg-selected dark:hover:bg-selected"
-                )}
+                // frame, height and room beside a ★ are put aside.
+                className={cn(row, "h-auto justify-start border-0 has-[>svg]:px-2.5")}
               >
                 {inner}
               </Button>

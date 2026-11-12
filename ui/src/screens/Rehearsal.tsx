@@ -3,6 +3,7 @@ import { Circle, Cloud, Pause, Pencil, Play, Square, X } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Kbd } from "@/components/ui/kbd"
+import { Label as FieldLabel } from "@/components/ui/label"
 import { MarkLine } from "@/components/ui/mark"
 import { FooterRow } from "@/components/FooterRow"
 import { MetronomeRow } from "@/components/metronome/MetronomeRow"
@@ -663,7 +664,7 @@ export function Rehearsal({
                 <MetronomeRow name={nextName} keys={!open} />
               </div>
               {open && (
-                <label className="col-start-1 row-start-1 flex min-w-0 cursor-pointer items-center gap-2 self-center text-sm text-muted-foreground">
+                <FieldLabel className="col-start-1 row-start-1 min-w-0 cursor-pointer self-center text-sm text-muted-foreground">
                   <Checkbox
                     checked={ticked}
                     onCheckedChange={(on) => void tick(open, on === true)}
@@ -675,7 +676,7 @@ export function Rehearsal({
                   <span className="truncate">
                     {sendTo === "service" ? "Send to the band service" : "Send to the cloud"}
                   </span>
-                </label>
+                </FieldLabel>
               )}
             </div>
           }

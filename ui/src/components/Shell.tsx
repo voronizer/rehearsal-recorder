@@ -4,6 +4,7 @@ import { ActivityButton } from "@/components/ActivityButton"
 import { ListeningVolume } from "@/components/ListeningVolume"
 import { Button } from "@/components/ui/button"
 import { Kbd } from "@/components/ui/kbd"
+import { Separator } from "@/components/ui/separator"
 import { useKeysOn } from "@/lib/keys"
 import { cn } from "@/lib/utils"
 
@@ -146,7 +147,7 @@ export function Shell({
             )}
           </div>
           {facts}
-          {facts && <span aria-hidden className="ml-2 h-8 w-px shrink-0 bg-border" />}
+          {facts && <Separator orientation="vertical" className="ml-2 data-[orientation=vertical]:h-8" />}
           <ActivityButton />
           {playback && <ListeningVolume />}
           {headerAction}

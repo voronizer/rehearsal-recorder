@@ -284,7 +284,7 @@ test("a file and a song with no takes go only after asking", async ({ page }) =>
   await expect(main.getByRole("link", { name: /words\.txt/ })).toBeVisible()
 
   await main.getByRole("button", { name: "Remove words.txt" }).click()
-  const ask = page.getByRole("dialog")
+  const ask = page.getByRole("alertdialog")
   await expect(ask).toContainText("Remove “words.txt”?")
   await ask.getByRole("button", { name: "Cancel" }).click()
   await expect(main.getByRole("link", { name: /words\.txt/ })).toBeVisible()

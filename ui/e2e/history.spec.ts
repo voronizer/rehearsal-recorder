@@ -185,7 +185,7 @@ test.describe("History", () => {
     await openApp(page)
     const list = await openHistory(page)
     await page.getByRole("button", { name: "Delete rehearsal Tuesday jam" }).click()
-    await expect(page.getByRole("dialog")).toHaveCount(0)
+    await expect(page.getByRole("alertdialog")).toHaveCount(0)
     expect((await calls(page, "delete_rehearsal")).map((c) => c.args)).toEqual([["/rec/old"]])
     await expect(list.getByRole("button", { name: /^Tuesday jam/ })).toHaveCount(0)
     const notice = notices(page).filter({ hasText: "“Tuesday jam” went to the Trash." })
@@ -492,7 +492,7 @@ test("the totals stay in the header at 960 px and 150 %, dropping whole, the siz
     else await expect(shown, "the size gone first").not.toContainText(TOTALS[2])
     expect(fronts, `at ${scale * 100} %`).toContain((await shown.textContent()) ?? "")
     // The line after them stays drawn, whatever they drop.
-    await expect(header.locator("span.w-px")).toBeVisible()
+    await expect(header.locator("[data-slot=separator]")).toBeVisible()
   }
 })
 
@@ -1150,7 +1150,7 @@ test("a take opened from the overview is deleted at once, and Undo puts it back"
   await expect(page.locator("[aria-label='Take timeline']")).toBeVisible()
   await expect(current(page)).toContainText("Pałyn #2")
   await page.getByRole("button", { name: "Delete take Pałyn 2" }).click()
-  await expect(page.getByRole("dialog")).toHaveCount(0)
+  await expect(page.getByRole("alertdialog")).toHaveCount(0)
   expect((await calls(page, "delete_take")).map((c) => c.args)).toEqual([["/rec/old", 2]])
   const strip = page.getByRole("group", { name: "Take strip" })
   await expect(strip.getByRole("button", { name: /Pałyn 2/ })).toHaveCount(0)

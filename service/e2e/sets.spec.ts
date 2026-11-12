@@ -203,7 +203,7 @@ test("delete a set and restore it", async ({ page }) => {
   const sets = main.getByRole("list", { name: "Sets" })
   await main.getByRole("button", { name: "What to do with Vik's birthday" }).click()
   await page.getByRole("menuitem", { name: "Delete set" }).click()
-  const ask = page.getByRole("dialog")
+  const ask = page.getByRole("alertdialog")
   await expect(ask.getByRole("heading")).toHaveText("Delete “Vik's birthday”?")
   await expect(ask).toContainText("It goes to the Trash, where anyone in the band can put it back for 30 days. Its songs stay as they are.")
   await ask.getByRole("button", { name: "Delete set" }).click()

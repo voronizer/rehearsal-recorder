@@ -1,4 +1,5 @@
 import { TriangleAlert, X } from "lucide-react"
+import { Alert } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import {
   dismissBridgeErrors,
@@ -22,6 +23,10 @@ import {
  * all away. A long list scrolls inside the bar, which stops at about 40% of
  * the window, so the screen under it stays usable.
  *
+ * It is the shared Alert, `destructive`, as a bar across the top of the
+ * window: the icon, the problems and Dismiss in a row, the problems' own
+ * words in the text colour.
+ *
  * `aria-atomic="false"`: an alert is read whole by default, and this one
  * would read every earlier problem again with each new one. Only what was
  * added is spoken. The count line is `aria-live="off"`, so a rising count
@@ -31,14 +36,14 @@ export function ErrorBar() {
   const errors = useBridgeErrors()
   if (errors.length === 0) return null
   return (
-    <div
-      role="alert"
+    <Alert
+      variant="destructive"
       aria-atomic="false"
       aria-label="Something went wrong"
-      className="fixed inset-x-0 top-0 z-40 flex items-start gap-3 border-b border-destructive/40 bg-destructive/15 px-6 py-3 text-sm backdrop-blur"
+      className="fixed inset-x-0 top-0 z-40 rounded-none border-x-0 border-t-0 px-6 has-[>svg]:grid-cols-[calc(var(--spacing)*4)_1fr_auto]"
     >
-      <TriangleAlert className="mt-0.5 size-4 shrink-0 text-destructive" />
-      <div className="min-w-0 flex-1">
+      <TriangleAlert />
+      <div className="min-w-0">
         <ul className="flex max-h-[40vh] flex-col gap-2 overflow-y-auto">
           {errors.map((error) => (
             <li key={keyOf(error)}>
@@ -46,7 +51,7 @@ export function ErrorBar() {
                 Something went wrong
                 <span className="font-normal text-muted-foreground"> in {error.method}</span>
               </p>
-              <p className="mt-0.5 font-mono text-xs break-words">
+              <p className="mt-0.5 font-mono text-xs break-words text-foreground">
                 {error.name}: {error.message}
               </p>
             </li>
@@ -59,10 +64,11 @@ export function ErrorBar() {
         size="icon-row"
         aria-label="Dismiss"
         onClick={dismissBridgeErrors}
+        className="col-start-3 row-start-1 text-foreground"
       >
         <X />
       </Button>
-    </div>
+    </Alert>
   )
 }
 

@@ -2,6 +2,7 @@ import { useEffect, useId, useState } from "react"
 import { FolderOpen, RotateCcw } from "lucide-react"
 import { Warning } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
+import { ButtonGroup } from "@/components/ui/button-group"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
@@ -121,7 +122,8 @@ export function FoldersSettings() {
     <>
       <SettingsGroup rise={1} title="Recordings folder" hint="Where everything is recorded to.">
         <div className="flex flex-col gap-3">
-          <div className="flex gap-2">
+          {/* The path and Browse in one frame, one control. */}
+          <ButtonGroup className="w-full">
             <Input
               id="recordings-dir"
               aria-label="Recordings folder"
@@ -149,7 +151,7 @@ export function FoldersSettings() {
                 <span aria-hidden>Browse</span>
               </TooltipContent>
             </Tooltip>
-          </div>
+          </ButtonGroup>
 
           {settings?.path_warning && <Warning>{settings.path_warning}</Warning>}
 
