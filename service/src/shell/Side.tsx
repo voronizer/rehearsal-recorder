@@ -7,6 +7,7 @@ import { Sidebar, SidebarMenu, SidebarMenuButton, SidebarMenuItem, useSidebar } 
 import { cn } from "@/lib/utils"
 import { queryClient, useFrame, useMe } from "../api"
 import { authClient } from "../auth"
+import { MenuHandle } from "./menu"
 import { Avatar, Logo } from "./parts"
 import { SECTION, SECTIONS } from "./sections"
 import { count } from "./words"
@@ -17,7 +18,7 @@ export function BandName({ small }: { small?: boolean }) {
   const name = frame?.name ?? ""
   return (
     <>
-      <Logo name={name} picture={frame?.picture ?? null} className={small ? "size-7 rounded-md text-sm" : undefined} />
+      <Logo name={name} picture={frame?.picture ?? null} className={small ? "size-7 rounded-sm text-sm" : undefined} />
       <span className={cn("min-w-0 truncate font-semibold", !name && "text-muted-foreground")}>{name || "Band name"}</span>
     </>
   )
@@ -58,22 +59,27 @@ const PHONE_WIDTH = { "--sidebar-width-mobile": "16rem" } as CSSProperties
 
 /**
  * The column down the left, shadcn's Sidebar: the band, how many members,
- * the sections (Marks with how many are open), your name. Folded, their
- * icons, each section's name in its tip. On a phone it is the sheet behind
- * ☰, and a section pressed, or any move to another page, closes it. A
- * take's page lights **Songs**, where the band finds its takes, also those
- * with no song (under **Not named**).
+ * the sections (Marks with how many are open), your name. With `handle`,
+ * the round handle on its edge folds it and opens it (shell/menu.tsx).
+ * Folded, the logo, the sections' icons, each section's name in its tip,
+ * and your letter; Marks has no count (Alex, 2026-11-12, 10:26:28). On a
+ * phone it is the sheet behind ☰, with no handle, and a section pressed,
+ * or any move to another page, closes it. A take's page lights **Songs**,
+ * where the band finds its takes, also those with no song (under
+ * **Not named**).
  */
-export function Side() {
+export function Side({ handle }: { handle?: boolean }) {
   const frame = useFrame().data
   const path = useLocation({ select: (l) => l.pathname })
-  const { setOpenMobile } = useSidebar()
+  const { isMobile, setOpenMobile } = useSidebar()
   useEffect(() => setOpenMobile(false), [path, setOpenMobile])
   const onTake = path.startsWith("/takes/")
   const lit = (to: string) => (to === "/" ? path === "/" : path === to || path.startsWith(`${to}/`) || (onTake && to === "/songs"))
   return (
     // Inside the frame's row, above the player's bar, not the window's height.
     <Sidebar side="left" collapsible="icon" className="absolute h-full group-data-[side=left]:border-r-0" style={PHONE_WIDTH}>
+      {/* First for Tab; outside the aside, whose scrolling would cut it at the edge. */}
+      {handle && !isMobile && <MenuHandle />}
       {/* A landmark of its own, as the column was before the Sidebar, whose parts are bare boxes. */}
       <aside className="flex h-full flex-col gap-5 overflow-y-auto p-3 group-data-[collapsible=icon]:overflow-hidden group-data-[collapsible=icon]:px-1.5">
         <div className="flex items-center gap-3 px-2 pt-1 group-data-[collapsible=icon]:px-0">

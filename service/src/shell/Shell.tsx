@@ -10,6 +10,7 @@ import { MarkPanel, TakeMarksPanel } from "../marks/MarkPanel"
 import { StatusesEditor } from "../songs/Statuses"
 import { PlayerProvider } from "../takes/player/one"
 import { Strip } from "./drawer"
+import { useMenuFold } from "./menu"
 import { PanelProvider, usePanel } from "./panel"
 import { InDrawer, InPanel } from "./parts"
 import { PhoneBar, PlayerBar } from "./PlayerBar"
@@ -221,12 +222,15 @@ const takeOf = (path: string) => /^\/takes\/([^/]+)$/.exec(path)?.[1]
 /**
  * The band's pages in their frame: the column of sections down the left,
  * the page, the panel beside it on the right (on a take's page folded into
- * its strip), the player along the bottom once the band has a take. Below
- * 1100 px the column of sections folds to its icons while the panel is open
- * (Alex, 2026-11-11, 22:23:17), so the page keeps its room. Below
- * `PUSH_FROM` the panel lies over the page instead, and the column stays
- * open. On a phone the column hides behind ☰, the panel lies over the page,
- * and a take's page has no strip.
+ * its strip), the player along the bottom once the band has a take. The
+ * band member folds the column to its icons by its handle, and the browser
+ * keeps the fold (Alex, 2026-11-12, 10:22:43; shell/menu.tsx). Below
+ * 1100 px it also folds by itself while the panel is open (Alex,
+ * 2026-11-11, 22:23:17), so the page keeps its room, and the handle goes
+ * until the panel closes. Below `PUSH_FROM` the panel lies over the page
+ * instead, and the column stays as the band member left it. On a phone the
+ * column hides behind ☰, with no handle, the panel lies over the page, and
+ * a take's page has no strip.
  */
 function Frame() {
   const size = useSize()
@@ -239,6 +243,7 @@ function Frame() {
   // address, so going to another page leaves it behind by itself.
   const path = useRouterState({ select: (s) => s.location.pathname })
   const take = takeOf(path)
+  const menu = useMenuFold(size, !!panel, pushes)
   if (size === "phone")
     return (
       <SidebarProvider mobileBelow={PHONE_BELOW} className="h-full min-h-0 flex-col">
@@ -260,8 +265,8 @@ function Frame() {
     )
   return (
     <div className="flex h-full flex-col">
-      <SidebarProvider mobileBelow={PHONE_BELOW} open={size === "wide" || !panel || !pushes} className="relative min-h-0 flex-1 overflow-clip" style={LEFT}>
-        <Side />
+      <SidebarProvider mobileBelow={PHONE_BELOW} open={menu.open} onOpenChange={menu.onOpenChange} className="relative min-h-0 flex-1 overflow-clip" style={LEFT}>
+        <Side handle={menu.handle} />
         <RightColumn take={take} over={!pushes}>
           {/* --screen-pad-y is the padding above and below, as in РЭХА's Shell: Master's row, stuck at the
               window's foot, reaches down past it so no lane shows under it (Timeline). */}

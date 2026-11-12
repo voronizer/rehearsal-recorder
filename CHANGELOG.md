@@ -5,6 +5,17 @@ versioning](https://semver.org/): until 1.0 the shape of things can still
 move, though recordings on disk are never left behind — old rehearsals keep
 opening.
 
+## Unreleased
+
+- **The band service's menu on the left folds to its icons.** Press the
+  round handle on the edge of the column of sections, by the band's name,
+  and press it again to open the menu. The browser remembers: next time
+  the menu opens folded in that browser. In a window from 820 to 1100 px
+  wide the menu still folds by itself while the panel on the right is
+  open, and the handle comes back when you close the panel. On a phone
+  nothing changes. The band's logo has less rounded corners, as the
+  buttons have.
+
 ## 0.27.0
 
 - **Every track shows mono or stereo.** After each track's name in РЭХА's
