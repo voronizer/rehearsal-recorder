@@ -263,54 +263,32 @@ const PRESSED = /(?<![\w$.-])aria-pressed(?![\w-])/g
 const CARD_CORNER = new RegExp(START + "rounded-xl" + END)
 const CARD_FILL = new RegExp(START + "bg-card" + END)
 
-/** Each string on the line, as its text, keyed by where it opens (-1 for
- *  one that began on an earlier line). The stretches of a template on either
- *  side of a `${ }` are one string. */
-function stringsOn(code, quoted) {
-  const strings = new Map()
-  for (let j = 0; j < code.length; j++) {
-    if (!quoted[j] || (j > 0 && quoted[j - 1])) continue
-    let end = j
-    while (end < code.length && quoted[end]) end++
-    const opening = stringStart(code, quoted, j)
-    strings.set(opening, `${strings.get(opening) ?? ""} ${code.slice(j, end)}`)
-  }
-  return strings
-}
-
-// The key in stringsOn of the template whose text line `n` ends in, or null
-// when the line ends outside one.
-function openAtEnd(ctx, n) {
-  if (!ctx.inTemplate[n]) return null
-  const code = ctx.lines[n]
-  if (code === "") return -1
-  return ctx.quoted[n][code.length - 1] ? stringStart(code, ctx.quoted[n], code.length - 1) : null
-}
-
-/** Each string that opens on line `ctx.i`, as its whole text: a template
- *  that runs on into later lines takes their text too, so that it is found
- *  on the line it starts on. One that began on an earlier line is left to
- *  that line. */
+/** Each string that opens on line `ctx.i`, as its whole text: its own
+ *  characters on every line it runs over, from the scanner's `owner` (a
+ *  template's text on either side of a `${ }`, not the code or the strings
+ *  inside it). So a template over several lines is found on the line it
+ *  starts on, and one that began on an earlier line is left to that line. */
 function stringsFrom(ctx) {
-  const strings = stringsOn(ctx.lines[ctx.i], ctx.quoted[ctx.i])
-  const open = openAtEnd(ctx, ctx.i)
-  if (open !== null && open >= 0 && strings.has(open)) {
-    let text = strings.get(open)
-    for (let n = ctx.i + 1; n < ctx.lines.length; n++) {
-      text += ` ${stringsOn(ctx.lines[n], ctx.quoted[n]).get(-1) ?? ""}`
-      if (openAtEnd(ctx, n) !== -1) break
+  const found = []
+  for (const id of new Set(ctx.owner[ctx.i])) {
+    const string = ctx.strings.get(id)
+    if (!string || string.line !== ctx.i) continue
+    let text = ""
+    for (let n = string.line; n <= string.end; n++) {
+      const line = ctx.lines[n]
+      for (let j = 0; j < line.length; j++) text += ctx.owner[n][j] === id ? line[j] : " "
+      text += " "
     }
-    strings.set(open, text)
+    found.push(text)
   }
-  strings.delete(-1)
-  return [...strings.values()]
+  return found
 }
 
 /** The rules, in the order findings are listed. `find(code, quoted, ctx)` gets
  *  one line of code (comments blanked out), per character whether it sits
- *  inside a string, and `ctx` (`lines`, `quoted` and `inTemplate` of every
- *  line, and `i`, this line's place) for what needs the lines around; it
- *  returns what broke the rule. `outsideUi` rules do not
+ *  inside a string, and `ctx` for what needs the lines around: `lines`,
+ *  `quoted` and `owner` of every line, `strings`, and `i`, this line's place
+ *  (readCode). It returns what broke the rule. `outsideUi` rules do not
  *  apply to the files of components/ui. `story` needs the list of files, so it
  *  is `missingStories`, not `find`. */
 export const RULES = [
@@ -485,9 +463,11 @@ function regexEnd(text, i) {
 
 /** The source as the rules should see it: one string per line, with the
  *  comments and regular expressions blanked out (a note that says "no
- *  uppercase" is not a use of it), for every character whether it sits
- *  inside a string, and for every line whether it ends inside the text of a
- *  template literal, which goes on into the next line (`inTemplate`).
+ *  uppercase" is not a use of it), and for every character whether it sits
+ *  inside a string (`quoted`) and which one (`owner`, an id, 0 outside any).
+ *  `strings` has, for each id, the lines it opens and closes on. A
+ *  template's `${` and `}` are its own; the code and the strings inside them
+ *  are not.
  *
  *  A small scanner rather than a regex, because a `//` in "https://..." is not
  *  a comment, a `/*` in "src/**\/*.tsx" is not one either, and a regular
@@ -499,17 +479,22 @@ function regexEnd(text, i) {
 function readCode(text) {
   const lines = [""]
   const quoted = [[]]
-  const inTemplate = []
-  const put = (ch, inString = false) => {
+  const owner = [[]]
+  const strings = new Map()
+  const put = (ch, id = 0) => {
     if (ch === "\r") return
     if (ch === "\n") {
-      inTemplate.push(stack.at(-1).mode === "`")
       lines.push("")
       quoted.push([])
+      owner.push([])
       return
     }
     lines[lines.length - 1] += ch
-    quoted[quoted.length - 1].push(inString)
+    quoted[quoted.length - 1].push(id !== 0)
+    owner[owner.length - 1].push(id)
+  }
+  const close = () => {
+    strings.get(stack.pop().id).end = lines.length - 1
   }
 
   // What is open: code (the file itself, or inside `${ }`), a block comment,
@@ -531,23 +516,23 @@ function readCode(text) {
       }
     } else if (top.mode === '"' || top.mode === "'" || top.mode === "`") {
       if (c === "\\" && next !== undefined) {
-        put(c, true)
+        put(c, top.id)
         // A backslash before the end of the line is a continuation.
-        put(next, true)
+        put(next, top.id)
         i++
       } else if (c === top.mode) {
-        put(c, true)
-        stack.pop()
+        put(c, top.id)
+        close()
       } else if (c === "\n" && top.mode !== "`") {
+        close()
         put(c)
-        stack.pop()
       } else if (c === "$" && next === "{" && top.mode === "`") {
-        put(c, true)
-        put(next, true)
+        put(c, top.id)
+        put(next, top.id)
         i++
         stack.push({ mode: "code", braces: 0, interpolation: true })
       } else {
-        put(c, true)
+        put(c, top.id)
       }
     } else if (c === "/" && next === "*") {
       put(" ")
@@ -573,11 +558,13 @@ function readCode(text) {
     } else if (c === "'" && /[\p{L}\p{N}]/u.test(text[i - 1] ?? "")) {
       put(c)
     } else if (c === '"' || c === "'" || c === "`") {
-      put(c, true)
-      stack.push({ mode: c })
+      const id = strings.size + 1
+      strings.set(id, { line: lines.length - 1, end: null })
+      stack.push({ mode: c, id })
+      put(c, id)
     } else if (top.interpolation && c === "}" && top.braces === 0) {
-      put(c, true)
       stack.pop()
+      put(c, stack.at(-1).id)
     } else {
       if (top.interpolation) {
         if (c === "{") top.braces++
@@ -586,8 +573,9 @@ function readCode(text) {
       put(c)
     }
   }
-  inTemplate.push(stack.at(-1).mode === "`")
-  return { lines, quoted, inTemplate }
+  // A string still open at the end of the file ends there.
+  for (const string of strings.values()) string.end ??= lines.length - 1
+  return { lines, quoted, owner, strings }
 }
 
 // `design-ok(rule): reason`. The reason runs to the next marker or the line's
@@ -614,7 +602,7 @@ function waivers(rawLines) {
 export function checkText(path, text) {
   path = path.replaceAll("\\", "/")
   if (!isChecked(path)) return []
-  const { lines, quoted, inTemplate } = readCode(text)
+  const { lines, quoted, owner, strings } = readCode(text)
   const waived = waivers(text.split(/\r?\n/))
   const shared = isShared(path)
   const found = []
@@ -623,7 +611,7 @@ export function checkText(path, text) {
     for (const rule of RULES) {
       if (!rule.find || (rule.outsideUi && shared)) continue
       if (waived[i].has(rule.name) || waived[i - 1]?.has(rule.name)) continue
-      for (const hit of rule.find(code, quoted[i], { lines, quoted, inTemplate, i })) {
+      for (const hit of rule.find(code, quoted[i], { lines, quoted, owner, strings, i })) {
         found.push({ rule: rule.name, line: i + 1, text: hit })
       }
     }

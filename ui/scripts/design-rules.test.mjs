@@ -549,6 +549,16 @@ describe("card", () => {
     ])
     expect(broken(lines("const a = `rounded-xl`", "const b = `bg-card`"))).toEqual([])
     expect(broken(lines("const a = `x", "  rounded-xl` + `bg-card", "  y`"))).toEqual([])
+    expect(broken(lines("const c = cn(`rounded-xl", "`, `bg-card`)"))).toEqual([])
+  })
+
+  it("reads a template's text round a ${ } that ends in a string of its own", () => {
+    expect(checkText(SCREEN, lines("const c = `rounded-xl", "  ${x ? `a` : 'b'}", "  bg-card`"))).toEqual([
+      { rule: "card", line: 1, text: "rounded-xl bg-card" },
+    ])
+    expect(broken("const c = `rounded-xl ${x ? 'a' : 'b'} bg-card`")).toEqual(["card"])
+    expect(broken(lines("const c = `rounded-xl", "  ${x ? 'a' : 'b'} bg-card`"))).toEqual(["card"])
+    expect(broken("const c = `rounded-xl ${x ? 'a' : 'bg-card'}`")).toEqual([])
   })
 
   it("keeps two strings apart: one class string is the rule", () => {
