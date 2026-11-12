@@ -279,8 +279,9 @@ export function App() {
       <div className="flex h-full flex-col items-center justify-center gap-5 text-muted-foreground">
         <img src="./logo.svg" alt="" className="size-16" />
         <div className="flex items-center gap-3">
-          {/* The words at once, the spinner after a second (B5). */}
-          <Spinner className="size-5" />
+          {/* The words at once, the spinner after a second (B5). The words
+              say it, so the spinner is not read out. */}
+          <Spinner aria-hidden role={undefined} aria-label={undefined} className="size-5" />
           <span className="text-sm">Connecting to the audio engine…</span>
         </div>
       </div>

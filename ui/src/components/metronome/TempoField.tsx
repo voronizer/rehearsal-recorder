@@ -73,7 +73,7 @@ export function TempoField({
 
   return (
     <div className="flex shrink-0 items-center">
-      <ButtonGroup>
+      <ButtonGroup aria-label="Tempo">
         {step("Slower", -1, <Minus />, tempo === null || tempo <= min)}
         <Input
           aria-label="Tempo"

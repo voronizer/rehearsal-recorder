@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from "react"
+import { useId, useState, type ReactNode } from "react"
 import { Minus, Plus } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { ButtonGroup } from "@/components/ui/button-group"
@@ -29,6 +29,7 @@ export function BarOneField({
   onChange: (seconds: number) => void
 }) {
   const [draft, setDraft] = useState<string | null>(null)
+  const caption = useId()
 
   const put = (seconds: number) => {
     const held = stepBarOne(seconds, 0, length)
@@ -64,11 +65,12 @@ export function BarOneField({
 
   return (
     <div className="flex shrink-0 items-center">
-      <span aria-hidden className="mr-1.5 text-sm text-muted-foreground">
+      <span id={caption} aria-hidden className="mr-1.5 text-sm text-muted-foreground">
         Bar 1 at
       </span>
-      {/* − n + in one frame, as the tempo has them. */}
-      <ButtonGroup>
+      {/* − n + in one frame, as the tempo has them, named by the words
+          before it. */}
+      <ButtonGroup aria-labelledby={caption}>
         {step("Bar 1 earlier", "A hundredth of a second earlier", -0.01, <Minus />)}
         <Input
           aria-label="Bar 1 at"

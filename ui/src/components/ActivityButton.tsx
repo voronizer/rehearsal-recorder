@@ -171,8 +171,17 @@ function Running({ entry, recording }: { entry: ActivityEntry; recording: boolea
   return (
     <div className="flex flex-col gap-1.5">
       <div className="flex items-center gap-2">
-        {/* After a second, as every spinner (B5). */}
-        {!waiting && <Spinner className="size-3.5 shrink-0 text-muted-foreground" />}
+        {/* After a second, as every spinner (B5). Not read out: the job's
+            title, step and figure beside it say it, and a live region per
+            job would talk over them. */}
+        {!waiting && (
+          <Spinner
+            aria-hidden
+            role={undefined}
+            aria-label={undefined}
+            className="size-3.5 shrink-0 text-muted-foreground"
+          />
+        )}
         <span className="min-w-0 flex-1 truncate">{entry.title}</span>
         {!waiting && <span className="tnum text-xs text-muted-foreground">{pct}%</span>}
       </div>

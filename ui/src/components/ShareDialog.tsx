@@ -143,7 +143,7 @@ export function ShareDialog({
             icon and nothing else, with the button's room kept, so a folder
             that is set never shows as missing. In the dark theme the path
             takes the outline button's fill and edge, as a field does. */}
-        <ButtonGroup className="w-full">
+        <ButtonGroup aria-label="Cloud folder" className="w-full">
           <ButtonGroupText className="min-w-0 flex-1 rounded-lg bg-background/50 px-3 py-2 text-xs font-normal shadow-none dark:border-input dark:bg-input/30">
             {none ? (
               <TriangleAlert className="size-3.5 shrink-0 text-warn" />

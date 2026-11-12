@@ -330,9 +330,11 @@ export function TakeNameField({
       <Popover open={songs === "none" && oldLine !== null} modal={false}>
         {/* The shared field's frame, at this field's own size and colours:
             the big one a grid, as tall as the copy in it; the text clear of
-            ✕ at the right. */}
+            ✕ at the right. Neither the frame nor the ✕'s place is a group
+            of its own (role="none"): the named group above holds both. */}
         <PopoverAnchor asChild>
           <InputGroup
+            role="none"
             className={cn(
               "h-auto w-full max-w-md rounded-lg shadow-none has-[>[data-align=inline-end]]:[&>input]:pr-11",
               size === "big" && "grid items-stretch",
@@ -406,6 +408,7 @@ export function TakeNameField({
               />
             )}
             <InputGroupAddon
+              role="none"
               align="inline-end"
               className={cn(
                 "absolute right-1.5 p-0 has-[>button]:mr-0",
