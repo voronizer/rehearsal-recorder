@@ -82,6 +82,12 @@ shadcn».
   or **Statuses** the error line shows only when there is an error, so the
   rows keep their height; the rows below move down on an error. (Not picked:
   А, a line kept free under every row, 24 px more per row.)
+- 2026-11-12 08:08:18 «Б. Короткие тексты»: the sign-in errors fit one
+  line, “Wrong code. Check it, or send a new one.”, “Too many tries. Wait a
+  minute.” and “Too many codes. Wait an hour.”, and the room under the
+  address and under the code is one line, 20 px. (Not picked: А, the old
+  texts in a room two lines high; В, no room, **Send code** moving down on
+  an error.)
 
 ## What the band sees
 
@@ -397,8 +403,8 @@ same diamond does in `Timeline.tsx`.
 22. The service's mark lines (C2) are a `service` kind of MarkLine that keeps
     their words and look: the note alone, or the label's name, with the time
     to hours.
-23. Sign-in's two errors that run to two lines keep a room two lines high,
-    so nothing below them moves.
+23. Sign-in's errors keep a room under their field, so nothing below them
+    moves (its height and the texts: Alex's pick of 08:08:18).
 24. Trouble, the page that could not be read, is the red Alert, as a failure.
 25. A set's length row no longer grows 4 px when it opens.
 26. The song page's status, key and menu leave the title's heading; “No key”
