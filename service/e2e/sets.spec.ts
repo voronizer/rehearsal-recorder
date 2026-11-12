@@ -262,25 +262,35 @@ test("the set's name opens as a field and a name turned down is said in the set'
   await expect(said).toHaveCount(0)
 })
 
-test("with a panel beside the page, the list of sets stands above the set, and beside it again once the panel closes", async ({ page }) => {
+test("with a panel beside the page, the list of sets stands above the set, which stays where it was, and beside it again once the panel closes", async ({ page }) => {
   for (const [width, height] of [
     [960, 680],
     [1180, 820],
   ]) {
     await page.setViewportSize({ width, height })
-    // As Mark in the player's bar leaves it: a new mark's panel over the set.
-    await page.goto(`/sets/${band().sets["Club gig"]}?panel=mark:${band().takes["Viasna 11"]}@0`)
+    // A take in the player's bar, then Sets: Mark there opens a new mark's panel over the set.
+    await page.goto("/")
+    await page.getByRole("region", { name: "The last rehearsal" }).locator('[data-take="Viasna 11"]').getByRole("button", { name: "Play “Viasna 11”" }).click()
+    const bar = page.getByLabel("Player", { exact: true })
+    await bar.getByRole("button", { name: "Pause “Viasna 11”" }).click()
+    await page.getByRole("navigation", { name: "Sections" }).getByRole("link", { name: "Sets" }).click()
     const main = page.getByRole("main")
-    const panel = page.getByLabel("Panel", { exact: true })
-    await expect(panel.getByRole("heading", { level: 2 }).first()).toHaveText("New mark at 0:00")
     const list = main.getByRole("list", { name: "Sets" })
     const set = main.getByRole("heading", { level: 2 })
+    await expect(set).toBeVisible()
+    const was = (await set.boundingBox())!.y
+    await bar.getByRole("button", { name: "Mark", exact: true }).click()
+    const panel = page.getByLabel("Panel", { exact: true })
+    await expect(panel.getByRole("heading", { level: 2 }).first()).toHaveText(/^New mark at 0:0\d$/)
     const [l, s] = [(await list.boundingBox())!, (await set.boundingBox())!]
     expect(l.y + l.height, `at ${width}`).toBeLessThanOrEqual(s.y)
+    // The page scrolled by the list's height: the set is where it was on the screen.
+    expect(Math.abs(s.y - was), `at ${width}`).toBeLessThanOrEqual(1)
     await panel.getByRole("button", { name: "Close", exact: true }).click()
     await expect(panel).toHaveCount(0)
     const [after, beside] = [(await list.boundingBox())!, (await set.boundingBox())!]
     expect(after.x + after.width, `at ${width}`).toBeLessThanOrEqual(beside.x)
+    expect(Math.abs(beside.y - was), `at ${width}`).toBeLessThanOrEqual(1)
   }
 })
 
