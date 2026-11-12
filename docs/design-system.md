@@ -275,16 +275,18 @@ the shared one when it is redone.
   corners, a 16 px title and the veil behind it; `size` is `default`,
   `narrow` (a list of keys) or `tall` (hung near the top and growing down,
   as New set does). Its buttons are `DialogButtons`, in the system's order
-  (P3). The way out says "Cancel" in every dialog that has an action (one
-  whose options act at once has only "Close"), and the action is a verb:
-  "Finish", "Remove", "Delete". Enter presses the action, except in a
-  question nothing can undo, where Enter presses Cancel and a stray key
-  changes nothing; that question is `ConfirmDialog`, in
-  `components/ConfirmDialog.tsx`, in РЭХА and in the band service. It is
-  the shared `AlertDialog` in this frame: Cancel has the keyboard when it
-  opens, Esc closes it, and a click outside leaves it open, so a stray
-  click does not lose the question. Its role is `alertdialog`, and with it
-  open Space, Esc and ⌘Z do not reach the screen behind. Two other
+  (P3). The way out says "Cancel" in every dialog that has an action,
+  except the two plain questions below, whose way out says what goes on:
+  "Keep sending", "Keep writing". A dialog whose options act at once has
+  only "Close". The action is a verb: "Finish", "Remove", "Delete". Enter
+  presses the action, except in a question nothing can undo, where Enter
+  presses Cancel and a stray key changes nothing; that question is
+  `ConfirmDialog`, in `components/ConfirmDialog.tsx`, in РЭХА and in the
+  band service. It is the shared `AlertDialog` in this frame: Cancel has
+  the keyboard when it opens, Esc closes it, and a click outside leaves it
+  open, so a stray click does not lose the question. Its role is
+  `alertdialog`, and with it open Space, Esc and ⌘Z do not reach the
+  screen behind. Two other
   questions are plain dialogs, where a click outside answers as their way
   out does: "Close РЭХА?" (`components/ClosingDialog.tsx`) and the band
   service's "Discard what you wrote?" (`shell/unsent.tsx`). A red button
