@@ -158,39 +158,39 @@ export function EditRow({
     <div className="flex flex-col gap-2 py-1.5">
       {/* The name's line for what went wrong under the row (S11), there when empty. */}
       <Field className="gap-1">
-      <div className="flex items-center gap-1.5">
-        {/* As in РЭХА's Settings › Marks: drag by the grip, or Space on it and the arrows. */}
-        <Button
-          ref={handleRef}
-          variant="ghost"
-          size="icon-tiny"
-          aria-label={`Move ${name}`}
-          className="h-8 w-5 cursor-grab touch-none text-muted-foreground hover:bg-transparent hover:text-foreground dark:hover:bg-transparent"
-        >
-          <GripVertical className="size-4" />
-        </Button>
-        {swatch && swatches && onColour && <ColourPicker name={name} swatch={swatch} swatches={swatches} onColour={onColour} />}
-        <Input
-          autoFocus={focus}
-          value={text}
-          maxLength={40}
-          aria-label="Name"
-          onChange={(e) => setText(e.target.value)}
-          onBlur={save}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") e.currentTarget.blur()
-            if (e.key === "Escape") setText(name)
-          }}
-          className="h-8 flex-1"
-        />
-        <span className="shrink-0 text-xs text-muted-foreground">{count}</span>
-        {canDelete && (
-          <Button variant="ghost" size="icon-row" aria-label={`Delete “${name}”`} onClick={() => (used ? setAsk(!ask) : onDelete())}>
-            <Trash2 className="text-muted-foreground" />
+        <div className="flex items-center gap-1.5">
+          {/* As in РЭХА's Settings › Marks: drag by the grip, or Space on it and the arrows. */}
+          <Button
+            ref={handleRef}
+            variant="ghost"
+            size="icon-tiny"
+            aria-label={`Move ${name}`}
+            className="h-8 w-5 cursor-grab touch-none text-muted-foreground hover:bg-transparent hover:text-foreground dark:hover:bg-transparent"
+          >
+            <GripVertical className="size-4" />
           </Button>
-        )}
-      </div>
-      <ErrorLine error={error} className="pl-6" />
+          {swatch && swatches && onColour && <ColourPicker name={name} swatch={swatch} swatches={swatches} onColour={onColour} />}
+          <Input
+            autoFocus={focus}
+            value={text}
+            maxLength={40}
+            aria-label="Name"
+            onChange={(e) => setText(e.target.value)}
+            onBlur={save}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") e.currentTarget.blur()
+              if (e.key === "Escape") setText(name)
+            }}
+            className="h-8 flex-1"
+          />
+          <span className="shrink-0 text-xs text-muted-foreground">{count}</span>
+          {canDelete && (
+            <Button variant="ghost" size="icon-row" aria-label={`Delete “${name}”`} onClick={() => (used ? setAsk(!ask) : onDelete())}>
+              <Trash2 className="text-muted-foreground" />
+            </Button>
+          )}
+        </div>
+        <ErrorLine error={error} className="pl-6" />
       </Field>
       {ask && (
         <div className="flex flex-col gap-2 pl-6">

@@ -90,7 +90,7 @@ export function TakeName({
  * A take's name that opens its page. On that page already, it opens the
  * take's marks in the drawer: the page itself is there. `plain`: in a row
  * that lights up and opens as a whole, with no dotted line. A name cut
- * short shows whole in a tip (B6).
+ * short, or `short` ("#12"), shows whole in a tip (B6).
  */
 export function TakeLink({
   take,
@@ -106,10 +106,12 @@ export function TakeLink({
   const { open } = usePanel()
   const here = useRouterState({ select: (s) => s.location.pathname === `/takes/${take.uid}` })
   const [ref, cut] = useCut<HTMLSpanElement>()
+  // "#12" alone says the song in the tip, as a name cut short does.
+  const shortened = !!short && songAndNumber(take) !== null
   const look = cn("inline-flex min-w-0 max-w-full items-center gap-1.5 text-left", !plain && OPENS, className)
   const name = <TakeName take={take} short={short} titleRef={ref} />
   return (
-    <WholeTip cut={cut} text={takeText(take)}>
+    <WholeTip cut={cut || shortened} text={takeText(take)}>
       {here ? (
         <Button
           variant={plain ? "ghost" : "link"}
@@ -187,8 +189,6 @@ export function StarButton({ take, who, disabled }: { take: TakeLike; who?: bool
       size="icon-row"
       pressed={mine}
       onPressedChange={(on) => star.mutate({ uid: take.uid, on })}
-      // Its own on or off, where the tip's trigger would put its own state.
-      data-state={mine ? "on" : "off"}
       aria-label={mine ? `Take back your star from ${quoted(take.name)}` : `Star ${quoted(take.name)}`}
       disabled={!me || disabled || star.isPending}
       className="dark:not-data-[state=on]:hover:bg-accent/50 data-[state=on]:bg-transparent data-[state=on]:hover:bg-accent dark:data-[state=on]:hover:bg-accent/50"
@@ -199,8 +199,12 @@ export function StarButton({ take, who, disabled }: { take: TakeLike; who?: bool
   return (
     <span className="flex items-center gap-0.5">
       {names ? (
+        // The tip is on a box round the star, so it shows while the star
+        // cannot be pressed too (in Trash, signed out, while it is saved).
         <Tooltip>
-          <TooltipTrigger asChild>{button}</TooltipTrigger>
+          <TooltipTrigger asChild>
+            <span className="flex">{button}</span>
+          </TooltipTrigger>
           <TooltipContent>Starred by {names}</TooltipContent>
         </Tooltip>
       ) : (

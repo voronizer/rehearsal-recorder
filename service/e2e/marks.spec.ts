@@ -44,6 +44,27 @@ test("the marks switch counts to do, done and all", async ({ page }) => {
   await expect(page.getByText("No mark is done yet.")).toBeVisible()
 })
 
+test("on a phone, long words on Marks are cut with … and shown whole in a tip", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 })
+  const long = "The bridge drags here, and the second verse comes in late every time we play it at the club"
+  // The list as the service sends it, with one mark's words made long.
+  await page.route(/\/api\/marks\?/, async (route) => {
+    const res = await route.fetch()
+    const body = (await res.json()) as Marks
+    await route.fulfill({ response: res, json: { ...body, marks: body.marks.map((k) => (k.note === "The bridge drags here" ? { ...k, note: long } : k)) } })
+  })
+  await page.goto("/marks")
+  const words = page.getByRole("main").getByRole("button", { name: long, exact: true })
+  await expect(words).toBeVisible()
+  expect(await words.evaluate((el) => el.scrollWidth > el.clientWidth && getComputedStyle(el).textOverflow === "ellipsis")).toBe(true)
+  // Cut inside its line, before the line's end.
+  const line = page.locator("[data-mark]").filter({ has: page.getByRole("button", { name: long, exact: true }) })
+  const [w, l] = [(await words.boundingBox())!, (await line.boundingBox())!]
+  expect(w.x + w.width).toBeLessThanOrEqual(l.x + l.width)
+  await words.hover()
+  await expect(page.getByRole("tooltip")).toHaveText(long)
+})
+
 test("a mark's take opens the take's page, from Marks and from the mark's panel", async ({ page }) => {
   await page.goto("/marks")
   const fill = page.locator("[data-mark]").filter({ hasText: "Fill too long?" })

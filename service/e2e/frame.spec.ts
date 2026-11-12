@@ -71,6 +71,27 @@ test.describe("on a phone", () => {
     await expect(page.getByLabel("Panel")).toContainText(/New mark at \d:\d\d/)
   })
 
+  test("a long song title in the bar is cut, and Mark stays in the bar", async ({ page }) => {
+    const long = "Dancing barefoot on the roof of the old brewery till the morning"
+    // The take as the service sends it, with its song's title made long.
+    await page.route(/\/api\/takes\/[^/?]+$/, async (route) => {
+      if (route.request().method() !== "GET") return route.continue()
+      const res = await route.fetch()
+      const take = (await res.json()) as { name: string; song: { id: number; title: string } | null }
+      await route.fulfill({ response: res, json: { ...take, name: take.name.replace(/^Viasna/, long), song: take.song && { ...take.song, title: long } } })
+    })
+    await page.goto(`/takes/${band().takes["Viasna 11"]}`)
+    const bar = page.getByLabel("Player", { exact: true })
+    const name = bar.getByRole("button", { name: `${long} 11`, exact: true })
+    await expect(name).toBeVisible()
+    const time = bar.getByTestId("bar-time")
+    const mark = bar.getByRole("button", { name: "Mark", exact: true })
+    const [n, t, m, b] = await Promise.all([name, time, mark, bar].map(async (l) => (await l.boundingBox())!))
+    expect(n.x + n.width).toBeLessThanOrEqual(t.x)
+    expect(t.x + t.width).toBeLessThanOrEqual(m.x)
+    expect(m.x + m.width).toBeLessThanOrEqual(b.x + b.width)
+  })
+
   test("New song from a take's line opens its page with the name field", async ({ page }) => {
     await page.goto("/songs")
     await page.getByRole("region", { name: "Not named" }).getByRole("button", { name: "What to do with Take 3", exact: true }).click()

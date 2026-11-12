@@ -11,13 +11,18 @@ import { setLine } from "./length"
   print window with it.
 */
 
-// The sheet's own look, for paper and not the screen: each line says why.
-const SHEET = "print-sheet bg-white text-black" // design-ok(raw-colour): a sheet made for paper, black on white whatever the theme, sized for A4
-const HEAD = "mb-6 flex items-baseline justify-between gap-6 border-b border-black/30 pb-3 text-[15px]" // design-ok(raw-colour): a sheet made for paper, black on white whatever the theme, sized for A4 design-ok(px-text): a sheet made for paper, black on white whatever the theme, sized for A4
-const SONG = "flex break-inside-avoid items-baseline gap-5 border-b border-black/15 py-3" // design-ok(raw-colour): a sheet made for paper, black on white whatever the theme, sized for A4
-const NUMBER = "w-10 shrink-0 text-right text-[28px] text-black/50" // design-ok(raw-colour): a sheet made for paper, black on white whatever the theme, sized for A4 design-ok(px-text): a sheet made for paper, black on white whatever the theme, sized for A4
-const TITLE = "min-w-0 flex-1 text-[40px] leading-tight font-bold" // design-ok(px-text): a sheet made for paper, black on white whatever the theme, sized for A4
-const FACTS = "shrink-0 text-[24px]" // design-ok(px-text): a sheet made for paper, black on white whatever the theme, sized for A4
+// The sheet's own look, for paper and not the screen: its ink and its
+// letters' sizes, each on one line with why.
+// design-ok(raw-colour): a sheet made for paper, black on white whatever the theme, sized for A4
+const INK = { sheet: "bg-white text-black", head: "border-black/30", song: "border-black/15", number: "text-black/50" }
+// design-ok(px-text): the same sheet's letters, in the sizes a page of A4 is read in from the stage
+const SIZE = { head: "text-[15px]", number: "text-[28px]", title: "text-[40px]", facts: "text-[24px]" }
+const SHEET = `print-sheet ${INK.sheet}`
+const HEAD = `mb-6 flex items-baseline justify-between gap-6 border-b pb-3 ${INK.head} ${SIZE.head}`
+const SONG = `flex break-inside-avoid items-baseline gap-5 border-b py-3 ${INK.song}`
+const NUMBER = `w-10 shrink-0 text-right ${SIZE.number} ${INK.number}`
+const TITLE = `min-w-0 flex-1 leading-tight font-bold ${SIZE.title}`
+const FACTS = `shrink-0 ${SIZE.facts}`
 
 /** “E minor” as a set list writes it, “Em”; “F♯ major”, “F♯”. */
 export const shortKey = (key: string | null) => (key ? key.replace(/ major$/, "").replace(/ minor$/, "m") : "")

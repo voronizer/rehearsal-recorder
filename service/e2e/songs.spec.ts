@@ -272,10 +272,8 @@ test("the star at rehearsal shows apart", async ({ page }) => {
   await expect(main.getByText("★ at rehearsal")).toBeVisible()
   const star = main.getByRole("button", { name: "Star “Kupalle 2”" })
   await expect(star).toHaveAttribute("aria-pressed", "false")
-  // No member's star, so the star has no tip of who.
-  await star.hover()
-  await page.waitForTimeout(800)
-  await expect(page.getByRole("tooltip")).toHaveCount(0)
+  // No member's star, so the star has no tip of who: nothing round it opens one.
+  await expect(star.locator("xpath=ancestor-or-self::*[@data-slot='tooltip-trigger']")).toHaveCount(0)
 
   // It does not count for the best take: with no member's star, the newest is it.
   await page.goto(`/songs/${band().songs["Kupalle"]}`)
@@ -361,4 +359,10 @@ test("a file over 50 MB is refused before it is sent", async ({ page }, info) =>
   await main.getByLabel("A file for the song").setInputFiles(big)
   await expect(main.getByRole("alert")).toHaveText("A file is up to 50 MB")
   expect(sent).toEqual([])
+})
+
+test("a best take's number on Songs says its whole name in a tip", async ({ page }) => {
+  await page.goto("/songs")
+  await page.locator('[data-song="Viasna"]').getByRole("link", { name: "Viasna 11", exact: true }).hover()
+  await expect(page.getByRole("tooltip")).toHaveText(/^Viasna\s#11$/)
 })

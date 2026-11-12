@@ -254,11 +254,13 @@ export function Rows({
 /**
  * A Button with no look of its own, for words that are pressed where they
  * stand (a fold's heading, a mark's words, a set's length): no frame, fill
- * or padding, only the shared focus ring. A word that opens something by
- * itself adds `OPENS` (components/ui/button.tsx), only where the row round
- * it does not open (2026-11-10).
+ * or padding, only the shared focus ring. It gives way in a row as the
+ * words it took the place of did (Button keeps its width by itself), so a
+ * long name is cut, not pushed past what is beside it. A word that opens
+ * something by itself adds `OPENS` (components/ui/button.tsx), only where
+ * the row round it does not open (2026-11-10).
  */
-export const BARE = "h-auto justify-start gap-0 rounded-sm border-0 p-0 text-left font-normal hover:bg-transparent has-[>svg]:px-0 dark:hover:bg-transparent"
+export const BARE = "h-auto min-w-0 shrink justify-start gap-0 rounded-sm border-0 p-0 text-left font-normal hover:bg-transparent has-[>svg]:px-0 dark:hover:bg-transparent"
 
 /**
  * **Statuses** and **Labels** at the top of their page: the shared Toggle,
