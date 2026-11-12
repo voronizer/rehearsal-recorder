@@ -399,6 +399,13 @@ same diamond does in `Timeline.tsx`.
 25. A set's length row no longer grows 4 px when it opens.
 26. The song page's status, key and menu leave the title's heading; “No key”
     loses the title's weight and matches the status beside it.
+27. A row of **Labels** or **Statuses** shows its error line only when there
+    is an error, so the rows keep their height (the card's recommended
+    option, built while Alex's answer waits).
+28. A set's rename error takes the place of the line under the set's name,
+    as a song's does, so the page does not move.
+29. While a panel stands beside the page, **Sets** puts its list above the
+    set, so the set's songs keep room for their names.
 
 ## Not in this
 
