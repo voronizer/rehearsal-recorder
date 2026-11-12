@@ -280,15 +280,17 @@ the shared one when it is redone.
   "Finish", "Remove", "Delete". Enter presses the action, except in a
   question nothing can undo, where Enter presses Cancel and a stray key
   changes nothing; that question is `ConfirmDialog`, in
-  `components/ConfirmDialog.tsx`, in РЭХА and in the band service. A
-  question is the shared `AlertDialog` in this frame: Cancel has the
-  keyboard when it opens, Esc closes it, and a click outside leaves it
-  open, so a stray click does not lose the question. Its role is
-  `alertdialog`, and with it open Space, Esc and ⌘Z do not reach the
-  screen behind. A red button only for what cannot be
-  brought back. The title and text stay as they were while it fades out
-  (`useHeld`, `lib/held.ts`). The check refuses `role="dialog"` and
-  `<dialog>` outside `components/ui/`.
+  `components/ConfirmDialog.tsx`, in РЭХА and in the band service. It is
+  the shared `AlertDialog` in this frame: Cancel has the keyboard when it
+  opens, Esc closes it, and a click outside leaves it open, so a stray
+  click does not lose the question. Its role is `alertdialog`, and with it
+  open Space, Esc and ⌘Z do not reach the screen behind. Two other
+  questions are plain dialogs, where a click outside answers as their way
+  out does: "Close РЭХА?" (`components/ClosingDialog.tsx`) and the band
+  service's "Discard what you wrote?" (`shell/unsent.tsx`). A red button
+  only for what cannot be brought back. The title and text stay as they
+  were while it fades out (`useHeld`, `lib/held.ts`). The check refuses
+  `role="dialog"` and `<dialog>` outside `components/ui/`.
 - **C4. A notice can carry one action**, such as Undo (B1):
   `notify({ …, action, onGone })` in `lib/notices.ts`. A notice with an
   action stays 10 s, whatever its kind, and the pointer over it pauses the
