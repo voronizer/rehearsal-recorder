@@ -263,8 +263,9 @@ const PRESSED = /(?<![\w$.-])aria-pressed(?![\w-])/g
 const CARD_CORNER = new RegExp(START + "rounded-xl" + END)
 const CARD_FILL = new RegExp(START + "bg-card" + END)
 
-/** Each string on the line, as its text. The stretches of a template on
- *  either side of a `${ }` are one string, keyed by where it opens. */
+/** Each string on the line, as its text, keyed by where it opens (-1 for
+ *  one that began on an earlier line). The stretches of a template on either
+ *  side of a `${ }` are one string. */
 function stringsOn(code, quoted) {
   const strings = new Map()
   for (let j = 0; j < code.length; j++) {
@@ -274,14 +275,42 @@ function stringsOn(code, quoted) {
     const opening = stringStart(code, quoted, j)
     strings.set(opening, `${strings.get(opening) ?? ""} ${code.slice(j, end)}`)
   }
+  return strings
+}
+
+// The key in stringsOn of the template whose text line `n` ends in, or null
+// when the line ends outside one.
+function openAtEnd(ctx, n) {
+  if (!ctx.inTemplate[n]) return null
+  const code = ctx.lines[n]
+  if (code === "") return -1
+  return ctx.quoted[n][code.length - 1] ? stringStart(code, ctx.quoted[n], code.length - 1) : null
+}
+
+/** Each string that opens on line `ctx.i`, as its whole text: a template
+ *  that runs on into later lines takes their text too, so that it is found
+ *  on the line it starts on. One that began on an earlier line is left to
+ *  that line. */
+function stringsFrom(ctx) {
+  const strings = stringsOn(ctx.lines[ctx.i], ctx.quoted[ctx.i])
+  const open = openAtEnd(ctx, ctx.i)
+  if (open !== null && open >= 0 && strings.has(open)) {
+    let text = strings.get(open)
+    for (let n = ctx.i + 1; n < ctx.lines.length; n++) {
+      text += ` ${stringsOn(ctx.lines[n], ctx.quoted[n]).get(-1) ?? ""}`
+      if (openAtEnd(ctx, n) !== -1) break
+    }
+    strings.set(open, text)
+  }
+  strings.delete(-1)
   return [...strings.values()]
 }
 
 /** The rules, in the order findings are listed. `find(code, quoted, ctx)` gets
  *  one line of code (comments blanked out), per character whether it sits
- *  inside a string, and `ctx` (`lines`, `quoted` of every line, and `i`, this
- *  line's place) for what needs the lines around; it returns what broke the
- *  rule. `outsideUi` rules do not
+ *  inside a string, and `ctx` (`lines`, `quoted` and `inTemplate` of every
+ *  line, and `i`, this line's place) for what needs the lines around; it
+ *  returns what broke the rule. `outsideUi` rules do not
  *  apply to the files of components/ui. `story` needs the list of files, so it
  *  is `missingStories`, not `find`. */
 export const RULES = [
@@ -397,8 +426,8 @@ export const RULES = [
     name: "card",
     why: "A group set apart is the shared Card (components/ui/card), not rounded-xl with bg-card made by hand.",
     outsideUi: true,
-    find: (code, quoted) =>
-      stringsOn(code, quoted)
+    find: (code, quoted, ctx) =>
+      stringsFrom(ctx)
         .filter((s) => CARD_CORNER.test(s) && CARD_FILL.test(s))
         .map(() => "rounded-xl bg-card"),
   },
@@ -456,20 +485,25 @@ function regexEnd(text, i) {
 
 /** The source as the rules should see it: one string per line, with the
  *  comments and regular expressions blanked out (a note that says "no
- *  uppercase" is not a use of it), and for every character whether it sits
- *  inside a string.
+ *  uppercase" is not a use of it), for every character whether it sits
+ *  inside a string, and for every line whether it ends inside the text of a
+ *  template literal, which goes on into the next line (`inTemplate`).
  *
  *  A small scanner rather than a regex, because a `//` in "https://..." is not
  *  a comment, a `/*` in "src/**\/*.tsx" is not one either, and a regular
  *  expression such as /https?:\/\// holds `//` and may hold a quote or a
- *  backtick. A quote in running text ("it's") opens a string that ends with
- *  its line, which keeps the damage to that line. */
+ *  backtick. A `'` straight after a letter or a digit is an apostrophe in
+ *  running text ("it's", "the 90's"): in code a string's quote never follows
+ *  a word. Any other quote in running text opens a string that ends with its
+ *  line, which keeps the damage to that line. */
 function readCode(text) {
   const lines = [""]
   const quoted = [[]]
+  const inTemplate = []
   const put = (ch, inString = false) => {
     if (ch === "\r") return
     if (ch === "\n") {
+      inTemplate.push(stack.at(-1).mode === "`")
       lines.push("")
       quoted.push([])
       return
@@ -536,6 +570,8 @@ function readCode(text) {
         for (; i <= end; i++) put(" ")
         i--
       }
+    } else if (c === "'" && /[\p{L}\p{N}]/u.test(text[i - 1] ?? "")) {
+      put(c)
     } else if (c === '"' || c === "'" || c === "`") {
       put(c, true)
       stack.push({ mode: c })
@@ -550,7 +586,8 @@ function readCode(text) {
       put(c)
     }
   }
-  return { lines, quoted }
+  inTemplate.push(stack.at(-1).mode === "`")
+  return { lines, quoted, inTemplate }
 }
 
 // `design-ok(rule): reason`. The reason runs to the next marker or the line's
@@ -577,7 +614,7 @@ function waivers(rawLines) {
 export function checkText(path, text) {
   path = path.replaceAll("\\", "/")
   if (!isChecked(path)) return []
-  const { lines, quoted } = readCode(text)
+  const { lines, quoted, inTemplate } = readCode(text)
   const waived = waivers(text.split(/\r?\n/))
   const shared = isShared(path)
   const found = []
@@ -586,7 +623,7 @@ export function checkText(path, text) {
     for (const rule of RULES) {
       if (!rule.find || (rule.outsideUi && shared)) continue
       if (waived[i].has(rule.name) || waived[i - 1]?.has(rule.name)) continue
-      for (const hit of rule.find(code, quoted[i], { lines, quoted, i })) {
+      for (const hit of rule.find(code, quoted[i], { lines, quoted, inTemplate, i })) {
         found.push({ rule: rule.name, line: i + 1, text: hit })
       }
     }

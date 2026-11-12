@@ -540,6 +540,21 @@ describe("card", () => {
     expect(broken("const box = `bg-card ${pad} rounded-xl`")).toEqual(["card"])
   })
 
+  it("reads a template literal over several lines as one string, from the line it starts on", () => {
+    expect(checkText(SCREEN, lines("const box = `rounded-xl", "  bg-card`"))).toEqual([
+      { rule: "card", line: 1, text: "rounded-xl bg-card" },
+    ])
+    expect(checkText(SCREEN, lines("const a = 1", "const box = `", "  rounded-xl", "", "  ${pad}", "  bg-card", "`"))).toEqual([
+      { rule: "card", line: 2, text: "rounded-xl bg-card" },
+    ])
+    expect(broken(lines("const a = `rounded-xl`", "const b = `bg-card`"))).toEqual([])
+    expect(broken(lines("const a = `x", "  rounded-xl` + `bg-card", "  y`"))).toEqual([])
+  })
+
+  it("keeps two strings apart: one class string is the rule", () => {
+    expect(broken(`<div className={cn("rounded-xl", "bg-card")} />`)).toEqual([])
+  })
+
   it("lets Card, and either class alone, through", () => {
     expect(broken(`<Card className="p-4" />`)).toEqual([])
     expect(classes("rounded-xl bg-muted")).toEqual([])
@@ -667,6 +682,17 @@ describe("what counts as code", () => {
     expect(broken(`<p>It's a take</p>\n<button />`)).toEqual(["raw-button"])
   })
 
+  it("takes a ' straight after a letter or a digit for an apostrophe, not a string", () => {
+    expect(checkText(SCREEN, `<p>It's here <span title="z">x</span></p>`)).toEqual([
+      { rule: "native-tip", line: 1, text: "<span title=" },
+    ])
+    expect(broken(`<p>Don't</p> <Button aria-pressed={on}>Songs</Button>`)).toEqual(["pressed-button"])
+    expect(broken(`<p>The 90's</p> <Button aria-pressed={on}>Songs</Button>`)).toEqual(["pressed-button"])
+    expect(broken(`<span data-x="title=1" />`)).toEqual([])
+    expect(broken(`const s = 'title=1'`)).toEqual([])
+    expect(broken(`<p>Rock 'n' roll</p> <i className={cn('flex', on && 'uppercase')} />`)).toEqual(["uppercase"])
+  })
+
   it("takes a Windows path as well", () => {
     expect(checkText("ui\\src\\screens\\Example.tsx", `<p className="text-lg" />`)).toEqual([
       { rule: "text-size", line: 1, text: "text-lg" },
@@ -730,10 +756,18 @@ describe("the three parts", () => {
 
   it("walks only the part named on the command line", () => {
     const script = fileURLToPath(new URL("./design-check.mjs", import.meta.url))
-    const run = spawnSync(process.execPath, [script, "site"], { encoding: "utf8" })
-    expect(run.stdout).toMatch(/\bsite\b/)
-    expect(run.stdout).not.toMatch(/^(?:ui|service)\//m)
-    expect(run.stdout).not.toMatch(/\b(?:ui|service)\/src\//)
+    const checked = (args) => {
+      const run = spawnSync(process.execPath, [script, ...args], { encoding: "utf8" })
+      const ok = /^design-check: ok, (\d+) files checked in ([a-z, ]+);/.exec(run.stdout)
+      expect(ok, run.stdout).not.toBeNull()
+      return { files: Number(ok[1]), parts: ok[2] }
+    }
+    const site = checked(["site"])
+    const all = checked([])
+    expect(site.parts).toBe("site")
+    expect(all.parts).toBe("ui, service, site")
+    expect(site.files).toBeGreaterThan(0)
+    expect(site.files).toBeLessThan(all.files)
 
     const odd = spawnSync(process.execPath, [script, "server"], { encoding: "utf8" })
     expect(odd.status).toBe(2)
