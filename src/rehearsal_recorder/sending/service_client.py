@@ -9,6 +9,7 @@ it knows РЭХА by. Every call carries the secret and РЭХА's version, so a
 service that needs a newer РЭХА can say so.
 """
 
+import functools
 import http.client
 import json
 import re
@@ -18,6 +19,11 @@ import urllib.request
 
 from rehearsal_recorder import __version__
 from rehearsal_recorder.updates import _tls
+
+# One for every call. Each new one reads every certificate again, and on
+# Windows the system's whole store too, for every part of every file.
+# A certificate added while РЭХА runs counts from its next start.
+_context = functools.lru_cache(maxsize=1)(_tls)
 
 # A call that has had no answer for this long is taken as no internet.
 TIMEOUT_SEC = 60
@@ -233,7 +239,7 @@ class ServiceClient:
         request = urllib.request.Request(self._base + path, data=data, method=method,
                                          headers=headers)
         try:
-            with self._opener(request, timeout=TIMEOUT_SEC, context=_tls()) as answer:
+            with self._opener(request, timeout=TIMEOUT_SEC, context=_context()) as answer:
                 return _json(answer.read())
         except urllib.error.HTTPError as e:
             try:

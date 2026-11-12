@@ -116,6 +116,9 @@ function position() {
 }
 // Which files are two channels: the tracks named in __STEREO_TRACKS__.
 function stereo(name) { return (window.__STEREO_TRACKS__ || []).includes(name); }
+// Which files could not be read for their channels (the service says channels 0):
+// the tracks named in __UNREADABLE_TRACKS__.
+function unreadable(name) { return (window.__UNREADABLE_TRACKS__ || []).includes(name); }
 // The icon the band keeps for a name, from __BAND_ICONS__, the way
 // layouts.for_device and take_media hand it out.
 function withIcon(t) {
@@ -2299,6 +2302,7 @@ window.__MAKE_API__ = () => ({
     // keeps none, the one __BAND_ICONS__ says it was recorded with.
     const {icon} = t.kind === 'backing' ? {icon: 'backing'} : t.icon ? t : withIcon({name: t.name});
     return {name:t.name, ...(icon ? {icon} : {}), ...(t.kind === 'backing' ? {kind: 'backing'} : {}),
+      ...(unreadable(t.name) ? {channels: 0} : {}),
       url:'about:blank', frames:48000*dur,
       samplerate:48000, duration_sec:dur,
       peaks: stereo(t.name) || (t.kind === 'backing' && backingStereo.has(t.file))

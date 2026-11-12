@@ -10,11 +10,15 @@ worker's loop is never started: each check drives `run_next` itself, so
 nothing races it.
 """
 
+import contextlib
+import io
 import json
+import struct
 import sys
 import tempfile
 import threading
 import time
+import wave
 from pathlib import Path
 
 try:
@@ -41,6 +45,19 @@ def ok(label, cond):
 
 
 BAND = ["Drums", "Bass", "Guitar", "Keys", "Vocals", "Shaker"]
+
+
+def write_stereo(path, tones, seconds=2.0):
+    """A stereo WAV: each (left, right) of `tones` in turn, a flat tone on
+    each side for `seconds`, at 16-bit scale."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with wave.open(str(path), "wb") as w:
+        w.setnchannels(2)
+        w.setsampwidth(2)
+        w.setframerate(SR)
+        for left, right in tones:
+            w.writeframes(struct.pack("<hh", left, right) * int(SR * seconds))
+
 
 # Several parts to a file, so a file can be cut short in the middle.
 band_service.PART_BYTES = 16 * 1024
@@ -101,16 +118,24 @@ def run(tmp, fake):
 
     takes = {"n": 0}
 
-    def keep(name, seconds=12.0, band=BAND, duration=None, send=None, a=None):
-        """A take of the rehearsal in progress, its tracks a tone each."""
+    def keep(name, seconds=12.0, band=BAND, duration=None, send=None, a=None, stereo=(), backing=False):
+        """A take of the rehearsal in progress, its tracks a tone each; one
+        named in `stereo` a tone on each side, and with `backing`, the song's
+        backing track after them."""
         a = a or api
         takes["n"] += 1
         n = takes["n"]
         draft = tmp / "drafts" / f"take {n}"
         tracks = []
         for i, track in enumerate(band):
-            write_wav(draft / f"{track}.wav", 800 + 100 * i + n, seconds=seconds)
+            if track in stereo:
+                write_stereo(draft / f"{track}.wav", [(800 + 100 * i + n, 3000 + n)], seconds=seconds)
+            else:
+                write_wav(draft / f"{track}.wav", 800 + 100 * i + n, seconds=seconds)
             tracks.append({"name": track, "file": str(draft / f"{track}.wav")})
+        if backing:
+            write_wav(draft / "Backing.wav", 500 + n, seconds=seconds)
+            tracks.append({"name": "Backing", "file": str(draft / "Backing.wav"), "kind": "backing"})
         a._session["take_counter"] = n
         kept = a.keep_take(n, str(draft), name, duration or seconds, tracks, [], send)
         assert kept["ok"], kept
@@ -803,6 +828,8 @@ def run(tmp, fake):
         ok("its details go again with its click, and the band's levels as they were sent",
            fake.takes[uid14]["meter"] == {"tempo": None, "signature": None, "click": False}
            and fake.takes[uid14]["balance"] == balance)
+        ok("and what REHA keeps of them for itself stays here",
+           not {"sides", "kind", "tempo"} & set(fake.takes[uid14]))
         volumes.clear()
         volumes.update(volumes_before)
         puts = fake.count("put ")
@@ -866,6 +893,7 @@ def run(tmp, fake):
 
     songs_both_ways(api, fake, service, drain, entries, keep, uid_of, take, folder)
     held_after_stop(api, fake, service, drain, entries, keep, uid_of, take, folder)
+    stereo_and_backing(api, fake, service, drain, entries, keep, uid_of, take, folder)
 
     ok("every request matches the service's description", fake.mismatches == [])
     # Cloudflare's Browser Integrity Check turns away Python-urllib/3.x.
@@ -1291,6 +1319,291 @@ def held_after_stop(api, fake, service, drain, entries, keep, uid_of, take, fold
        and Path(take(n_c4)["cloud"].get("mix", "")).exists())
     ok("and nothing is left written down", not api._cloud_jobs_path().exists())
     api.set_send_to("service")
+
+
+def stereo_and_backing(api, fake, service, drain, entries, keep, uid_of, take, folder):
+    """Both sides of a stereo track's wave, and the Backing track marked
+    among a take's tracks (stereo-in-the-service spec): sent with a take, and
+    to takes up from before by a pass of their own, after the tempo's."""
+    print("\n[12] Both sides of a stereo wave, and the Backing track")
+    tmp = Path(tempfile.mkdtemp())
+    write_stereo(tmp / "two.wav", [(9000, 1000), (1000, 20000)])
+    write_wav(tmp / "one.wav", 9000)
+    service_files.make({"name": "1.peaks", "kind": "peaks", "source": str(tmp / "two.wav")}, tmp / "1.peaks")
+    service_files.make({"name": "2.peaks", "kind": "peaks", "source": str(tmp / "one.wav")}, tmp / "2.peaks")
+    two = json.loads((tmp / "1.peaks").read_text(encoding="utf-8"))
+    one = json.loads((tmp / "2.peaks").read_text(encoding="utf-8"))
+    sides = two.get("sides") or []
+    ok("a stereo track's waveform has a row per side, each as long as its peaks",
+       len(sides) == 2 and len(sides[0]) == len(sides[1]) == len(two["peaks"]) == service_files.PEAKS)
+
+    def near(a, b):
+        return abs(a - b) < 0.001
+
+    ok("left then right, its peaks the louder side at each moment",
+       near(sides[0][0], 9000 / 32768) and near(sides[1][0], 1000 / 32768)
+       and near(sides[0][-1], 1000 / 32768) and near(sides[1][-1], 20000 / 32768)
+       and two["peaks"] == [max(a, b) for a, b in zip(*sides)])
+    ok("a mono track's waveform is as it was", set(one) == {"peaks"} and len(one["peaks"]) == service_files.PEAKS)
+    backed = {"take_number": 4, "name": "Lieta 2", "song": "Lieta", "duration_sec": 30, "starred": False,
+              "tracks": [{"name": "Bass", "file": "b.wav", "icon": "bass"},
+                         {"name": "Backing", "file": "k.wav", "icon": None, "kind": "backing"}]}
+    tracks = service_files.meta(backed, {"id": 1, "created_at": "2026-11-11", "name": "Thursday"}, [], {}, 1, 0)["tracks"]
+    ok("a take's details mark its Backing track, and no other",
+       tracks[1].get("kind") == "backing" and "kind" not in tracks[0])
+
+    def row_of(n):
+        return api._lib.service_row(folder(), n)
+
+    def marks(n):
+        sent = row_of(n)["sent"] or {}
+        return sent.get("sides"), sent.get("kind")
+
+    def kinds(uid):
+        return [t.get("kind") for t in fake.takes[uid]["tracks"]]
+
+    def look():
+        """The next look at the service, and what comes of it."""
+        service()._next_check = 0
+        drain()
+
+    def from_before(n):
+        """The take as an older REHA left it: its waves one row each, and its
+        tracks with no mark, here and there."""
+        uid = uid_of(n)
+        api._lib.change_service_row(row_of(n)["take_id"], lambda r: {"sent": {
+            **{k: v for k, v in r["sent"].items() if k not in ("sides", "kind")},
+            "tracks": [{k: v for k, v in t.items() if k != "kind"} for t in r["sent"]["tracks"]]}})
+        for name, data in list(fake.files.items()):
+            if name.startswith(f"{uid}/") and name.endswith(".peaks"):
+                fake.files[name] = json.dumps({"peaks": json.loads(data)["peaks"]}).encode()
+        for t in fake.takes[uid]["tracks"]:
+            t.pop("kind", None)
+        return uid, row_of(n)["take_id"]
+
+    drain()
+    n1 = keep("Viasna", band=["Drums", "Bass"], stereo=("Drums",), backing=True)
+    drain()
+    uid1 = uid_of(n1)
+    up = fake.names_of(uid1, 1)
+    ok("a take sent now sends both sides of its stereo track's wave, and one row of a mono track's",
+       len(json.loads(up["1.peaks"]).get("sides") or []) == 2
+       and "sides" not in json.loads(up["2.peaks"]) and "sides" not in json.loads(up["3.peaks"]))
+    ok("its details mark its Backing track", kinds(uid1) == [None, None, "backing"])
+    ok("and its row keeps both marks, which never go to the service",
+       marks(n1) == (True, True) and not {"sides", "kind", "tempo"} & set(fake.takes[uid1]))
+
+    # Up from before: a stereo track and Backing.
+    uid1, id1 = from_before(n1)
+    lines = len(entries())
+    files, puts = fake.count(f"file {uid1} "), fake.count(f"put {uid1}")
+    balance = dict(fake.takes[uid1]["balance"])
+    volumes = api._config.setdefault("volumes", {})
+    volumes_before = dict(volumes)
+    volumes["Drums"] = 0.3
+    look()
+    ok("a take up from before gets both sides of its stereo wave after the next look, with no line in the list",
+       fake.count(f"file {uid1} ") == files + 1 and fake.count(f"file {uid1} 1.peaks") == 2
+       and len(json.loads(fake.files[f"{uid1}/1/1.peaks"]).get("sides") or []) == 2 and len(entries()) == lines)
+    ok("and its details once, Backing marked, the band's levels as they were sent",
+       fake.count(f"put {uid1}") == puts + 1 and kinds(uid1) == [None, None, "backing"]
+       and fake.takes[uid1]["balance"] == balance and not {"sides", "kind", "tempo"} & set(fake.takes[uid1]))
+    ok("its row keeps both marks, and what was made for it is gone from the disk",
+       marks(n1) == (True, True) and not (band_service.staging_root() / uid1).exists()
+       and api._lib.service_files(id1, 1) == {})
+    volumes.clear()
+    volumes.update(volumes_before)
+    look()
+    ok("and the next look sends it nothing more",
+       fake.count(f"file {uid1} ") == files + 1 and fake.count(f"put {uid1}") == puts + 1)
+
+    # Up from before, all mono, no Backing.
+    n2 = keep("Viasna", band=["Drums", "Bass"])
+    drain()
+    uid2, _ = from_before(n2)
+    calls = len([o for o in fake.order if uid2 in o])
+    look()
+    ok("an all-mono take with no Backing is sent nothing, and is marked all the same",
+       len([o for o in fake.order if uid2 in o]) == calls and marks(n2) == (True, True))
+
+    # Up from before, its stereo WAV gone from the computer.
+    n3 = keep("Viasna", band=["Drums"], stereo=("Drums",), backing=True)
+    drain()
+    uid3, _ = from_before(n3)
+    wav = Path(take(n3)["tracks"][0]["file"])
+    away = wav.with_name("away.wav")
+    wav.rename(away)
+    starts, puts = fake.count(f"start {uid3} "), fake.count(f"put {uid3}")
+    look()
+    away.rename(wav)
+    ok("a take whose files are gone sends no waves, and is marked all the same",
+       fake.count(f"start {uid3} ") == starts and marks(n3)[0] is True)
+    ok("its details go all the same, Backing marked",
+       fake.count(f"put {uid3}") == puts + 1 and kinds(uid3) == [None, "backing"] and marks(n3)[1] is True)
+
+    # A service from before Backing's mark.
+    fake.keeps_kind = False
+    n4 = keep("Viasna", band=["Drums"], backing=True)
+    drain()
+    uid4, id4 = uid_of(n4), row_of(n4)["take_id"]
+    ok("a service from before Backing's mark takes the take all the same, and it is not marked",
+       take(n4)["service"]["up"] and marks(n4) == (True, None) and kinds(uid4) == [None, None])
+    puts = fake.count(f"put {uid4}")
+    look()
+    ok("its details go again after the next look, and it stays unmarked",
+       fake.count(f"put {uid4}") == puts + 1 and marks(n4) == (True, None) and id4 not in service()._owed_marks)
+    drain()
+    ok("and they go no more until the look after", fake.count(f"put {uid4}") == puts + 1)
+    fake.keeps_kind = True
+    look()
+    ok("once the service keeps the mark, the next look marks the take",
+       fake.count(f"put {uid4}") == puts + 2 and kinds(uid4) == [None, "backing"] and marks(n4) == (True, True))
+    look()
+    ok("and asks no more", fake.count(f"put {uid4}") == puts + 2)
+
+    # Sound playing.
+    from rehearsal_recorder.audio.player import TakePlayer
+    n5 = keep("Viasna", band=["Drums"], stereo=("Drums",))
+    drain()
+    uid5, id5 = from_before(n5)
+    service()._compare()
+    service()._next_check = time.monotonic() + 3600
+    player_before = api._player
+    listened = TakePlayer([{"name": "Drums", "file": take(n5)["tracks"][0]["file"]}])
+    api._player = listened
+    listened.play()
+    ok("nothing goes while sound plays",
+       service().run_next() is False and fake.count(f"start {uid5} 1.peaks") == 1 and id5 in service()._owed_marks)
+    listened.pause()
+
+    def play_on_start(words):
+        if words == f"start {uid5} 1.peaks" and not listened.playing:
+            listened.play()
+
+    fake.on_call = play_on_start
+    service().run_next()
+    fake.on_call = None
+    ok("Play stops it before the wave's part goes, and it waits",
+       fake.count(f"start {uid5} 1.peaks") == 2 and fake.count(f"file {uid5} 1.peaks") == 1
+       and id5 in service()._owed_marks and service().run_next() is False)
+    listened.pause()
+    drain()
+    ok("and it goes once the sound stops",
+       fake.count(f"file {uid5} 1.peaks") == 2 and marks(n5) == (True, True))
+    listened.close()
+    api._player = player_before
+
+    # No internet.
+    n6 = keep("Viasna", band=["Drums"], stereo=("Drums",))
+    drain()
+    uid6, id6 = from_before(n6)
+    service()._compare()
+    service()._next_check = time.monotonic() + 3600
+    fake.drop = 1
+    service().run_next()
+    ok("with no internet, its waves wait and are tried again",
+       fake.count(f"file {uid6} 1.peaks") == 1 and id6 in service()._owed_marks
+       and ("marks", id6) in service()._later and marks(n6) == (None, None))
+    service()._later.clear()
+    drain()
+    ok("and go once it is back", fake.count(f"file {uid6} 1.peaks") == 2 and marks(n6) == (True, True))
+
+    # Turned down.
+    n7 = keep("Viasna", band=["Drums"], stereo=("Drums",))
+    drain()
+    uid7, id7 = from_before(n7)
+    service()._compare()
+    service()._next_check = time.monotonic() + 3600
+    fake.refuse = (400, "Not now")
+    said = io.StringIO()
+    with contextlib.redirect_stderr(said):
+        service().run_next()
+    fake.refuse = None
+    ok("a take whose waves are turned down says so in one line, and is set aside",
+       said.getvalue().count("\n") == 1 and "stereo waves or Backing mark" in said.getvalue()
+       and id7 in service()._marks_aside and id7 not in service()._owed_marks)
+    look()
+    ok("and is not tried again in this run", fake.count(f"start {uid7} 1.peaks") == 1 and marks(n7) == (None, None))
+    ok("nothing of it is a line in the list, nor left to send",
+       not [e for e in entries() if e["take_number"] in (n1, n2, n3, n5, n6, n7) and e["state"] != "done"]
+       and api.sending_left() == {"takes": 0, "bytes": 0})
+
+    # A take whose MP3s were cut short under an older REHA: its stereo wave
+    # is sent again only as that REHA made it, with one row.
+    drain()
+    service()._next_check = time.monotonic() + 3600
+    n8 = keep("Viasna", band=["Drums"], stereo=("Drums",))
+    uid8, id8 = uid_of(n8), row_of(n8)["take_id"]
+
+    def drop_first_file(words):
+        if words == f"put {uid8}":
+            fake.drop = 1
+
+    fake.on_call = drop_first_file
+    service().run_next()
+    fake.on_call = None
+    staged = band_service.staging_root() / uid8 / "1" / "1.peaks"
+    old = json.dumps({"peaks": json.loads(staged.read_text(encoding="utf-8"))["peaks"]})
+    staged.write_text(old, encoding="utf-8")
+    api._lib.drop_service_file(id8, 1, "1.peaks")
+    api._lib.add_service_file(id8, 1, "1.peaks", f"{uid8}/1/1.peaks", staged.stat().st_size)
+    service()._later.clear()
+    drain()
+    ok("a wave an older REHA made, sent now, leaves the take without the mark of both sides",
+       take(n8)["service"]["up"] and "sides" not in json.loads(fake.files[f"{uid8}/1/1.peaks"])
+       and marks(n8) == (None, True))
+    look()
+    ok("and the next look sends it with both sides, and marks it",
+       len(json.loads(fake.files[f"{uid8}/1/1.peaks"]).get("sides") or []) == 2 and marks(n8) == (True, True))
+
+    # Cropped while its marks go: left to its own send.
+    n9 = keep("Viasna", band=["Drums"], stereo=("Drums",), backing=True)
+    drain()
+    uid9, id9 = from_before(n9)
+    service()._compare()
+    service()._next_check = time.monotonic() + 3600
+    puts = fake.count(f"put {uid9}")
+    cropped = []
+
+    def crop_on_start(words):
+        if words == f"start {uid9} 1.peaks" and not cropped:
+            cropped.append(api.crop_take(folder(), n9, 2.0, 10.0))
+
+    fake.on_call = crop_on_start
+    service().run_next()
+    fake.on_call = None
+    ok("a take cropped while its marks go stops there, and is no longer owed them",
+       cropped and cropped[0]["ok"] and id9 not in service()._owed_marks
+       and fake.count(f"file {uid9} 1.peaks") == 1 and fake.count(f"put {uid9}") == puts
+       and row_of(n9)["due"] and marks(n9) == (None, None))
+    drain()
+    ok("its own send takes the new generation up with both marks",
+       fake.takes[uid9]["gen"] == 2 and kinds(uid9) == [None, "backing"] and marks(n9) == (True, True)
+       and len(json.loads(fake.files[f"{uid9}/2/1.peaks"]).get("sides") or []) == 2)
+    api.end_trash(cropped[0]["undo"])
+
+    # Taken out while it is owed its marks.
+    n10 = keep("Viasna", band=["Drums"], stereo=("Drums",))
+    drain()
+    uid10, id10 = from_before(n10)
+    service()._compare()
+    service()._next_check = time.monotonic() + 3600
+    owed = id10 in service()._owed_marks
+    starts = fake.count(f"start {uid10} 1.peaks")
+    api.unshare_take(folder(), n10)
+    ok("a take taken out of the service is no longer owed its marks", owed and id10 not in service()._owed_marks)
+    drain()
+    ok("and nothing of them goes", fake.count(f"start {uid10} 1.peaks") == starts)
+
+    # A service from before Backing's mark, a take with no Backing.
+    fake.keeps_kind = False
+    n11 = keep("Viasna", band=["Drums"])
+    drain()
+    puts = fake.count(f"put {uid_of(n11)}")
+    look()
+    ok("a take with no Backing sent to a service from before the mark is marked, and asked nothing more",
+       marks(n11) == (True, True) and fake.count(f"put {uid_of(n11)}") == puts)
+    fake.keeps_kind = True
 
 
 if __name__ == "__main__":

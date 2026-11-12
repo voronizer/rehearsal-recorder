@@ -34,6 +34,9 @@ export type PlayerSound = {
   /** Keeps Master's level for the next take: РЭХА's settings, or this
    *  device in the service. */
   keepMaster(volume: number): Promise<Ok>
+  /** Keeps Backing's M for a song, when this sound keeps it itself (the
+   *  service); without it РЭХА keeps it (`set_song_backing_heard`). */
+  keepBackingHeard?(songId: number, heard: boolean): Promise<Ok>
   /** Keeps the faders where they are: РЭХА's settings, or the member's in the service. */
   keepLevels(volumes: Record<string, number>): Promise<Ok>
   close(): Promise<Ok>

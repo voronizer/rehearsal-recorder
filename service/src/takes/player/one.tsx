@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from "react"
 import { playLook, type PlayLook } from "@/lib/playLook"
 import { useLevels, useTake, type TakePage } from "../../api"
+import { firstDesk, whenHeard, withBacking } from "./backing"
 import { withMute, withSolo, type Desk } from "./desk"
 import { levelOf } from "./levels"
 import { keptMaster } from "./master"
@@ -10,7 +11,9 @@ import { Player, wakeSound } from "./player"
   The service's one player: ▶ in a list, the take's panel and page, and the
   bar at the bottom all play through it, so one take sounds at a time. A
   take pressed in a list plays once its page has come; its files are
-  fetched only then.
+  fetched only then. A take with a Backing track and a song waits for the
+  service to say whether you hear Backing, so Backing is never heard
+  where you have it muted (backing.ts).
 */
 
 let canPlay: boolean | null = null
@@ -145,35 +148,46 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const t = take.data
     if (!t || !supported) return
-    // As the take's page left it: its repeat, M and S, and the levels turned
-    // there and not kept yet; else the M and S pressed in its panel.
-    const setup: Setup = setups.current.get(t.uid)?.() ?? { loop: null, ...(desksNow.current[t.uid] ?? NO_DESK), moved: {} }
-    const p = new Player(t.tracks.map((k) => ({ url: k.mp3, gain: setup.moved[k.name] ?? levelOf(yoursNow.current, t, k.name) })))
-    p.setMaster(master.current)
-    p.onChange = () => {
-      tick(t.uid, p.time())
+    let gone = false
+    let made: Player | null = null
+    // Backing as the member hears it for the take's song: a take played
+    // from a list, or before its page has opened, waits for the answer.
+    whenHeard(t, (heard) => {
+      if (gone) return
+      // As the take's page left it: its repeat, M and S, and the levels turned
+      // there and not kept yet; else the M and S it had in the player before.
+      const kept: Setup = setups.current.get(t.uid)?.() ?? { loop: null, ...(desksNow.current[t.uid] ?? firstDesk(t)), moved: {} }
+      const setup = { ...kept, ...withBacking(t, kept, heard) }
+      const p = new Player(t.tracks.map((k) => ({ url: k.mp3, gain: setup.moved[k.name] ?? levelOf(yoursNow.current, t, k.name) })))
+      p.setMaster(master.current)
+      p.onChange = () => {
+        tick(t.uid, p.time())
+        redraw((n) => n + 1)
+      }
+      p.onEnd = () => redraw((n) => n + 1)
+      if (setup.loop) p.setLoop(setup.loop.a, setup.loop.b)
+      for (const i of setup.muted) p.setMute(i, true)
+      if (setup.solo !== null) p.setSolo(setup.solo, true)
+      const go = pending.current
+      pending.current = null
+      const at = go?.at ?? (clock.uid === t.uid ? clock.time : 0)
+      p.seek(at)
+      tick(t.uid, at)
+      if (go?.play) {
+        p.play(at)
+        setStarted(true)
+      } else setStarted(false)
+      made = p
+      player.current = p
+      held.current = { uid: t.uid, gen: t.gen }
+      setDesk(t.uid, () => ({ muted: setup.muted, solo: setup.solo }))
       redraw((n) => n + 1)
-    }
-    p.onEnd = () => redraw((n) => n + 1)
-    if (setup.loop) p.setLoop(setup.loop.a, setup.loop.b)
-    for (const i of setup.muted) p.setMute(i, true)
-    if (setup.solo !== null) p.setSolo(setup.solo, true)
-    const go = pending.current
-    pending.current = null
-    const at = go?.at ?? (clock.uid === t.uid ? clock.time : 0)
-    p.seek(at)
-    tick(t.uid, at)
-    if (go?.play) {
-      p.play(at)
-      setStarted(true)
-    } else setStarted(false)
-    player.current = p
-    held.current = { uid: t.uid, gen: t.gen }
-    setDesk(t.uid, () => ({ muted: setup.muted, solo: setup.solo }))
-    redraw((n) => n + 1)
+    })
     return () => {
-      p.close()
-      if (player.current === p) {
+      gone = true
+      if (!made) return
+      made.close()
+      if (player.current === made) {
         player.current = null
         held.current = null
       }

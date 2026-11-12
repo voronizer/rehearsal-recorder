@@ -1,7 +1,16 @@
 import { useEffect, useMemo } from "react"
 import type { PlayerState, TakeNotes, TrackFile, TrackMedia } from "@/lib/api"
 import type { PlayerSound } from "@/lib/playerSound"
-import { keepLevels, levelsQuery, peaksQuery, queryClient, type TakePage } from "../../api"
+import {
+  channelsQuery,
+  keepLevels,
+  levelsQuery,
+  peaksQuery,
+  queryClient,
+  type TakePage,
+  type Wave,
+} from "../../api"
+import { firstDesk, keepHeard } from "./backing"
 import { levelOf } from "./levels"
 import { withMute, withSolo } from "./desk"
 import { keepMaster } from "./master"
@@ -34,11 +43,17 @@ const yoursNow = () => queryClient.getQueryData(levelsQuery.queryKey)?.levels
 export function serviceSound(take: TakePage, one: One): ServiceSound {
   const { uid, gen } = take
   const names = take.tracks.map((t) => t.name)
-  const tracks: TrackFile[] = take.tracks.map((t) => ({ name: t.name, file: t.mp3, ...(t.icon ? { icon: t.icon } : {}) }))
+  const tracks: TrackFile[] = take.tracks.map((t) => ({
+    name: t.name,
+    file: t.mp3,
+    ...(t.icon ? { icon: t.icon } : {}),
+    // The take's Backing track, as РЭХА marked it: drawn and muted as РЭХА's player does.
+    ...(t.kind === "backing" ? { kind: "backing" as const } : {}),
+  }))
   let position = 0
   let loop: { a: number; b: number } | null = null
-  let muted: number[] = []
-  let solo: number | null = null
+  // Backing muted, as every take starts until its page has opened it as you hear it (backing.ts).
+  let { muted, solo } = firstDesk(take)
   /** Levels turned and not kept yet. */
   let moved: Record<string, number> = {}
   /** Levels sent to be kept, not answered yet: yours once they are. */
@@ -71,7 +86,8 @@ export function serviceSound(take: TakePage, one: One): ServiceSound {
         muted: muted.map((i) => names[i]),
         soloed: solo === null ? null : names[solo],
         volumes: Object.fromEntries(names.map((n, i) => [n, p.gain(i)])),
-        levels: Object.fromEntries(names.map((n, i) => [n, [loud[i]]])),
+        // A side each for a stereo file, left then right.
+        levels: Object.fromEntries(names.map((n, i) => [n, loud[i]])),
       }
     }
     const coming = one.comingOf(uid)
@@ -87,12 +103,33 @@ export function serviceSound(take: TakePage, one: One): ServiceSound {
     }
   }
 
-  /** The take's wave from its `.peaks`, the whole of it or the part from `from` to `to`. */
-  const coarse = async (path: string, from?: number, to?: number): Promise<number[]> => {
-    const all = (await queryClient.fetchQuery(peaksQuery(path))) ?? []
-    if (from === undefined || to === undefined || !take.duration_sec) return all
-    const per = all.length / take.duration_sec
-    return all.slice(Math.floor(from * per), Math.max(Math.floor(from * per) + 1, Math.ceil(to * per)))
+  /** Each track's `.peaks` as this opening of the page read it. */
+  const waves = new Map<string, Promise<Wave | null>>()
+
+  /**
+   * A track's wave from its `.peaks`: a row a side when РЭХА sent both,
+   * else one. Asked of the service the first time the page opens the
+   * take, so a wave РЭХА sent again since shows; the same for every zoom
+   * after that.
+   */
+  const waveOf = (path: string): Promise<Wave | null> => {
+    let wave = waves.get(path)
+    if (!wave) {
+      wave = queryClient.fetchQuery({ ...peaksQuery(path), staleTime: 0 })
+      // A wave that did not come is asked for again next time.
+      wave.catch(() => waves.delete(path))
+      waves.set(path, wave)
+    }
+    return wave
+  }
+
+  /** The wave's rows, the whole take or the part from `from` to `to`. */
+  const part = (rows: number[][], from?: number, to?: number): number[][] => {
+    if (from === undefined || to === undefined || !take.duration_sec) return rows
+    return rows.map((all) => {
+      const per = all.length / take.duration_sec
+      return all.slice(Math.floor(from * per), Math.max(Math.floor(from * per) + 1, Math.ceil(to * per)))
+    })
   }
 
   const play = () => {
@@ -134,15 +171,25 @@ export function serviceSound(take: TakePage, one: One): ServiceSound {
       const fine = zoomed && (COARSE * (to - from)) / Math.max(take.duration_sec, 0.001) < buckets / 2
       const p = fine ? mine() : null
       const media = take.tracks.map(async (t, i): Promise<TrackMedia> => {
-        const peaks = (p && (await p.stretch(i, from!, to!, buckets, wanted.signal))) || (await coarse(t.peaks, from, to))
+        // Both sides sent say stereo. Without them, the MP3's first frame
+        // says: a mono file, or a stereo one in a take sent before РЭХА sent
+        // both sides. A file that cannot be read has no rings, and the take
+        // still opens.
+        const wave = await waveOf(t.peaks)
+        const rows = wave?.sides ?? [wave?.peaks ?? []]
+        const channels = wave?.sides ? 2 : await queryClient.fetchQuery(channelsQuery(t.mp3)).catch(() => 0 as const)
+        // Zoomed in, as many rows as the whole take's wave has.
+        const peaks = (p && (await p.stretch(i, from!, to!, buckets, wanted.signal, rows.length))) || part(rows, from, to)
         return {
           name: t.name,
-          ...(t.icon ? { icon: t.icon } : {}),
+          // Backing has the backing track's icon, as РЭХА's take_media gives it.
+          ...(t.kind === "backing" ? { icon: "backing", kind: "backing" as const } : t.icon ? { icon: t.icon } : {}),
           url: t.mp3,
           frames: 0,
           samplerate: 0,
           duration_sec: take.duration_sec,
-          peaks: [peaks],
+          peaks,
+          channels,
         }
       })
       return Promise.all(media)
@@ -233,6 +280,16 @@ export function serviceSound(take: TakePage, one: One): ServiceSound {
         return { ok: false, error: e instanceof Error ? e.message : String(e) }
       } finally {
         for (const n of Object.keys(turned)) if (sent[n] === turned[n]) delete sent[n]
+      }
+    },
+
+    // M on the Backing track, kept for you and that song: every take of it opens so.
+    async keepBackingHeard(songId, heard) {
+      try {
+        await keepHeard(songId, heard)
+        return { ok: true }
+      } catch (e) {
+        return { ok: false, error: e instanceof Error ? e.message : String(e) }
       }
     },
 
