@@ -19,7 +19,8 @@ import { cn } from "@/lib/utils"
   - `mark`: no track, and a thumb with no look of its own; the caller draws
     it with `thumbClassName` and `thumb` (R14).
   - `bar`: the player's bar, a thick track filled in the accent, the thumb
-    shown only while the keyboard is on it (S5).
+    shown only while the keyboard is on it (S5). `trackClassName` draws it
+    thinner where it lies along an edge (the band service's phone bar).
 */
 
 type Variant = "default" | "fader" | "mark" | "bar"
@@ -50,6 +51,7 @@ const THUMB: Record<Variant, string> = {
 }
 function Slider({
   variant = "default",
+  trackClassName,
   thumbClassName,
   thumb,
   className,
@@ -63,6 +65,8 @@ function Slider({
   ...props
 }: React.ComponentProps<typeof SliderPrimitive.Root> & {
   variant?: Variant
+  /** Classes for the track, after the variant's. */
+  trackClassName?: string
   /** Classes for each thumb, after the variant's. */
   thumbClassName?: string
   /** What is drawn inside each thumb: the caller's own look (variant "mark"). */
@@ -93,7 +97,7 @@ function Slider({
       {...props}
     >
       {TRACK[variant] && (
-        <SliderPrimitive.Track data-slot="slider-track" className={TRACK[variant]}>
+        <SliderPrimitive.Track data-slot="slider-track" className={cn(TRACK[variant], trackClassName)}>
           <SliderPrimitive.Range data-slot="slider-range" className={RANGE[variant]} />
         </SliderPrimitive.Track>
       )}

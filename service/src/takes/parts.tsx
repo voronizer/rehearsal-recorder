@@ -1,14 +1,19 @@
-import type { CSSProperties, ReactNode } from "react"
+import type { CSSProperties, ReactNode, Ref } from "react"
 import { Link, useNavigate, useRouterState } from "@tanstack/react-router"
 import { Star } from "lucide-react"
-import { Button } from "@/components/ui/button"
+import { Avatar, AvatarFallback } from "@/components/ui/avatar"
+import { Button, OPENS } from "@/components/ui/button"
+import { Item } from "@/components/ui/item"
 import { LabelDot } from "@/components/ui/mark"
 import { PlayButton } from "@/components/ui/play-button"
+import { Toggle } from "@/components/ui/toggle"
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
+import { useCut, WholeTip } from "@/components/ui/whole"
 import { labelLook } from "@/lib/labels"
 import { cn } from "@/lib/utils"
 import { useFrame, useLabels, useMe, usePeople, useStar, type Label } from "../api"
-import { OPENS } from "../shell/parts"
 import { usePanel } from "../shell/panel"
+import { BARE } from "../shell/parts"
 import { clock, quoted, songAndNumber, takeText, type TakeNaming } from "../shell/words"
 import { useLookOf, usePlayer, useTime } from "./player/one"
 import { TakeMenu } from "./TakeMenu"
@@ -50,11 +55,14 @@ export function TakeName({
   short,
   wrap,
   className,
+  titleRef,
 }: {
   take: TakeNaming
   short?: boolean
   wrap?: boolean
   className?: string
+  /** On the title, the part that is cut where there is no room. */
+  titleRef?: Ref<HTMLSpanElement>
 }) {
   const parts = songAndNumber(take)
   const title = parts?.song ?? take.name
@@ -68,7 +76,11 @@ export function TakeName({
     )
   return (
     <span className={cn("inline-flex min-w-0 max-w-full items-baseline gap-1", className)}>
-      {!(short && parts) && <span className="min-w-0 truncate">{title}</span>}
+      {!(short && parts) && (
+        <span ref={titleRef} className="min-w-0 truncate">
+          {title}
+        </span>
+      )}
       {parts && <span className="tnum shrink-0 text-muted-foreground">#{parts.number}</span>}
     </span>
   )
@@ -77,7 +89,8 @@ export function TakeName({
 /**
  * A take's name that opens its page. On that page already, it opens the
  * take's marks in the drawer: the page itself is there. `plain`: in a row
- * that lights up and opens as a whole, with no dotted line.
+ * that lights up and opens as a whole, with no dotted line. A name cut
+ * short shows whole in a tip (B6).
  */
 export function TakeLink({
   take,
@@ -92,17 +105,26 @@ export function TakeLink({
 }) {
   const { open } = usePanel()
   const here = useRouterState({ select: (s) => s.location.pathname === `/takes/${take.uid}` })
+  const [ref, cut] = useCut<HTMLSpanElement>()
   const look = cn("inline-flex min-w-0 max-w-full items-center gap-1.5 text-left", !plain && OPENS, className)
-  if (here)
-    return (
-      <button type="button" title={takeText(take)} aria-label={take.name} onClick={() => open({ kind: "marks", uid: take.uid })} className={look}>
-        <TakeName take={take} short={short} />
-      </button>
-    )
+  const name = <TakeName take={take} short={short} titleRef={ref} />
   return (
-    <Link to="/takes/$uid" params={{ uid: take.uid }} title={takeText(take)} aria-label={take.name} className={look}>
-      <TakeName take={take} short={short} />
-    </Link>
+    <WholeTip cut={cut} text={takeText(take)}>
+      {here ? (
+        <Button
+          variant={plain ? "ghost" : "link"}
+          aria-label={take.name}
+          onClick={() => open({ kind: "marks", uid: take.uid })}
+          className={cn(BARE, "whitespace-normal", look)}
+        >
+          {name}
+        </Button>
+      ) : (
+        <Link to="/takes/$uid" params={{ uid: take.uid }} aria-label={take.name} className={look}>
+          {name}
+        </Link>
+      )}
+    </WholeTip>
   )
 }
 
@@ -129,19 +151,21 @@ export function useInitials() {
   }
 }
 
+/** Who starred the take, a circle each, the shared Avatar; two letters still fit (“Iv”, “Ir”). */
 function Initials({ stars }: { stars: TakeLike["stars"] }) {
   const letters = useInitials()
   if (!stars.length) return null
   return (
     <span className="flex -space-x-1">
       {stars.map((s) => (
-        <span
-          key={s.member_id}
-          title={s.name}
-          className="flex h-5 min-w-5 items-center justify-center rounded-full bg-secondary px-1 text-[10px] font-semibold ring-2 ring-background"
-        >
-          {letters(s.member_id, s.name, s.initial)}
-        </span>
+        <Tooltip key={s.member_id}>
+          <TooltipTrigger asChild>
+            <Avatar className="h-5 w-auto min-w-5 ring-2 ring-background">
+              <AvatarFallback className="bg-secondary px-1 text-xs font-semibold text-foreground">{letters(s.member_id, s.name, s.initial)}</AvatarFallback>
+            </Avatar>
+          </TooltipTrigger>
+          <TooltipContent>{s.name}</TooltipContent>
+        </Tooltip>
       ))}
     </span>
   )
@@ -157,18 +181,31 @@ export function StarButton({ take, who, disabled }: { take: TakeLike; who?: bool
   const star = useStar()
   const mine = !!me && take.stars.some((s) => s.member_id === me.id)
   const names = take.stars.map((s) => s.name).join(", ")
+  // The shared Toggle with no fill when on, as РЭХА's star: the filled star says it.
+  const button = (
+    <Toggle
+      size="icon-row"
+      pressed={mine}
+      onPressedChange={(on) => star.mutate({ uid: take.uid, on })}
+      // Its own on or off, where the tip's trigger would put its own state.
+      data-state={mine ? "on" : "off"}
+      aria-label={mine ? `Take back your star from ${quoted(take.name)}` : `Star ${quoted(take.name)}`}
+      disabled={!me || disabled || star.isPending}
+      className="dark:not-data-[state=on]:hover:bg-accent/50 data-[state=on]:bg-transparent data-[state=on]:hover:bg-accent dark:data-[state=on]:hover:bg-accent/50"
+    >
+      <Star className={cn("size-4", mine ? "fill-current text-signal" : "text-muted-foreground")} />
+    </Toggle>
+  )
   return (
-    <span className="flex items-center gap-0.5" title={names ? `Starred by ${names}` : undefined}>
-      <Button
-        variant="ghost"
-        size="icon-row"
-        aria-pressed={mine}
-        aria-label={mine ? `Take back your star from ${quoted(take.name)}` : `Star ${quoted(take.name)}`}
-        disabled={!me || disabled || star.isPending}
-        onClick={() => star.mutate({ uid: take.uid, on: !mine })}
-      >
-        <Star className={cn("size-4", mine ? "fill-current text-signal" : "text-muted-foreground")} />
-      </Button>
+    <span className="flex items-center gap-0.5">
+      {names ? (
+        <Tooltip>
+          <TooltipTrigger asChild>{button}</TooltipTrigger>
+          <TooltipContent>Starred by {names}</TooltipContent>
+        </Tooltip>
+      ) : (
+        button
+      )}
       {who ? <Initials stars={take.stars} /> : <span className="tnum w-3 text-xs text-muted-foreground">{take.stars.length || ""}</span>}
     </span>
   )
@@ -264,6 +301,7 @@ export function Wave({
 
 /** A mark's diamond, as on the wave. */
 export function Diamond({ colour, className }: { colour: string; className?: string }) {
+  // design-ok(radius): the marker's diamond on the waveform, a graphic that keeps its own corner
   return <span aria-hidden="true" className={cn("inline-block size-2.5 shrink-0 rotate-45 rounded-[2px]", className)} style={{ background: colour }} />
 }
 
@@ -302,8 +340,8 @@ export function TakeLine({ take, marks, short, after }: { take: TakeLike; marks?
   const labelOf = useLabelOf()
   return (
     <div className="flex flex-col gap-0.5" data-take={take.name}>
-      <div
-        className="-mx-2 grid cursor-pointer grid-cols-[2rem_minmax(0,1fr)_auto] items-center gap-x-3 rounded-lg px-2 py-1.5 hover:bg-accent/60"
+      <Item
+        className="-mx-2 grid cursor-pointer grid-cols-[2rem_minmax(0,1fr)_auto] items-center gap-0 gap-x-3 rounded-lg border-0 px-2 py-1.5 hover:bg-accent/60"
         onClick={(e) => {
           if ((e.target as HTMLElement).closest(OWN_PRESS)) return
           // A press inside a menu drawn over the row is the menu's.
@@ -333,19 +371,22 @@ export function TakeLine({ take, marks, short, after }: { take: TakeLike; marks?
           <StarButton take={take} />
           <TakeMenu take={take} row />
         </OwnPress>
-      </div>
+      </Item>
       {marks &&
         take.marks.map((k) => (
-          <button
+          <Button
             key={k.id}
-            type="button"
+            variant="ghost"
             onClick={() => p.seek(take.uid, k.at)}
-            className={cn("ml-9 flex min-w-0 items-center gap-2 rounded-md px-2 py-1 text-left text-sm hover:bg-accent/60", k.closed && "opacity-60")}
+            className={cn(
+              "ml-9 h-auto min-w-0 justify-start gap-2 rounded-md border-0 px-2 py-1 text-left hover:bg-accent/60 dark:hover:bg-accent/60",
+              k.closed && "opacity-60"
+            )}
           >
             <LabelDot colour={labelOf(k.label_id).colour} />
             <span className="tnum shrink-0 text-muted-foreground">{clock(k.at)}</span>
             <span className="truncate">{k.note || labelOf(k.label_id).name}</span>
-          </button>
+          </Button>
         ))}
     </div>
   )

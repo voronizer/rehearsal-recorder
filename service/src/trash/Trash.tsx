@@ -1,6 +1,7 @@
 import { useState } from "react"
 import { ListMusic, Music } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { FieldError } from "@/components/ui/field"
 import { useRestore, useRestoreSet, useRestoreSong, useTrash, type Trashed, type TrashedSet, type TrashedSong } from "../api"
 import { Group, Page, Rows, Tile, Trouble, useTitle } from "../shell/parts"
 import { count, day, localDay, longDay, quoted, takeText } from "../shell/words"
@@ -62,11 +63,7 @@ export function Trash() {
           <span role="status">{back}</span>
         </Tile>
       )}
-      {refused && (
-        <p role="alert" className="text-destructive">
-          {refused}
-        </p>
-      )}
+      <FieldError>{refused}</FieldError>
       {trash.error && <Trouble error={trash.error} retry={() => void trash.refetch()} />}
       {trash.data &&
         (lines.length ? (

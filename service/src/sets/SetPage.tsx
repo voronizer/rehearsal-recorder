@@ -1,18 +1,20 @@
 import { useEffect, useState } from "react"
 import { Link, useNavigate } from "@tanstack/react-router"
-import { Check, Ellipsis, GripVertical, Mic, Pencil, Printer, X } from "lucide-react"
+import { Ellipsis, GripVertical, Mic, Pencil, Printer, X } from "lucide-react"
 import { ConfirmDialog } from "@/components/ConfirmDialog"
 import { SongPills } from "@/components/SongPills"
 import { SortableList } from "@/components/SortableList"
-import { Button } from "@/components/ui/button"
+import { Button, OPENS } from "@/components/ui/button"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
+import { Field, FieldError } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { formatMeter } from "@/lib/format"
 import { cn } from "@/lib/utils"
 import { same } from "../../worker/shared/names"
 import { useChangeSet, useDeleteSet, useSongs, useTypeLength, type BandSet, type SongItem } from "../api"
-import { Back, Group, Groups, OPENS, Page } from "../shell/parts"
+import { InPlace } from "../shell/InPlace"
+import { Back, BARE, ErrorLine, Group, Groups, Page } from "../shell/parts"
 import { useSize } from "../shell/size"
 import { clock, quoted } from "../shell/words"
 import { lengthOf, parseLength, setLine, songsOf } from "./length"
@@ -79,43 +81,23 @@ function SetTitle({ set, songs, big }: { set: BandSet; songs: SongItem[]; big?: 
     change.mutate({ id: set.id, name: typed }, { onSuccess: stop })
   }
   const title = editing ? (
-    <span className="flex min-w-0 flex-wrap items-center gap-1">
-      <Input
-        aria-label="Set's name"
-        autoFocus
-        onFocus={(e) => e.currentTarget.select()}
-        maxLength={NAME_MAX}
-        value={name}
-        aria-invalid={!!change.error}
-        onChange={(e) => {
-          change.reset()
-          setName(e.target.value)
-        }}
-        onKeyDown={(e) => {
-          if (e.key === "Enter") {
-            e.preventDefault()
-            go()
-          } else if (e.key === "Escape") {
-            // Esc closes a panel too; here it only leaves the name.
-            e.preventDefault()
-            e.stopPropagation()
-            stop()
-          }
-        }}
-        className={cn("h-9 w-72 min-w-0 px-2 font-semibold", big ? "text-xl md:text-xl" : "text-lg md:text-lg")}
-      />
-      <Button variant="ghost" size="icon-row" aria-label="Rename" disabled={!name.trim() || change.isPending} onClick={go}>
-        <Check />
-      </Button>
-      <Button variant="ghost" size="icon-row" aria-label="Leave the name as it was" onClick={stop}>
-        <X className="text-muted-foreground" />
-      </Button>
-      {change.error && (
-        <span role="alert" className="text-xs font-normal text-destructive">
-          {change.error.message}
-        </span>
-      )}
-    </span>
+    <InPlace
+      label="Set's name"
+      selectAll
+      maxLength={NAME_MAX}
+      value={name}
+      invalid={!!change.error}
+      onChange={(n) => {
+        change.reset()
+        setName(n)
+      }}
+      ok={{ label: "Rename", disabled: !name.trim() || change.isPending }}
+      onOk={go}
+      leave="Leave the name as it was"
+      onLeave={stop}
+      className="w-80 max-w-full"
+      inputClassName={cn("font-semibold", big ? "text-xl md:text-xl" : "text-base md:text-base")}
+    />
   ) : (
     <span className="flex min-w-0 items-center gap-1">
       <span className="min-w-0 [overflow-wrap:anywhere]">{set.name}</span>
@@ -137,7 +119,7 @@ function SetTitle({ set, songs, big }: { set: BandSet; songs: SongItem[]; big?: 
       </Tooltip>
     </span>
   )
-  return (
+  const row = (
     <span className="flex flex-wrap items-center gap-3">
       {title}
       <span className="flex-1" />
@@ -162,11 +144,7 @@ function SetTitle({ set, songs, big }: { set: BandSet; songs: SongItem[]; big?: 
           </DropdownMenuContent>
         </DropdownMenu>
       </span>
-      {remove.error && (
-        <span role="alert" className="text-xs font-normal text-destructive">
-          {remove.error.message}
-        </span>
-      )}
+      <FieldError>{remove.error?.message}</FieldError>
       <ConfirmDialog
         open={asking}
         onOpenChange={setAsking}
@@ -177,6 +155,14 @@ function SetTitle({ set, songs, big }: { set: BandSet; songs: SongItem[]; big?: 
         // Once it is gone, to the list: on a computer the first set is picked there.
         onConfirm={() => void remove.mutateAsync(set.id).then(() => navigate({ to: "/sets", replace: true }), () => {})}
       />
+    </span>
+  )
+  if (!editing) return row
+  // While the name is a field, the line under it for what went wrong (S11).
+  return (
+    <span className="flex flex-col gap-1">
+      {row}
+      <ErrorLine error={change.error?.message} />
     </span>
   )
 }
@@ -198,36 +184,40 @@ function LengthCell({ song }: { song: SongItem }) {
   }
   if (field)
     return (
-      <Input
-        autoFocus
-        value={field.text}
-        placeholder="m:ss"
-        aria-label={`Length of ${song.title}`}
-        aria-invalid={bad || !!type.error}
-        title={type.error?.message}
-        onFocus={(e) => e.currentTarget.select()}
-        onChange={(e) => {
-          setField({ ...field, text: e.target.value })
-          setBad(false)
-          type.reset()
-        }}
-        onBlur={close}
-        onKeyDown={(e) => {
-          if (e.key === "Escape") {
+      // Its line for what went wrong lies in the row's room below it, so
+      // the row keeps its height (B4), and runs left from under the field.
+      <Field className="-mb-6 w-16 shrink-0 gap-1">
+        <Input
+          autoFocus
+          value={field.text}
+          placeholder="m:ss"
+          aria-label={`Length of ${song.title}`}
+          aria-invalid={bad || !!type.error}
+          onFocus={(e) => e.currentTarget.select()}
+          onChange={(e) => {
+            setField({ ...field, text: e.target.value })
+            setBad(false)
+            type.reset()
+          }}
+          onBlur={close}
+          onKeyDown={(e) => {
+            if (e.key === "Escape") {
+              e.preventDefault()
+              e.stopPropagation()
+              close()
+            }
+            if (e.key !== "Enter") return
             e.preventDefault()
-            e.stopPropagation()
-            close()
-          }
-          if (e.key !== "Enter") return
-          e.preventDefault()
-          // Nothing changed: the best take's length stays the best take's.
-          if (field.text.trim() === field.from) return close()
-          const typed = parseLength(field.text)
-          if (typed === "bad") return setBad(true)
-          type.mutate({ id: song.id, length: typed }, { onSuccess: close })
-        }}
-        className="tnum h-7 w-16 px-1.5"
-      />
+            // Nothing changed: the best take's length stays the best take's.
+            if (field.text.trim() === field.from) return close()
+            const typed = parseLength(field.text)
+            if (typed === "bad") return setBad(true)
+            type.mutate({ id: song.id, length: typed }, { onSuccess: close })
+          }}
+          className="tnum h-7 w-16 px-1.5"
+        />
+        <ErrorLine error={type.error?.message} className="flex justify-end whitespace-nowrap" />
+      </Field>
     )
   const hint =
     song.typed_length !== null
@@ -236,17 +226,21 @@ function LengthCell({ song }: { song: SongItem }) {
         ? "The best take's length. Press it to type your own."
         : "Press it to type a length."
   return (
-    <button
-      type="button"
-      title={hint}
-      onClick={() => {
-        const text = sec !== null ? clock(sec) : ""
-        setField({ text, from: text })
-      }}
-      className={cn("tnum w-fit", OPENS, sec === null && "text-xs text-muted-foreground")}
-    >
-      {sec !== null ? clock(sec) : "no takes"}
-    </button>
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <Button
+          variant="link"
+          onClick={() => {
+            const text = sec !== null ? clock(sec) : ""
+            setField({ text, from: text })
+          }}
+          className={cn(BARE, "tnum w-fit", sec === null && "text-xs text-muted-foreground")}
+        >
+          {sec !== null ? clock(sec) : "no takes"}
+        </Button>
+      </TooltipTrigger>
+      <TooltipContent>{hint}</TooltipContent>
+    </Tooltip>
   )
 }
 
@@ -256,7 +250,7 @@ const COLS = "grid-cols-[1.5rem_minmax(0,1fr)_6rem_4rem_4rem]"
 function SongCells({ at, song }: { at: number; song: SongItem }) {
   const size = useSize()
   const title = (
-    <Link to="/songs/$id" params={{ id: String(song.id) }} className={cn("truncate", OPENS)}>
+    <Link to="/songs/$id" params={{ id: String(song.id) }} className={cn("truncate text-left", OPENS)}>
       {song.title}
     </Link>
   )
@@ -383,11 +377,7 @@ function SetBody({ songs }: { songs: SetSongs }) {
       <Group>
         {songs.songs.length > 0 && <Head />}
         <Editable ids={songs.ids} songs={songs.songs} put={songs.put} />
-        {songs.error && (
-          <p role="alert" className="text-destructive">
-            Not saved: {songs.error.message}
-          </p>
-        )}
+        <FieldError>{songs.error && `Not saved: ${songs.error.message}`}</FieldError>
       </Group>
       <Group>
         <AddSongs ids={songs.ids} all={songs.all} put={songs.put} />
@@ -402,7 +392,7 @@ export function SetPane({ set }: { set: BandSet }) {
   return (
     <div className="flex min-w-0 flex-1 flex-col gap-4">
       <div className="flex flex-col gap-1">
-        <h2 className="text-lg font-semibold">
+        <h2 className="text-base font-semibold">
           <SetTitle set={set} songs={songs.songs} />
         </h2>
         <p className="text-muted-foreground">{setLine(songs.songs)}</p>

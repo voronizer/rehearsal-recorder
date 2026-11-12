@@ -3,6 +3,7 @@ import { Ellipsis } from "lucide-react"
 import { ConfirmDialog } from "@/components/ConfirmDialog"
 import { Button } from "@/components/ui/button"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
+import { FieldError } from "@/components/ui/field"
 import { useDeleteTake, useMoveTake } from "../api"
 import { quoted, takeText, type TakeNaming } from "../shell/words"
 import { MoveSub, type Movable } from "./move"
@@ -17,12 +18,14 @@ export function TakeMenu({ take, onGone, row }: { take: Movable & TakeNaming; on
   const remove = useDeleteTake()
   const move = useMoveTake()
   const [asking, setAsking] = useState(false)
+  // Open here: a song picked in Move to song's list closes it, as a line of the menu would.
+  const [open, setOpen] = useState(false)
   // New song… puts the focus in its field; the menu, closing, must not take it back to ⋯.
   const naming = useRef(false)
   const error = remove.error ?? move.error
   return (
     <>
-      <DropdownMenu>
+      <DropdownMenu open={open} onOpenChange={setOpen}>
         <DropdownMenuTrigger asChild>
           <Button variant="ghost" size="icon-row" aria-label={`What to do with ${take.name}`}>
             <Ellipsis />
@@ -35,15 +38,11 @@ export function TakeMenu({ take, onGone, row }: { take: Movable & TakeNaming; on
             naming.current = false
           }}
         >
-          <MoveSub take={take} move={move} row={row} onNew={() => (naming.current = true)} />
+          <MoveSub take={take} move={move} row={row} onNew={() => (naming.current = true)} onDone={() => setOpen(false)} />
           <DropdownMenuItem onSelect={() => setAsking(true)}>Delete take</DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
-      {error && (
-        <span role="alert" className="text-xs text-destructive">
-          {error.message}
-        </span>
-      )}
+      <FieldError>{error?.message}</FieldError>
       <ConfirmDialog
         open={asking}
         onOpenChange={setAsking}

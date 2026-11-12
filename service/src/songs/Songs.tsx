@@ -3,10 +3,11 @@ import { useEffect, useState } from "react"
 import { Link, useNavigate, useSearch } from "@tanstack/react-router"
 import { Plus } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { Toggle } from "@/components/ui/toggle"
 import { cn } from "@/lib/utils"
 import { useSongs, type SongItem } from "../api"
 import { usePanel } from "../shell/panel"
-import { Empty, Group, Groups, Page, Rows, TitleWith, Trouble, useTitle } from "../shell/parts"
+import { Empty, Group, Groups, Page, PANEL_TOGGLE, Rows, TitleWith, Trouble, useTitle } from "../shell/parts"
 import { useSize } from "../shell/size"
 import { clock, count, day } from "../shell/words"
 import { OWN_PRESS, OwnPress, Play, TakeLine, TakeLink } from "../takes/parts"
@@ -77,9 +78,10 @@ export function Songs() {
   }, [edit, navigate])
   const head = (
     <TitleWith title="Songs">
-      <Button variant="outline" size="row" aria-pressed={panel?.kind === "statuses"} onClick={() => open({ kind: "statuses" })}>
+      {/* Pressed while the statuses are open; a press calls for them, and the panel closes them when they are open already. */}
+      <Toggle variant="outline" size="row" pressed={panel?.kind === "statuses"} onPressedChange={() => open({ kind: "statuses" })} className={PANEL_TOGGLE}>
         Statuses
-      </Button>
+      </Toggle>
       <Button
         variant="outline"
         size="row"
@@ -99,7 +101,7 @@ export function Songs() {
   if (!songs.data) return null
   const { statuses, songs: all, not_named } = songs.data
   if (!all.length && !not_named.length)
-    return <Empty title={head} top={dialog} text="No songs yet. A song made in РЭХА appears here, or press New song to start one here." />
+    return <Empty title={head} top={dialog} empty={["No songs yet", "A song made in РЭХА appears here, or press New song to start one here."]} />
   const takes = all.reduce((n, s) => n + s.takes, 0) + not_named.length
   return (
     <Page title={head} sub={`${count(all.length, "song")} · ${count(takes, "take")}`}>

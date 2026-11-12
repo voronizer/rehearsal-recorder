@@ -60,3 +60,44 @@ test("a removed member is sent to sign-in", async ({ page }) => {
   await expect(page).toHaveURL(/\/signin/)
   await expect(page.getByRole("button", { name: "Send code" })).toBeVisible()
 })
+
+test("the code pasted whole fills the six boxes, and Sign in is still pressed", async ({ page, request }) => {
+  const owner = await asMember("alex")
+  await addMember(owner, "pasted@example.com")
+  await confirm(owner, "pasted@example.com")
+
+  await page.goto("/signin")
+  await page.getByLabel("Email address").fill("pasted@example.com")
+  await page.getByRole("button", { name: "Send code" }).click()
+  await expect(page.getByText(SENT)).toBeVisible()
+  const code = await codeFor(request, "pasted@example.com")
+  const field = page.getByLabel("Code")
+  await field.focus()
+  await field.evaluate((el, text) => {
+    const data = new DataTransfer()
+    data.setData("text/plain", text)
+    el.dispatchEvent(new ClipboardEvent("paste", { clipboardData: data, bubbles: true, cancelable: true }))
+  }, code)
+  await expect(page.locator("[data-slot=input-otp-slot]")).toHaveText(code.split(""))
+  await expect(field).toHaveValue(code)
+  // Nothing signs in by itself.
+  await expect(page).toHaveURL(/\/signin/)
+  await page.getByRole("button", { name: "Sign in" }).click()
+  await expect(page.getByRole("heading", { name: "What should the band call you?" })).toBeVisible()
+})
+
+test("a wrong code is said under the boxes, above Sign in", async ({ page }) => {
+  await page.goto("/signin")
+  await page.getByLabel("Email address").fill("nobody@example.com")
+  await page.getByRole("button", { name: "Send code" }).click()
+  await expect(page.getByText(SENT)).toBeVisible()
+  const button = page.getByRole("button", { name: "Sign in" })
+  await page.getByLabel("Code").fill("000000")
+  await button.click()
+  const alert = page.getByRole("alert")
+  await expect(alert).toHaveText("This code does not work. Check it, or press Send code for a new one.")
+  const boxes = (await page.locator("[data-slot=input-otp-slot]").first().boundingBox())!
+  const said = (await alert.boundingBox())!
+  expect(said.y).toBeGreaterThanOrEqual(boxes.y + boxes.height)
+  expect(said.y + said.height).toBeLessThanOrEqual((await button.boundingBox())!.y)
+})

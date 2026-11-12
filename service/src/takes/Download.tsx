@@ -1,14 +1,11 @@
-import { useEffect, useId, useRef, useState, type ReactNode } from "react"
+import { useEffect, useRef, useState } from "react"
 import { Download as DownloadIcon, Layers, Music4 } from "lucide-react"
+import { ShareOption } from "@/components/ShareOption"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Dialog, DialogButtons, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
-import { Item } from "@/components/ui/item"
-import { Spinner } from "@/components/ui/spinner"
+import { Label } from "@/components/ui/label"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
-import { useAfter } from "@/hooks/useAfter"
-import { SPINNER_AFTER_MS } from "@/lib/playLook"
-import { cn } from "@/lib/utils"
 import type { TakePage } from "../api"
 import { count, quoted, takeText } from "../shell/words"
 import { gainsOf, makeMix, mixName, type Heard } from "./player/mix"
@@ -158,7 +155,7 @@ function Choices({
       </DialogHeader>
       <div className="flex flex-col gap-2">
         {take.tracks.length > 0 && (
-          <Choice
+          <ShareOption
             icon={<Music4 />}
             title="The mix"
             hint="One MP3 of the take as you hear it on this page: your levels, mute and solo."
@@ -171,14 +168,14 @@ function Choices({
             onClick={() => void mix()}
           />
         )}
-        <Choice
+        <ShareOption
           icon={<Layers />}
           title="Tracks in MP3"
           hint="Every track on its own, small files for a phone or a quick look."
           disabled={busy || !linesOf(take, "mp3").length}
           onClick={() => onList("mp3")}
         />
-        <Choice
+        <ShareOption
           icon={<Layers />}
           title="Tracks in FLAC"
           hint={take.flac_coming ? COMING : "Every track as РЭХА recorded it, and the notes as .mid, to open in a DAW."}
@@ -188,57 +185,6 @@ function Choices({
       </div>
       <DialogButtons cancel="Close" />
     </>
-  )
-}
-
-/** A choice in РЭХА's share dialog's look (ShareDialog.tsx): its icon, its name, the line under it. */
-function Choice({
-  icon,
-  title,
-  hint,
-  trouble = null,
-  busy = false,
-  progress = null,
-  disabled,
-  onClick,
-}: {
-  icon: ReactNode
-  title: string
-  hint: string
-  /** Said in the line's place, in the error's colour. */
-  trouble?: string | null
-  busy?: boolean
-  progress?: string | null
-  disabled: boolean
-  onClick: () => void
-}) {
-  // Its icon and words stay for the work's first second (B5).
-  const slow = useAfter(busy && progress !== null, SPINNER_AFTER_MS)
-  const hintId = useId()
-  return (
-    <Item asChild variant="outline" size="sm" className="flex-nowrap items-start">
-      <Button
-        type="button"
-        variant="ghost"
-        onClick={onClick}
-        disabled={disabled}
-        aria-label={title}
-        aria-describedby={hintId}
-        className="h-auto w-full justify-start text-left whitespace-normal"
-      >
-        {/* Quiet: "Mixing… n%" beside it says it. */}
-        <span className="mt-0.5 shrink-0 text-muted-foreground [&>svg]:size-4">{slow ? <Spinner after={0} quiet /> : icon}</span>
-        <span className="min-w-0 flex-1">
-          <span className="flex items-center gap-2 text-sm font-semibold">
-            {title}
-            {slow && progress && <span className="text-xs font-normal text-muted-foreground">{progress}</span>}
-          </span>
-          <span id={hintId} role={trouble ? "alert" : undefined} className={cn("mt-0.5 block text-xs", trouble ? "text-destructive" : "text-muted-foreground")}>
-            {trouble ?? hint}
-          </span>
-        </span>
-      </Button>
-    </Item>
   )
 }
 
@@ -261,7 +207,7 @@ function TrackList({ take, kind, onBack, onDone }: { take: TakePage; kind: Kind;
       </DialogHeader>
       <div className="flex flex-col gap-1">
         {lines.map((l) => (
-          <label key={l.href} data-file={l.label} className="flex h-8 cursor-pointer items-center gap-3 rounded-md px-2 text-sm hover:bg-accent">
+          <Label key={l.href} data-file={l.label} className="flex h-8 cursor-pointer items-center gap-3 rounded-md px-2 text-sm leading-5 font-normal hover:bg-accent">
             <Checkbox
               checked={ticked.has(l.href)}
               onCheckedChange={(on) => {
@@ -272,7 +218,7 @@ function TrackList({ take, kind, onBack, onDone }: { take: TakePage; kind: Kind;
               }}
             />
             {l.label}
-          </label>
+          </Label>
         ))}
       </div>
       <DialogButtons

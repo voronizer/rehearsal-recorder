@@ -44,11 +44,16 @@ test("a new song is refused for a title the band has in another case", async ({ 
   await page.getByRole("button", { name: "New song" }).click()
   const main = page.getByRole("main")
   const dialog = page.getByRole("dialog", { name: "New song" })
+  const add = dialog.getByRole("button", { name: "Add song" })
   await dialog.getByLabel("Title").fill("pałyn")
-  await dialog.getByRole("button", { name: "Add song" }).click()
+  // The error's line under the title is there before it: nothing below moves.
+  await dialog.evaluate((el) => Promise.all(el.getAnimations().map((a) => a.finished)))
+  const top = (await add.boundingBox())!.y
+  await add.click()
   await expect(dialog.getByRole("alert")).toHaveText("There is already a song called “Pałyn”.")
+  expect((await add.boundingBox())!.y).toBe(top)
   await dialog.getByLabel("Title").fill("Zorka")
-  await dialog.getByRole("button", { name: "Add song" }).click()
+  await add.click()
   // The new song's page opens, with the first status; Back from it is Songs, with no dialog.
   await expect(page).toHaveURL(/\/songs\/\d+$/)
   await expect(main.getByRole("heading", { level: 1 })).toContainText("Zorka")
@@ -237,7 +242,10 @@ test("a song page puts the best take on top", async ({ page }) => {
   const best = page.getByRole("region", { name: "Best take" })
   await expect(best).toContainText("most stars")
   await expect(best.locator("[data-take]")).toHaveAttribute("data-take", "Viasna 11")
-  await expect(best.getByTitle("Starred by Dzima, Ira")).toBeVisible()
+  // Who starred it is in the star's tip.
+  await best.getByRole("button", { name: "Star “Viasna 11”" }).hover()
+  await expect(page.getByRole("tooltip")).toHaveText("Starred by Dzima, Ira")
+  await page.mouse.move(0, 0)
   // Every take by rehearsal, newest first; only the newest rehearsal open.
   const all = page.getByRole("region", { name: "All takes" })
   await expect(all.locator("[data-take]")).toHaveCount(2)
@@ -262,8 +270,12 @@ test("the star at rehearsal shows apart", async ({ page }) => {
   await page.goto(`/takes/${band().takes["Kupalle 2"]}`)
   const main = page.getByRole("main")
   await expect(main.getByText("★ at rehearsal")).toBeVisible()
-  await expect(main.getByRole("button", { name: "Star “Kupalle 2”" })).toHaveAttribute("aria-pressed", "false")
-  await expect(main.getByTitle(/^Starred by/)).toHaveCount(0)
+  const star = main.getByRole("button", { name: "Star “Kupalle 2”" })
+  await expect(star).toHaveAttribute("aria-pressed", "false")
+  // No member's star, so the star has no tip of who.
+  await star.hover()
+  await page.waitForTimeout(800)
+  await expect(page.getByRole("tooltip")).toHaveCount(0)
 
   // It does not count for the best take: with no member's star, the newest is it.
   await page.goto(`/songs/${band().songs["Kupalle"]}`)

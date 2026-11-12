@@ -42,7 +42,7 @@ export function MarkPanel({ uid, id, at }: { uid: string; id?: number; at?: numb
   return (
     <div className="flex flex-col gap-6" aria-label={`Mark at ${clock(moment)}`}>
       <div className="flex items-center gap-2">
-        <h2 className="flex-1 text-lg font-semibold">
+        <h2 className="flex-1 text-base font-semibold">
           {mark ? "Mark" : "New mark"} at <span className="tnum">{clock(moment)}</span>
         </h2>
         <PanelClose />

@@ -11,22 +11,30 @@ import { setLine } from "./length"
   print window with it.
 */
 
+// The sheet's own look, for paper and not the screen: each line says why.
+const SHEET = "print-sheet bg-white text-black" // design-ok(raw-colour): a sheet made for paper, black on white whatever the theme, sized for A4
+const HEAD = "mb-6 flex items-baseline justify-between gap-6 border-b border-black/30 pb-3 text-[15px]" // design-ok(raw-colour): a sheet made for paper, black on white whatever the theme, sized for A4 design-ok(px-text): a sheet made for paper, black on white whatever the theme, sized for A4
+const SONG = "flex break-inside-avoid items-baseline gap-5 border-b border-black/15 py-3" // design-ok(raw-colour): a sheet made for paper, black on white whatever the theme, sized for A4
+const NUMBER = "w-10 shrink-0 text-right text-[28px] text-black/50" // design-ok(raw-colour): a sheet made for paper, black on white whatever the theme, sized for A4 design-ok(px-text): a sheet made for paper, black on white whatever the theme, sized for A4
+const TITLE = "min-w-0 flex-1 text-[40px] leading-tight font-bold" // design-ok(px-text): a sheet made for paper, black on white whatever the theme, sized for A4
+const FACTS = "shrink-0 text-[24px]" // design-ok(px-text): a sheet made for paper, black on white whatever the theme, sized for A4
+
 /** “E minor” as a set list writes it, “Em”; “F♯ major”, “F♯”. */
 export const shortKey = (key: string | null) => (key ? key.replace(/ major$/, "").replace(/ minor$/, "m") : "")
 
 export function PrintSheet({ set, songs }: { set: BandSet; songs: SongItem[] }) {
   return createPortal(
-    <div className="print-sheet bg-white text-black" style={{ fontFamily: "Helvetica, Arial, sans-serif" }}>
-      <div className="mb-6 flex items-baseline justify-between gap-6 border-b border-black/30 pb-3 text-[15px]">
+    <div className={SHEET} style={{ fontFamily: "Helvetica, Arial, sans-serif" }}>
+      <div className={HEAD}>
         <span className="font-semibold">{set.name}</span>
         <span className="shrink-0">{setLine(songs, true)}</span>
       </div>
       <ol>
         {songs.map((s, i) => (
-          <li key={s.id} className="flex break-inside-avoid items-baseline gap-5 border-b border-black/15 py-3">
-            <span className="w-10 shrink-0 text-right text-[28px] text-black/50">{i + 1}</span>
-            <span className="min-w-0 flex-1 text-[40px] leading-tight font-bold">{s.title}</span>
-            <span className="shrink-0 text-[24px]">{[shortKey(s.key), s.tempo !== null ? String(Math.round(s.tempo)) : ""].filter(Boolean).join(" · ")}</span>
+          <li key={s.id} className={SONG}>
+            <span className={NUMBER}>{i + 1}</span>
+            <span className={TITLE}>{s.title}</span>
+            <span className={FACTS}>{[shortKey(s.key), s.tempo !== null ? String(Math.round(s.tempo)) : ""].filter(Boolean).join(" · ")}</span>
           </li>
         ))}
       </ol>

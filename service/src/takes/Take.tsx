@@ -4,6 +4,7 @@ import { RotateCcw } from "lucide-react"
 import { TakePlayer as RehaPlayer } from "@/components/TakePlayer"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { FieldError } from "@/components/ui/field"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { useMultitrackPlayer } from "@/hooks/useMultitrackPlayer"
 import { usePlayerKeys, useSpacebar } from "@/hooks/useSpacebar"
@@ -140,11 +141,7 @@ function Levels({ take, sound, under = false }: { take: TakePage; sound: Service
       </TooltipContent>
     </Tooltip>
   )
-  const said = trouble && (
-    <span role="alert" className="min-w-0 text-sm text-destructive">
-      Your levels were not kept: {trouble}
-    </span>
-  )
+  const said = trouble && <FieldError className="min-w-0">Your levels were not kept: {trouble}</FieldError>
   // Under Master the two are cells of the player's row, on its columns.
   return (
     <div data-levels className={under ? "contents" : "flex items-center gap-3"}>

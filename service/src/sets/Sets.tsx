@@ -1,6 +1,7 @@
 import { Link, useNavigate, useParams } from "@tanstack/react-router"
 import { Plus } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { FieldError } from "@/components/ui/field"
 import { ITEM_CHOSEN, Item } from "@/components/ui/item"
 import { cn } from "@/lib/utils"
 import { useMakeSet, useSets, useSongs, type BandSet, type SongItem } from "../api"
@@ -75,14 +76,10 @@ export function Sets() {
         <Plus />
         New set
       </Button>
-      {make.error && (
-        <p role="alert" className="text-destructive">
-          {make.error.message}
-        </p>
-      )}
+      <FieldError>{make.error?.message}</FieldError>
     </div>
   )
-  if (!all.length) return <Empty title="Sets" text="No sets yet. A set is the songs in the order you play them at a gig." top={newSet} />
+  if (!all.length) return <Empty title="Sets" empty={["No sets yet", "A set is the songs in the order you play them at a gig."]} top={newSet} />
   const picked = chosen ?? all[0]
   const list = (
     <div className={cn("flex shrink-0 flex-col gap-2", size !== "phone" && "w-54")}>

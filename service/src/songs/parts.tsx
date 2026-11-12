@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from "react"
 import { ChevronDown, Download, Ellipsis, ExternalLink, X } from "lucide-react"
 import { ConfirmDialog } from "@/components/ConfirmDialog"
-import { Button } from "@/components/ui/button"
+import { Badge } from "@/components/ui/badge"
+import { Button, OPENS } from "@/components/ui/button"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -11,13 +12,15 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
+import { Field, FieldError } from "@/components/ui/field"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Textarea } from "@/components/ui/textarea"
 import { cn } from "@/lib/utils"
 import { KEYS } from "../../worker/shared/keys"
 import { MAX_FILE, TOO_BIG } from "../../worker/songs/limits"
 import { useAddFile, useChangeSong, useDeleteFile, useDeleteSong, useSongs, type SongFile, type SongPage } from "../api"
 import { usePanel } from "../shell/panel"
-import { OPENS, Rows, TEXTAREA, Tile, useFlash } from "../shell/parts"
+import { ErrorLine, Rows, useFlash } from "../shell/parts"
 import { count, quoted } from "../shell/words"
 import { TakeLine } from "../takes/parts"
 
@@ -122,8 +125,8 @@ function NotesBox({ song }: { song: Song }) {
   // Another page or another song opened: what is written goes too.
   useEffect(() => () => save.current(latest.current), [])
   return (
-    <Tile>
-      <textarea
+    <Field className="gap-3">
+      <Textarea
         value={text}
         onChange={(e) => setText(e.target.value)}
         onFocus={() => (writing.current = true)}
@@ -135,18 +138,15 @@ function NotesBox({ song }: { song: Song }) {
         maxLength={10000}
         aria-label="Notes"
         placeholder="Words, the form, who starts"
-        className={TEXTAREA}
+        // As the box was: its rows, 14 px on a phone too, no fill in dark.
+        className="min-h-0 text-sm field-sizing-fixed dark:bg-transparent"
       />
-      {change.error ? (
-        <p role="alert" className="text-destructive">
-          Not saved: {change.error.message}
-        </p>
-      ) : (
-        <span role="status" className="min-h-4 text-xs text-muted-foreground">
+      <ErrorLine error={change.error && `Not saved: ${change.error.message}`}>
+        <span role="status" className="text-xs text-muted-foreground">
           {change.isPending ? "Saving…" : saved ? "Saved" : ""}
         </span>
-      )}
-    </Tile>
+      </ErrorLine>
+    </Field>
   )
 }
 
@@ -168,9 +168,9 @@ export function Files({ song, files }: { song: Song; files: SongFile[] }) {
     <Rows>
       {files.map((f) => (
         <div key={f.id} className="flex items-center gap-3">
-          <span className="flex size-8 shrink-0 items-center justify-center rounded-md bg-background text-[10px] font-semibold text-muted-foreground ring-1 ring-border">
+          <Badge variant="outline" className="size-8 rounded-md border-0 bg-background p-0 text-muted-foreground ring-1 ring-border">
             {KIND[f.kind][0]}
-          </span>
+          </Badge>
           <a
             href={f.url}
             {...(f.kind === "pdf" || f.kind === "picture" ? { target: "_blank", rel: "noreferrer" } : { download: f.name })}
@@ -192,11 +192,7 @@ export function Files({ song, files }: { song: Song; files: SongFile[] }) {
         </div>
       ))}
     </Rows>
-    {remove.error && (
-      <p role="alert" className="text-destructive">
-        {remove.error.message}
-      </p>
-    )}
+    <FieldError>{remove.error?.message}</FieldError>
     <ConfirmDialog
       open={removing !== null}
       onOpenChange={(open) => !open && setRemoving(null)}
@@ -217,11 +213,7 @@ export function AddFile({ song }: { song: Song }) {
   const error = tooBig ? TOO_BIG : add.error?.message
   return (
     <span className="flex items-center gap-2">
-      {error && (
-        <span role="alert" className="text-xs text-destructive">
-          {error}
-        </span>
-      )}
+      <FieldError>{error}</FieldError>
       <input
         ref={pick}
         type="file"
@@ -271,11 +263,7 @@ export function SongMenu({ song, onGone }: { song: Song; onGone: () => void }) {
           <DropdownMenuItem onSelect={() => setAsking(true)}>Delete song</DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
-      {remove.error && (
-        <span role="alert" className="text-xs text-destructive">
-          {remove.error.message}
-        </span>
-      )}
+      <FieldError>{remove.error?.message}</FieldError>
       <ConfirmDialog
         open={asking}
         onOpenChange={setAsking}

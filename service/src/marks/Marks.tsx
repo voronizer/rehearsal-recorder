@@ -2,10 +2,13 @@ import { useState, type MouseEvent } from "react"
 import { MessageSquare } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { LabelDot } from "@/components/ui/mark"
+import { Toggle } from "@/components/ui/toggle"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
+import { useCut, WholeTip } from "@/components/ui/whole"
 import { cn } from "@/lib/utils"
 import { useMarks, type Mark, type Show } from "../api"
-import { Empty, Group, Groups, Page, Rows, TitleWith, Trouble, useTitle } from "../shell/parts"
+import { BARE, Empty, Group, Groups, Page, PANEL_TOGGLE, Rows, TitleWith, Trouble, useTitle } from "../shell/parts"
 import { usePanel } from "../shell/panel"
 import { useSize } from "../shell/size"
 import { clock, count, day, localDay } from "../shell/words"
@@ -28,7 +31,9 @@ function MarkLine({ mark }: { mark: Mark }) {
   const { open } = usePanel()
   const size = useSize()
   const label = useLabelOf()(mark.label_id)
+  const [ref, cut] = useCut<HTMLButtonElement>()
   const go = () => open({ kind: "mark", uid: mark.take.uid, id: mark.id })
+  const words = mark.note || label.name
   // The take's name opens the take; anywhere else on the line opens the mark.
   const row = (e: MouseEvent) => !(e.target as HTMLElement).closest("button, a") && go()
   const talk = mark.comments.length
@@ -59,14 +64,21 @@ function MarkLine({ mark }: { mark: Mark }) {
         mark.closed && "opacity-60"
       )}
     >
-      <span title={label.name} className="flex">
-        <LabelDot colour={label.colour} />
-      </span>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <span className="flex">
+            <LabelDot colour={label.colour} />
+          </span>
+        </TooltipTrigger>
+        <TooltipContent>{label.name}</TooltipContent>
+      </Tooltip>
       <span className="tnum text-muted-foreground">{clock(mark.at)}</span>
       <span className="flex min-w-0 items-center gap-1.5">
-        <button type="button" title={mark.note || label.name} onClick={go} className="min-w-0 truncate text-left">
-          {mark.note || label.name}
-        </button>
+        <WholeTip cut={cut} text={words}>
+          <Button ref={ref} variant="ghost" onClick={go} className={cn(BARE, "block min-w-0 truncate")}>
+            {words}
+          </Button>
+        </WholeTip>
       </span>
       {size !== "phone" && take}
       <span className="flex items-center gap-1 text-xs text-muted-foreground" aria-label={talk ? count(talk, "comment") : undefined}>
@@ -97,15 +109,16 @@ export function Marks() {
   const { panel, open } = usePanel()
   const head = (
     <TitleWith title="Marks">
-      <Button variant="outline" size="row" aria-pressed={panel?.kind === "labels"} onClick={() => open({ kind: "labels" })}>
+      {/* Pressed while the labels are open; a press calls for them, and the panel closes them when they are open already. */}
+      <Toggle variant="outline" size="row" pressed={panel?.kind === "labels"} onPressedChange={() => open({ kind: "labels" })} className={PANEL_TOGGLE}>
         Labels
-      </Button>
+      </Toggle>
     </TitleWith>
   )
   if (list.error) return <Trouble error={list.error} retry={() => void list.refetch()} />
   if (!list.data) return null
   const { counts, marks } = list.data
-  if (!counts.all) return <Empty title={head} text="No marks yet. Marks set in РЭХА come with the takes, and anyone can set one on a take here." />
+  if (!counts.all) return <Empty title={head} empty={["No marks yet", "Marks set in РЭХА come with the takes, and anyone can set one on a take here."]} />
   const songs = [...new Set(marks.map((k) => k.take.song_title ?? "Not named"))]
   return (
     <Page title={head}>

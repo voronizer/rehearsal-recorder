@@ -2,10 +2,12 @@ import { useState } from "react"
 import { useNavigate } from "@tanstack/react-router"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogButtons, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { Field } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { useAddSong, useSongs } from "../api"
+import { ErrorLine } from "../shell/parts"
 
 /**
  * **New song**, on Songs, as a dialog (Alex, 2026-11-10): the title, then
@@ -56,17 +58,21 @@ function NewSongForm() {
           )
         }}
       >
+        {/* What went wrong in the line under the title, there when empty (S11). */}
         <div className="flex flex-col gap-2">
           <Label htmlFor="new-title">Title</Label>
-          <Input
-            id="new-title"
-            autoFocus
-            maxLength={100}
-            value={title}
-            onChange={(e) => (setTitle(e.target.value), add.reset())}
-            placeholder="Zorka"
-            aria-invalid={!!add.error}
-          />
+          <Field className="gap-1">
+            <Input
+              id="new-title"
+              autoFocus
+              maxLength={100}
+              value={title}
+              onChange={(e) => (setTitle(e.target.value), add.reset())}
+              placeholder="Zorka"
+              aria-invalid={!!add.error}
+            />
+            <ErrorLine error={add.error?.message} />
+          </Field>
         </div>
         <div className="flex flex-col gap-2">
           <Label htmlFor="new-status">Status</Label>
@@ -83,11 +89,6 @@ function NewSongForm() {
             </SelectContent>
           </Select>
         </div>
-        {add.error && (
-          <p role="alert" className="text-destructive">
-            {add.error.message}
-          </p>
-        )}
       </form>
       <DialogButtons
         action={

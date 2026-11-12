@@ -1,14 +1,15 @@
 import { useEffect, useState, useSyncExternalStore, type ReactNode } from "react"
-import { Check, Pencil, X } from "lucide-react"
+import { Pencil } from "lucide-react"
 import { SignatureSelect } from "@/components/metronome/SignatureSelect"
 import { TempoField } from "@/components/metronome/TempoField"
 import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
+import { FieldError } from "@/components/ui/field"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import type { Signature } from "@/lib/api"
 import { cn } from "@/lib/utils"
 import { same, TAKE_NAME } from "../../worker/shared/names"
 import { useChangeSong, useSongs, type SongPage } from "../api"
+import { InPlace } from "../shell/InPlace"
 
 /**
  * A song's title, tempo and signature, changed where they stand (Alex,
@@ -37,11 +38,7 @@ export function TempoControls({ song }: { song: Song }) {
     <span className="flex items-center gap-1.5 text-sm font-normal">
       <TempoField tempo={tempo} signature={signature} onChange={(t) => save(t, signature)} />
       <SignatureSelect value={signature} onChange={(s) => (tempo === null ? setFirst(s) : save(tempo, s))} />
-      {change.error && (
-        <span role="alert" className="text-xs text-destructive">
-          {change.error.message}
-        </span>
-      )}
+      <FieldError>{change.error?.message}</FieldError>
     </span>
   )
 }
@@ -119,40 +116,24 @@ export function InPlaceTitle({ song, children }: { song: Song; children: ReactNo
         </Tooltip>
       </span>
     )
-  const field = (
-    <span className="flex min-w-0 items-center gap-1">
-      <Input
-        aria-label="Song title"
-        autoFocus
-        onFocus={(e) => e.currentTarget.select()}
-        maxLength={100}
-        value={title}
-        onChange={(e) => {
-          change.reset()
-          setTitle(e.target.value)
-        }}
-        onKeyDown={(e) => {
-          if (e.key === "Enter") {
-            e.preventDefault()
-            go()
-          } else if (e.key === "Escape") {
-            // Esc closes a panel too; here it only leaves the title.
-            e.preventDefault()
-            e.stopPropagation()
-            stop()
-          }
-        }}
-        className="h-9 w-72 min-w-0 px-2 text-xl font-semibold"
-      />
-      <Button variant="ghost" size="icon-row" aria-label="Rename" disabled={now.kind === "refused" || change.isPending} onClick={go}>
-        <Check />
-      </Button>
-      <Button variant="ghost" size="icon-row" aria-label="Leave the title as it was" onClick={stop}>
-        <X className="text-muted-foreground" />
-      </Button>
-    </span>
+  return (
+    <InPlace
+      label="Song title"
+      selectAll
+      maxLength={100}
+      value={title}
+      onChange={(t) => {
+        change.reset()
+        setTitle(t)
+      }}
+      ok={{ label: "Rename", disabled: now.kind === "refused" || change.isPending }}
+      onOk={go}
+      leave="Leave the title as it was"
+      onLeave={stop}
+      className="w-80 max-w-full"
+      inputClassName="text-xl font-semibold"
+    />
   )
-  return field
 }
 
 /** A song page's facts, or while its title is a field, what renaming it does. */
