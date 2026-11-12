@@ -36,6 +36,13 @@ All on 12 November 2026 (UTC).
   a computer, `downloads` and `sets`, are taken again, now with the handle;
   the site's words stay.
 - 10:28:10 card «Не трогать»: РЭХА unchanged.
+- 11:15:23 «ok» to this spec and the plan.
+- 11:17:52 «и давай логотип сделаем не таким круглым - слишком слизаны
+  углы»; 11:19:27 card «А. Как кнопки» (mockup
+  https://claude.ai/artifact/LgVPuTW9Yefz2MvduX5SQB): the band's logo has
+  8 px corners at 36 px (the menu, sign-in), as a button has, and 4 px at
+  28 px (a phone's header); 56 px on Members keeps 12 px. Before: 12 px
+  and 8 px.
 
 ## What the band sees
 
@@ -102,6 +109,12 @@ kept fold waits for a computer's window.
   C8).
 - No count or dot on a folded Marks (Alex, 10:26:28).
 - РЭХА, its guide and the service's README are unchanged.
+
+### The logo's corners
+
+`Logo` (`service/src/shell/parts.tsx`) is `rounded-md` (8 px) at 36 px, in
+the column, folded or open, and on the sign-in card; `rounded-sm` (4 px) at
+28 px in a phone's header; Members' 56 px keeps `rounded-xl` (12 px).
 
 ## Words and pictures
 

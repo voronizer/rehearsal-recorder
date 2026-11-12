@@ -13,7 +13,8 @@ opening.
   the menu opens folded in that browser. In a window from 820 to 1100 px
   wide the menu still folds by itself while the panel on the right is
   open, and the handle comes back when you close the panel. On a phone
-  nothing changes.
+  nothing changes. The band's logo has less rounded corners, as the
+  buttons have.
 
 ## 0.27.0
 

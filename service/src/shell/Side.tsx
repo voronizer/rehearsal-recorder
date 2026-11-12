@@ -18,7 +18,7 @@ export function BandName({ small }: { small?: boolean }) {
   const name = frame?.name ?? ""
   return (
     <>
-      <Logo name={name} picture={frame?.picture ?? null} className={small ? "size-7 rounded-md text-sm" : undefined} />
+      <Logo name={name} picture={frame?.picture ?? null} className={small ? "size-7 rounded-sm text-sm" : undefined} />
       <span className={cn("min-w-0 truncate font-semibold", !name && "text-muted-foreground")}>{name || "Band name"}</span>
     </>
   )

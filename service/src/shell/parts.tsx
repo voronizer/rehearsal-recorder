@@ -461,12 +461,13 @@ export function Avatar({ letter, className }: { letter: string; className?: stri
 
 /**
  * The band's picture, or the first letter of its name on the accent: the
- * shared Avatar with a square's corners. The letter stands in when the
- * picture is slow to come or does not come.
+ * shared Avatar with a square's corners, 8 px at 36 px as a button's (Alex,
+ * 2026-11-12, 11:19:27: 12 px wore the corners away). The letter stands in
+ * when the picture is slow to come or does not come.
  */
 export function Logo({ name, picture, className }: { name: string; picture: string | null; className?: string }) {
   return (
-    <Circle className={cn("size-9 rounded-lg text-base", className)}>
+    <Circle className={cn("size-9 rounded-md text-base", className)}>
       {picture && <AvatarImage src={picture} alt="" className="object-cover" />}
       <AvatarFallback delayMs={picture ? 600 : undefined} className="rounded-none bg-primary text-[length:inherit] font-semibold text-primary-foreground">{(Array.from(name.trim())[0] ?? "B").toUpperCase()}</AvatarFallback>
     </Circle>
