@@ -44,9 +44,10 @@ All on 12 November 2026 (UTC).
 On a computer, a round button 24 px across sits on the column's right edge,
 its middle on the edge's line, level with the band's name (its top 22 px
 below the column's top). It is our `Button`, `outline` at `icon-tiny`, made
-round: the page's white (dark: its own fill) with a 1 px line and a light
-shadow, a grey chevron 14 px that goes dark under the pointer, and the hand
-over it (F12).
+round: the page's colour in both themes, as in the mockup, with a 1 px line
+and a light shadow; under the pointer only its grey chevron, 14 px, goes
+dark, and the hand shows over it (F12). A long band name is cut 8 px before
+the handle, as it is cut now.
 
 - Open, it shows ‹ and is named **Fold the menu**.
 - Folded, it shows › and is named **Open the menu**.
@@ -55,12 +56,12 @@ Its name shows as a tip at its right on hover, and at once on keyboard
 focus, as the strip's signs do. The tip only repeats the name, so it is for
 the eyes alone (Tooltip in the design system). The handle comes first in the
 column for Tab, before the sections, and keeps the focus when pressed, since
-it stays where it was.
+it is the same button, now on the column's new edge.
 
 ### Folded
 
-The column is 48 px: the logo, 36 px, at the top, the handle half over its
-right edge; the sections' icons, each named in a tip; your letter at the
+The column is 48 px: the logo, 36 px, at the top, with the handle's middle on
+the column's edge and its left 6 px over the logo's right edge; the sections' icons, each named in a tip; your letter at the
 bottom. Marks has no count. This is the column as it folds by itself today,
 so nothing in it is new. The sections' icons stand at the same height open
 and folded, so nothing jumps.
@@ -86,7 +87,9 @@ folds it for the visit.
   panel closes, the column goes back to the band member's choice and the
   handle comes back.
 - 500 to 819 px: the panel lies over the page, as now; the column stays as
-  the band member left it, and the handle works.
+  the band member left it, and the handle works. Below 684 px an open panel
+  covers the open column's edge and its handle, as it covers the column now;
+  closing the panel brings them back.
 
 ### On a phone
 
@@ -115,8 +118,9 @@ kept fold waits for a computer's window.
 1. With the panel open at 820 to 1099 px, the handle is not there, rather
    than opening the column over the page or squeezing the page under 324 px.
 2. The handle is our `Button` (`outline`, `icon-tiny`, round), not shadcn's
-   `SidebarRail`: the rail is an invisible strip with a resize pointer, and
-   the hand goes over everything that presses (F12).
+   `SidebarRail`, an invisible strip with a resize pointer where the hand
+   goes over everything that presses (F12), nor `SidebarTrigger`, whose icon
+   is fixed to PanelLeft where the handle needs ‹ and ›.
 3. Its names: **Fold the menu** and **Open the menu**, after the panel's
    **Fold the panel** and **Open the panel**, and the phone's **Menu**.
 4. Kept as `reha.menu` = `folded` in `localStorage`; absent means open.
@@ -124,3 +128,7 @@ kept fold waits for a computer's window.
 6. No key for it.
 7. The page keeps laying out by the window, as now: folding the column
    widens the page but does not switch it to the wide layout.
+8. No handle on a phone: there the menu is the sheet behind ☰, and the kept
+   fold waits for a computer's window.
+9. Below 684 px an open panel lies over the handle, as it lies over the
+   column today, rather than the handle standing over the panel.

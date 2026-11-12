@@ -8,12 +8,13 @@ fold.
 
 **Architecture:** The column is already shadcn's `Sidebar` with
 `collapsible="icon"` (`service/src/shell/Side.tsx`), whose provider in
-`Frame` (`service/src/shell/Shell.tsx`) decides `open`. `Frame` gains the
-band member's fold, read from and written to `localStorage` by a small
-module (`service/src/shell/menu.ts`, after `takes/player/master.ts`), and
-keeps the fold it does by itself while the panel is open at 820 to 1099 px.
-`Side` draws the handle from our `Button`, outside the column's scrolling
-`aside`, so it can stand half over the edge.
+`Frame` (`service/src/shell/Shell.tsx`) decides `open`. The feature's logic
+lives in one module, `service/src/shell/menu.tsx`: the kept fold in
+`localStorage` (after `takes/player/master.ts`), a `useMenuFold` hook that
+joins it with the fold the frame does by itself while the panel is open at
+820 to 1099 px, and `MenuHandle`, drawn from our `Button`. `Frame` and
+`Side` only call it; the handle stands outside the column's scrolling
+`aside`, so it can sit half over the edge.
 
 **Tech Stack:** React 19, TanStack Router, Tailwind 4 (`cn` = clsx +
 tailwind-merge), vitest, Playwright e2e in `service/`.
@@ -57,38 +58,41 @@ and the Marks badge go; only C, the handle, stays).
 ### Task 1: The handle and the kept fold
 
 **Files:**
-- Create: `service/src/shell/menu.ts`, `service/src/shell/menu.test.ts`
+- Create: `service/src/shell/menu.tsx`, `service/src/shell/menu.test.ts`
 - Modify: `service/src/shell/Shell.tsx` (`Frame`), `service/src/shell/Side.tsx`
 - Modify: `service/e2e/frame.spec.ts`
 - Modify: `docs/design-system.md` (F4's band service paragraph; C8's `Sidebar` line), `CHANGELOG.md` (Unreleased)
 
-- [ ] **Step 1: The kept fold.** `menu.ts`: `const KEY = "reha.menu"`;
+- [ ] **Step 1: The kept fold.** `menu.tsx`: `const KEY = "reha.menu"`;
   `keptFold(): boolean` is `localStorage.getItem(KEY) === "folded"`, false
   when the storage throws; `keepFold(folded: boolean)` sets `"folded"` or
   removes the key, swallowing a throw. A header comment as in `master.ts`:
-  the browser's, not the member's; Alex, 2026-11-12 10:23:55.
+  the browser's, not the member's; Alex, 2026-11-12 10:23:55; and the
+  header says the whole feature is here (kept fold, `useMenuFold`,
+  `MenuHandle`).
   `menu.test.ts` with `vi.stubGlobal("localStorage", …)` as in
   `master.test.ts`: nothing kept is open; `"folded"` is folded; another
   value is open; a throwing `getItem` is open; `keepFold(true)` then
   `keepFold(false)` leave the key set then removed; a throwing `setItem`
   does not throw. Run `npx vitest run src/shell/menu.test.ts` in `service/`.
 
-- [ ] **Step 2: `Frame` holds the fold.** In the computer branch of `Frame`
-  (before the phone's early return, so the hooks keep their order):
-  `const [folded, setFolded] = useState(keptFold)`;
-  `const auto = size !== "wide" && !!panel && pushes` (the fold by itself,
-  as the old `open` expression said); the left `SidebarProvider` gets
-  `open={!folded && !auto}` and
-  `onOpenChange={(open) => { if (auto) return; setFolded(!open); keepFold(!open) }}`.
-  `<Side handle={!auto} />`. Update `Frame`'s comment: the band member
+- [ ] **Step 2: `useMenuFold`.** In `menu.tsx`,
+  `useMenuFold(size: Size, panel: boolean, pushes: boolean)` returns
+  `{ open, onOpenChange, handle }`: `const [folded, setFolded] = useState(keptFold)`;
+  `const auto = size !== "wide" && panel && pushes` (the fold by itself, as
+  `Frame`'s old `open` expression said); `open = !folded && !auto`;
+  `onOpenChange = (open) => { if (auto) return; setFolded(!open); keepFold(!open) }`;
+  `handle = !auto`. `Frame` calls it before the phone's early return (so the
+  hooks keep their order), passes `open` and `onOpenChange` to the left
+  `SidebarProvider`, and `<Side handle={handle} />`. Update `Frame`'s comment: the band member
   folds the column by its handle (Alex, 2026-11-12 10:22:43), the browser
   keeps it; with the panel open below 1100 px it folds by itself and the
   handle goes.
 
-- [ ] **Step 3: The handle.** In `Side.tsx`, `Side({ handle }: { handle?: boolean })`
-  and a `MenuHandle` drawn when `handle && !isMobile`, as the first child of
-  `<Sidebar>`, before the `aside` (Tab reaches it first; the `aside` scrolls
-  and would clip it):
+- [ ] **Step 3: The handle.** `MenuHandle` in `menu.tsx`; in `Side.tsx`,
+  `Side({ handle }: { handle?: boolean })` draws it when `handle && !isMobile`,
+  as the first child of `<Sidebar>`, before the `aside` (Tab reaches it first;
+  the `aside` scrolls and would clip it):
   ```tsx
   function MenuHandle() {
     const { open, toggleSidebar } = useSidebar()
@@ -97,7 +101,7 @@ and the Marks badge go; only C, the handle, stays).
       <Tooltip>
         <TooltipTrigger asChild>
           <Button variant="outline" size="icon-tiny" aria-label={name} onClick={toggleSidebar}
-            className="absolute top-[22px] -right-3 z-20 rounded-full text-muted-foreground hover:text-foreground">
+            className="absolute top-[22px] -right-3 z-20 rounded-full text-muted-foreground hover:text-foreground dark:bg-background hover:bg-background dark:hover:bg-background">
             {open ? <ChevronLeft className="size-3.5" /> : <ChevronRight className="size-3.5" />}
           </Button>
         </TooltipTrigger>
@@ -124,8 +128,9 @@ and the Marks badge go; only C, the handle, stays).
     a reload keeps it open.
   - "at 960 px a column folded by hand stays folded beside the panel and
     after it; while the panel folds it, there is no handle": on a take's
-    page at 960×680, open the column's handle and the strip's panel: no
-    button named **Fold the menu** or **Open the menu**; fold the panel:
+    page at 960×680, with the column open (the handle reads **Fold the
+    menu**), open a panel from the strip: no button named **Fold the menu**
+    or **Open the menu**; fold the panel:
     the handle is back as **Fold the menu** and the column open. Then fold
     by hand, open and fold the panel: the column stays folded throughout,
     the handle back as **Open the menu**.
@@ -134,19 +139,24 @@ and the Marks badge go; only C, the handle, stays).
   Run only these three with the throwaway config.
 
 - [ ] **Step 5: Words.** `docs/design-system.md`: in F4's band service
-  paragraph, after "Its column on the left stays grey", a sentence: the
+  paragraph, after the sentence ending "in the dark theme the panel keeps
+  its colour.", a sentence: the
   column folds to its icons by a round handle on its edge, level with the
   band's name, and the browser keeps the fold (Alex, 12 November 2026); in
   C8's `Sidebar` line, after "keeps nothing between runs": the band service
   keeps its left column's fold itself, in the browser. CHANGELOG under
-  Unreleased (create the heading if missing):
-  `- **The band service's menu folds to its icons.** …` saying: press the
-  round handle on its edge, by the band's name; press it again to open it;
-  the browser remembers, so the menu opens folded next time on that
-  computer; on a phone nothing changes. Humanizer pass on the item.
+  Unreleased (create the heading if missing), along these lines, then a
+  humanizer pass:
+  > - **The band service's menu on the left folds to its icons.** Press the
+  >   round handle on the edge of the column of sections, by the band's
+  >   name; press it again to open it. The browser remembers, so next time
+  >   the menu opens folded in that browser. In a window from 820 to 1099 px
+  >   wide the menu still folds by itself while the panel on the right is
+  >   open, and the handle comes back when you close the panel. On a phone
+  >   nothing changes.
 
 - [ ] **Step 6:** `npm run typecheck` and `npm run design-check` where they
-  live; commit: "Service: a handle folds the menu to its icons, and the
+  live, and `npx vitest run src/shell/` in `service/`; commit: "Service: a handle folds the menu to its icons, and the
   browser keeps it".
 
 ### Task 2: The two pictures on reha.stream
@@ -166,5 +176,6 @@ and the Marks badge go; only C, the handle, stays).
 ### After the tasks
 
 Review the whole branch (spec against code, the four Review Focus points),
-fix every finding, push, open the PR, start the checks by hand, and ask
-Alex before merging.
+fix every finding, push and open the PR: its checks start by themselves on
+`pull_request` (`service.yml`, `site.yml`), so they run once with no hand
+start. Ask Alex before merging.
