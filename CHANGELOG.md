@@ -79,14 +79,14 @@ opening.
   paste the whole code to fill all six, then press **Sign in** as before.
   A phone still offers the code from the letter.
 - **Errors in the band service keep their place.** Under a mark's words, a
-  comment, a song's notes and the sign-in boxes, an error has a line kept
-  free for it, so nothing below moves when one shows. When you rename a
-  set, an error shows in place of the line under its name, as it does for
-  a song. Errors everywhere are one size. When the service turns down a
-  length you type in a set, it says why under the field, where a browser
-  tip said it before, and pressing a length no longer makes its row
-  taller. A page that could not be read says so in red, in a box with
-  **Try again**.
+  comment, a song's notes, a new song's title, and your email address,
+  code and name at sign-in, an error has a line kept free for it, so
+  nothing below moves when one shows. When you rename a set, an error
+  shows in place of the line under its name, as it does for a song. Errors
+  everywhere are one size. When the service turns down a length you type
+  in a set, it says why under the field, where a browser tip said it
+  before, and pressing a length no longer makes its row taller. A page
+  that could not be read says so in red, in a box with **Try again**.
 - **The band service looks more like РЭХА.** Empty **Songs**, **Marks**,
   **Rehearsals** and **Sets** say so in the middle of the page, in the same
   words. A label's or status's colour is picked from a grid that opens by
