@@ -213,7 +213,12 @@ test("a phone keeps the sections behind the menu", async ({ page }) => {
   await page.goto("/")
   const sections = page.getByRole("navigation", { name: "Sections" })
   await expect(sections).toHaveCount(0)
+  // No handle folds the menu here, in the page or in the menu.
+  const handle = page.getByRole("button", { name: /^(Fold|Open) the menu$/ })
+  await expect(handle).toHaveCount(0)
   await page.getByRole("button", { name: "Menu" }).click()
+  await expect(sections).toBeVisible()
+  await expect(handle).toHaveCount(0)
   await sections.getByRole("link", { name: "Songs" }).click()
   await expect(sections).toHaveCount(0)
   await expect(page.getByRole("heading", { level: 1 })).toContainText("Songs")
@@ -384,6 +389,74 @@ test.describe("the two columns", () => {
     await panel.getByRole("button", { name: "Fold the panel" }).click()
     await expect(panel).toHaveCount(0)
     expect(await box(main)).toEqual({ x: 224, width: 960 - 224 - 48 })
+  })
+
+  test("the handle folds the sections to their icons and opens them, the page takes the room, and a reload keeps the fold", async ({ page }) => {
+    await page.goto("/")
+    const main = page.getByRole("main")
+    const songs = page.getByRole("navigation", { name: "Sections" }).getByRole("link", { name: "Songs" })
+    const fold = page.getByRole("button", { name: "Fold the menu", exact: true })
+    const open = page.getByRole("button", { name: "Open the menu", exact: true })
+    await expect(page.getByRole("heading", { level: 1 })).toBeVisible()
+    await expect.poll(() => box(main)).toEqual({ x: 224, width: 1180 - 224 })
+    await expect.poll(() => box(songs)).toEqual({ x: 12, width: 200 })
+    const y = (await songs.boundingBox())!.y
+
+    // First for Tab, with its tip at once.
+    await page.keyboard.press("Tab")
+    await expect(fold).toBeFocused()
+    await expect(page.getByRole("tooltip")).toHaveText("Fold the menu")
+    await page.keyboard.press("Enter")
+    // The same button, on the column's new edge, keeps the focus.
+    await expect(open).toBeFocused()
+    await expect.poll(() => box(main)).toEqual({ x: 48, width: 1180 - 48 })
+    await expect.poll(() => box(songs)).toEqual({ x: 6, width: 36 })
+    // The sections stand where they stood.
+    expect((await songs.boundingBox())!.y).toBe(y)
+
+    await page.reload()
+    await expect(open).toBeVisible()
+    await expect.poll(() => box(main)).toEqual({ x: 48, width: 1180 - 48 })
+    await open.click()
+    await expect(fold).toBeVisible()
+    await expect.poll(() => box(main)).toEqual({ x: 224, width: 1180 - 224 })
+    await page.reload()
+    await expect(fold).toBeVisible()
+    await expect.poll(() => box(main)).toEqual({ x: 224, width: 1180 - 224 })
+  })
+
+  test("at 960 px a column folded by hand stays folded beside the panel and after it; while the panel folds it, there is no handle", async ({ page }) => {
+    await page.setViewportSize({ width: 960, height: 680 })
+    await page.goto(take())
+    const main = page.getByRole("main")
+    const panel = page.getByLabel("Panel", { exact: true })
+    const fold = page.getByRole("button", { name: "Fold the menu", exact: true })
+    const open = page.getByRole("button", { name: "Open the menu", exact: true })
+    const strip = page.getByLabel("Strip").getByRole("button", { name: "Open the panel" })
+    await expect(fold).toBeVisible()
+
+    // The panel folds the column by itself, and the handle goes until it closes.
+    await strip.click()
+    await expect(panel).toBeVisible()
+    await expect.poll(() => box(main)).toEqual({ x: 48, width: 960 - 48 - 448 })
+    await expect(fold).toHaveCount(0)
+    await expect(open).toHaveCount(0)
+    await panel.getByRole("button", { name: "Fold the panel" }).click()
+    await expect(panel).toHaveCount(0)
+    await expect.poll(() => box(main)).toEqual({ x: 224, width: 960 - 224 - 48 })
+    await expect(fold).toBeVisible()
+
+    // Folded by hand, it stays folded with the panel and after it.
+    await fold.click()
+    await expect.poll(() => box(main)).toEqual({ x: 48, width: 960 - 48 - 48 })
+    await strip.click()
+    await expect(panel).toBeVisible()
+    await expect.poll(() => box(main)).toEqual({ x: 48, width: 960 - 48 - 448 })
+    await expect(open).toHaveCount(0)
+    await panel.getByRole("button", { name: "Fold the panel" }).click()
+    await expect(panel).toHaveCount(0)
+    await expect.poll(() => box(main)).toEqual({ x: 48, width: 960 - 48 - 48 })
+    await expect(open).toBeVisible()
   })
 
   test("at 960 px the sections fold to their icons while the panel is open, names in tips, and open when it closes", async ({ page }) => {

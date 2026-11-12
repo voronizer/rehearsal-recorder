@@ -82,7 +82,9 @@ showcase and reha.stream all import. A screen uses the names (`bg-primary`,
   lose theirs as each screen is redone.
   One exception: the band service's panel from the right is white in the
   light theme, as a page is (Alex, 5 November 2026). Its column on the left
-  stays grey, and in the dark theme the panel keeps its colour.
+  stays grey, and in the dark theme the panel keeps its colour. That
+  column folds to its icons by a round handle on its edge, level with the
+  band's name, and the browser keeps the fold (Alex, 12 November 2026).
   On a take's page the panel folds into a strip 48 px wide along the right
   edge, in that column's grey, with a sign for each of its sections (Alex,
   8 November 2026). The band's own lists, its statuses and its labels, are
@@ -435,7 +437,7 @@ the shared one when it is redone.
   - `ButtonGroup`: buttons joined into one bar.
   - `Field`: a label, a control and the line under it. A screen that wants the room of an error held puts `FieldError` in a `min-h-5` line that is there when empty.
   - `Avatar`: a member's picture, or their initials.
-  - `Sidebar`: ours, adapted from shadcn's: a column that folds to its icons, or opens as a sheet below `mobileBelow` px (`SidebarProvider`'s, 768 unless the caller gives another), named `mobileTitle` for a screen reader. It has no ⌘B or Ctrl+B and no cookie, so it keeps nothing between runs. The caller sets its widths (`--sidebar-width`, `--sidebar-width-mobile`, `--sidebar-width-icon`) and where it stands. It is C8's side panel: the service's left column and the panel on its right are each a `Sidebar`, with a provider of its own (S2, S3, S18).
+  - `Sidebar`: ours, adapted from shadcn's: a column that folds to its icons, or opens as a sheet below `mobileBelow` px (`SidebarProvider`'s, 768 unless the caller gives another), named `mobileTitle` for a screen reader. It has no ⌘B or Ctrl+B and no cookie, so it keeps nothing between runs; the band service keeps its left column's fold itself, in the browser (`service/src/shell/menu.tsx`). The caller sets its widths (`--sidebar-width`, `--sidebar-width-mobile`, `--sidebar-width-icon`) and where it stands. It is C8's side panel: the service's left column and the panel on its right are each a `Sidebar`, with a provider of its own (S2, S3, S18).
   - `Skeleton`: a grey stand-in for a row still coming.
   - `Accordion`: sections that fold.
   - `InputOTP`: a short code, one box to a character. Its caret does not blink under Reduce motion.
