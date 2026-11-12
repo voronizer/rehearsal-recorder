@@ -332,9 +332,11 @@ test.describe("the two columns", () => {
   })
 
   test("a panel closed after the page was scrolled away from the row that opened it leaves the page where it is", async ({ page }) => {
-    for (const [width, height, left] of [
-      [1180, 820, 224],
-      [960, 680, 48],
+    // `top`: where the band scrolls to with the panel open, up among the songs, the mark out of view. Once the
+    // panel closes, the mark is above the view at 1180, where the page has two columns again, and below it at 960.
+    for (const [width, height, left, top] of [
+      [1180, 820, 224, 250],
+      [960, 680, 48, 0],
     ]) {
       await page.setViewportSize({ width, height })
       await page.goto("/")
@@ -346,13 +348,13 @@ test.describe("the two columns", () => {
       // The page has its room beside the panel, Latest marks under the songs, the mark kept in view.
       await expect.poll(() => box(main)).toEqual({ x: left, width: width - left - 448 })
       await expect(mark).toBeInViewport()
-      // Up to the last rehearsal, past the songs: the mark is out of view.
-      await main.evaluate((m) => m.scrollTo({ top: 0, behavior: "instant" }))
+      // Up among the songs: the mark is out of view.
+      await main.evaluate((m, top) => m.scrollTo({ top, behavior: "instant" }), top)
       await expect(mark).not.toBeInViewport()
       await panel.getByRole("button", { name: "Close", exact: true }).click()
       await expect(panel).toHaveCount(0)
       await expect.poll(() => box(main)).toEqual({ x: 224, width: width - 224 })
-      expect(await main.evaluate((m) => m.scrollTop), `at ${width}`).toBe(0)
+      expect(await main.evaluate((m) => m.scrollTop), `at ${width}`).toBe(top)
     }
   })
 
