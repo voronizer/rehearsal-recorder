@@ -153,6 +153,9 @@ function MenuButton() {
 /** How long after a press a panel that comes is taken as opened by it. */
 const PRESS_MS = 1000
 
+/** What counts as a press in the page, each heard before the page's own handlers. */
+const PRESSES = ["pointerdown", "click", "keydown"] as const
+
 /**
  * The row that opened the panel stays in view as the page takes its new room
  * beside the panel, opened or closed: on a wide window the page lays out
@@ -179,11 +182,10 @@ function useOpenerInView(main: RefObject<HTMLElement | null>, panel: string | nu
       const box = row.getBoundingClientRect()
       seen.current = box.bottom > view.top && box.top < view.bottom
     }
-    document.addEventListener("pointerdown", press, true)
-    document.addEventListener("keydown", press, true)
+    // The click too: a panel opens on it, and a press held past a second still opened this one.
+    for (const kind of PRESSES) document.addEventListener(kind, press, true)
     return () => {
-      document.removeEventListener("pointerdown", press, true)
-      document.removeEventListener("keydown", press, true)
+      for (const kind of PRESSES) document.removeEventListener(kind, press, true)
     }
   }, [main])
   useLayoutEffect(() => {
