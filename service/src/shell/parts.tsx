@@ -491,9 +491,9 @@ export function Note({ children }: { children: ReactNode }) {
 const SAY_AFTER_MS = 10_000
 
 /**
- * A panel whose take or song is still on its way, as B5 has it: nothing
- * for the first second, so a quick answer does not flash, then the shared
- * Spinner, and from 10 s “Opening…” beside it.
+ * A panel whose take is still on its way, as B5 has it: nothing for the
+ * first second, so a quick answer does not flash, then the shared Spinner,
+ * and from 10 s “Opening…” beside it.
  */
 export function Waiting() {
   const slow = useAfter(true, SAY_AFTER_MS)
