@@ -137,3 +137,38 @@ test("Labels and a mark's panel are one layer: one in the other's place, Back st
   await expect(panel).toHaveCount(0)
   await expect(page).toHaveURL(/\/marks$/)
 })
+
+test("a label's colour: the picker opens on it, Enter takes the one reached, Esc closes only the picker", async ({ page }) => {
+  await page.goto("/marks?panel=labels")
+  const panel = page.getByLabel("Panel", { exact: true })
+  const trigger = panel.getByRole("button", { name: /^Colour of/ }).first()
+  const name = (await trigger.getAttribute("aria-label"))!
+  await trigger.click()
+  const picker = page.getByRole("dialog", { name })
+  await expect(picker).toBeVisible()
+  // The focus is on the label's own colour, the one ticked.
+  const focused = page.locator(":focus")
+  await expect(focused).toHaveAttribute("aria-checked", "true")
+  const own = (await focused.getAttribute("aria-label"))!
+  // The arrows move round the grid; Esc closes the picker, and the panel stays.
+  await page.keyboard.press("ArrowDown")
+  await expect(focused).not.toHaveAttribute("aria-label", own)
+  await page.keyboard.press("Escape")
+  await expect(picker).toHaveCount(0)
+  await expect(panel.getByRole("heading", { name: "Labels", exact: true })).toBeVisible()
+  // Enter takes the colour reached, and the picker closes.
+  await trigger.click()
+  await page.keyboard.press("ArrowRight")
+  const next = (await focused.getAttribute("aria-label"))!
+  await page.keyboard.press("Enter")
+  await expect(picker).toHaveCount(0)
+  await trigger.click()
+  await expect(page.locator(":focus")).toHaveAttribute("aria-label", next)
+  await expect(page.locator(":focus")).toHaveAttribute("aria-checked", "true")
+  // Back as it was, for the tests after.
+  await picker.getByRole("radio", { name: own }).click()
+  await expect(picker).toHaveCount(0)
+  await trigger.click()
+  await expect(page.locator(":focus")).toHaveAttribute("aria-label", own)
+  await page.keyboard.press("Escape")
+})

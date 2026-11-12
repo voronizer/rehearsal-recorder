@@ -1,9 +1,8 @@
-import { useEffect, useState, useSyncExternalStore, type KeyboardEvent, type ReactNode } from "react"
+import { useEffect, useRef, useState, useSyncExternalStore, type KeyboardEvent, type ReactNode } from "react"
 import { useNavigate, useRouterState } from "@tanstack/react-router"
 import { Check } from "lucide-react"
 import { Command, CommandInput, CommandItem, CommandList, CommandSeparator } from "@/components/ui/command"
 import { DropdownMenuSub, DropdownMenuSubContent, DropdownMenuSubTrigger } from "@/components/ui/dropdown-menu"
-import { cn } from "@/lib/utils"
 import { fold, same, TAKE_NAME } from "../../worker/shared/names"
 import { useMoveTake, useSongs } from "../api"
 import { InPlace } from "../shell/InPlace"
@@ -49,6 +48,9 @@ function useShown() {
   }, [])
 }
 
+/** The keys that move the Command's light from line to line (with Ctrl, n j p k too). */
+const MOVES = ["ArrowUp", "ArrowDown", "Home", "End", "PageUp", "PageDown"]
+
 /** A ticked line's look and its tick, as the menu's own radio lines have them. */
 const LINE = "cursor-pointer pr-2 pl-8"
 const tick = (on: boolean) => (
@@ -80,9 +82,29 @@ export function MoveSub({
   const navigate = useNavigate()
   const here = useRouterState({ select: (s) => s.location.pathname === `/takes/${take.uid}` })
   const own = songOf(take)
+  const input = useRef<HTMLInputElement>(null)
   const [search, setSearch] = useState("")
   const typed = fold(search)
   const shown = typed ? songs.filter((s) => fold(s.title).includes(typed)) : songs
+  // The line Enter picks as the search changes: the take's own place with
+  // nothing typed, then the first song found, or New song… when none is.
+  const first = (text: string) => {
+    if (!fold(text)) return own === null ? NONE : `song-${own}`
+    const found = songs.find((s) => fold(s.title).includes(fold(text)))
+    return found ? `song-${found.id}` : NEW
+  }
+  const [lit, setLit] = useState(() => first(""))
+  // The Command lights the line drawn first (Not named) by itself as the
+  // search changes or a lit song goes from the list; only the member's keys
+  // and pointer move the light, so its own pick is put back (`again` makes
+  // the Command read the light anew: it reads the value trimmed).
+  const member = useRef(false)
+  const [again, setAgain] = useState(false)
+  // Till the event is over: the pointer is heard on the list before its line.
+  const heard = () => {
+    member.current = true
+    setTimeout(() => (member.current = false))
+  }
   const to = (song: number | null) => {
     onDone()
     if (song !== own) move.mutate({ uid: take.uid, song })
@@ -91,28 +113,61 @@ export function MoveSub({
   // to the menu's typeahead; Esc still closes it, and ← in an empty search
   // goes back to the menu.
   const keep = (e: KeyboardEvent) => {
+    if (MOVES.includes(e.key) || (e.ctrlKey && "njpk".includes(e.key))) heard()
     if (e.key === "Escape" || e.key === "Tab" || (e.key === "ArrowLeft" && !search)) return
     e.stopPropagation()
   }
   return (
-    <DropdownMenuSub onOpenChange={(open) => !open && setSearch("")}>
+    <DropdownMenuSub
+      onOpenChange={(open) => {
+        if (open) return
+        setSearch("")
+        setLit(first(""))
+      }}
+    >
       <DropdownMenuSubTrigger>Move to song</DropdownMenuSubTrigger>
-      <DropdownMenuSubContent className="w-56 p-0">
+      <DropdownMenuSubContent
+        className="w-56 p-0"
+        // The menu gives the focus to this line as the pointer leaves it;
+        // over the list, the search has it again, so what is typed goes there.
+        onPointerMove={() => {
+          if (document.activeElement !== input.current) input.current?.focus({ preventScroll: true })
+        }}
+      >
         {/* The search is this list's own (shouldFilter off): the Command
             would sort what it finds and put Not named at the bottom. */}
-        <Command label="Move to song" shouldFilter={false} loop defaultValue={own === null ? NONE : `song-${own}`} onKeyDown={keep}>
-          <CommandInput autoFocus value={search} onValueChange={setSearch} />
-          {/* The songs come first in the page, so the first one found is the
-              one Enter picks; Not named is drawn over them. ↑ and ↓ go round,
-              in the order the lines are drawn. */}
-          <CommandList label="Move to song" className="max-h-72 p-1 [&>[cmdk-list-sizer]]:flex [&>[cmdk-list-sizer]]:flex-col">
+        <Command
+          label="Move to song"
+          shouldFilter={false}
+          loop
+          value={again ? `${lit} ` : lit}
+          onValueChange={(value) => (member.current ? setLit(value) : setAgain(!again))}
+          onKeyDown={keep}
+        >
+          <CommandInput
+            ref={input}
+            autoFocus
+            value={search}
+            onValueChange={(text) => {
+              setSearch(text)
+              setLit(first(text))
+            }}
+          />
+          {/* In the page as they are drawn, so ↑ ↓ Home End and a screen
+              reader go through them in that order; ↑ and ↓ go round. */}
+          <CommandList label="Move to song" className="max-h-72 p-1" onPointerMoveCapture={heard}>
+            <CommandItem value={NONE} aria-checked={own === null} onSelect={() => to(null)} className={LINE}>
+              {tick(own === null)}
+              Not named
+            </CommandItem>
+            <CommandSeparator alwaysRender className="my-1" />
             {shown.map((s) => (
               <CommandItem key={s.id} value={`song-${s.id}`} aria-checked={s.id === own} onSelect={() => to(s.id)} className={LINE}>
                 {tick(s.id === own)}
                 <span className="truncate">{s.title}</span>
               </CommandItem>
             ))}
-            {shown.length > 0 && <CommandSeparator alwaysRender className="order-1 my-1" />}
+            {shown.length > 0 && <CommandSeparator alwaysRender className="my-1" />}
             <CommandItem
               value={NEW}
               onSelect={() => {
@@ -121,14 +176,9 @@ export function MoveSub({
                 if (row && !here) void navigate({ to: "/takes/$uid", params: { uid: take.uid } })
                 setNaming(take.uid)
               }}
-              className="order-2 cursor-pointer"
+              className="cursor-pointer"
             >
               New song…
-            </CommandItem>
-            <CommandSeparator alwaysRender className="-order-1 my-1" />
-            <CommandItem value={NONE} aria-checked={own === null} onSelect={() => to(null)} className={cn(LINE, "-order-2")}>
-              {tick(own === null)}
-              Not named
             </CommandItem>
           </CommandList>
         </Command>

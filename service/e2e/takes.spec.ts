@@ -878,20 +878,35 @@ test.describe("moving a take", () => {
     const options = page.getByRole("option")
     await expect(page.getByRole("option", { name: "Pałyn" })).toBeVisible()
     await expect(page.getByRole("option", { name: "Viasna" })).toHaveCount(0)
-    await expect(page.getByRole("option", { name: "Not named" })).toBeVisible()
-    await expect(page.getByRole("option", { name: "New song…" })).toBeVisible()
-    // Not named is drawn first and New song last, whatever is typed.
-    const tops = await options.evaluateAll((els) => els.map((el) => [el.textContent, el.getBoundingClientRect().top] as const))
-    const sorted = [...tops].sort((x, y) => x[1] - y[1]).map(([name]) => name)
-    expect(sorted[0]).toBe("Not named")
-    expect(sorted.at(-1)).toBe("New song…")
+    // Not named first and New song… last, whatever is typed, in the page as on the screen.
+    const names = await options.allTextContents()
+    expect(names[0]).toBe("Not named")
+    expect(names.at(-1)).toBe("New song…")
+    const tops = await options.evaluateAll((els) => els.map((el) => el.getBoundingClientRect().top))
+    expect(tops).toEqual([...tops].sort((x, y) => x - y))
     // The first song found is the one Enter would pick.
-    await expect(options.filter({ hasText: /^(Kupalle|Pałyn)$/ }).first()).toHaveAttribute("aria-selected", "true")
-    // Typed into the search, a letter is not the menu's own jump to a line.
+    const first = options.filter({ hasText: /^(Kupalle|Pałyn)$/ }).first()
+    await expect(first).toHaveAttribute("aria-selected", "true")
+    // Home and End go to the first and the last line drawn; ↓ from the last goes round.
+    await page.keyboard.press("End")
+    await expect(page.getByRole("option", { name: "New song…" })).toHaveAttribute("aria-selected", "true")
+    await page.keyboard.press("ArrowDown")
+    await expect(page.getByRole("option", { name: "Not named" })).toHaveAttribute("aria-selected", "true")
+    await page.keyboard.press("End")
+    await page.keyboard.press("Home")
+    await expect(page.getByRole("option", { name: "Not named" })).toHaveAttribute("aria-selected", "true")
+    // The pointer, coming from Move to song as a hand does, lights the line
+    // it is over, and the search keeps what is typed.
+    const palyn = (await page.getByRole("option", { name: "Pałyn" }).boundingBox())!
+    await page.mouse.move(palyn.x + 20, palyn.y + palyn.height / 2, { steps: 10 })
+    await expect(page.getByRole("option", { name: "Pałyn" })).toHaveAttribute("aria-selected", "true")
+    // Typed into the search, a letter is not the menu's own jump to a line;
+    // with no song found, New song… is the one lit.
     await page.keyboard.type("zz")
     await expect(search).toBeFocused()
     await expect(search).toHaveValue("pazz")
-    await expect(options).toHaveText(["New song…", "Not named"])
+    await expect(options).toHaveText(["Not named", "New song…"])
+    await expect(page.getByRole("option", { name: "New song…" })).toHaveAttribute("aria-selected", "true")
     await page.keyboard.press("Escape")
     await expect(search).toHaveCount(0)
     await expect(page.getByRole("main").getByRole("heading", { level: 1 })).toContainText("Viasna")
