@@ -87,12 +87,8 @@ export function Side() {
             {SECTIONS.map(([to, label, Icon]) => (
               <SidebarMenuItem key={to}>
                 <SidebarMenuButton asChild isActive={lit(to)} tooltip={label} className={SECTION}>
-                  <Link
-                    to={to}
-                    onClick={() => setOpenMobile(false)}
-                    activeOptions={{ exact: to === "/" }}
-                    {...(onTake && to === "/songs" && { "aria-current": "page" as const })}
-                  >
+                  {/* Lit, and the page for a screen reader, by lit(). The link marks its own page too (Home's only when exact), which lit() always counts. */}
+                  <Link to={to} onClick={() => setOpenMobile(false)} activeOptions={{ exact: to === "/" }} aria-current={lit(to) ? "page" : undefined}>
                     <Icon className="text-muted-foreground" />
                     <span>{label}</span>
                     {to === "/marks" && !!frame?.open_marks && <span className="tnum ml-auto text-xs text-muted-foreground">{frame.open_marks}</span>}

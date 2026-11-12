@@ -401,6 +401,9 @@ function SidebarGroupLabel({
   ...props
 }: React.ComponentProps<"div"> & { asChild?: boolean }) {
   const Comp = asChild ? Slot.Root : "div"
+  // Drawn anew as the sidebar opens or folds, as the parts above are, so
+  // motionOff() is asked then and not only when the label first came.
+  useSidebar()
 
   return (
     <Comp

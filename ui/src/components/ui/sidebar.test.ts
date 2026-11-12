@@ -1,7 +1,7 @@
 import { createElement, type ReactNode } from "react"
 import { renderToStaticMarkup } from "react-dom/server"
 import { afterEach, describe, expect, it } from "vitest"
-import { Sidebar, SidebarProvider, useSidebar } from "@/components/ui/sidebar"
+import { Sidebar, SidebarGroupLabel, SidebarProvider, useSidebar } from "@/components/ui/sidebar"
 
 /* The tests run in Node, with no window: a matchMedia of the given width is
    put in its place for the render. */
@@ -67,9 +67,11 @@ describe("SidebarProvider", () => {
 
   it("opens and folds at once under Reduce motion", () => {
     windowOf(1000)
-    const html = () => renderToStaticMarkup(createElement(SidebarProvider, null, createElement(Sidebar, { collapsible: "icon" }, "Sections")))
+    const html = () =>
+      renderToStaticMarkup(createElement(SidebarProvider, null, createElement(Sidebar, { collapsible: "icon" }, createElement(SidebarGroupLabel, null, "Sections"))))
     reduceMotion(false)
     expect(html()).toContain("transition-[left,right,width]")
+    expect(html()).toContain("transition-[margin,opacity]")
     reduceMotion(true)
     expect(html()).not.toContain("transition-")
   })

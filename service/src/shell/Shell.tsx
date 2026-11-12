@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react"
+import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode, type RefObject } from "react"
 import { Outlet, useRouterState } from "@tanstack/react-router"
 import { ChevronLeft, Menu } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -54,24 +54,19 @@ function PanelBody({ page }: { page?: string }) {
 }
 
 /**
- * The panel over the page from the right, with no veil, so the page and the
- * player's bar can still be used: on a phone the full width between the
- * header and the bar; in a window too small to make room for it (under
- * `PUSH_FROM`), 448 px, over a take's strip too (Alex, 2026-11-11, 23:19:52).
+ * The panel on a phone: over the page between the header and the player's
+ * bar, the full width, with no veil, so the bar can still be used.
  */
-function OverPanel({ page, phone }: { page?: string; phone?: boolean }) {
+function PhonePanel() {
   const { panel } = usePanel()
   if (!panel) return null
   return (
     <aside
       key={JSON.stringify(panel)}
       aria-label="Panel"
-      className={cn(
-        "absolute inset-y-0 right-0 z-20 flex flex-col overflow-y-auto bg-side p-5 text-sm shadow-lg animate-in slide-in-from-right duration-200",
-        phone ? "w-full" : "w-[28rem] max-w-[calc(100%-3rem)] border-l"
-      )}
+      className="absolute inset-y-0 right-0 z-20 flex w-full flex-col overflow-y-auto bg-side p-5 text-sm shadow-lg animate-in slide-in-from-right duration-200"
     >
-      <PanelBody page={page} />
+      <PanelBody />
     </aside>
   )
 }
@@ -81,12 +76,14 @@ function OverPanel({ page, phone }: { page?: string; phone?: boolean }) {
  * panel: beside the page, which narrows by its width (Alex, 2026-11-11,
  * 21:52:04). On a take's page (`take`, its uid) it folds into the strip;
  * elsewhere it is gone when closed. Its top and bottom are the page's, above
- * the player's bar. In a window too small to push the page it stays folded,
- * and the panel lies over the page (`OverPanel`).
+ * the player's bar. In a window too small to push the page (`over`, under
+ * `PUSH_FROM`) it opens over the page, 448 px, with a shadow, and the page
+ * keeps its room (Alex, 2026-11-11, 23:19:52). Only its classes change
+ * between the two, so a comment being typed in the panel stays as the
+ * window crosses the line.
  */
-function RightColumn({ take, children }: { take?: string; children: ReactNode }) {
-  const { panel, open, close } = usePanel()
-  const beside = usePushes() && !!panel
+function RightColumn({ take, over, children }: { take?: string; over: boolean; children: ReactNode }) {
+  const { panel, close } = usePanel()
   // A new panel in a column already open slides in, as one over the page
   // did; the first one comes with the column itself.
   const [was, setWas] = useState(panel)
@@ -98,24 +95,31 @@ function RightColumn({ take, children }: { take?: string; children: ReactNode })
   return (
     <SidebarProvider
       mobileBelow={PHONE_BELOW}
-      open={beside}
-      onOpenChange={(opened) => {
-        if (!opened) close()
-        else if (take) open({ kind: "marks", uid: take })
-      }}
-      className="relative min-h-0 min-w-0 flex-1"
+      open={!!panel}
+      onOpenChange={(opened) => !opened && close()}
+      // Over the page, the column's gap keeps its folded width, so the page does not narrow.
+      className={cn("relative min-h-0 min-w-0 flex-1", over && (take ? "[&_[data-slot=sidebar-gap]]:w-(--sidebar-width-icon)!" : "[&_[data-slot=sidebar-gap]]:w-0!"))}
       style={RIGHT}
     >
       {children}
       {/* Anew between a take's page and another, so the strip comes and goes with its page instead of sliding. */}
-      <Sidebar key={take ? "strip" : "page"} side="right" collapsible={take ? "icon" : "offcanvas"} className="absolute h-full">
-        {beside ? (
+      <Sidebar
+        key={take ? "strip" : "page"}
+        side="right"
+        collapsible={take ? "icon" : "offcanvas"}
+        // Over the page, as wide as the window less 48 px at most, as the panel was before the Sidebar.
+        className={cn("absolute h-full", over && "z-20 max-w-[calc(100vw-3rem)]", over && panel && "shadow-lg")}
+      >
+        {panel ? (
           // The column's width less its line from the start: as the column
           // opens, the panel comes in from the edge with its lines unbroken.
           <aside
             key={JSON.stringify(panel)}
             aria-label="Panel"
-            className={cn("flex h-full w-[calc(var(--sidebar-width)-1px)] flex-col overflow-y-auto p-5 text-sm", slide && "animate-in slide-in-from-right duration-200")}
+            className={cn(
+              "flex h-full w-[calc(var(--sidebar-width)-1px)] max-w-[calc(100vw-3rem-1px)] flex-col overflow-y-auto p-5 text-sm",
+              slide && "animate-in slide-in-from-right duration-200"
+            )}
           >
             <PanelBody page={take} />
           </aside>
@@ -146,6 +150,52 @@ function MenuButton() {
   )
 }
 
+/**
+ * The row that opened the panel stays in view as the page takes its new room
+ * beside the panel, opened or closed: on a wide window the page lays out
+ * anew (PageRoom), and Home's Latest marks goes under its songs. The row is
+ * what was pressed in the page, by pointer or key, as the panel came; one
+ * opened from elsewhere, such as the strip or another panel, keeps the row
+ * before. Kept at once, not smoothly, so it is still under Reduce motion.
+ */
+function useOpenerInView(main: RefObject<HTMLElement | null>, panel: string | null) {
+  const pressed = useRef<Element | null>(null)
+  const opener = useRef<Element | null>(null)
+  const was = useRef(!!panel)
+  useEffect(() => {
+    const press = (e: Event) => {
+      pressed.current = e.target instanceof Element ? e.target : null
+    }
+    document.addEventListener("pointerdown", press, true)
+    document.addEventListener("keydown", press, true)
+    return () => {
+      document.removeEventListener("pointerdown", press, true)
+      document.removeEventListener("keydown", press, true)
+    }
+  }, [])
+  useLayoutEffect(() => {
+    const page = main.current
+    const row = pressed.current
+    if (panel && page && row && row !== page && page.contains(row)) opener.current = row
+    else if (panel && !was.current) opener.current = null
+    const moved = was.current !== !!panel
+    was.current = !!panel
+    if (!moved || !page) return
+    const keep = () => {
+      if (opener.current?.isConnected) opener.current.scrollIntoView({ block: "nearest", inline: "nearest", behavior: "instant" })
+    }
+    keep()
+    // And while the column opens or folds over its 200 ms.
+    const watch = new ResizeObserver(keep)
+    watch.observe(page)
+    const stop = window.setTimeout(() => watch.disconnect(), 300)
+    return () => {
+      window.clearTimeout(stop)
+      watch.disconnect()
+    }
+  }, [main, panel])
+}
+
 /** The take whose page this is, by its address. */
 const takeOf = (path: string) => /^\/takes\/([^/]+)$/.exec(path)?.[1]
 
@@ -164,6 +214,8 @@ function Frame() {
   const pushes = usePushes()
   const bar = !!useFrame().data?.has_takes
   const { panel } = usePanel()
+  const main = useRef<HTMLElement>(null)
+  useOpenerInView(main, panel && JSON.stringify(panel))
   // A panel belongs to the page it was opened on: it is in that page's
   // address, so going to another page leaves it behind by itself.
   const path = useRouterState({ select: (s) => s.location.pathname })
@@ -181,7 +233,7 @@ function Frame() {
           <main className="h-full overflow-y-auto bg-background px-4 py-5 text-sm">
             <Outlet />
           </main>
-          <OverPanel phone />
+          <PhonePanel />
         </div>
         {bar && <PhoneBar />}
         <Side />
@@ -191,10 +243,11 @@ function Frame() {
     <div className="flex h-full flex-col">
       <SidebarProvider mobileBelow={PHONE_BELOW} open={size === "wide" || !panel || !pushes} className="relative min-h-0 flex-1 overflow-clip" style={LEFT}>
         <Side />
-        <RightColumn take={take}>
+        <RightColumn take={take} over={!pushes}>
           {/* --screen-pad-y is the padding above and below, as in РЭХА's Shell: Master's row, stuck at the
               window's foot, reaches down past it so no lane shows under it (Timeline). */}
           <main
+            ref={main}
             className={cn(
               "min-w-0 flex-1 overflow-y-auto bg-background py-(--screen-pad-y) text-sm",
               size === "wide" ? "px-8 [--screen-pad-y:2rem]" : "px-6 [--screen-pad-y:1.5rem]"
@@ -206,7 +259,6 @@ function Frame() {
             </PageRoom.Provider>
           </main>
         </RightColumn>
-        {!pushes && <OverPanel page={take} />}
       </SidebarProvider>
       {bar && <PlayerBar />}
     </div>

@@ -56,20 +56,31 @@ const keyOf = (c: ReturnType<typeof Children.toArray>[number], i: number) =>
  * A screen's or a panel's groups. On a page: one card with the groups as
  * its parts, a line between them. In a card or the panel: the parts and
  * lines alone. On a phone the card would only take width from the rows.
+ * `columns`: side by side instead, the last as wide as it says (`Columns`).
  */
-export function Groups({ children, className }: { children: ReactNode; className?: string }) {
+export function Groups({ children, className, columns }: { children: ReactNode; className?: string; columns?: string }) {
   const surface = useContext(SurfaceCtx)
   const size = useSize()
   const items = Children.toArray(children).filter(Boolean)
   const parts = items.map((c, i) => (
-    <div key={keyOf(c, i)} className={cn(surface === "panel" ? "py-5" : "py-6", i > 0 && "border-t", surface !== "page" && "first:pt-0 last:pb-0")}>
+    <div
+      key={keyOf(c, i)}
+      className={columns ? "min-w-0" : cn(surface === "panel" ? "py-5" : "py-6", i > 0 && "border-t", surface !== "page" && "first:pt-0 last:pb-0")}
+    >
       {c}
     </div>
   ))
-  if (surface !== "page") return <div className={cn("flex flex-col", className)}>{parts}</div>
+  // One tree whatever the surface and the room, so what is in the groups
+  // stays as a panel opening beside the page turns two columns into one.
+  const card = surface === "page" && !columns
   return (
-    <SurfaceCtx.Provider value="card">
-      <div className={cn("flex flex-col", size !== "phone" && "rounded-xl bg-card px-6", className)}>{parts}</div>
+    <SurfaceCtx.Provider value={card ? "card" : surface}>
+      <div
+        className={cn(columns ? "grid items-start gap-10" : "flex flex-col", card && size !== "phone" && "rounded-xl bg-card px-6", className)}
+        style={columns ? { gridTemplateColumns: `minmax(0,1fr) ${columns}` } : undefined}
+      >
+        {parts}
+      </div>
     </SurfaceCtx.Provider>
   )
 }
@@ -254,19 +265,11 @@ export function Tile({ children, className, boxed }: { children: ReactNode; clas
 
 /** Two columns on a computer; one under another in a small window and on a phone. */
 export function Columns({ main, side, sideWidth = "20rem" }: { main: ReactNode; side: ReactNode; sideWidth?: string }) {
-  const size = useSize()
-  if (size !== "wide")
-    return (
-      <Groups>
-        {main}
-        {side}
-      </Groups>
-    )
   return (
-    <div className="grid items-start gap-10" style={{ gridTemplateColumns: `minmax(0,1fr) ${sideWidth}` }}>
-      <div className="min-w-0">{main}</div>
-      <div className="min-w-0">{side}</div>
-    </div>
+    <Groups columns={useSize() === "wide" ? sideWidth : undefined}>
+      {main}
+      {side}
+    </Groups>
   )
 }
 

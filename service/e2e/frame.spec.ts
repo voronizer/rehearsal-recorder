@@ -5,7 +5,7 @@ test.use({ storageState: as("alex") })
 
 const fits = (page: Page) => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)
 
-/** Where a box starts from the left and how wide it is, in whole px: polled, as the columns open and fold over 200 ms. */
+/** Where a box starts from the left and how wide it is, in whole px. The callers poll it where the columns open and fold over 200 ms. */
 const box = async (l: Locator) => {
   const b = (await l.boundingBox())!
   return { x: Math.round(b.x), width: Math.round(b.width) }
@@ -223,8 +223,8 @@ test.describe("the two columns", () => {
     await expect.poll(() => box(main)).toEqual({ x: 224, width: 768 - 224 })
     await main.locator("[data-mark]").first().getByRole("button").first().click()
     await expect(panel.getByRole("heading", { level: 2 }).first()).toHaveText(/^Mark at/)
-    // 448 px from the right over the page; the sections stay open, as the page keeps its room.
-    await expect.poll(() => box(panel)).toEqual({ x: 768 - 448, width: 448 })
+    // 448 px from the right over the page, with its line; the sections stay open, as the page keeps its room.
+    await expect.poll(() => box(panel)).toEqual({ x: 768 - 447, width: 447 })
     expect(await box(main)).toEqual({ x: 224, width: 768 - 224 })
     expect(await box(songs)).toEqual({ x: 12, width: 200 })
 
@@ -233,7 +233,7 @@ test.describe("the two columns", () => {
     await expect.poll(() => box(panel)).toEqual({ x: 820 - 447, width: 447 })
   })
 
-  test("at 768 px on a take's page the panel lies over the page and its strip, and folds back", async ({ page }) => {
+  test("at 768 px on a take's page the panel opens over the page from its strip, the page keeps its width, and it folds back", async ({ page }) => {
     await page.setViewportSize({ width: 768, height: 680 })
     await page.goto(take())
     const main = page.getByRole("main")
@@ -242,12 +242,36 @@ test.describe("the two columns", () => {
     await expect.poll(() => box(main)).toEqual({ x: 224, width: 768 - 224 - 48 })
     await strip.getByRole("button", { name: "Open the panel" }).click()
     await expect(panel.getByRole("heading", { name: "Marks", exact: true })).toBeVisible()
-    await expect.poll(() => box(panel)).toEqual({ x: 768 - 448, width: 448 })
-    expect(await box(strip)).toEqual({ x: 768 - 47, width: 47 })
+    await expect.poll(() => box(panel)).toEqual({ x: 768 - 447, width: 447 })
     expect(await box(main)).toEqual({ x: 224, width: 768 - 224 - 48 })
     await panel.getByRole("button", { name: "Fold the panel" }).click()
     await expect(panel).toHaveCount(0)
+    await expect.poll(() => box(strip)).toEqual({ x: 768 - 47, width: 47 })
     expect(await box(main)).toEqual({ x: 224, width: 768 - 224 - 48 })
+  })
+
+  test("a comment being typed stays as the window crosses 820 px and back", async ({ page }) => {
+    await page.setViewportSize({ width: 768, height: 680 })
+    await page.goto("/marks")
+    await page.getByRole("main").locator("[data-mark]").first().getByRole("button").first().click()
+    const comment = page.getByLabel("Panel", { exact: true }).getByRole("textbox", { name: "Your comment" }).last()
+    await comment.fill("Slower into the bridge")
+    await page.setViewportSize({ width: 820, height: 680 })
+    await expect.poll(() => box(page.getByRole("main"))).toEqual({ x: 48, width: 820 - 48 - 448 })
+    await expect(comment).toHaveValue("Slower into the bridge")
+    await page.setViewportSize({ width: 768, height: 680 })
+    await expect.poll(() => box(page.getByRole("main"))).toEqual({ x: 224, width: 768 - 224 })
+    await expect(comment).toHaveValue("Slower into the bridge")
+  })
+
+  test("on Home at 1180 px, a mark pressed in Latest marks stays in view as its panel opens and the page goes to one column", async ({ page }) => {
+    await page.goto("/")
+    const mark = page.getByRole("region", { name: "Latest marks" }).getByRole("button", { name: /Too quiet here/ })
+    await expect(mark).toBeInViewport()
+    await mark.click()
+    await expect(page.getByLabel("Panel", { exact: true }).getByRole("heading", { level: 2 }).first()).toHaveText(/^Mark at 0:03$/)
+    await expect.poll(() => box(page.getByRole("main"))).toEqual({ x: 224, width: 1180 - 224 - 448 })
+    await expect(mark).toBeInViewport({ ratio: 1 })
   })
 
   test("under Reduce motion both columns fold and open at once", async ({ page }) => {
@@ -279,6 +303,8 @@ test.describe("the two columns", () => {
     await expect.poll(() => box(main)).toEqual({ x: 48, width: 960 - 48 - 448 })
     await expect.poll(() => box(songs)).toEqual({ x: 6, width: 36 })
     await expect(songs).toHaveAttribute("aria-current", "page")
+    // The section lit is the one a screen reader hears as this page, and the only one.
+    await expect(page.getByRole("navigation", { name: "Sections" }).locator("[aria-current=page], [data-active=true]")).toHaveCount(1)
     await songs.hover()
     await expect(page.getByRole("tooltip")).toHaveText("Songs")
 
