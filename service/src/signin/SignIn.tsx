@@ -11,8 +11,8 @@ import { ErrorLine } from "../shell/parts"
 import { Frame } from "./Frame"
 
 const SENT = "If this address is in the band, a code is on its way"
-const BAD_CODE = "This code does not work. Check it, or press Send code for a new one."
-const TOO_MANY = "Too many tries. Wait a minute, then press Send code again."
+const BAD_CODE = "Wrong code. Check it, or send a new one."
+const TOO_MANY = "Too many tries. Wait a minute."
 
 /**
  * Signing in: the address and **Send code**, then the code from the letter
@@ -87,8 +87,8 @@ export function SignIn() {
               if (stage === "confirm") setStage("address")
             }}
           />
-          {/* Two lines' room: what is said here takes two in the card, and Send code stays where it is. */}
-          <ErrorLine error={stage !== "confirm" && said?.by === "send" ? said.text : undefined} className="min-h-10" />
+          {/* One line's room: what is said here fits one, and Send code stays where it is. */}
+          <ErrorLine error={stage !== "confirm" && said?.by === "send" ? said.text : undefined} />
         </Field>
         <Button type="submit" variant={stage === "address" || stage === "confirm" ? "default" : "outline"} disabled={busy}>
           Send code
@@ -120,8 +120,7 @@ export function SignIn() {
                 ))}
               </InputOTPGroup>
             </InputOTP>
-            {/* Two lines' room, as under the address. */}
-            <ErrorLine error={said?.by === "sign" ? said.text : undefined} className="min-h-10" />
+            <ErrorLine error={said?.by === "sign" ? said.text : undefined} />
           </Field>
           <Button type="submit" disabled={busy}>
             Sign in

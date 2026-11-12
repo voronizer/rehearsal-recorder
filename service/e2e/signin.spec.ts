@@ -96,7 +96,7 @@ test("a wrong code is said under the boxes, and Sign in does not move", async ({
   await page.getByLabel("Code").fill("000000")
   await button.click()
   const alert = page.getByRole("alert")
-  await expect(alert).toHaveText("This code does not work. Check it, or press Send code for a new one.")
+  await expect(alert).toHaveText("Wrong code. Check it, or send a new one.")
   const boxes = (await page.locator("[data-slot=input-otp-slot]").first().boundingBox())!
   const said = (await alert.boundingBox())!
   expect(said.y).toBeGreaterThanOrEqual(boxes.y + boxes.height)
