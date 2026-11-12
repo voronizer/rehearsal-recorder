@@ -101,6 +101,58 @@ test("on Windows, the Windows download is the button", async ({ page }) => {
   }
 })
 
+// Every answer is in the page while its question is closed (search
+// engines read it); a question opens on a click, the arrow keys move
+// between the questions, and any number can be open together.
+test("a question opens, the arrows move between them, the answers stay in the page", async ({ page }) => {
+  await page.goto("/")
+  const questions = page.locator("#faq [data-slot='accordion-trigger']")
+  const answers = page.locator("#faq [data-slot='accordion-content']")
+  const n = await questions.count()
+  expect(n).toBeGreaterThan(2)
+  await expect(answers).toHaveCount(n)
+  for (const text of await answers.allTextContents()) expect(text.trim().length).toBeGreaterThan(0)
+  await expect(answers.first()).toBeHidden()
+  await questions.first().scrollIntoViewIfNeeded()
+  await questions.first().click()
+  await expect(questions.first()).toHaveAttribute("aria-expanded", "true")
+  await expect(answers.first()).toBeVisible()
+  await questions.first().press("ArrowDown")
+  await expect(questions.nth(1)).toBeFocused()
+  await page.keyboard.press("Enter")
+  await expect(answers.nth(1)).toBeVisible()
+  await expect(answers.first()).toBeVisible()
+  await page.keyboard.press("ArrowUp")
+  await expect(questions.first()).toBeFocused()
+  await questions.first().click()
+  await expect(answers.first()).toBeHidden()
+})
+
+// F11: under Reduce motion an answer is there at once; otherwise it opens
+// with its own animation (page.css).
+for (const reduced of [true, false]) {
+  test(`an opened answer ${reduced ? "does not move" : "opens with an animation"} (reduced motion ${reduced ? "on" : "off"})`, async ({
+    browser,
+  }) => {
+    const context = await browser.newContext({ reducedMotion: reduced ? "reduce" : "no-preference" })
+    const page = await context.newPage()
+    await page.goto("/")
+    const question = page.locator("#faq [data-slot='accordion-trigger']").first()
+    await question.scrollIntoViewIfNeeded()
+    await question.click()
+    const answer = page.locator("#faq [data-slot='accordion-content']").first()
+    await expect(answer).toBeVisible()
+    const { name, duration } = await answer.evaluate((el) => {
+      const style = getComputedStyle(el)
+      return { name: style.animationName, duration: style.animationDuration }
+    })
+    expect(name).toBe(reduced ? "none" : "qa-open")
+    // The quarter of a second page.css gives it.
+    if (!reduced) expect(duration).toBe("0.25s")
+    await context.close()
+  })
+}
+
 test("the page ends with the downloads again, after the questions", async ({ page }) => {
   await page.goto("/")
   const end = page.locator(".get-it")

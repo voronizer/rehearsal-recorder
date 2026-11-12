@@ -14,6 +14,7 @@ import {
   openHistory,
   recordTake,
   setFake,
+  sliderOf,
   startRehearsal,
   style,
   test,
@@ -172,7 +173,7 @@ test.describe("the take Stop opened", () => {
     await expect(page.getByRole("button", { name: "Crop to the region" })).toHaveCount(0)
     await dragRegion(page, 0.25, 0.75)
     await page.getByRole("button", { name: "Crop to the region" }).click()
-    await expect(page.getByRole("dialog")).toHaveCount(0)
+    await expect(page.getByRole("alertdialog")).toHaveCount(0)
     await expect.poll(() => callCount(page, "crop_take")).toBe(1)
     const [, n, from, to] = (await calls(page, "crop_take"))[0].args as number[]
     expect(n).toBe(1)
@@ -218,7 +219,7 @@ test.describe("the take Stop opened", () => {
       .getByRole("group", { name: "Take strip" })
       .getByRole("button", { name: "Delete take Pałyn 2" })
       .click()
-    await expect(page.getByRole("dialog")).toHaveCount(0)
+    await expect(page.getByRole("alertdialog")).toHaveCount(0)
     await expect(closeTakeButton(page)).toHaveCount(0)
     expect(await callCount(page, "delete_take")).toBe(1)
     await notices(page)
@@ -616,10 +617,10 @@ test.describe("the mix", () => {
   test("one master turns the whole take down, for listening only", async ({ page }) => {
     await savedTake(page)
     const master = page.getByRole("slider", { name: "Master volume", exact: true })
-    await expect(master).toHaveValue("1")
+    await expect(master).toHaveAttribute("aria-valuenow", "1")
     // Under the tracks, below the last of them.
     const vocals = (await page.getByRole("slider", { name: "Vocals volume" }).boundingBox())!
-    const spot = (await master.boundingBox())!
+    const spot = (await sliderOf(master).boundingBox())!
     expect(spot.y).toBeGreaterThan(vocals.y)
 
     const mixes = await callCount(page, "save_mix")
@@ -631,8 +632,7 @@ test.describe("the mix", () => {
     await expect.poll(async () => (await calls(page, "save_master_volume")).at(-1)?.args[0]).toBe(turned)
     expect(await callCount(page, "save_mix")).toBe(mixes)
 
-    // A fader is an input, and every key used to go dead once one had been
-    // touched.
+    // Every key used to go dead once a fader had been touched.
     const toggles = await callCount(page, "player_toggle")
     await page.keyboard.press("Space")
     await expect.poll(() => callCount(page, "player_toggle")).toBe(toggles + 1)
@@ -640,19 +640,19 @@ test.describe("the mix", () => {
     await expect.poll(async () => Number(await masterMeter.getAttribute("aria-valuenow"))).toBeGreaterThan(0)
     await page.keyboard.press("Space")
     await expect(masterMeter).toHaveAttribute("aria-valuenow", "0")
-    const level = await master.inputValue()
+    const level = (await master.getAttribute("aria-valuenow"))!
 
     // The same for every other key: a fader dragged with the mouse keeps none.
     await page.mouse.click(spot.x + spot.width * 0.3, spot.y + spot.height / 2)
     let seeks = await callCount(page, "player_seek")
     await page.keyboard.press("ArrowRight")
     await expect.poll(() => callCount(page, "player_seek")).toBe(seeks + 1)
-    await expect(master).toHaveValue(level)
+    await expect(master).toHaveAttribute("aria-valuenow", level)
     await page.mouse.click(spot.x + spot.width * 0.3, spot.y + spot.height / 2)
     seeks = await callCount(page, "player_seek")
     await page.keyboard.press("Home")
     await expect.poll(() => callCount(page, "player_seek")).toBe(seeks + 1)
-    await expect(master).toHaveValue(level)
+    await expect(master).toHaveAttribute("aria-valuenow", level)
 
     // Reached with the keyboard, the fader is what the arrows are aimed at.
     // After the last track's S, which is after its fader, comes the click's
@@ -668,15 +668,15 @@ test.describe("the mix", () => {
     )
     seeks = await callCount(page, "player_seek")
     await page.keyboard.press("ArrowLeft")
-    await expect.poll(async () => Number(await master.inputValue())).toBeLessThan(Number(level))
+    await expect.poll(async () => Number(await master.getAttribute("aria-valuenow"))).toBeLessThan(Number(level))
     expect(await callCount(page, "player_seek")).toBe(seeks)
 
     // And another take opens at the volume the last one was left at.
-    const left = await master.inputValue()
+    const left = (await master.getAttribute("aria-valuenow"))!
     await page.getByRole("button", { name: "Songs", exact: true }).click()
     await takeButton(page.locator("[aria-label='Take strip']"), "Pałyn #1").click()
     await expect(takeButton(page.locator("[aria-label='Take strip']"), "Pałyn #1")).toHaveAttribute("aria-current", "true")
-    await expect(master).toHaveValue(left)
+    await expect(master).toHaveAttribute("aria-valuenow", left)
   })
 })
 
@@ -1033,7 +1033,7 @@ test.describe("cropping a saved take", () => {
     await savedTake(page)
     await dragRegion(page, 0.25, 0.75)
     await page.getByRole("button", { name: "Crop to the region" }).click()
-    await expect(page.getByRole("dialog")).toHaveCount(0)
+    await expect(page.getByRole("alertdialog")).toHaveCount(0)
     await expect.poll(() => callCount(page, "crop_take")).toBe(1)
     const [, , from, to] = (await calls(page, "crop_take"))[0].args as number[]
     expect(Math.abs(from - TAKE_SECONDS * 0.25)).toBeLessThan(0.4)

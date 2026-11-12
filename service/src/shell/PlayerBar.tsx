@@ -1,7 +1,9 @@
+import { useState } from "react"
 import { useRouterState } from "@tanstack/react-router"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import { PlayButton } from "@/components/ui/play-button"
+import { Slider } from "@/components/ui/slider"
 import type { TakePage } from "../api"
 import { usePlayer, useTime } from "../takes/player/one"
 import { StarButton, TakeLink } from "../takes/parts"
@@ -35,21 +37,57 @@ function MarkHere({ take, at }: { take: TakePage | undefined; at: number }) {
   )
 }
 
-/** Where the take is: press to move there. */
-function Line({ take, at }: { take: TakePage; at: number }) {
+/** The bar's keys, in seconds; with Shift an arrow moves ten, as Page Up and Page Down do. */
+const KEY_SECONDS: Record<string, number> = { ArrowRight: 1, ArrowUp: 1, ArrowLeft: -1, ArrowDown: -1, PageUp: 10, PageDown: -10 }
+
+/** The bar's own step, in seconds: fine enough that a press or a drag lands where it is, as before the Slider. */
+const FINE = 0.01
+
+/**
+ * Where the take is (S5), the shared Slider drawn as the bar: a press or a
+ * drag moves the take there as it is let go, the thumb following the
+ * pointer till then, since a seek starts every track again. Once it has
+ * the focus, ← and → move the take a second at once, with Shift ten, and
+ * Home and End go to its ends. A screen reader hears the take's name and
+ * where it is, “0:05 of 3:12”.
+ */
+function Line({ take, at, className, trackClassName, ...rest }: { take: TakePage; at: number; className?: string; trackClassName?: string; "data-testid": string }) {
   const p = usePlayer()
   const length = take.duration_sec || 1
+  const now = Math.min(at, length)
+  // Where the thumb is while the bar is pressed.
+  const [held, setHeld] = useState<number | null>(null)
+  const shown = held ?? now
+  const seek = (to: number) => p.seek(take.uid, Math.max(0, Math.min(length, to)))
   return (
-    <div
-      data-testid="bar-line"
-      className="relative h-1.5 flex-1 cursor-pointer rounded-full bg-muted"
-      onPointerDown={(e) => {
-        const r = e.currentTarget.getBoundingClientRect()
-        p.seek(take.uid, Math.max(0, Math.min(1, (e.clientX - r.left) / r.width)) * take.duration_sec)
+    <Slider
+      {...rest}
+      variant="bar"
+      min={0}
+      max={length}
+      step={FINE}
+      value={[shown]}
+      onValueChange={([to]) => setHeld(to)}
+      onValueCommit={([to]) => {
+        setHeld(null)
+        seek(to)
       }}
-    >
-      <div className="absolute inset-y-0 left-0 rounded-full bg-primary" style={{ width: `${(Math.min(at, length) / length) * 100}%` }} />
-    </div>
+      // Let go where it was pressed, nothing is committed: the thumb goes back to the take all the same.
+      onLostPointerCapture={() => setHeld(null)}
+      // The keys move the take at once, by whole seconds, and the Slider's own handler is skipped:
+      // it would step by its fine step, and Home and End would leave the thumb held.
+      onKeyDown={(e) => {
+        const by = KEY_SECONDS[e.key]
+        const to = e.key === "Home" ? 0 : e.key === "End" ? length : by === undefined ? null : now + (e.shiftKey && Math.abs(by) === 1 ? by * 10 : by)
+        if (to === null) return
+        e.preventDefault()
+        seek(to)
+      }}
+      aria-label={take.name}
+      aria-valuetext={`${clock(shown)} of ${clock(take.duration_sec)}`}
+      className={cn("cursor-pointer", className)}
+      trackClassName={trackClassName}
+    />
   )
 }
 
@@ -94,7 +132,7 @@ export function PlayerBar() {
           <span className="tnum text-xs text-muted-foreground" data-testid="bar-time">
             {clock(at)}
           </span>
-          <Line take={take} at={at} />
+          <Line data-testid="bar-line" take={take} at={at} className="flex-1" />
           <span className="tnum text-xs text-muted-foreground">{clock(take.duration_sec)}</span>
         </div>
       )}
@@ -111,22 +149,17 @@ export function PhoneBar() {
   const p = usePlayer()
   const take = p.take
   const at = useTime(p.uid)
-  const length = take?.duration_sec || 1
   return (
     <footer aria-label="Player" className="relative shrink-0 border-t bg-panel">
       {take && (
         // The line is thin; the strip a finger presses to move is 24 px tall.
-        <div
+        <Line
           data-testid="phone-line"
-          className="absolute inset-x-0 -top-3 z-10 h-6 cursor-pointer touch-none"
-          onPointerDown={(e) => {
-            const r = e.currentTarget.getBoundingClientRect()
-            p.seek(take.uid, Math.max(0, Math.min(1, (e.clientX - r.left) / r.width)) * take.duration_sec)
-          }}
-        >
-          <div className="absolute inset-x-0 top-[11px] h-0.5 bg-muted" />
-          <div className="absolute top-[11px] left-0 h-0.5 bg-primary" style={{ width: `${(Math.min(at, length) / length) * 100}%` }} />
-        </div>
+          take={take}
+          at={at}
+          className="absolute inset-x-0 -top-3 z-10 h-6"
+          trackClassName="rounded-none data-[orientation=horizontal]:h-0.5 [&>span]:rounded-none"
+        />
       )}
       <div className="flex h-14 items-center gap-3 px-3">
         <BarPlay take={take} />

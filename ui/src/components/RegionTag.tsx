@@ -1,6 +1,7 @@
 import { useLayoutEffect, useRef, useState } from "react"
 import { Repeat, Scissors, X } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { Toggle } from "@/components/ui/toggle"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { useKeysOn } from "@/lib/keys"
 import { cn } from "@/lib/utils"
@@ -26,6 +27,11 @@ const ACTION =
  *  are the tag's own text colour, a little of it. */
 const ON_TAG =
   "h-auto w-5 self-stretch rounded-none border-transparent border-l-warn-foreground/15 text-warn-foreground hover:bg-warn-foreground/10 hover:text-warn-foreground focus-visible:border-transparent focus-visible:border-l-warn-foreground/15 focus-visible:ring-warn-foreground/50 focus-visible:ring-inset dark:hover:bg-warn-foreground/10"
+
+/** The loop is the shared Toggle: the same tints, over the toggle's own grey
+ *  when it is on and when it is off under the pointer. */
+const LOOP_TINTS =
+  "not-data-[state=on]:hover:bg-warn-foreground/10 not-data-[state=on]:hover:text-warn-foreground dark:not-data-[state=on]:hover:bg-warn-foreground/10 data-[state=on]:bg-warn-foreground/15 data-[state=on]:text-warn-foreground data-[state=on]:hover:bg-warn-foreground/20 dark:data-[state=on]:hover:bg-warn-foreground/20"
 
 /**
  * The region's times, written on the region, with what can be done with it.
@@ -97,22 +103,18 @@ export function RegionTag({
                 the loop is faint, as the transport's Repeat is plain. */}
             <Tooltip>
               <TooltipTrigger asChild>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon-tiny"
-                  onClick={onToggleLoop}
-                  aria-pressed={looping}
+                <Toggle
+                  size="lane"
+                  pressed={looping}
+                  onPressedChange={onToggleLoop}
+                  // Its own on or off, where the tip's trigger would put its
+                  // own state.
+                  data-state={looping ? "on" : "off"}
                   aria-label="Loop the region"
-                  className={cn(
-                    ON_TAG,
-                    looping
-                      ? "bg-warn-foreground/15 hover:bg-warn-foreground/20 dark:hover:bg-warn-foreground/20"
-                      : "[&>svg]:opacity-55"
-                  )}
+                  className={cn(ON_TAG, LOOP_TINTS, !looping && "[&>svg]:opacity-55")}
                 >
                   <Repeat className="size-3" />
-                </Button>
+                </Toggle>
               </TooltipTrigger>
               <TooltipContent>{looping ? `Stop repeating it${rKey}` : `Repeat it${rKey}`}</TooltipContent>
             </Tooltip>

@@ -158,7 +158,8 @@ export function Stage() {
         </span>
       </Top>
       <div key={song.id} className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto px-5 py-5">
-        <h1 className="text-4xl font-semibold text-balance">
+        {/* design-ok(text-size): 8.5 % of the window's width, from 28 px (at 330 px) to 56 px (from 660 px), so a long title fits a phone held upright and stays big on a tablet; the lines as close as they were */}
+        <h1 className="text-[clamp(1.75rem,8.5vw,3.5rem)] leading-[1.1] font-semibold text-balance">
           <span className="tnum mr-3 text-muted-foreground">{at + 1}</span>
           {song.title}
         </h1>

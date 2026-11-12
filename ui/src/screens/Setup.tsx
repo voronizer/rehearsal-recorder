@@ -14,9 +14,11 @@ import {
 } from "lucide-react"
 import { Warning } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
+import { Card } from "@/components/ui/card"
 import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from "@/components/ui/empty"
 import { Kbd } from "@/components/ui/kbd"
 import { Input } from "@/components/ui/input"
+import { ITEM_CHOSEN } from "@/components/ui/item"
 import { Label } from "@/components/ui/label"
 import { Sheet, SheetContent, SheetDescription, SheetTitle } from "@/components/ui/sheet"
 import { Spinner } from "@/components/ui/spinner"
@@ -1099,9 +1101,7 @@ export function Setup({
             size="row"
             onClick={checking ? stopCheck : startCheck}
             disabled={!checking && (!tracks.length || deviceIndex === null)}
-            className={cn(
-              checking && "bg-selected hover:bg-selected dark:bg-selected dark:hover:bg-selected"
-            )}
+            className={cn(checking && ITEM_CHOSEN)}
           >
             {/* A check that takes a second to open turns a spinner in its
                 icon's place (B5). */}
@@ -1358,9 +1358,9 @@ export function Setup({
         <div className="mx-auto max-w-3xl min-w-0">
           {/* The tracks as one group, headed by what they record with, a
               line between each row (Q1). */}
-          <section
+          <Card
             data-tracks
-            className="flex animate-rise flex-col rounded-xl bg-card"
+            className="animate-rise gap-0 p-0"
             style={rise(1)}
           >
             {tracksHead}
@@ -1368,7 +1368,7 @@ export function Setup({
             <div className="flex flex-col gap-3 px-6 pb-4 empty:hidden">{warnings}</div>
             <div className="flex flex-col">{tracks.length ? trackRows : noTracks}</div>
             {tracksFoot}
-          </section>
+          </Card>
         </div>
       </div>
       {/* The past set back from the rehearsal about to start: a panel of its

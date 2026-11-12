@@ -24,7 +24,9 @@ start), Settings, and the big player that the rehearsal screen and History
 open takes in. Their pieces are
 the shared ones, New set's song list included, which the start screen
 shares with Settings' Sets, and the check's [allow-list](#the-check) is
-empty. Where a rule below says "as each screen is redone", the screens'
+empty. The check reads the band service (`service/src`) and the site
+(`site/src`) too, by the same rules, since their pages draw with the same
+components. Where a rule below says "as each screen is redone", the screens'
 pull requests have carried it out. On reha.stream the pieces of the app are
 the real components, and the page around them takes the app's light colours,
 the system's font and the five text sizes (`site/src/page/page.css`); its big
@@ -273,15 +275,24 @@ the shared one when it is redone.
   corners, a 16 px title and the veil behind it; `size` is `default`,
   `narrow` (a list of keys) or `tall` (hung near the top and growing down,
   as New set does). Its buttons are `DialogButtons`, in the system's order
-  (P3). The way out says "Cancel" in every dialog that has an action (one
-  whose options act at once has only "Close"), and the action is a verb:
-  "Finish", "Remove", "Delete". Enter presses the action, except in a
-  question nothing can undo, where Enter presses Cancel and a stray key
-  changes nothing; that question is `ConfirmDialog`, in
-  `components/ConfirmDialog.tsx`. A red button only for what cannot be
-  brought back. The title and text stay as they were while it fades out
-  (`useHeld`, `lib/held.ts`). The check refuses `role="dialog"` and
-  `<dialog>` outside `components/ui/`.
+  (P3). The way out says "Cancel" in every dialog that has an action,
+  except the two plain questions below, whose way out says what goes on:
+  "Keep sending", "Keep writing". A dialog whose options act at once has
+  only "Close". The action is a verb: "Finish", "Remove", "Delete". Enter
+  presses the action, except in a question nothing can undo, where Enter
+  presses Cancel and a stray key changes nothing; that question is
+  `ConfirmDialog`, in `components/ConfirmDialog.tsx`, in РЭХА and in the
+  band service. It is the shared `AlertDialog` in this frame: Cancel has
+  the keyboard when it opens, Esc closes it, and a click outside leaves it
+  open, so a stray click does not lose the question. Its role is
+  `alertdialog`, and with it open Space, Esc and ⌘Z do not reach the
+  screen behind. Two other
+  questions are plain dialogs, where a click outside answers as their way
+  out does: "Close РЭХА?" (`components/ClosingDialog.tsx`) and the band
+  service's "Discard what you wrote?" (`shell/unsent.tsx`). A red button
+  only for what cannot be brought back. The title and text stay as they
+  were while it fades out (`useHeld`, `lib/held.ts`). The check refuses
+  `role="dialog"` and `<dialog>` outside `components/ui/`.
 - **C4. A notice can carry one action**, such as Undo (B1):
   `notify({ …, action, onGone })` in `lib/notices.ts`. A notice with an
   action stays 10 s, whatever its kind, and the pointer over it pauses the
@@ -417,9 +428,32 @@ the shared one when it is redone.
   few words looks and works alike. The metronome's Sound and Count-in are
   `PickRow`s as well, behind the gear on the rehearsal screen and in
   Settings, so it is in `components/ui/` (U3).
+  Added from shadcn for the rows of the audit, each with a story:
+  - `AlertDialog`: a question that needs an answer, in `Dialog`'s frame. A click outside does not close it.
+  - `Textarea`: a text area. Its `line` look has no frame, only a line under it, for a name written in a row (R4).
+  - `InputGroup`: one frame round an input and what stands beside it, the field with a button: a take's name (R2) and the service's names written in place (S7).
+  - `ButtonGroup`: buttons joined into one bar.
+  - `Field`: a label, a control and the line under it. A screen that wants the room of an error held puts `FieldError` in a `min-h-5` line that is there when empty.
+  - `Avatar`: a member's picture, or their initials.
+  - `Sidebar`: ours, adapted from shadcn's: a column that folds to its icons, or opens as a sheet below `mobileBelow` px (`SidebarProvider`'s, 768 unless the caller gives another), named `mobileTitle` for a screen reader. It has no ⌘B or Ctrl+B and no cookie, so it keeps nothing between runs. The caller sets its widths (`--sidebar-width`, `--sidebar-width-mobile`, `--sidebar-width-icon`) and where it stands. It is C8's side panel: the service's left column and the panel on its right are each a `Sidebar`, with a provider of its own (S2, S3, S18).
+  - `Skeleton`: a grey stand-in for a row still coming.
+  - `Accordion`: sections that fold.
+  - `InputOTP`: a short code, one box to a character. Its caret does not blink under Reduce motion.
+  - `Command`: a list you filter by typing.
+  - `Slider` `fader`: the thumb alone, over a meter (R3).
+  - `Slider` `mark`: no track, and a thumb the caller draws (R14).
+  - `Slider` `bar`: the player's bar, with its thumb shown only on keyboard focus (S5).
+  - `ToggleGroup` passes `rovingFocus` on, for a grid that keeps its own arrow keys (R5, S15).
+  - `Spinner` `quiet`: not read out, for a spinner beside words that already say what is happening.
+  - `MarkLine` `variant="service"`: the band service's line (C2): the note alone, or the label's name when nothing is written; the label named in the dot's tip; the time to hours. `wrap`: the words go on to more lines, the dot and the time on the first. `onPress`: the words are the line's button, whole in a tip when cut.
+  - `SheetContent` `showCloseButton={false}`: no row with ✕ at its top, as the Sidebar's sheet has; Esc closes it either way.
+  - `DialogButtons` `cancelButton`: a way out the caller makes, such as a question's `AlertDialogCancel`, put in the system's order (P3).
+  - `Collapsible` round what opens out where it stands (R13): the take strip, with Songs and the open tab's number as its triggers; the songs under Next take, with **All 12 songs** and **Fewer**; a notes lane, with `NotesFold`. None has a part of its own to fold, so none is a `CollapsibleContent`: each trigger's `aria-controls` names what it opens, the row of tabs, the list or the lane.
+  - `--signal-foreground` and `--mark-foreground`: the text on a signal fill and on a mark's colour. `--sidebar-*` follow the theme's own tokens.
+  - `ShareOption` (`components/ShareOption.tsx`): the row that hands a take on, in Share's dialog and in the service's Download.
   The rest are added by the first screen's pull request that needs them: one
-  ✕, one link, one size of icon button, a field with a button (InputGroup),
-  screen header and side panel. A take's name is written by
+  ✕, one link, one size of icon button and screen header. A take's name is
+  written by
   `components/TakeTitle.tsx` (`TakeTitle` in lists, `GoTitle` in headers and
   pills): the song, then its number after a # in the muted colour,
   "Pałyn #3", so a title that ends in a number of its own reads apart
@@ -551,7 +585,10 @@ The other shared components, each with its stories:
   as long as it holds, as the start screen's tracks and the unsaved takes
   have.
 - **Spinner**, `spinner.tsx`: lucide's `Loader2Icon`, turning, `role="status"`
-  and named Loading. It is there from the start but invisible for the first
+  and named Loading. `quiet` takes both away where words beside it already
+  say what is happening ("Reading the folder…"): it is hidden from a screen
+  reader, which hears the words with no second voice over them. It is there
+  from the start but invisible for the first
   second (`SPINNER_AFTER_MS`, or its `after` in ms), so a quick answer does
   not flash it and nothing moves when it shows (B4, B5). It stands still under
   Reduce motion and while a take records (F11). C8's loading signs. A control
@@ -613,7 +650,9 @@ The other shared components, each with its stories:
   does History: a label's dot in its list and on its page (`LabelList`,
   `MarksPage`), the notes from last time on a song's page (`SongPage`), and
   the ticks on the bars of a song's ladder and the Marks page (`SongLadder`,
-  `MarksPage`). The other dots, note lines and ticks move onto them as their
+  `MarksPage`). The band service's three mark lines are `MarkLine`s with
+  `variant="service"` (C8): a take's marks, a mark on Home and a row of
+  Marks. The other dots, note lines and ticks move onto them as their
   screens are redone.
 - **Checkbox**, `checkbox.tsx`: shadcn's, in the theme. A 16 px square with
   the 4 px corner of a small thing (F9). Ticked, it is filled in the text's
@@ -637,9 +676,10 @@ The other shared components, each with its stories:
   opens and closes under its trigger: `Collapsible`, `CollapsibleTrigger`
   and `CollapsibleContent`. It has no look of its own. The trigger is what
   the screen puts in it, a `Button` as a rule; Radix sets `aria-expanded`
-  on it, and Enter or Space opens and closes the part. A rung of a song's
-  ladder in History is its one use so far: the rung is the trigger, its
-  chevron says whether it is open, and its takes are the part.
+  on it, and Enter or Space opens and closes the part. On a rung of a song's
+  ladder in History the rung is the trigger, its chevron says whether it is
+  open, and its takes are the part; the take strip, the songs under Next
+  take and a notes lane open out with it too (C8).
 - **Slider**, `slider.tsx`: shadcn's, on the theme. A thin grey track, the
   part set in the text's colour rather than the accent (F2: a setting, not
   what plays), and a round thumb that shows keyboard focus in the shared
@@ -858,7 +898,8 @@ as the `cn` import.
 - **B2. A question only where nothing can be undone**: finishing a rehearsal
   by Esc, removing a rehearsal from history, deleting a label that has
   marks, deleting a set, and merging two songs. Each is a `ConfirmDialog`,
-  where Enter presses Cancel. The **Finish** button itself does not ask. Its
+  where Enter presses Cancel and a click outside does not close it. The
+  **Finish** button itself does not ask. Its
   text counts properly, "1 take is saved", through `savedLine()` in
   `lib/format.ts`.
 - **B3. Load errors show everywhere.** A ▶ that fails without a word looks
@@ -907,8 +948,11 @@ as the `cn` import.
   keeps its name and its width while it looks, and after its second a
   Spinner takes its icon's place. While Under the hood asks Python for its
   page, it shows the Spinner, unseen for its first second, and from 10 s
-  says beside it what it is doing. The rest as each screen is redone, on
-  shadcn's Spinner.
+  says beside it what it is doing. The band service waits the same second:
+  a panel whose take is still on its way (`Waiting`, in
+  `service/src/shell/parts.tsx`) shows nothing for its first second, then
+  the Spinner, and from 10 s "Opening…" beside it. The rest as each screen
+  is redone, on shadcn's Spinner.
 - **B6. Long names.** A name never gives way to a secondary figure: the name
   is what tells one thing from another. The figure wraps, goes first, or
   hides and shows on hover, as a recording tile's dB figure does; a cut
@@ -992,9 +1036,14 @@ as the `cn` import.
   state by hand to see it. It was decided to keep it on the computer (R22):
   it is not published, neither in pull request previews nor on reha.stream.
   CI builds it, so a story that does not build fails the pull request.
-- **K3. CI refuses what breaks the rules**, with `npm run design-check`, the
-  Design check step of interface · 1/3 in `.github/workflows/interface.yml`. A
-  rule that lives only in a document wears away one screen at a time; the
+- **K3. CI refuses what breaks the rules**, in РЭХА, the band service and
+  the site, with `npm run design-check`. Each part's workflow checks its
+  own: the Design check step of interface · 1/3 in
+  `.github/workflows/interface.yml` checks `ui`, the one in `service.yml`
+  checks `service`, and the one in the site's action
+  (`.github/actions/site/action.yml`) checks `site`. All three run on a
+  change to `ui/`, so a change to the rules is checked against every part.
+  A rule that lives only in a document wears away one screen at a time; the
   check names the line on the pull request, before a reviewer has to.
   Spacing is not checked (F8).
 
@@ -1019,15 +1068,22 @@ component.
 
 ```bash
 cd ui
-npm run design-check
+npm run design-check                # РЭХА, the service and the site
+npm run design-check -- service     # one part: ui, service or site
 ```
 
-It reads every `.tsx` and `.ts` under `ui/src/`, stories included and
-tests left out (class strings live in `.ts` files too, such as
-`lib/labels.ts`), prints each problem as `path:line rule text`, and then
-says what each broken rule is for. The rules are in
-`ui/scripts/design-rules.mjs`, and their tests, which Vitest runs, in
-`ui/scripts/design-rules.test.mjs`.
+It reads every `.tsx` and `.ts` under `ui/src/`, `service/src/` and
+`site/src/`, stories included and tests left out (class strings live in
+`.ts` files too, such as `lib/labels.ts`), prints each problem as
+`path:line rule text` with the path from the repository's root
+(`service/src/shell/Shell.tsx:46`), and then says what each broken rule is
+for. Given a part's name it reads only that part; CI checks each part in its
+own workflow (K3), with `node ../ui/scripts/design-check.mjs service` from
+`service/` and `node ui/scripts/design-check.mjs site` from the root. The
+rules are in `ui/scripts/design-rules.mjs`, and their tests, which Vitest
+runs, in `ui/scripts/design-rules.test.mjs`. `components/ui/` in the table
+is always `ui/src/components/ui/`: the service and the site have none of
+their own, so the rules outside it hold in every file of theirs.
 
 | Rule | Refuses |
 |---|---|
@@ -1039,11 +1095,22 @@ says what each broken rule is for. The rules are in
 | `raw-button` | a hand-made `<button>` outside `components/ui/` |
 | `radix` | Radix imported outside `components/ui/` |
 | `dialog` | `role="dialog"` or `<dialog>` outside `components/ui/`; a selector that finds one, `[role="dialog"]`, passes |
+| `raw-field` | a hand-made `<input>`, `<textarea>` or `<select>` outside `components/ui/`, where `Input`, `Textarea`, `InputGroup`, `Slider` or `Select` is meant; a file picker, `type="file"`, which shadcn has nothing for, passes |
+| `raw-label` | a hand-made `<label>` outside `components/ui/`, where `Label` is meant |
+| `spinner` | `animate-spin` outside `components/ui/`, where `Spinner` is meant |
+| `native-tip` | `title=` on an HTML element or a router `Link` outside `components/ui/`, where `Tooltip` or `WholeTip` is meant; an `<iframe>`'s, which names the frame, and the `title` prop of a component of ours pass |
+| `pressed-button` | `aria-pressed` on a `Button` outside `components/ui/`, where `Toggle` or `ToggleGroup` is meant |
+| `card` | `rounded-xl` with `bg-card` in one class string outside `components/ui/`, where `Card` is meant |
 | `story` | a component in `components/ui/` with no story beside it |
+
+The rules that read an attribute find the tag it belongs to across lines:
+a `title=` two lines under its `<span` is the span's, and a `type="file"`
+two lines under its `<input` lets that input pass.
 
 **The allow-list.** While the screens were redone, one pull request each,
 `ui/design-check.allow.json` let a file not yet redone break the rules it
-was listed for, by file and rule, and each screen's pull request took its
+was listed for, by file (its path from the repository's root,
+`ui/src/screens/X.tsx`) and rule, and each screen's pull request took its
 files off. Every screen is redone, and the list is empty for good, `{}`: a
 new screen or feature keeps the rules from its first line. The test
 *the allow-list is empty: every screen is redone*, in
@@ -1052,19 +1119,24 @@ list, and the check says "0 known cases in 0 files are on the allow-list".
 Nothing in `components/ui/` could ever be listed: that is where the rules
 are kept, so a problem there is fixed.
 
-**`design-ok`.** Two kinds of thing are outside what the rules mean: a
+**`design-ok`.** Three kinds of thing are outside what the rules mean: a
 small graphic that keeps its own corner, such as a mark's diamond on the
-waveform or a tooltip's arrow, and text sized from the window rather than
-from the scale (the recording clock, the names and readouts on the track
-tiles). Such a line is let off one rule by a comment on it, or on the line
-above, that says why, as `//` or `{/* */}`, whichever the line allows. Two
-from the code, in `components/Timeline.tsx` and `screens/Recording.tsx`:
+waveform or a tooltip's arrow; text sized from the window rather than from
+the scale (the recording clock, the names and readouts on the track tiles);
+and a sheet made for paper, which is black on white whatever the theme and
+sized for A4 (the set list the band service prints for the stage, Alex's
+pick of 9 November). Such a line is let off one rule by a comment on it, or
+on the line above, that says why and names its kind, as `//` or
+`{/* */}`, whichever the line allows. Three from the code, in
+`components/Timeline.tsx`, `screens/Recording.tsx` and the service's
+`sets/Print.tsx`:
 
 ```tsx
 // design-ok(radius): the marker's diamond on the waveform, a graphic that keeps its own corner
 // design-ok(px-text): the recording clock is sized from the window's height (CLOCK_SIZE)
+// design-ok(raw-colour): a sheet made for paper, black on white whatever the theme, sized for A4
 ```
 
-A comment with no reason lets off nothing, and it is for those two kinds
+A comment with no reason lets off nothing, and it is for those three kinds
 only: any other line that breaks a rule is fixed, since nothing goes on the
 allow-list any more.

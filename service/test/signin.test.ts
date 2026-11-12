@@ -18,7 +18,7 @@ import {
 } from "./helpers"
 
 const CONFIRM_FIRST = "First confirm your address: look for a letter from Cloudflare, then press Send code again"
-const TOO_MANY_CODES = "Too many codes for this address. Wait an hour, then press Send code again."
+const TOO_MANY_CODES = "Too many codes. Wait an hour."
 const MINUTE = 60 * 1000
 const DAY = 24 * 60 * MINUTE
 

@@ -545,7 +545,8 @@ test.describe("as Ira", () => {
     await expect(guitar).toHaveAttribute("aria-valuetext", "97%")
 
     // Let go, take it again at once, and hold it while the answer to the first comes.
-    const box = (await guitar.boundingBox())!
+    // Along the whole fader, not its thumb, which is what its name finds.
+    const box = (await guitar.locator("xpath=ancestor::*[@data-slot='slider'][1]").boundingBox())!
     const y = box.y + box.height / 2
     await page.mouse.move(box.x + box.width * 0.96, y)
     await page.mouse.down()
@@ -590,6 +591,8 @@ test.describe("as Ira", () => {
     const player = page.locator("[data-take-player]")
     const guitar = player.getByRole("slider", { name: "Guitar volume" })
     await expect(guitar).toHaveAttribute("aria-valuetext", "100%")
+    // A key first: after the click on the link, focus() alone reads as the mouse's, and ← would move the take.
+    await page.keyboard.press("Shift")
     await guitar.focus()
     for (let i = 0; i < 3; i++) await page.keyboard.press("ArrowLeft")
     await expect(guitar).toHaveAttribute("aria-valuetext", "97%")
@@ -668,11 +671,28 @@ test.describe("as Ira", () => {
     const star = main.getByRole("button", { name: "Star “Pałyn 3”" })
     await expect(star).toHaveAttribute("aria-pressed", "false")
     await star.click()
-    await expect(main.getByRole("button", { name: "Take back your star from “Pałyn 3”" })).toHaveAttribute("aria-pressed", "true")
-    await expect(main.getByTitle("Starred by Ira")).toBeVisible()
+    const mine = main.getByRole("button", { name: "Take back your star from “Pałyn 3”" })
+    await expect(mine).toHaveAttribute("aria-pressed", "true")
+    // Who starred it is in the star's tip.
+    await page.mouse.move(0, 0)
+    await mine.hover()
+    await expect(page.getByRole("tooltip")).toContainText("Starred by Ira")
     await page.reload()
-    await expect(page.getByRole("main").getByRole("button", { name: "Take back your star from “Pałyn 3”" })).toBeVisible()
-    await expect(page.getByRole("main").getByTitle("Starred by Ira")).toBeVisible()
+    await page.getByRole("main").getByRole("button", { name: "Take back your star from “Pałyn 3”" }).hover()
+    await expect(page.getByRole("tooltip")).toContainText("Starred by Ira")
+  })
+
+  test("while a star is on its way it cannot be pressed, and its tip still says who starred the take", async ({ page }) => {
+    // The answer never comes, so the star stays on its way and nothing is changed.
+    await page.route("**/api/takes/*/star", () => {})
+    await page.goto(`/takes/${band().takes["Viasna 11"]}`)
+    const star = page.getByRole("main").getByRole("button", { name: "Take back your star from “Viasna 11”" })
+    await star.click()
+    await expect(star).toBeDisabled()
+    await page.mouse.move(0, 0, { steps: 10 })
+    await expect(page.getByRole("tooltip")).toHaveCount(0)
+    await star.hover({ force: true })
+    await expect(page.getByRole("tooltip")).toHaveText("Starred by Dzima, Ira")
   })
 })
 
@@ -708,7 +728,7 @@ test.describe("as Dzima", () => {
     // Deleting your mark, under its ⋯, says what goes with it.
     await kept.getByRole("button", { name: "What to do with the mark at 0:05" }).click()
     await page.getByRole("menuitem", { name: "Delete" }).click()
-    const ask = page.getByRole("dialog")
+    const ask = page.getByRole("alertdialog")
     await expect(ask).toContainText("Its comment goes with it.")
     await ask.getByRole("button", { name: "Cancel" }).click()
   })
@@ -773,7 +793,7 @@ test.describe("deleting a take, as Alex", () => {
   async function deleteTake(page: import("@playwright/test").Page, where: import("@playwright/test").Locator, name: string) {
     await where.getByRole("button", { name: `What to do with ${name}`, exact: true }).click()
     await page.getByRole("menuitem", { name: "Delete take" }).click()
-    await page.getByRole("dialog").getByRole("button", { name: "Delete take" }).click()
+    await page.getByRole("alertdialog").getByRole("button", { name: "Delete take" }).click()
   }
 
   test("an old take's panel address opens the take's page", async ({ page }) => {
@@ -805,8 +825,8 @@ test.describe("moving a take", () => {
     await named.getByRole("button", { name: "What to do with Take 3", exact: true }).click()
     await page.getByRole("menuitem", { name: "Move to song" }).click()
     // A take with no song: Not named is ticked.
-    await expect(page.getByRole("menuitemradio", { name: "Not named" })).toHaveAttribute("aria-checked", "true")
-    await page.getByRole("menuitem", { name: "New song…" }).click()
+    await expect(page.getByRole("option", { name: "Not named" })).toHaveAttribute("aria-checked", "true")
+    await page.getByRole("option", { name: "New song…" }).click()
     // From a list the take's page opens, the field in its line.
     await expect(page).toHaveURL(`/takes/${band().takes["Take 3"]}`)
     const main = page.getByRole("main")
@@ -825,8 +845,8 @@ test.describe("moving a take", () => {
 
     await main.getByRole("button", { name: "What to do with Rečka", exact: true }).click()
     await page.getByRole("menuitem", { name: "Move to song" }).click()
-    await expect(page.getByRole("menuitemradio", { name: "Rečka" })).toHaveAttribute("aria-checked", "true")
-    await page.getByRole("menuitemradio", { name: "Pałyn" }).click()
+    await expect(page.getByRole("option", { name: "Rečka" })).toHaveAttribute("aria-checked", "true")
+    await page.getByRole("option", { name: "Pałyn" }).click()
     await expect(title).toContainText("Pałyn · number from РЭХА")
     await page.goto("/songs")
     await expect(named).toHaveCount(0)
@@ -840,7 +860,7 @@ test.describe("moving a take", () => {
     // The take's ⋯ in its rehearsal's fold, not the song's by its title.
     await page.getByRole("main").getByRole("region").getByRole("button", { name: "What to do with Pałyn", exact: true }).click()
     await page.getByRole("menuitem", { name: "Move to song" }).click()
-    await page.getByRole("menuitemradio", { name: "Not named" }).click()
+    await page.getByRole("option", { name: "Not named" }).click()
     await expect(row).toHaveCount(0)
     await page.goto("/songs")
     await expect(named.locator('[data-take="Take"]')).toBeVisible()
@@ -852,11 +872,57 @@ test.describe("moving a take", () => {
     page.on("request", (r) => void (r.method() === "PATCH" && sent++))
     await main.getByRole("button", { name: "What to do with Take", exact: true }).click()
     await page.getByRole("menuitem", { name: "Move to song" }).click()
-    const none = page.getByRole("menuitemradio", { name: "Not named" })
+    const none = page.getByRole("option", { name: "Not named" })
     await expect(none).toHaveAttribute("aria-checked", "true")
     await none.click()
     await expect(none).toBeHidden()
     expect(sent).toBe(0)
+  })
+
+  test("Move to song finds a song by two letters; Not named and New song stay", async ({ page }) => {
+    await page.goto(`/takes/${band().takes["Viasna 12"]}`)
+    await page.getByRole("main").getByRole("button", { name: "What to do with Viasna 12", exact: true }).click()
+    await page.getByRole("menuitem", { name: "Move to song" }).click()
+    // The search is focused as the list opens; the take's song is ticked.
+    const search = page.getByRole("combobox", { name: "Move to song" })
+    await expect(search).toBeFocused()
+    await expect(page.getByRole("option", { name: "Viasna" })).toHaveAttribute("aria-checked", "true")
+    await page.keyboard.type("pa")
+    const options = page.getByRole("option")
+    await expect(page.getByRole("option", { name: "Pałyn" })).toBeVisible()
+    await expect(page.getByRole("option", { name: "Viasna" })).toHaveCount(0)
+    // Not named first and New song… last, whatever is typed, in the page as on the screen.
+    const names = await options.allTextContents()
+    expect(names[0]).toBe("Not named")
+    expect(names.at(-1)).toBe("New song…")
+    const tops = await options.evaluateAll((els) => els.map((el) => el.getBoundingClientRect().top))
+    expect(tops).toEqual([...tops].sort((x, y) => x - y))
+    // The first song found is the one Enter would pick.
+    const first = options.filter({ hasText: /^(Kupalle|Pałyn)$/ }).first()
+    await expect(first).toHaveAttribute("aria-selected", "true")
+    // Home and End go to the first and the last line drawn; ↓ from the last goes round.
+    await page.keyboard.press("End")
+    await expect(page.getByRole("option", { name: "New song…" })).toHaveAttribute("aria-selected", "true")
+    await page.keyboard.press("ArrowDown")
+    await expect(page.getByRole("option", { name: "Not named" })).toHaveAttribute("aria-selected", "true")
+    await page.keyboard.press("End")
+    await page.keyboard.press("Home")
+    await expect(page.getByRole("option", { name: "Not named" })).toHaveAttribute("aria-selected", "true")
+    // The pointer, coming from Move to song as a hand does, lights the line
+    // it is over, and the search keeps what is typed.
+    const palyn = (await page.getByRole("option", { name: "Pałyn" }).boundingBox())!
+    await page.mouse.move(palyn.x + 20, palyn.y + palyn.height / 2, { steps: 10 })
+    await expect(page.getByRole("option", { name: "Pałyn" })).toHaveAttribute("aria-selected", "true")
+    // Typed into the search, a letter is not the menu's own jump to a line;
+    // with no song found, New song… is the one lit.
+    await page.keyboard.type("zz")
+    await expect(search).toBeFocused()
+    await expect(search).toHaveValue("pazz")
+    await expect(options).toHaveText(["Not named", "New song…"])
+    await expect(page.getByRole("option", { name: "New song…" })).toHaveAttribute("aria-selected", "true")
+    await page.keyboard.press("Escape")
+    await expect(search).toHaveCount(0)
+    await expect(page.getByRole("main").getByRole("heading", { level: 1 })).toContainText("Viasna")
   })
 })
 
@@ -913,7 +979,7 @@ test.describe("the drawer on a take's page, as Alex", () => {
     const panel = page.getByLabel("Panel", { exact: true })
     await expect(panel).toContainText("Mark at 0:03")
     await expect(panel).toHaveCount(1)
-    await expect(page.getByLabel("Strip")).toBeVisible()
+    await expect(page.getByLabel("Strip")).toHaveCount(0)
   })
 
   test("a drawer a chat link opened folds with Back, and with its sign after another mark", async ({ page }) => {

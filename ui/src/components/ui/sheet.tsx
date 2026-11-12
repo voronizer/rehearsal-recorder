@@ -36,10 +36,13 @@ function SheetContent({
   className,
   children,
   side = "right",
+  showCloseButton = true,
   onInteractOutside,
   ...props
 }: React.ComponentProps<typeof SheetPrimitive.Content> & {
   side?: "left" | "right"
+  /** The row with ✕ at the top; Esc closes the sheet either way. */
+  showCloseButton?: boolean
 }) {
   return (
     <SheetPrimitive.Portal>
@@ -59,13 +62,15 @@ function SheetContent({
         )}
         {...props}
       >
-        <div className="flex shrink-0 justify-end px-3 pt-3">
-          <SheetPrimitive.Close asChild>
-            <Button variant="ghost" size="icon-row" aria-label="Close">
-              <XIcon />
-            </Button>
-          </SheetPrimitive.Close>
-        </div>
+        {showCloseButton && (
+          <div className="flex shrink-0 justify-end px-3 pt-3">
+            <SheetPrimitive.Close asChild>
+              <Button variant="ghost" size="icon-row" aria-label="Close">
+                <XIcon />
+              </Button>
+            </SheetPrimitive.Close>
+          </div>
+        )}
         {children}
       </SheetPrimitive.Content>
     </SheetPrimitive.Portal>

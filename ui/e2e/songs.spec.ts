@@ -532,7 +532,7 @@ test.describe("Songs in History", () => {
     const row = rungGroup(page, "/rec/older").locator("[data-take='3']")
     await row.hover()
     await row.getByRole("button", { name: "Delete take Opus 1" }).click()
-    await expect(page.getByRole("dialog")).toHaveCount(0)
+    await expect(page.getByRole("alertdialog")).toHaveCount(0)
     await expect(rows(page).and(page.locator("[data-song='Opus']"))).toHaveCount(0)
     await expect(head(page).getByRole("heading", { name: "Pałyn" })).toBeVisible()
     // Undo puts the go back, and the song with it.
@@ -894,7 +894,7 @@ test.describe("Songs in History", () => {
       .getByRole("button", { name: /^First rehearsal/ })
       .click()
     await page.getByRole("button", { name: "Delete rehearsal First rehearsal" }).click()
-    await expect(page.getByRole("dialog")).toHaveCount(0)
+    await expect(page.getByRole("alertdialog")).toHaveCount(0)
     await page.getByRole("radio", { name: "Songs", exact: true }).click()
     await expect(rows(page).and(page.locator("[data-song='Pałyn']"))).toHaveCount(1)
     await expect(rows(page).and(page.locator("[data-song='Opus']"))).toHaveCount(0)

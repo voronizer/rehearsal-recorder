@@ -32,8 +32,8 @@ const scrollTo = (heading: string) => async (page: Page) => {
   await page.getByRole("heading", { name: heading, exact: true }).evaluate((el) => {
     el.scrollIntoView({ block: "start" })
     // Whichever scrolls, the page or its main part, makes room for the bar.
-    el.closest("main")?.scrollBy(0, -64)
-    window.scrollBy(0, -64)
+    el.closest("main")?.scrollBy(0, -48)
+    window.scrollBy(0, -48)
   })
 }
 

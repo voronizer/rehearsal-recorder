@@ -500,6 +500,10 @@ export const style = (el: Locator, ...props: string[]) =>
     return Object.fromEntries(ps.map((p) => [p, cs.getPropertyValue(p)]))
   }, props)
 
+/** The whole of a shared slider, from its thumb, which is what its name
+ *  finds: the length a click along it turns. */
+export const sliderOf = (thumb: Locator) => thumb.locator("xpath=ancestor::*[@data-slot='slider'][1]")
+
 /** A theme colour mixed with nothing, `percent` strong, as the browser computes it. */
 export const mixed = (page: Page, token: string, percent: number) =>
   page.evaluate(

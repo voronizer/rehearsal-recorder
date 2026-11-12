@@ -4,7 +4,6 @@ import { Plus } from "lucide-react"
 import { SortableList } from "@/components/SortableList"
 import { Button } from "@/components/ui/button"
 import { colourName, firstFreeColour, LABEL_COLOURS, labelLook } from "@/lib/labels"
-import { cn } from "@/lib/utils"
 import { useAddLabel, useChangeLabel, useDeleteLabel, useLabels, useOrderLabels, type Label } from "../api"
 import { EditRow, PanelHead, placed } from "../shell/EditList"
 import { Group, Groups } from "../shell/parts"
@@ -56,7 +55,8 @@ export function LabelsEditor({ onClose }: { onClose: () => void }) {
                 swatches={LABEL_COLOURS.map((c) => ({
                   value: c,
                   name: colourName(c),
-                  className: cn(labelLook(c).swatch, c === l.colour && "ring-2 ring-ring ring-offset-2 ring-offset-card"),
+                  className: labelLook(c).swatch,
+                  chosen: c === l.colour,
                 }))}
                 onColour={(colour) => change.mutate({ id: l.id, colour: colour as Label["colour"] }, said(l.id))}
                 onName={(name) => change.mutate({ id: l.id, name }, said(l.id))}

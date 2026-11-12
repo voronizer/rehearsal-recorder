@@ -33,13 +33,13 @@ test.describe("as Alex", () => {
       await page.getByRole("menuitem", { name: "Remove" }).click()
     }
     await remove()
-    const ask = page.getByRole("dialog", { name: "Remove “vera@example.com”?" })
+    const ask = page.getByRole("alertdialog", { name: "Remove “vera@example.com”?" })
     await expect(ask).toContainText("Their marks, comments and stars stay")
     await ask.getByRole("button", { name: "Cancel" }).click()
     await expect(ask).toHaveCount(0)
     await expect(row("vera@example.com")).toBeVisible()
     await remove()
-    await page.getByRole("dialog").getByRole("button", { name: "Remove" }).click()
+    await page.getByRole("alertdialog").getByRole("button", { name: "Remove" }).click()
     await expect(row("vera@example.com")).toHaveCount(0)
 
     // Folded once the band has a key.

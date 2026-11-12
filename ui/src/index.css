@@ -41,12 +41,24 @@
   --color-strong-foreground: var(--strong-foreground);
   /* The veil behind a dialog. */
   --color-overlay: var(--overlay);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
 
   /* The app's own semantics: signal fine / silent / clipping */
   --color-signal: var(--signal);
+  /* Text on a signal-green fill, and on a mark's label colour: white in
+     both themes. */
+  --color-signal-foreground: var(--signal-foreground);
+  --color-mark-foreground: var(--mark-foreground);
   --color-warn: var(--warn);
   /* Text on yellow is dark in both themes: white on yellow is unreadable
      in the light one. */
@@ -107,6 +119,19 @@
     var(--tw-ease, var(--ease-smooth)) var(--tw-animation-delay, 0s)
     var(--tw-animation-iteration-count, 1) var(--tw-animation-direction, normal)
     var(--tw-animation-fill-mode, none);
+  /* The code box's caret (InputOTP): on, off, on, once every 1.25 s. */
+  --animate-caret-blink: caret-blink 1.25s ease-out infinite;
+  @keyframes caret-blink {
+    0%,
+    70%,
+    100% {
+      opacity: 1;
+    }
+    20%,
+    50% {
+      opacity: 0;
+    }
+  }
   --animate-out: exit var(--tw-animation-duration, var(--tw-duration, 220ms))
     var(--tw-ease, var(--ease-smooth)) var(--tw-animation-delay, 0s)
     var(--tw-animation-iteration-count, 1) var(--tw-animation-direction, normal)
@@ -116,6 +141,7 @@
 /* In the sheet whether or not a screen has used it yet: the site and
    Storybook import this file too. */
 @source inline("animate-rise");
+@source inline("animate-caret-blink");
 
 /* Motion gives way (F11). Under the system's Reduce motion, and while a take
    is being recorded (Recording.tsx sets data-recording on <html>), these do
@@ -136,12 +162,14 @@
       .animate-spin,
       .animate-ping,
       .animate-pulse,
+      .animate-caret-blink,
       [class*=":animate-rise"],
       [class*=":animate-in"],
       [class*=":animate-out"],
       [class*=":animate-spin"],
       [class*=":animate-ping"],
-      [class*=":animate-pulse"]
+      [class*=":animate-pulse"],
+      [class*=":animate-caret-blink"]
     ) {
     animation: none;
   }
@@ -154,12 +182,14 @@ html[data-recording]
     .animate-spin,
     .animate-ping,
     .animate-pulse,
+    .animate-caret-blink,
     [class*=":animate-rise"],
     [class*=":animate-in"],
     [class*=":animate-out"],
     [class*=":animate-spin"],
     [class*=":animate-ping"],
-    [class*=":animate-pulse"]
+    [class*=":animate-pulse"],
+    [class*=":animate-caret-blink"]
   ) {
   animation: none;
 }
@@ -209,6 +239,16 @@ html[data-recording]
   --input: oklch(0.87 0.004 286.3);
   --ring: oklch(0.56 0.24 266);
   --signal: oklch(0.72 0.18 149);
+  --signal-foreground: oklch(1 0 0);
+  --mark-foreground: oklch(1 0 0);
+  --sidebar: var(--panel);
+  --sidebar-foreground: var(--foreground);
+  --sidebar-primary: var(--primary);
+  --sidebar-primary-foreground: var(--primary-foreground);
+  --sidebar-accent: var(--accent);
+  --sidebar-accent-foreground: var(--accent-foreground);
+  --sidebar-border: var(--border);
+  --sidebar-ring: var(--ring);
   --warn: oklch(0.79 0.16 76);
   --warn-foreground: oklch(0.24 0.04 76);
 
@@ -260,6 +300,16 @@ html[data-recording]
   --input: oklch(0.32 0.009 286.3);
   --ring: oklch(0.56 0.24 266);
   --signal: oklch(0.75 0.18 149);
+  --signal-foreground: oklch(1 0 0);
+  --mark-foreground: oklch(1 0 0);
+  --sidebar: var(--panel);
+  --sidebar-foreground: var(--foreground);
+  --sidebar-primary: var(--primary);
+  --sidebar-primary-foreground: var(--primary-foreground);
+  --sidebar-accent: var(--accent);
+  --sidebar-accent-foreground: var(--accent-foreground);
+  --sidebar-border: var(--border);
+  --sidebar-ring: var(--ring);
   --warn: oklch(0.79 0.16 76);
   --warn-foreground: oklch(0.22 0.04 76);
 
@@ -324,6 +374,13 @@ html[data-recording]
 }
 [data-tight] [data-footer-actions] {
   min-width: 0;
+}
+/* The tempo's − and + gone, its number keeps a whole frame: the button group
+   gave its left edge and its corners to the buttons beside it. */
+[data-tight="2"] [data-slot="button-group"]:has(> [data-squeeze="2"]) > input,
+[data-tight="3"] [data-slot="button-group"]:has(> [data-squeeze="2"]) > input {
+  border-left-width: 1px;
+  border-radius: var(--radius-md);
 }
 [data-tight="2"] [data-squeeze-quiet="2"],
 [data-tight="3"] [data-squeeze-quiet="2"],

@@ -66,8 +66,9 @@ export function NotesPlate({
   paired?: boolean
   /** The port was not there the whole take, and no .mid was saved. */
   missing?: boolean
-  /** In the player: whether the notes are open, and the arrow's press. */
-  fold?: { open: boolean; onToggle: () => void }
+  /** In the player: whether the notes are open, and the id of the lane the
+   *  arrow opens. The Collapsible round both is the caller's (Timeline). */
+  fold?: { open: boolean; controls: string }
 }) {
   const folded = fold !== undefined && !fold.open
   return (
@@ -106,7 +107,7 @@ export function NotesPlate({
         </span>
         <span className="flex w-[2.875rem] shrink-0 gap-1.5">
           <NotesMute name={name} missing={missing} />
-          {fold && <NotesFold name={name} open={fold.open} onToggle={fold.onToggle} />}
+          {fold && <NotesFold name={name} open={fold.open} controls={fold.controls} />}
         </span>
       </div>
       {port && !folded && <Whole text={port} reach className="truncate text-xs leading-4 text-muted-foreground" />}

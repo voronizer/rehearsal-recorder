@@ -1,5 +1,7 @@
-// The design rules, as code (K3). `design-check.mjs` walks src/ and runs these;
-// everything here is pure, so design-rules.test.mjs can feed it strings.
+// The design rules, as code (K3). `design-check.mjs` walks the src/ of РЭХА's
+// interface, the band service and the site and runs these; everything here is
+// pure, so design-rules.test.mjs can feed it strings. Paths are from the
+// repository's root: `ui/src/...`, `service/src/...`, `site/src/...`.
 //
 // It reads source as text, with regular expressions, on purpose: the rules are
 // about class names and a handful of literals, a real parser would need the
@@ -12,13 +14,19 @@
 //   // design-ok(radius): a 2 px tick
 //   {/* design-ok(px-text): sized from the window, not from the scale */}
 //
-// That is for what the rules cannot mean: graphics 1-2 px thick, and text whose
-// size is taken from the window (the recording clock, the tiles). A comment
+// That is for what the rules cannot mean: graphics 1-2 px thick, text whose
+// size is taken from the window (the recording clock, the tiles), and a sheet
+// made for paper, black on white whatever the theme and sized for A4 (the
+// service's set list for the stage, service/src/sets/Print.tsx). A comment
 // with no reason waives nothing.
 
-// What lives in here may build its own: it is where Radix, the raw <button>
-// and the dialog are wrapped for everybody else.
-const SHARED_DIR = "src/components/ui/"
+// The parts the check walks, each its own src/.
+export const PARTS = ["ui", "service", "site"]
+
+// What lives in here may build its own: it is where Radix, the raw <button>,
+// the dialog and the fields are wrapped for everybody else, the service and
+// the site included.
+const SHARED_DIR = "ui/src/components/ui/"
 
 // Tailwind's palette. A theme colour (bg-primary, text-warn) is never one of
 // these, so a hit here is a colour that goes round the theme.
@@ -187,11 +195,100 @@ const RADIUS = re(
     END,
 )
 
+// How many lines up or down the check looks for the rest of a tag.
+const TAG_REACH = 40
+
+/** The JSX tag that position `col` of line `ctx.i` sits in, as
+ *  `{ name, text }`. It goes back over the tag's attributes, strings and
+ *  `{…}` skipped, to the `<Name` that opened it, then on to the `>` that
+ *  closes it; `text` runs from that `<` to that `>`. So an attribute two
+ *  lines under its `<span` is the span's. Null where `col` is not among a
+ *  tag's attributes: in code, inside a `{…}` of its own, or in running text,
+ *  which a `>` or anything an attribute cannot hold (`;`, `(`, `,`) gives
+ *  away. */
+function tagAround(ctx, col) {
+  let open = null
+  let depth = 0
+  back: for (let n = ctx.i; n >= 0 && n > ctx.i - TAG_REACH; n--) {
+    const line = ctx.lines[n]
+    for (let j = n === ctx.i ? col : line.length - 1; j >= 0; j--) {
+      if (ctx.quoted[n][j]) continue
+      const c = line[j]
+      if (c === "}") depth++
+      else if (c === "{") {
+        if (depth === 0) return null
+        depth--
+      } else if (depth > 0) continue
+      else if (c === "<") {
+        const name = /^<([A-Za-z_$][\w$.:-]*)/.exec(line.slice(j))
+        if (!name) return null
+        open = { n, j, name: name[1] }
+        break back
+      } else if (!/[\w$.:=\s-]/.test(c)) return null
+    }
+  }
+  if (!open) return null
+
+  // On to its `>`, past a `=>` or a `>` inside a string or a `{…}`.
+  depth = 0
+  const text = []
+  for (let n = open.n; n < ctx.lines.length && n < open.n + TAG_REACH; n++) {
+    const line = ctx.lines[n]
+    const from = n === open.n ? open.j : 0
+    for (let j = from; j < line.length; j++) {
+      if (ctx.quoted[n][j]) continue
+      if (line[j] === "{") depth++
+      else if (line[j] === "}") depth--
+      else if (line[j] === ">" && depth === 0) {
+        text.push(line.slice(from, j + 1))
+        return { name: open.name, text: text.join("\n") }
+      }
+    }
+    text.push(line.slice(from))
+  }
+  return { name: open.name, text: text.join("\n") }
+}
+
+// An element the browser draws, `<span`, `<motion.div`, and not a component:
+// its name, or what follows its last dot, starts in lower case.
+const isElement = (name) => /^[a-z]/.test(name.split(".").at(-1))
+
+const RAW_FIELD = re(String.raw`<(?:[A-Za-z_$][\w$]*\.)?(?:input|textarea|select)${END}`)
+// A file picker: shadcn has no field for one, so a hidden <input> it stays.
+const FILE_PICKER = /(?<![\w$-])type\s*=\s*\{?\s*["'\x60]file["'\x60]/
+// `title=` as an attribute: not `el.title =`, `subtitle=`, `title ===` or
+// `title =>`.
+const TITLE_ATTRIBUTE = /(?<![\w$.:-])title\s*=(?![=>])/g
+const PRESSED = /(?<![\w$.-])aria-pressed(?![\w-])/g
+const CARD_CORNER = new RegExp(START + "rounded-xl" + END)
+const CARD_FILL = new RegExp(START + "bg-card" + END)
+
+/** Each string that opens on line `ctx.i`, as its whole text: its own
+ *  characters on every line it runs over, from the scanner's `owner` (a
+ *  template's text on either side of a `${ }`, not the code or the strings
+ *  inside it). So a template over several lines is found on the line it
+ *  starts on, and one that began on an earlier line is left to that line. */
+function stringsFrom(ctx) {
+  const found = []
+  for (const id of new Set(ctx.owner[ctx.i])) {
+    const string = ctx.strings.get(id)
+    if (!string || string.line !== ctx.i) continue
+    let text = ""
+    for (let n = string.line; n <= string.end; n++) {
+      const line = ctx.lines[n]
+      for (let j = 0; j < line.length; j++) text += ctx.owner[n][j] === id ? line[j] : " "
+      text += " "
+    }
+    found.push(text)
+  }
+  return found
+}
+
 /** The rules, in the order findings are listed. `find(code, quoted, ctx)` gets
  *  one line of code (comments blanked out), per character whether it sits
- *  inside a string, and `ctx` (`lines`, `quoted` of every line, and `i`, this
- *  line's place) for what needs the lines around; it returns what broke the
- *  rule. `outsideUi` rules do not
+ *  inside a string, and `ctx` for what needs the lines around: `lines`,
+ *  `quoted` and `owner` of every line, `strings`, and `i`, this line's place
+ *  (readCode). It returns what broke the rule. `outsideUi` rules do not
  *  apply to the files of components/ui. `story` needs the list of files, so it
  *  is `missingStories`, not `find`. */
 export const RULES = [
@@ -263,6 +360,56 @@ export const RULES = [
     ],
   },
   {
+    name: "raw-field",
+    why: "A field is the shared Input, Textarea, InputGroup, Slider or Select, not a hand-made <input>, <textarea> or <select>; a file picker (type=\"file\") may stay an <input>.",
+    outsideUi: true,
+    find: (code, quoted, ctx) =>
+      [...code.matchAll(RAW_FIELD)]
+        .filter((m) => !(m[0].endsWith("input") && FILE_PICKER.test(tagAround(ctx, m.index)?.text ?? "")))
+        .map((m) => m[0]),
+  },
+  {
+    name: "raw-label",
+    why: "A field's name is the shared Label (components/ui/label), not a hand-made <label>.",
+    outsideUi: true,
+    find: (code) => hits(re(String.raw`<(?:[A-Za-z_$][\w$]*\.)?label${END}`), code),
+  },
+  {
+    name: "spinner",
+    why: "Loading is the shared Spinner (components/ui/spinner), which waits its second, not an icon with animate-spin.",
+    outsideUi: true,
+    find: (code) => hits(re(START + "animate-spin" + END), code),
+  },
+  {
+    name: "native-tip",
+    why: "A tip is the shared Tooltip or WholeTip, not the browser's own title= on an element or a router Link; an <iframe>'s title, which names the frame, passes.",
+    outsideUi: true,
+    find: (code, quoted, ctx) =>
+      [...code.matchAll(TITLE_ATTRIBUTE)]
+        .filter((m) => !quoted[m.index])
+        .map((m) => tagAround(ctx, m.index)?.name)
+        .filter((name) => name === "Link" || (name && isElement(name) && name.split(".").at(-1) !== "iframe"))
+        .map((name) => `<${name} title=`),
+  },
+  {
+    name: "pressed-button",
+    why: "A button that stays pressed is the shared Toggle or ToggleGroup, not a Button with aria-pressed.",
+    outsideUi: true,
+    find: (code, quoted, ctx) =>
+      [...code.matchAll(PRESSED)]
+        .filter((m) => !quoted[m.index] && tagAround(ctx, m.index)?.name === "Button")
+        .map(() => "<Button aria-pressed"),
+  },
+  {
+    name: "card",
+    why: "A group set apart is the shared Card (components/ui/card), not rounded-xl with bg-card made by hand.",
+    outsideUi: true,
+    find: (code, quoted, ctx) =>
+      stringsFrom(ctx)
+        .filter((s) => CARD_CORNER.test(s) && CARD_FILL.test(s))
+        .map(() => "rounded-xl bg-card"),
+  },
+  {
     name: "story",
     why: "Every component in components/ui has a NAME.stories.tsx beside it.",
   },
@@ -270,11 +417,22 @@ export const RULES = [
 
 const RULE_NAMES = new Set(RULES.map((r) => r.name))
 
-/** The interface's components and screens, and the .ts beside them (class
- *  strings live in .ts too, such as lib/labels.ts), are held to the rules;
- *  their tests are not. */
-export const isChecked = (path) => /^src\/.+\.tsx?$/.test(path) && !/\.test\.tsx?$/.test(path)
+/** The components and screens of each part, `ui/src/`, `service/src/` and
+ *  `site/src/`, and the .ts beside them (class strings live in .ts too, such
+ *  as lib/labels.ts), are held to the rules; their tests are not. */
+const CHECKED = new RegExp(String.raw`^(?:${PARTS.join("|")})\/src\/.+\.tsx?$`)
+export const isChecked = (path) => CHECKED.test(path) && !/\.test\.tsx?$/.test(path)
 const isShared = (path) => path.startsWith(SHARED_DIR)
+
+/** The parts named on design-check's command line, in PARTS' order; all
+ *  three when none is. A name that is not a part throws. */
+export function partsToCheck(args) {
+  const odd = args.find((a) => !PARTS.includes(a))
+  if (odd !== undefined) {
+    throw new Error(`"${odd}" is not a part of the check: name ui, service or site, or none for all three`)
+  }
+  return args.length === 0 ? [...PARTS] : PARTS.filter((p) => args.includes(p))
+}
 
 // Where a `/` starts a regular expression and not a division: where an
 // expression may begin. After `)`, `]`, `}` or a name it divides (`{n} / {total}`
@@ -306,25 +464,37 @@ function regexEnd(text, i) {
 /** The source as the rules should see it: one string per line, with the
  *  comments and regular expressions blanked out (a note that says "no
  *  uppercase" is not a use of it), and for every character whether it sits
- *  inside a string.
+ *  inside a string (`quoted`) and which one (`owner`, an id, 0 outside any).
+ *  `strings` has, for each id, the lines it opens and closes on. A
+ *  template's `${` and `}` are its own; the code and the strings inside them
+ *  are not.
  *
  *  A small scanner rather than a regex, because a `//` in "https://..." is not
  *  a comment, a `/*` in "src/**\/*.tsx" is not one either, and a regular
  *  expression such as /https?:\/\// holds `//` and may hold a quote or a
- *  backtick. A quote in running text ("it's") opens a string that ends with
- *  its line, which keeps the damage to that line. */
+ *  backtick. A `'` straight after a letter or a digit is an apostrophe in
+ *  running text ("it's", "the 90's"): in code a string's quote never follows
+ *  a word. Any other quote in running text opens a string that ends with its
+ *  line, which keeps the damage to that line. */
 function readCode(text) {
   const lines = [""]
   const quoted = [[]]
-  const put = (ch, inString = false) => {
+  const owner = [[]]
+  const strings = new Map()
+  const put = (ch, id = 0) => {
     if (ch === "\r") return
     if (ch === "\n") {
       lines.push("")
       quoted.push([])
+      owner.push([])
       return
     }
     lines[lines.length - 1] += ch
-    quoted[quoted.length - 1].push(inString)
+    quoted[quoted.length - 1].push(id !== 0)
+    owner[owner.length - 1].push(id)
+  }
+  const close = () => {
+    strings.get(stack.pop().id).end = lines.length - 1
   }
 
   // What is open: code (the file itself, or inside `${ }`), a block comment,
@@ -346,23 +516,23 @@ function readCode(text) {
       }
     } else if (top.mode === '"' || top.mode === "'" || top.mode === "`") {
       if (c === "\\" && next !== undefined) {
-        put(c, true)
+        put(c, top.id)
         // A backslash before the end of the line is a continuation.
-        put(next, true)
+        put(next, top.id)
         i++
       } else if (c === top.mode) {
-        put(c, true)
-        stack.pop()
+        put(c, top.id)
+        close()
       } else if (c === "\n" && top.mode !== "`") {
+        close()
         put(c)
-        stack.pop()
       } else if (c === "$" && next === "{" && top.mode === "`") {
-        put(c, true)
-        put(next, true)
+        put(c, top.id)
+        put(next, top.id)
         i++
         stack.push({ mode: "code", braces: 0, interpolation: true })
       } else {
-        put(c, true)
+        put(c, top.id)
       }
     } else if (c === "/" && next === "*") {
       put(" ")
@@ -385,12 +555,16 @@ function readCode(text) {
         for (; i <= end; i++) put(" ")
         i--
       }
+    } else if (c === "'" && /[\p{L}\p{N}]/u.test(text[i - 1] ?? "")) {
+      put(c)
     } else if (c === '"' || c === "'" || c === "`") {
-      put(c, true)
-      stack.push({ mode: c })
+      const id = strings.size + 1
+      strings.set(id, { line: lines.length - 1, end: null })
+      stack.push({ mode: c, id })
+      put(c, id)
     } else if (top.interpolation && c === "}" && top.braces === 0) {
-      put(c, true)
       stack.pop()
+      put(c, stack.at(-1).id)
     } else {
       if (top.interpolation) {
         if (c === "{") top.braces++
@@ -399,7 +573,9 @@ function readCode(text) {
       put(c)
     }
   }
-  return { lines, quoted }
+  // A string still open at the end of the file ends there.
+  for (const string of strings.values()) string.end ??= lines.length - 1
+  return { lines, quoted, owner, strings }
 }
 
 // `design-ok(rule): reason`. The reason runs to the next marker or the line's
@@ -418,14 +594,15 @@ function waivers(rawLines) {
   })
 }
 
-/** What in one file breaks a rule. `path` is relative to ui/ (`src/...`);
- *  only src/**\/*.tsx is checked, stories included. Returns
+/** What in one file breaks a rule. `path` is from the repository's root
+ *  (`ui/src/...`, `service/src/...`); only the .tsx and .ts of the three
+ *  parts' src/ are checked, stories included. Returns
  *  `{ rule, line, text }` per finding (line from 1, text the part of the line
  *  that broke the rule), minus what a `design-ok` waives. */
 export function checkText(path, text) {
   path = path.replaceAll("\\", "/")
   if (!isChecked(path)) return []
-  const { lines, quoted } = readCode(text)
+  const { lines, quoted, owner, strings } = readCode(text)
   const waived = waivers(text.split(/\r?\n/))
   const shared = isShared(path)
   const found = []
@@ -434,7 +611,7 @@ export function checkText(path, text) {
     for (const rule of RULES) {
       if (!rule.find || (rule.outsideUi && shared)) continue
       if (waived[i].has(rule.name) || waived[i - 1]?.has(rule.name)) continue
-      for (const hit of rule.find(code, quoted[i], { lines, quoted, i })) {
+      for (const hit of rule.find(code, quoted[i], { lines, quoted, owner, strings, i })) {
         found.push({ rule: rule.name, line: i + 1, text: hit })
       }
     }
@@ -442,9 +619,9 @@ export function checkText(path, text) {
   return found
 }
 
-/** The `story` rule: every `src/components/ui/X.tsx` has an
- *  `X.stories.tsx` beside it. `paths` is every file of src/ (relative to
- *  ui/). Returns findings with their `path`. */
+/** The `story` rule: every `ui/src/components/ui/X.tsx` has an
+ *  `X.stories.tsx` beside it. `paths` is every file checked, from the
+ *  repository's root. Returns findings with their `path`. */
 export function missingStories(paths) {
   const have = new Set(paths)
   const found = []

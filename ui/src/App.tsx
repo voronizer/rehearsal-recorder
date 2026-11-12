@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react"
-import { Loader2, RotateCcw, TriangleAlert } from "lucide-react"
+import { RotateCcw, TriangleAlert } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { Spinner } from "@/components/ui/spinner"
 import { Setup } from "@/screens/Setup"
 import { Rehearsal } from "@/screens/Rehearsal"
 import { Recording } from "@/screens/Recording"
@@ -278,7 +279,9 @@ export function App() {
       <div className="flex h-full flex-col items-center justify-center gap-5 text-muted-foreground">
         <img src="./logo.svg" alt="" className="size-16" />
         <div className="flex items-center gap-3">
-          <Loader2 className="size-5 animate-spin" />
+          {/* The words at once, the spinner after a second (B5); the words
+              say it, so the spinner is quiet. */}
+          <Spinner quiet className="size-5" />
           <span className="text-sm">Connecting to the audio engine…</span>
         </div>
       </div>

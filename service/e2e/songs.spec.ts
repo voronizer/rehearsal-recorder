@@ -1,5 +1,5 @@
 import { writeFileSync } from "node:fs"
-import { expect, test } from "@playwright/test"
+import { expect, test, type Locator } from "@playwright/test"
 import { as, band, HEADERS } from "./band"
 import { linesOf, roomBetween } from "./rows"
 
@@ -44,11 +44,16 @@ test("a new song is refused for a title the band has in another case", async ({ 
   await page.getByRole("button", { name: "New song" }).click()
   const main = page.getByRole("main")
   const dialog = page.getByRole("dialog", { name: "New song" })
+  const add = dialog.getByRole("button", { name: "Add song" })
   await dialog.getByLabel("Title").fill("pałyn")
-  await dialog.getByRole("button", { name: "Add song" }).click()
+  // The error's line under the title is there before it: nothing below moves.
+  await dialog.evaluate((el) => Promise.all(el.getAnimations().map((a) => a.finished)))
+  const top = (await add.boundingBox())!.y
+  await add.click()
   await expect(dialog.getByRole("alert")).toHaveText("There is already a song called “Pałyn”.")
+  expect((await add.boundingBox())!.y).toBe(top)
   await dialog.getByLabel("Title").fill("Zorka")
-  await dialog.getByRole("button", { name: "Add song" }).click()
+  await add.click()
   // The new song's page opens, with the first status; Back from it is Songs, with no dialog.
   await expect(page).toHaveURL(/\/songs\/\d+$/)
   await expect(main.getByRole("heading", { level: 1 })).toContainText("Zorka")
@@ -119,17 +124,15 @@ test("Statuses opens in the panel over Songs, New song a dialog, one at a time; 
   await button.click()
   await panel.getByRole("button", { name: "Close", exact: true }).click()
   await expect(panel).toHaveCount(0)
-  // Statuses again closes it; the panel covers the buttons at the top right: by keyboard.
+  // Statuses again closes it; the panel is beside the page, clear of the buttons at the top right.
   await button.click()
-  await button.focus()
-  await page.keyboard.press("Enter")
+  await button.click()
   await expect(panel).toHaveCount(0)
 
   // New song over the open panel: the dialog in its place.
   await button.click()
   await expect(statuses).toBeVisible()
-  await page.getByRole("button", { name: "New song", exact: true }).focus()
-  await page.keyboard.press("Enter")
+  await page.getByRole("button", { name: "New song", exact: true }).click()
   const dialog = page.getByRole("dialog", { name: "New song" })
   await expect(dialog).toBeVisible()
   await expect(panel).toHaveCount(0)
@@ -183,14 +186,25 @@ test("a song's title changes where it stands, its takes with it", async ({ page 
   await page.goto(`/songs/${band().songs["Pałyn"]}`)
   const main = page.getByRole("main")
   const field = main.getByRole("textbox", { name: "Song title" })
+  // The facts' line and what is below it stay where they are: the field is as
+  // tall as the heading's row, and a refusal takes the facts' place as an
+  // error under a field.
+  const facts = main.getByText(/^\d:\d\d · 2 takes on 2 rehearsals$/)
+  const below = main.getByRole("region", { name: "Best take" })
+  const top = async (l: Locator) => Math.round((await l.boundingBox())!.y)
+  const [factsTop, belowTop] = [await top(facts), await top(below)]
   await main.getByRole("button", { name: "Rename song Pałyn" }).click()
   await expect(field).toBeFocused()
-  // In the facts' place, a line says what only it can.
+  expect(await top(facts)).toBe(factsTop)
+  expect(await top(below)).toBe(belowTop)
   await field.fill("viasna")
-  await expect(main.getByText("“Viasna” is another song. Songs are merged in РЭХА: Rename song there.")).toBeVisible()
+  const said = main.getByRole("alert")
+  await expect(said).toHaveText("“Viasna” is another song. Songs are merged in РЭХА: Rename song there.")
   await expect(main.getByRole("button", { name: "Rename", exact: true })).toBeDisabled()
+  expect(await top(said)).toBe(factsTop)
+  expect(await top(below)).toBe(belowTop)
   await field.fill("Take 3")
-  await expect(main.getByText("Take 3 is what a take with no song is called.")).toBeVisible()
+  await expect(main.getByRole("alert")).toHaveText("Take 3 is what a take with no song is called.")
   await field.fill("Pałyn vosień")
   await expect(main.getByText("Its 2 takes are renamed with it.")).toBeVisible()
   await field.press("Escape")
@@ -239,7 +253,10 @@ test("a song page puts the best take on top", async ({ page }) => {
   const best = page.getByRole("region", { name: "Best take" })
   await expect(best).toContainText("most stars")
   await expect(best.locator("[data-take]")).toHaveAttribute("data-take", "Viasna 11")
-  await expect(best.getByTitle("Starred by Dzima, Ira")).toBeVisible()
+  // Who starred it is in the star's tip.
+  await best.getByRole("button", { name: "Star “Viasna 11”" }).hover()
+  await expect(page.getByRole("tooltip")).toHaveText("Starred by Dzima, Ira")
+  await page.mouse.move(0, 0)
   // Every take by rehearsal, newest first; only the newest rehearsal open.
   const all = page.getByRole("region", { name: "All takes" })
   await expect(all.locator("[data-take]")).toHaveCount(2)
@@ -264,8 +281,10 @@ test("the star at rehearsal shows apart", async ({ page }) => {
   await page.goto(`/takes/${band().takes["Kupalle 2"]}`)
   const main = page.getByRole("main")
   await expect(main.getByText("★ at rehearsal")).toBeVisible()
-  await expect(main.getByRole("button", { name: "Star “Kupalle 2”" })).toHaveAttribute("aria-pressed", "false")
-  await expect(main.getByTitle(/^Starred by/)).toHaveCount(0)
+  const star = main.getByRole("button", { name: "Star “Kupalle 2”" })
+  await expect(star).toHaveAttribute("aria-pressed", "false")
+  // No member's star, so the star has no tip of who: nothing round it opens one.
+  await expect(star.locator("xpath=ancestor-or-self::*[@data-slot='tooltip-trigger']")).toHaveCount(0)
 
   // It does not count for the best take: with no member's star, the newest is it.
   await page.goto(`/songs/${band().songs["Kupalle"]}`)
@@ -286,7 +305,7 @@ test("a file and a song with no takes go only after asking", async ({ page }) =>
   await expect(main.getByRole("link", { name: /words\.txt/ })).toBeVisible()
 
   await main.getByRole("button", { name: "Remove words.txt" }).click()
-  const ask = page.getByRole("dialog")
+  const ask = page.getByRole("alertdialog")
   await expect(ask).toContainText("Remove “words.txt”?")
   await ask.getByRole("button", { name: "Cancel" }).click()
   await expect(main.getByRole("link", { name: /words\.txt/ })).toBeVisible()
@@ -351,4 +370,10 @@ test("a file over 50 MB is refused before it is sent", async ({ page }, info) =>
   await main.getByLabel("A file for the song").setInputFiles(big)
   await expect(main.getByRole("alert")).toHaveText("A file is up to 50 MB")
   expect(sent).toEqual([])
+})
+
+test("a best take's number on Songs says its whole name in a tip", async ({ page }) => {
+  await page.goto("/songs")
+  await page.locator('[data-song="Viasna"]').getByRole("link", { name: "Viasna 11", exact: true }).hover()
+  await expect(page.getByRole("tooltip")).toHaveText(/^Viasna\s#11$/)
 })

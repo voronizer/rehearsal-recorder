@@ -7,7 +7,7 @@ import { now } from "../shared/time"
 export const CODES_AN_HOUR = 5
 const HOUR = 60 * 60 * 1000
 
-export const TOO_MANY_CODES = "Too many codes for this address. Wait an hour, then press Send code again."
+export const TOO_MANY_CODES = "Too many codes. Wait an hour."
 
 /**
  * Counts a code asked for `email`, and answers whether it may be sent.

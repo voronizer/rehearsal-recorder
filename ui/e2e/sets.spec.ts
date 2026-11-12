@@ -997,7 +997,7 @@ test.describe("in Settings", () => {
   test("Delete set asks first and the set goes", async ({ page }) => {
     await openSets(page)
     await detail(page).getByRole("button", { name: "Delete set" }).click()
-    const ask = page.getByRole("dialog", { name: "Delete “Gig on the 25th”?" })
+    const ask = page.getByRole("alertdialog", { name: "Delete “Gig on the 25th”?" })
     await expect(ask).toContainText(
       "Rehearsals played by it keep their takes and their names."
     )
@@ -1006,7 +1006,7 @@ test.describe("in Settings", () => {
     expect(await callCount(page, "delete_set")).toBe(0)
 
     await detail(page).getByRole("button", { name: "Delete set" }).click()
-    await page.getByRole("dialog").getByRole("button", { name: "Delete" }).click()
+    await page.getByRole("alertdialog").getByRole("button", { name: "Delete" }).click()
     await expect(items(page)).toHaveCount(1)
     expect((await calls(page, "delete_set")).at(-1)?.args).toEqual([1])
     await expect(nameField(page)).toHaveValue("New songs")
@@ -1264,7 +1264,7 @@ test.describe("in Settings", () => {
     const notice = said(page, "“Viasna” was taken out of the set.")
     await expect(notice).toHaveCount(1)
     await detail(page).getByRole("button", { name: "Delete set" }).click()
-    await page.getByRole("dialog").getByRole("button", { name: "Delete" }).click()
+    await page.getByRole("alertdialog").getByRole("button", { name: "Delete" }).click()
     await expect(items(page)).toHaveCount(1)
 
     await notice.getByRole("button", { name: "Undo" }).click()

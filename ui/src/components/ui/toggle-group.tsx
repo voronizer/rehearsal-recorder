@@ -19,6 +19,10 @@ import { cn } from "@/lib/utils"
   `type="single"` is Radix's, and can be emptied: pressing the chosen item
   again sends `onValueChange("")`. A pick-one that must always have one
   chosen ignores the "", as ModeSwitch does.
+
+  `rovingFocus={false}` is Radix's, passed through: a grid that moves between
+  its items with its own arrow keys (R5, S15) keeps every item in the Tab order
+  and leaves the arrows to itself.
 */
 
 type Variant = "default" | "outline" | "switch"

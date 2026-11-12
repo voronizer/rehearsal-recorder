@@ -1,7 +1,8 @@
 import { useNavigate } from "@tanstack/react-router"
+import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import { useFrame, useRehearsals, type RehearsalItem } from "../api"
-import { Empty, Group, Groups, Page, Rows, Trouble, useTitle } from "../shell/parts"
+import { BARE, Empty, Group, Groups, Page, Rows, Trouble, useTitle } from "../shell/parts"
 import { useSize } from "../shell/size"
 import { count, day, dayMonth, month } from "../shell/words"
 
@@ -37,7 +38,7 @@ function RehearsalRow({ r, table }: { r: RehearsalItem; table: boolean }) {
   )
   if (table)
     return (
-      <button type="button" data-rehearsal={r.date} className={cn("grid w-full items-center gap-3 text-left", COLUMNS)} onClick={go}>
+      <Button variant="ghost" data-rehearsal={r.date} className={cn(BARE, "grid w-full items-center gap-3 whitespace-normal", COLUMNS)} onClick={go}>
         {date}
         <span className="truncate">{played(r)}</span>
         <span className="flex items-center gap-2.5">
@@ -46,10 +47,10 @@ function RehearsalRow({ r, table }: { r: RehearsalItem; table: boolean }) {
         </span>
         <span className="tnum">{r.starred ? `★ ${r.starred}` : ""}</span>
         <span className="tnum">{r.marks || ""}</span>
-      </button>
+      </Button>
     )
   return (
-    <button type="button" data-rehearsal={r.date} className="flex w-full items-center gap-3 text-left" onClick={go}>
+    <Button variant="ghost" data-rehearsal={r.date} className={cn(BARE, "flex w-full items-center gap-3 whitespace-normal")} onClick={go}>
       <span className="min-w-0 flex-1">
         {date}
         <span className="block truncate text-xs text-muted-foreground">{played(r)}</span>
@@ -63,7 +64,7 @@ function RehearsalRow({ r, table }: { r: RehearsalItem; table: boolean }) {
           {[r.starred > 0 && `★ ${r.starred}`, r.marks > 0 && count(r.marks, "mark")].filter(Boolean).join(" · ")}
         </span>
       </span>
-    </button>
+    </Button>
   )
 }
 
@@ -75,7 +76,7 @@ export function Rehearsals() {
   if (list.error) return <Trouble error={list.error} retry={() => void list.refetch()} />
   if (!list.data) return null
   const all = list.data
-  if (!all.length) return <Empty title="Rehearsals" text="No rehearsals yet. A rehearsal appears here when РЭХА sends its first take." />
+  if (!all.length) return <Empty title="Rehearsals" empty={["No rehearsals yet", "A rehearsal appears here when РЭХА sends its first take."]} />
   const months = [...new Set(all.map((r) => r.date.slice(0, 7)))]
   const takes = all.reduce((n, r) => n + r.takes.length, 0)
   return (

@@ -44,6 +44,27 @@ test("the marks switch counts to do, done and all", async ({ page }) => {
   await expect(page.getByText("No mark is done yet.")).toBeVisible()
 })
 
+test("on a phone, long words on Marks are cut with … and shown whole in a tip", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 })
+  const long = "The bridge drags here, and the second verse comes in late every time we play it at the club"
+  // The list as the service sends it, with one mark's words made long.
+  await page.route(/\/api\/marks\?/, async (route) => {
+    const res = await route.fetch()
+    const body = (await res.json()) as Marks
+    await route.fulfill({ response: res, json: { ...body, marks: body.marks.map((k) => (k.note === "The bridge drags here" ? { ...k, note: long } : k)) } })
+  })
+  await page.goto("/marks")
+  const words = page.getByRole("main").getByRole("button", { name: long, exact: true })
+  await expect(words).toBeVisible()
+  expect(await words.evaluate((el) => el.scrollWidth > el.clientWidth && getComputedStyle(el).textOverflow === "ellipsis")).toBe(true)
+  // Cut inside its line, before the line's end.
+  const line = page.locator("[data-mark]").filter({ has: page.getByRole("button", { name: long, exact: true }) })
+  const [w, l] = [(await words.boundingBox())!, (await line.boundingBox())!]
+  expect(w.x + w.width).toBeLessThanOrEqual(l.x + l.width)
+  await words.hover()
+  await expect(page.getByRole("tooltip")).toHaveText(long)
+})
+
 test("a mark's take opens the take's page, from Marks and from the mark's panel", async ({ page }) => {
   await page.goto("/marks")
   const fill = page.locator("[data-mark]").filter({ hasText: "Fill too long?" })
@@ -103,9 +124,8 @@ test("Labels and a mark's panel are one layer: one in the other's place, Back st
   const lines = page.getByRole("main").locator("[data-mark]")
   await lines.nth(0).getByRole("button").first().click()
   await expect(panel.getByRole("heading", { level: 2 }).first()).toHaveText(/^Mark at/)
-  // The panel covers the buttons at the top right: by keyboard.
-  await page.getByRole("button", { name: "Labels", exact: true }).focus()
-  await page.keyboard.press("Enter")
+  // The panel is beside the page, clear of the buttons at the top right.
+  await page.getByRole("button", { name: "Labels", exact: true }).click()
   await expect(labels).toBeVisible()
   await expect(panel).toHaveCount(1)
   await lines.nth(1).getByRole("button").first().click()
@@ -116,4 +136,39 @@ test("Labels and a mark's panel are one layer: one in the other's place, Back st
   await panel.getByRole("button", { name: "Close", exact: true }).click()
   await expect(panel).toHaveCount(0)
   await expect(page).toHaveURL(/\/marks$/)
+})
+
+test("a label's colour: the picker opens on it, Enter takes the one reached, Esc closes only the picker", async ({ page }) => {
+  await page.goto("/marks?panel=labels")
+  const panel = page.getByLabel("Panel", { exact: true })
+  const trigger = panel.getByRole("button", { name: /^Colour of/ }).first()
+  const name = (await trigger.getAttribute("aria-label"))!
+  await trigger.click()
+  const picker = page.getByRole("dialog", { name })
+  await expect(picker).toBeVisible()
+  // The focus is on the label's own colour, the one ticked.
+  const focused = page.locator(":focus")
+  await expect(focused).toHaveAttribute("aria-checked", "true")
+  const own = (await focused.getAttribute("aria-label"))!
+  // The arrows move round the grid; Esc closes the picker, and the panel stays.
+  await page.keyboard.press("ArrowDown")
+  await expect(focused).not.toHaveAttribute("aria-label", own)
+  await page.keyboard.press("Escape")
+  await expect(picker).toHaveCount(0)
+  await expect(panel.getByRole("heading", { name: "Labels", exact: true })).toBeVisible()
+  // Enter takes the colour reached, and the picker closes.
+  await trigger.click()
+  await page.keyboard.press("ArrowRight")
+  const next = (await focused.getAttribute("aria-label"))!
+  await page.keyboard.press("Enter")
+  await expect(picker).toHaveCount(0)
+  await trigger.click()
+  await expect(page.locator(":focus")).toHaveAttribute("aria-label", next)
+  await expect(page.locator(":focus")).toHaveAttribute("aria-checked", "true")
+  // Back as it was, for the tests after.
+  await picker.getByRole("radio", { name: own }).click()
+  await expect(picker).toHaveCount(0)
+  await trigger.click()
+  await expect(page.locator(":focus")).toHaveAttribute("aria-label", own)
+  await page.keyboard.press("Escape")
 })

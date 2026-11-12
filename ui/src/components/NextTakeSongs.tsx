@@ -1,7 +1,17 @@
-import { Children, isValidElement, useLayoutEffect, useRef, useState, type ReactNode } from "react"
+import {
+  Children,
+  isValidElement,
+  useId,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react"
 import { Check, ChevronDown, ChevronUp } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { Collapsible, CollapsibleTrigger } from "@/components/ui/collapsible"
 import { Empty, EmptyDescription, EmptyHeader } from "@/components/ui/empty"
+import { ITEM_CHOSEN } from "@/components/ui/item"
 import { WholeTip, useCut } from "@/components/ui/whole"
 import type { RehearsalSet } from "@/lib/api"
 import { takesLabel } from "@/lib/format"
@@ -66,7 +76,7 @@ function SongRow({
         // A row that is not played is not dimmed as a disabled button is:
         // its title and *not played* are grey already.
         "disabled:opacity-100",
-        lit && "bg-selected hover:bg-selected dark:bg-selected dark:hover:bg-selected",
+        lit && ITEM_CHOSEN,
         highlighted && "border-ring ring-[3px] ring-ring/50"
       )}
     >
@@ -248,6 +258,10 @@ export function SetCard(props: SetCardProps) {
  * the field names shows even past the five. Typing narrows them over all
  * of them; while the field has focus the list keeps the height it had,
  * so nothing under it moves.
+ *
+ * The fold is the shared Collapsible. It opens more rows of the same list,
+ * which has no part of its own to fold, so the button says it controls the
+ * list.
  */
 export function SongRows({
   titles,
@@ -283,6 +297,7 @@ export function SongRows({
   onOpen: (open: boolean) => void
 }) {
   const box = useRef<HTMLElement>(null)
+  const list = useId()
   const [held, setHeld] = useState<number | null>(null)
   // Measured as focus arrives, before any key narrows the list.
   useLayoutEffect(() => {
@@ -312,51 +327,53 @@ export function SongRows({
     ((current !== null && inSet.includes(current)) ||
       inSet.some((t) => t.toLocaleLowerCase().includes(text.toLocaleLowerCase())))
   return (
-    <section
-      ref={box}
-      aria-label={title}
-      data-song-list
-      style={{ minHeight: held ?? undefined }}
-      className="flex flex-col gap-2"
-    >
-      <h2 className="flex min-h-8 items-center px-2 text-sm font-semibold">{title}</h2>
-      {rows.length === 0 ? (
-        <p className="px-2 text-sm text-muted-foreground">
-          {setHasIt
-            ? `No other song has “${text}” in it.`
-            : `No song has “${text}” in it. The take makes it a new one.`}
-        </p>
-      ) : (
-        <ul className="flex flex-col">
-          {rows.map((t) => (
-            <SongRow
-              key={t}
-              title={t}
-              number={null}
-              goes={goes.get(t) ?? 0}
-              lit={t === current}
-              highlighted={highlighted === t}
-              onPick={onPick}
-              data={{ "data-song-row": t }}
-            />
-          ))}
-        </ul>
-      )}
-      {folds && (
-        <Button
-          type="button"
-          variant="ghost"
-          data-songs-more
-          aria-expanded={open}
-          onMouseDown={(e) => e.preventDefault()}
-          onClick={() => onOpen(!open)}
-          className={cn(ROW, "text-muted-foreground hover:text-foreground")}
-        >
-          <span className="w-4 shrink-0" />
-          <span className="flex-1">{open ? "Fewer" : `All ${titles.length} songs`}</span>
-          {open ? <ChevronUp className="size-4" /> : <ChevronDown className="size-4" />}
-        </Button>
-      )}
-    </section>
+    <Collapsible open={open} onOpenChange={onOpen} asChild>
+      <section
+        ref={box}
+        aria-label={title}
+        data-song-list
+        style={{ minHeight: held ?? undefined }}
+        className="flex flex-col gap-2"
+      >
+        <h2 className="flex min-h-8 items-center px-2 text-sm font-semibold">{title}</h2>
+        {rows.length === 0 ? (
+          <p className="px-2 text-sm text-muted-foreground">
+            {setHasIt
+              ? `No other song has “${text}” in it.`
+              : `No song has “${text}” in it. The take makes it a new one.`}
+          </p>
+        ) : (
+          <ul id={list} className="flex flex-col">
+            {rows.map((t) => (
+              <SongRow
+                key={t}
+                title={t}
+                number={null}
+                goes={goes.get(t) ?? 0}
+                lit={t === current}
+                highlighted={highlighted === t}
+                onPick={onPick}
+                data={{ "data-song-row": t }}
+              />
+            ))}
+          </ul>
+        )}
+        {folds && (
+          <CollapsibleTrigger asChild aria-controls={list}>
+            <Button
+              type="button"
+              variant="ghost"
+              data-songs-more
+              onMouseDown={(e) => e.preventDefault()}
+              className={cn(ROW, "text-muted-foreground hover:text-foreground")}
+            >
+              <span className="w-4 shrink-0" />
+              <span className="flex-1">{open ? "Fewer" : `All ${titles.length} songs`}</span>
+              {open ? <ChevronUp className="size-4" /> : <ChevronDown className="size-4" />}
+            </Button>
+          </CollapsibleTrigger>
+        )}
+      </section>
+    </Collapsible>
   )
 }

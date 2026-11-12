@@ -1,5 +1,6 @@
 import { useLayoutEffect, useRef, useState, type ReactNode } from "react"
 
+import { Separator } from "@/components/ui/separator"
 import { FooterTight } from "@/hooks/useFooterTight"
 import { cn } from "@/lib/utils"
 
@@ -89,7 +90,14 @@ export function FooterRow({
         <div ref={leftRef} className="min-w-0 flex-1">
           {left}
         </div>
-        {rule && <div data-footer-rule aria-hidden className="w-px self-stretch bg-border" />}
+        {rule && (
+          <Separator
+            orientation="vertical"
+            data-footer-rule
+            // As tall as the row: stretched, which a height of its own stops.
+            className="self-stretch data-[orientation=vertical]:h-auto"
+          />
+        )}
         <div
           ref={actionsRef}
           data-footer-actions

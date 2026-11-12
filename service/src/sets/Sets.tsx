@@ -1,11 +1,14 @@
+import { useEffect, useLayoutEffect, useRef } from "react"
 import { Link, useNavigate, useParams } from "@tanstack/react-router"
 import { Plus } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { FieldError } from "@/components/ui/field"
 import { ITEM_CHOSEN, Item } from "@/components/ui/item"
 import { cn } from "@/lib/utils"
 import { useMakeSet, useSets, useSongs, type BandSet, type SongItem } from "../api"
+import { usePanel } from "../shell/panel"
 import { Empty, Page, Trouble, useTitle } from "../shell/parts"
-import { useSize } from "../shell/size"
+import { usePushes, useSize } from "../shell/size"
 import { setLine, songsOf } from "./length"
 import { madeNow, SetPage, SetPane } from "./SetPage"
 
@@ -37,15 +40,61 @@ function SetRow({ set, all, picked }: { set: BandSet; all: SongItem[]; picked: b
 }
 
 /**
+ * While the list goes above the set, or back beside it, the page scrolls by
+ * the list's height and the gap, so the set stays where it was on the
+ * screen: **Mark** in the player's bar opens a panel without moving it. A
+ * set too short for the page to scroll that far gets the room it needs
+ * under it, for as long as the list is above.
+ */
+function useSetStaysPut(stacked: boolean) {
+  const row = useRef<HTMLDivElement>(null)
+  const list = useRef<HTMLDivElement>(null)
+  const was = useRef(stacked)
+  // Where the page was scrolled to last: once the list is beside the set again the page is shorter, and the browser may have cut its scroll.
+  const scrolled = useRef(0)
+  useEffect(() => {
+    const keep = (e: Event) => {
+      if (e.target instanceof HTMLElement && e.target === row.current?.closest("main")) scrolled.current = e.target.scrollTop
+    }
+    document.addEventListener("scroll", keep, true)
+    return () => document.removeEventListener("scroll", keep, true)
+  }, [])
+  useLayoutEffect(() => {
+    if (was.current === stacked) return
+    was.current = stacked
+    const page = row.current?.closest("main")
+    if (!page || !row.current || !list.current) return
+    const by = list.current.offsetHeight + parseFloat(getComputedStyle(row.current).rowGap)
+    if (stacked) {
+      // The page has only grown, so its scroll is as it was.
+      const to = page.scrollTop + by
+      row.current.style.paddingBottom = `${Math.max(0, to - (page.scrollHeight - page.clientHeight))}px`
+      page.scrollTo({ top: to, behavior: "instant" })
+      scrolled.current = to
+    } else {
+      row.current.style.paddingBottom = ""
+      page.scrollTo({ top: Math.max(0, scrolled.current - by), behavior: "instant" })
+    }
+  }, [stacked])
+  return { row, list }
+}
+
+/**
  * Sets: on a computer the list down the left with **New set** under it, and
  * the picked set beside it, as in РЭХА; on a phone the list, and a set opens
- * on its own page. **New set** makes the set at once and opens it.
+ * on its own page. While a panel stands beside the page, the list is above
+ * the set, so the set has the page's width for its songs. **New set** makes
+ * the set at once and opens it.
  */
 export function Sets() {
   const sets = useSets()
   const songs = useSongs()
   const make = useMakeSet()
   const size = useSize()
+  const pushes = usePushes()
+  const { panel } = usePanel()
+  const stacked = !!panel && pushes
+  const put = useSetStaysPut(stacked)
   const navigate = useNavigate()
   const { id } = useParams({ strict: false })
   const all = sets.data?.sets ?? []
@@ -75,17 +124,13 @@ export function Sets() {
         <Plus />
         New set
       </Button>
-      {make.error && (
-        <p role="alert" className="text-destructive">
-          {make.error.message}
-        </p>
-      )}
+      <FieldError>{make.error?.message}</FieldError>
     </div>
   )
-  if (!all.length) return <Empty title="Sets" text="No sets yet. A set is the songs in the order you play them at a gig." top={newSet} />
+  if (!all.length) return <Empty title="Sets" empty={["No sets yet", "A set is the songs in the order you play them at a gig."]} top={newSet} />
   const picked = chosen ?? all[0]
   const list = (
-    <div className={cn("flex shrink-0 flex-col gap-2", size !== "phone" && "w-54")}>
+    <div ref={put.list} className={cn("flex shrink-0 flex-col gap-2", size !== "phone" && "w-54")}>
       {/* 24 px from one set's words to the next: each row's own room and 8 px. */}
       <ul aria-label="Sets" className="flex flex-col gap-2">
         {all.map((s) => (
@@ -98,7 +143,7 @@ export function Sets() {
   if (size === "phone") return <Page title="Sets">{list}</Page>
   return (
     <Page title="Sets">
-      <div className="flex items-start gap-6">
+      <div ref={put.row} className={cn("flex gap-6", stacked ? "flex-col" : "items-start")}>
         {list}
         <SetPane key={picked.id} set={picked} />
       </div>

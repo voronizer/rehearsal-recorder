@@ -201,7 +201,10 @@ describe("the motion", () => {
   })
 
   it("takes nothing over 400 ms", () => {
-    const times = [...css.matchAll(/(?<![\w.-])(\d*\.?\d+)(ms|s)\b/g)].map(
+    // The caret's blink is a loop that never waits on anything, not a change
+    // the band sits through.
+    const timed = css.replace(/--animate-caret-blink:[^;]*;/, "")
+    const times = [...timed.matchAll(/(?<![\w.-])(\d*\.?\d+)(ms|s)\b/g)].map(
       (m) => Number(m[1]) * (m[2] === "s" ? 1000 : 1)
     )
     expect(times.length).toBeGreaterThan(0)

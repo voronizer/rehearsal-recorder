@@ -33,7 +33,7 @@ const head = (page: Page) => page.locator("[data-song-head]")
 const tipShown = (page: Page) => page.locator("[data-slot='tooltip-content'][data-state$='open']")
 const dialog = (page: Page) => page.getByRole("dialog", { name: "Rename song" })
 const titleField = (page: Page) => dialog(page).getByRole("textbox", { name: "Song title" })
-const question = (page: Page) => page.getByRole("dialog", { name: /^Merge / })
+const question = (page: Page) => page.getByRole("alertdialog", { name: /^Merge / })
 
 /** Rename song, from the pencil beside the title. */
 async function openRename(page: Page, title: string) {
@@ -48,7 +48,7 @@ const activityPolls = (page: Page) =>
 /** Whether anything in the page is wider than its box. */
 const sideways = (page: Page) =>
   page.evaluate(() =>
-    [...document.querySelectorAll<HTMLElement>("body, [role='dialog'], [role='region']")].some(
+    [...document.querySelectorAll<HTMLElement>("body, [role='dialog'], [role='alertdialog'], [role='region']")].some(
       (el) => el.scrollWidth > el.clientWidth + 1
     )
   )

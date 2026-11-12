@@ -181,7 +181,8 @@ function Updates({ hood, update }: { hood: Hood; update: UpdateStatus }) {
   } else if (install?.state === "preparing") {
     status = (
       <>
-        <Spinner />
+        {/* Quiet: the words beside it say it. */}
+        <Spinner quiet />
         <div className="min-w-0 flex-1">
           <div className="font-semibold">Getting {install.version} ready…</div>
           <div className="text-xs text-muted-foreground">
@@ -385,11 +386,12 @@ export function UnderTheHood() {
   }
 
   // The spinner from the first second, the words beside it from the tenth.
-  // The row is as tall with them as without, so neither moves the other.
+  // The row is as tall with them as without, so neither moves the other. The
+  // spinner says "Loading" until the words come, then is quiet.
   if (!hood) {
     return (
       <div className="flex h-5 items-center gap-2 text-sm text-muted-foreground">
-        <Spinner />
+        <Spinner quiet={slow} />
         {slow && <span>Asking the machine…</span>}
       </div>
     )

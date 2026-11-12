@@ -1,7 +1,9 @@
 import type * as React from "react"
 import type { Label, LabelColour } from "@/lib/api"
-import { OPENS } from "@/components/ui/button"
-import { formatMMSS } from "@/lib/format"
+import { Button, OPENS } from "@/components/ui/button"
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
+import { useCut, WholeTip } from "@/components/ui/whole"
+import { formatClock, formatMMSS } from "@/lib/format"
 import { labelLook, markText } from "@/lib/labels"
 import { cn } from "@/lib/utils"
 
@@ -33,6 +35,14 @@ function LabelDot({ colour, className }: { colour: LabelColour; className?: stri
  * text size is the caller's. It does nothing when pressed: a place that
  * opens or plays the take at the mark puts it in its button and says so
  * with `opens`, which draws its words as words that open (OPENS).
+ *
+ * `variant="service"` is the band service's line (C2): the note alone, or
+ * the label's name when nothing is written; the label is told by the dot,
+ * which names it in a tip, and the time runs to hours as the service's
+ * clock does. `wrap`: the words go on to more lines instead of being cut,
+ * the dot and the time on the first. `onPress`: the words are the line's
+ * button, which does it, with no look of its own; cut short, they show
+ * whole in a tip (B6).
  */
 function MarkLine({
   label,
@@ -40,6 +50,9 @@ function MarkLine({
   note,
   take,
   opens = false,
+  variant = "default",
+  wrap = false,
+  onPress,
   className,
 }: {
   label: Label
@@ -49,15 +62,51 @@ function MarkLine({
   /** The take it is on (its TakeTitle), where the line is not under it. */
   take?: React.ReactNode
   opens?: boolean
+  variant?: "default" | "service"
+  wrap?: boolean
+  onPress?: () => void
   className?: string
 }) {
+  const service = variant === "service"
+  const text = service ? note.trim() || label.name : markText(label, note)
+  const [ref, cut] = useCut<HTMLButtonElement>()
+  const dot = <LabelDot colour={label.colour} />
+  const words = onPress ? (
+    <WholeTip cut={cut} text={text}>
+      <Button
+        ref={ref}
+        variant="ghost"
+        onClick={onPress}
+        className={cn(
+          "block h-auto min-w-0 shrink rounded-sm border-0 p-0 text-left text-[length:inherit] font-normal hover:bg-transparent dark:hover:bg-transparent",
+          wrap ? "whitespace-normal" : "truncate"
+        )}
+      >
+        {text}
+      </Button>
+    </WholeTip>
+  ) : opens ? (
+    <span className={OPENS}>{text}</span>
+  ) : (
+    text
+  )
   return (
-    <span data-note className={cn("flex min-w-0 items-center gap-2", className)}>
-      <LabelDot colour={label.colour} />
-      <span className="tnum shrink-0 text-muted-foreground">{formatMMSS(at)}</span>
-      <span className="truncate">
-        {take != null && <span className="text-muted-foreground">{take} · </span>}
-        {opens ? <span className={OPENS}>{markText(label, note)}</span> : markText(label, note)}
+    <span data-note className={cn("flex min-w-0 gap-2", wrap ? "items-baseline" : "items-center", className)}>
+      {service ? (
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <span className="flex">{dot}</span>
+          </TooltipTrigger>
+          <TooltipContent>{label.name}</TooltipContent>
+        </Tooltip>
+      ) : (
+        dot
+      )}
+      <span className="tnum shrink-0 text-muted-foreground">{service ? formatClock(at) : formatMMSS(at)}</span>
+      {/* A button among the words is a box of its own, cut or wrapped in its room. */}
+      <span className={cn("min-w-0", onPress ? "flex" : !wrap && "truncate")}>
+        {take != null && <span className="shrink-0 text-muted-foreground">{take} · </span>}
+        {words}
       </span>
     </span>
   )

@@ -2,6 +2,7 @@ import { useState, type ReactNode } from "react"
 import { Minus, Plus } from "lucide-react"
 import { TempoUnit } from "@/components/metronome/NoteGlyph"
 import { Button } from "@/components/ui/button"
+import { ButtonGroup } from "@/components/ui/button-group"
 import { Input } from "@/components/ui/input"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import type { Signature } from "@/lib/api"
@@ -17,8 +18,10 @@ import { clampTempo, parseTempo, tempoRange } from "@/lib/metronome"
  * `onChange` gets each new tempo; the field shows `tempo`, what Python
  * holds, the moment it is not being typed in.
  *
- * In a footer short of room (FooterRow's squeeze) − and + and the unit go
- * at its second step, and the number stays.
+ * − n + sit in one frame (the shared ButtonGroup), as tall as the footer's
+ * other controls. In a footer short of room (FooterRow's squeeze) − and +
+ * and the unit go at its second step, and the number stays, framed on its
+ * own (index.css).
  */
 export function TempoField({
   tempo,
@@ -50,11 +53,14 @@ export function TempoField({
       <TooltipTrigger asChild>
         <Button
           data-squeeze="2"
-          variant="ghost"
+          variant="outline"
           size="icon-tiny"
           aria-label={label}
           disabled={disabled || off}
           onClick={() => nudge(by)}
+          // As tall as the number; 2 px wider than before, the gaps the
+          // frame closed, so nothing after it moves.
+          className="h-8 w-6.5"
         >
           {icon}
         </Button>
@@ -66,36 +72,39 @@ export function TempoField({
   )
 
   return (
-    <div className="flex shrink-0 items-center gap-0.5">
-      {step("Slower", -1, <Minus />, tempo === null || tempo <= min)}
-      <Input
-        aria-label="Tempo"
-        // Empty, the row shows a dash: no tempo (spec Part 2).
-        placeholder="—"
-        inputMode="numeric"
-        autoComplete="off"
-        spellCheck={false}
-        disabled={disabled}
-        value={draft ?? (tempo === null ? "" : String(tempo))}
-        onChange={(e) => setDraft(e.target.value)}
-        onBlur={commit}
-        onKeyDown={(e) => {
-          if (e.key === "Enter") {
-            e.preventDefault()
-            // Leaving the field counts what was typed, and the keys go back
-            // to the screen: Space records.
-            e.currentTarget.blur()
-          } else if (e.key === "ArrowUp" || e.key === "ArrowDown") {
-            e.preventDefault()
-            setDraft(null)
-            nudge(e.key === "ArrowUp" ? 1 : -1)
-          }
-        }}
-        className="tnum h-8 w-10 px-1 text-center font-semibold"
-      />
-      {step("Faster", 1, <Plus />, tempo === null || tempo >= max)}
+    <div className="flex shrink-0 items-center">
+      {/* No group of its own (role="none"): the number is "Tempo" already. */}
+      <ButtonGroup role="none">
+        {step("Slower", -1, <Minus />, tempo === null || tempo <= min)}
+        <Input
+          aria-label="Tempo"
+          // Empty, the row shows a dash: no tempo (spec Part 2).
+          placeholder="—"
+          inputMode="numeric"
+          autoComplete="off"
+          spellCheck={false}
+          disabled={disabled}
+          value={draft ?? (tempo === null ? "" : String(tempo))}
+          onChange={(e) => setDraft(e.target.value)}
+          onBlur={commit}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.preventDefault()
+              // Leaving the field counts what was typed, and the keys go back
+              // to the screen: Space records.
+              e.currentTarget.blur()
+            } else if (e.key === "ArrowUp" || e.key === "ArrowDown") {
+              e.preventDefault()
+              setDraft(null)
+              nudge(e.key === "ArrowUp" ? 1 : -1)
+            }
+          }}
+          className="tnum h-8 w-10 px-1 text-center font-semibold"
+        />
+        {step("Faster", 1, <Plus />, tempo === null || tempo >= max)}
+      </ButtonGroup>
       <span data-squeeze="2" className="contents">
-        <TempoUnit signature={signature} className="ml-1 text-sm" />
+        <TempoUnit signature={signature} className="ml-1.5 text-sm" />
       </span>
     </div>
   )

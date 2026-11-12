@@ -352,7 +352,7 @@ test("Finish goes straight to the start screen; Escape asks first", async ({ pag
   await startButton(page).click()
   await expect(recordButton(page, 2)).toBeVisible()
   await page.keyboard.press("Escape")
-  const dialog = page.getByRole("dialog")
+  const dialog = page.getByRole("alertdialog")
   await expect(dialog.getByRole("heading")).toHaveText("Finish this rehearsal?")
   await dialog.getByRole("button", { name: "Finish" }).click()
   await expect(startButton(page)).toBeVisible()
@@ -491,9 +491,9 @@ test.describe("a track's icon", () => {
     await expect(first).toHaveAttribute("data-icon", "other")
     await first.click()
     const grid = page.getByRole("dialog", { name: "Icon for Guitar" })
-    await expect(grid.getByRole("button")).toHaveCount(14)
-    await expect(grid.getByRole("button", { name: "Other" })).toHaveAttribute("aria-pressed", "true")
-    await grid.getByRole("button", { name: "Electric guitar" }).click()
+    await expect(grid.getByRole("radio")).toHaveCount(14)
+    await expect(grid.getByRole("radio", { name: "Other" })).toHaveAttribute("aria-checked", "true")
+    await grid.getByRole("radio", { name: "Electric guitar" }).click()
     await expect(grid).toHaveCount(0)
     await expect(first).toHaveAttribute("data-icon", "guitar-electric")
     await expect(first).toBeFocused()
@@ -504,13 +504,13 @@ test.describe("a track's icon", () => {
     await second.focus()
     await page.keyboard.press("Enter")
     const vocals = page.getByRole("dialog", { name: "Icon for Vocals" })
-    await expect(vocals.getByRole("button", { name: "Other" })).toBeFocused()
+    await expect(vocals.getByRole("radio", { name: "Other" })).toBeFocused()
     await page.keyboard.press("Home")
-    await expect(vocals.getByRole("button", { name: "Vocals" })).toBeFocused()
+    await expect(vocals.getByRole("radio", { name: "Vocals" })).toBeFocused()
     await page.keyboard.press("ArrowDown")
-    await expect(vocals.getByRole("button", { name: "Drums" })).toBeFocused()
+    await expect(vocals.getByRole("radio", { name: "Drums" })).toBeFocused()
     await page.keyboard.press("ArrowRight")
-    await expect(vocals.getByRole("button", { name: "Percussion" })).toBeFocused()
+    await expect(vocals.getByRole("radio", { name: "Percussion" })).toBeFocused()
     await page.keyboard.press("Escape")
     await expect(vocals).toHaveCount(0)
     await expect(second).toHaveAttribute("data-icon", "other")
@@ -559,8 +559,8 @@ test.describe("a track's icon", () => {
     await expect(tooltip(page)).toHaveText("Bass")
     await icon.click()
     const grid = page.getByRole("dialog", { name: "Icon for Guitar" })
-    const chosen = grid.getByRole("button", { name: "Bass" })
-    await expect(chosen).toHaveAttribute("aria-pressed", "true")
+    const chosen = grid.getByRole("radio", { name: "Bass" })
+    await expect(chosen).toHaveAttribute("aria-checked", "true")
     // On is the grey fill, with no ring in the accent round it (F2): looked
     // at with the focus and the pointer elsewhere.
     await expect(chosen).toBeFocused()
@@ -570,9 +570,10 @@ test.describe("a track's icon", () => {
     await expect.poll(() => chosen.evaluate((el) => getComputedStyle(el).backgroundColor)).toBe(
       await colourOf(page, "selected")
     )
-    await expect(chosen).toHaveCSS("box-shadow", "none")
-    // Each one the shared button, its name at 12 px.
-    await expect(grid.locator("button:not([data-slot='button'])")).toHaveCount(0)
+    // No shadow, or only the shared toggle's clear ones.
+    await expect(chosen).toHaveCSS("box-shadow", /^(none|rgba\(0, 0, 0, 0\) 0px 0px 0px 0px(, rgba\(0, 0, 0, 0\) 0px 0px 0px 0px)*)$/)
+    // Each one the shared toggle, its name at 12 px.
+    await expect(grid.locator("button:not([data-slot='toggle-group-item'])")).toHaveCount(0)
     await expect(chosen).toHaveCSS("font-size", "12px")
   })
 
@@ -583,7 +584,7 @@ test.describe("a track's icon", () => {
     const icon = page.getByRole("button", { name: "Track 1 icon" })
     await icon.click()
     const grid = page.getByRole("dialog", { name: "Icon for Guitar" })
-    await grid.getByRole("button", { name: "Drums" }).click()
+    await grid.getByRole("radio", { name: "Drums" }).click()
     await expect(grid).toHaveCount(0)
     await expect(icon).toHaveAttribute("data-icon", "drums")
     // The grid sends focus back to the button as it shuts, and the mouse
@@ -678,7 +679,7 @@ test.describe("the track rows on the shared pieces", () => {
       await page.getByRole("button", { name: `Remove track ${name}` }).click()
     await expect(rows(page)).toHaveCount(0)
 
-    const empty = page.locator("section[data-tracks] [data-slot='empty']")
+    const empty = page.locator("[data-tracks] [data-slot='empty']")
     await expect(empty.getByText("No tracks yet", { exact: true })).toBeVisible()
     await expect(
       empty.getByText("Add one per musician, then pick the input they plug into.", { exact: true })
@@ -853,8 +854,9 @@ test.describe("the track rows on the shared pieces", () => {
     await openApp(page)
     const field = page.getByRole("textbox", { name: "Track 1 name" })
     const place = field.locator("xpath=..")
+    // The line is the field's own (the shared text area's `line`).
     const look = () =>
-      place.evaluate((el) => {
+      field.evaluate((el) => {
         const s = getComputedStyle(el)
         return { fill: s.backgroundColor, top: s.borderTopWidth, line: s.borderBottomColor, under: s.boxShadow }
       })
@@ -918,7 +920,7 @@ test.describe("the start screen's groups", () => {
     await page.emulateMedia({ reducedMotion: "no-preference" })
     await openApp(page)
     await expect(page.locator("footer #rehearsal-name")).toHaveCount(1)
-    const group = page.locator("[data-part='setup'] section[data-tracks]")
+    const group = page.locator("[data-part='setup'] [data-tracks]")
     const recordingWith = group.locator("[data-recording-with]")
     await expect(recordingWith).toContainText("Recording with")
     await expect(group.locator("[data-track-row]")).toHaveCount(2)
@@ -948,7 +950,7 @@ test.describe("the start screen's groups", () => {
     const rising = await page.evaluate(() =>
       [
         document.querySelector("[data-part='past'] > *"),
-        document.querySelector("section[data-tracks]"),
+        document.querySelector("[data-tracks]"),
         document.querySelector("footer > *"),
       ].map((el) => {
         const style = el ? getComputedStyle(el) : null
@@ -1190,7 +1192,7 @@ test.describe("lineups", () => {
     await lineupTitle(page).click()
     await menu(page).getByRole("menuitem", { name: "Delete “Trio”…" }).click()
     await page
-      .getByRole("dialog", { name: "Delete “Trio”?" })
+      .getByRole("alertdialog", { name: "Delete “Trio”?" })
       .getByRole("button", { name: "Delete lineup" })
       .click()
     await expect(lineupTitle(page)).toHaveAccessibleName("Tracks")
@@ -1362,7 +1364,7 @@ test.describe("lineups", () => {
     await openApp(page, { before: both() })
     await lineupTitle(page).click()
     await menu(page).getByRole("menuitem", { name: "Delete “Band”…" }).click()
-    const ask = page.getByRole("dialog", { name: "Delete “Band”?" })
+    const ask = page.getByRole("alertdialog", { name: "Delete “Band”?" })
     await expect(ask).toContainText(
       "The tracks on screen stay as they are. Rehearsals recorded with it keep their tracks."
     )
@@ -1801,7 +1803,7 @@ test.describe("the left part behind a button in a narrow window", () => {
       const rem = parseFloat(getComputedStyle(document.documentElement).fontSize)
       const inside = setup.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight)
       return {
-        group: document.querySelector("section[data-tracks]")!.getBoundingClientRect().width,
+        group: document.querySelector("[data-tracks]")!.getBoundingClientRect().width,
         most: Math.min(inside, 48 * rem),
         setup: setup.getBoundingClientRect().width,
         screen: document.querySelector("main")!.clientWidth,

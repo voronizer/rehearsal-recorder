@@ -101,9 +101,9 @@ that comes to about $3 a month. The domain you pay for to whoever sells it.
 8. Open the service's address. Type your own address and press **Send
    code**. The first time, Cloudflare sends a letter of its own: press
    **Verify email address** in it, then **Send code** again. Type the six
-   digits from the service's letter, and tell it what the band should
-   call you. If no letter comes within a minute, press **Send code** once
-   more.
+   digits from the service's letter in the six boxes, or paste the whole
+   code, press **Sign in**, and tell it what the band should call you. If
+   no letter comes within a minute, press **Send code** once more.
 9. On **Members**, press **Add member** for each of the band's addresses.
    Cloudflare sends each of them its letter; once they have pressed the
    button in it, they sign in the same way, with their own address.

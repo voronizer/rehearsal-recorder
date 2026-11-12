@@ -27,7 +27,7 @@ export function FirstDay({ steps }: { steps: FirstSteps | null }) {
                   <span
                     className={cn(
                       "mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-full border",
-                      done && "border-signal bg-signal text-white"
+                      done && "border-signal bg-signal text-signal-foreground"
                     )}
                   >
                     {done && <Check className="size-3.5" />}

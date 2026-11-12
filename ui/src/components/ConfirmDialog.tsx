@@ -1,4 +1,13 @@
 import { useEffect, useId, useState, type ReactNode } from "react"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -21,6 +30,10 @@ import { useHeld } from "@/lib/held"
  * Enter presses Cancel, so a stray key changes nothing; the action is a verb
  * on a red button when it destroys, on the accent when it only cannot be
  * taken back.
+ *
+ * It is an AlertDialog: Cancel has the keyboard when it opens and Esc
+ * closes it. A click outside leaves it open, so a stray click does not lose
+ * the question. Its buttons stand in the system's order (DialogButtons, P3).
  *
  * `title` and `description` are null when nothing is asked, which is what
  * the state they come from is set to on close: the dialog then keeps the
@@ -46,32 +59,28 @@ export function ConfirmDialog({
   const asked = useHeld(title, "")
   const said = useHeld(description, null)
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent {...(said ? {} : { "aria-describedby": undefined })}>
-        <DialogHeader>
-          <DialogTitle>{asked}</DialogTitle>
+    <AlertDialog open={open} onOpenChange={onOpenChange}>
+      <AlertDialogContent {...(said ? {} : { "aria-describedby": undefined })}>
+        <AlertDialogHeader>
+          <AlertDialogTitle>{asked}</AlertDialogTitle>
           {said && (
-            <DialogDescription asChild>
+            <AlertDialogDescription asChild>
               <div>{said}</div>
-            </DialogDescription>
+            </AlertDialogDescription>
           )}
-        </DialogHeader>
+        </AlertDialogHeader>
+        {/* Both close the question themselves, the action once it has run. */}
         <DialogButtons
           irreversible
+          cancelButton={<AlertDialogCancel variant="ghost">Cancel</AlertDialogCancel>}
           action={
-            <Button
-              variant={destructive ? "destructive" : "default"}
-              onClick={() => {
-                onConfirm()
-                onOpenChange(false)
-              }}
-            >
+            <AlertDialogAction variant={destructive ? "destructive" : "default"} onClick={() => onConfirm()}>
               {actionLabel}
-            </Button>
+            </AlertDialogAction>
           }
         />
-      </DialogContent>
-    </Dialog>
+      </AlertDialogContent>
+    </AlertDialog>
   )
 }
 

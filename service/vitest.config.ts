@@ -28,8 +28,13 @@ export default defineConfig(async () => {
           },
         },
         {
-          // The interface's code by its `@/`, as the pages import it (vite.config.ts).
-          resolve: { alias: { "@": fileURLToPath(new URL("../ui/src", import.meta.url)) } },
+          // The interface's code by its `@/`, and its icons, as the pages import them (vite.config.ts).
+          resolve: {
+            alias: {
+              "@": fileURLToPath(new URL("../ui/src", import.meta.url)),
+              "lucide-react": fileURLToPath(new URL("../ui/node_modules/lucide-react", import.meta.url)),
+            },
+          },
           test: { name: "pages", include: ["src/**/*.test.ts"], environment: "node" },
         },
       ],

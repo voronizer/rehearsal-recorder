@@ -97,7 +97,7 @@ body {
 /* ---- Menu ---- */
 .nav { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding-block: 18px; }
 .brand { display: flex; align-items: center; gap: 10px; font-weight: 600; text-decoration: none; }
-.brand svg { width: 28px; height: 28px; }
+.brand img { width: 28px; height: 28px; }
 .menu { display: flex; align-items: center; gap: 26px; font-size: 0.875rem; color: var(--page-muted); }
 .menu a { text-decoration: none; }
 .menu a:hover { color: var(--page-fg); }
@@ -277,11 +277,20 @@ body {
 
 /* ---- Questions ---- */
 .qa { max-width: 46rem; margin-inline: auto; border-top: 1px solid var(--page-line); }
-.qa details { border-bottom: 1px solid var(--page-line); padding-block: 20px; }
-.qa summary { cursor: pointer; font-weight: 600; font-size: 1rem; list-style: none; display: flex; justify-content: space-between; gap: 16px; }
-.qa summary::-webkit-details-marker { display: none; }
-.qa summary::after { content: "+"; color: var(--page-muted); font-weight: 400; font-size: 1.25rem; line-height: 1; }
-.qa details[open] summary::after { content: "–"; }
+.qa [data-slot="accordion-item"] { border-bottom: 1px solid var(--page-line); padding-block: 20px; }
+.qa [data-slot="accordion-trigger"] { cursor: pointer; font-weight: 600; font-size: 1rem; line-height: inherit; padding: 0; border-radius: 0; text-decoration: none; justify-content: space-between; gap: 16px; }
+.qa [data-slot="accordion-trigger"] > svg { display: none; }
+.qa [data-slot="accordion-trigger"]::after { content: "+"; color: var(--page-muted); font-weight: 400; font-size: 1.25rem; line-height: 1; }
+.qa [data-slot="accordion-trigger"][data-state="open"]::after { content: "–"; }
+.qa [data-slot="accordion-trigger"]:focus-visible { outline: 2px solid var(--page-accent); outline-offset: 6px; box-shadow: none; }
+/* forceMount keeps a closed answer in the page, and Radix then leaves out
+   its hidden attribute: the closed ones are hidden here, at once, as <details> did. */
+.qa [data-slot="accordion-content"] { font-size: inherit; line-height: inherit; }
+.qa [data-slot="accordion-content"][data-state="closed"] { display: none; }
+.qa [data-slot="accordion-content"][data-state="open"] { animation: qa-open 250ms var(--ease-smooth); }
+.qa [data-slot="accordion-content"] > div { padding: 0; }
+@keyframes qa-open { from { height: 0; } to { height: var(--radix-accordion-content-height); } }
+@media (prefers-reduced-motion: reduce) { .qa [data-slot="accordion-content"] { animation: none !important; } }
 .qa p { color: var(--page-muted); margin: 10px 0 0; max-width: 40rem; }
 
 /* ---- The band arguing, as its chat: in a story and in the block that
@@ -366,7 +375,7 @@ body {
 /* ---- The end of the main page: the downloads again, on the page's ground
    as on the first screen ---- */
 .get-it { display: grid; gap: 18px; justify-items: center; text-align: center; padding-block: 0 clamp(72px, 11vw, 150px); }
-.get-it > svg { width: 72px; height: 72px; }
+.get-it > img { width: 72px; height: 72px; }
 .get-it .lede { margin: 0; }
 .get-it .fine { margin: 0; }
 

@@ -1,9 +1,18 @@
 import { Children, createContext, Fragment, useContext, useEffect, useRef, useState, type ReactNode } from "react"
 import { Link } from "@tanstack/react-router"
-import { ChevronLeft, ChevronRight, PanelRightClose, X } from "lucide-react"
+import { ChevronLeft, ChevronRight, PanelRightClose, TriangleAlert, X } from "lucide-react"
+import { Alert, AlertDescription } from "@/components/ui/alert"
+import { Avatar as Circle, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
+import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { Card } from "@/components/ui/card"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
+import { Empty as EmptyBox, EmptyDescription, EmptyHeader, EmptyTitle } from "@/components/ui/empty"
+import { FieldError } from "@/components/ui/field"
+import { Item, ItemGroup } from "@/components/ui/item"
+import { Spinner } from "@/components/ui/spinner"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
+import { useAfter } from "@/hooks/useAfter"
 import { cn } from "@/lib/utils"
 import { usePanel } from "./panel"
 import { sectionIcon, type SectionTo } from "./sections"
@@ -56,20 +65,37 @@ const keyOf = (c: ReturnType<typeof Children.toArray>[number], i: number) =>
  * A screen's or a panel's groups. On a page: one card with the groups as
  * its parts, a line between them. In a card or the panel: the parts and
  * lines alone. On a phone the card would only take width from the rows.
+ * `columns`: side by side instead, the last as wide as it says (`Columns`).
  */
-export function Groups({ children, className }: { children: ReactNode; className?: string }) {
+export function Groups({ children, className, columns }: { children: ReactNode; className?: string; columns?: string }) {
   const surface = useContext(SurfaceCtx)
   const size = useSize()
   const items = Children.toArray(children).filter(Boolean)
   const parts = items.map((c, i) => (
-    <div key={keyOf(c, i)} className={cn(surface === "panel" ? "py-5" : "py-6", i > 0 && "border-t", surface !== "page" && "first:pt-0 last:pb-0")}>
+    <div
+      key={keyOf(c, i)}
+      className={columns ? "min-w-0" : cn(surface === "panel" ? "py-5" : "py-6", i > 0 && "border-t", surface !== "page" && "first:pt-0 last:pb-0")}
+    >
       {c}
     </div>
   ))
-  if (surface !== "page") return <div className={cn("flex flex-col", className)}>{parts}</div>
+  // One tree whatever the surface and the room, so what is in the groups
+  // stays as a panel opening beside the page turns two columns into one:
+  // always the shared Card, whose look is there only where it is a card.
+  const card = surface === "page" && !columns
   return (
-    <SurfaceCtx.Provider value="card">
-      <div className={cn("flex flex-col", size !== "phone" && "rounded-xl bg-card px-6", className)}>{parts}</div>
+    <SurfaceCtx.Provider value={card ? "card" : surface}>
+      <Card
+        className={cn(
+          "gap-0 p-0",
+          card && size !== "phone" ? "px-6" : "rounded-none bg-transparent text-inherit",
+          columns && "grid items-start gap-10",
+          className
+        )}
+        style={columns ? { gridTemplateColumns: `minmax(0,1fr) ${columns}` } : undefined}
+      >
+        {parts}
+      </Card>
     </SurfaceCtx.Provider>
   )
 }
@@ -129,21 +155,17 @@ export function Group({
       <Collapsible defaultOpen={fold === "open"} className="group/fold flex flex-col" role="region" aria-label={label}>
         <div className="flex min-h-8 items-center gap-2">
           <CollapsibleTrigger asChild>
-            <button
-              type="button"
-              aria-label={[label, typeof hint === "string" ? hint : null].filter(Boolean).join(", ")}
-              className="-ml-1 flex shrink-0 items-center rounded-md p-1 outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
-            >
+            <Button variant="ghost" size="icon-tiny" aria-label={[label, typeof hint === "string" ? hint : null].filter(Boolean).join(", ")} className="-ml-1">
               <ChevronRight className="size-4 text-muted-foreground transition-transform group-data-[state=open]/fold:rotate-90" />
-            </button>
+            </Button>
           </CollapsibleTrigger>
           <h2 className={cn("min-w-0 text-sm", small ? "font-medium" : "font-semibold")}>{title}</h2>
           {hint && (
             // The count folds too; the arrow says it to the keyboard and a screen reader.
             <CollapsibleTrigger asChild>
-              <button type="button" tabIndex={-1} aria-hidden="true" className="min-w-0 flex-1 truncate py-1 text-left text-sm text-muted-foreground">
+              <Button variant="ghost" tabIndex={-1} aria-hidden="true" className={cn(BARE, "block min-w-0 flex-1 truncate py-1 text-muted-foreground hover:text-muted-foreground")}>
                 {hint}
-              </button>
+              </Button>
             </CollapsibleTrigger>
           )}
           <span className="hidden group-data-[state=open]/fold:contents">{action}</span>
@@ -156,13 +178,10 @@ export function Group({
       <Collapsible defaultOpen={fold === "open"} className="group/fold flex flex-col" role="region" aria-label={label}>
         <div className="flex min-h-8 items-center gap-2">
           <CollapsibleTrigger asChild>
-            <button
-              type="button"
-              className="-ml-1 flex min-w-0 flex-1 items-center gap-1.5 rounded-md py-1 pl-1 text-left outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
-            >
+            <Button variant="ghost" className={cn(BARE, "-ml-1 min-w-0 flex-1 gap-1.5 py-1 pl-1 whitespace-normal has-[>svg]:pl-1")}>
               <ChevronRight className="size-4 shrink-0 text-muted-foreground transition-transform group-data-[state=open]/fold:rotate-90" />
               {heading}
-            </button>
+            </Button>
           </CollapsibleTrigger>
           <span className="hidden group-data-[state=open]/fold:contents">{action}</span>
         </div>
@@ -204,12 +223,19 @@ export function Rows({
 }) {
   const items = Children.toArray(children).filter(Boolean)
   return (
-    <div role="list" className={cn("flex flex-col", takes && "gap-3", talk && "gap-0.5", className)}>
+    <ItemGroup className={cn(takes && "gap-3", talk && "gap-0.5", className)}>
       {items.map((c, i) => (
-        <div
+        // The shared row, holding whatever the list's row is: no frame, so
+        // the rows keep their 24 px, and no layout of its own.
+        <Item
           role="listitem"
           key={keyOf(c, i)}
-          className={cn(!takes && "-mx-2 rounded-lg px-2", talk ? "py-1.5" : !takes && "py-3", opens && "cursor-pointer transition-colors hover:bg-accent/60")}
+          className={cn(
+            "block border-0",
+            takes ? "p-0" : "-mx-2 rounded-lg px-2",
+            talk ? "py-1.5" : !takes && "py-3",
+            opens && "cursor-pointer hover:bg-accent/60"
+          )}
           onClick={
             opens
               ? (e) => {
@@ -219,22 +245,29 @@ export function Rows({
           }
         >
           {c}
-        </div>
+        </Item>
       ))}
-    </div>
+    </ItemGroup>
   )
 }
 
 /**
- * What a word that opens something by itself looks like (Alex's pick C,
- * 2026-11-02): a grey dotted line under it, solid under the pointer, so a
- * phone with no pointer shows it too. Only where the row round it does not
- * open (2026-11-10): a set's song and its length, a song's file, Home's day
- * and song titles, a take's name in the bar or a mark's panel. A row that
- * lights up and opens as a whole has none.
+ * A Button with no look of its own, for words that are pressed where they
+ * stand (a fold's heading, a mark's words, a set's length): no frame, fill
+ * or padding, only the shared focus ring. It gives way in a row as the
+ * words it took the place of did (Button keeps its width by itself), so a
+ * long name is cut, not pushed past what is beside it. A word that opens
+ * something by itself adds `OPENS` (components/ui/button.tsx), only where
+ * the row round it does not open (2026-11-10).
  */
-export const OPENS =
-  "text-left underline decoration-muted-foreground/60 decoration-dotted underline-offset-4 hover:decoration-current hover:decoration-solid"
+export const BARE = "h-auto min-w-0 shrink justify-start gap-0 rounded-sm border-0 p-0 text-left font-normal hover:bg-transparent has-[>svg]:px-0 dark:hover:bg-transparent"
+
+/**
+ * **Statuses** and **Labels** at the top of their page: the shared Toggle,
+ * pressed while their panel is open, drawn as the outline Button beside it
+ * is while it is not (its faint fill in dark).
+ */
+export const PANEL_TOGGLE = "dark:not-data-[state=on]:bg-input/30 dark:not-data-[state=on]:hover:bg-input/50"
 
 /** The browser tab says which page this is: “Viasna · РЭХА”. */
 export function useTitle(name: string | undefined) {
@@ -243,10 +276,6 @@ export function useTitle(name: string | undefined) {
   }, [name])
 }
 
-/** A box for more than a line of words, drawn as the interface's Input. */
-export const TEXTAREA =
-  "w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
-
 /** Something that is not a list. `boxed`: a form or a notice, framed in a line. */
 export function Tile({ children, className, boxed }: { children: ReactNode; className?: string; boxed?: boolean }) {
   return <div className={cn("flex flex-col gap-3", boxed && "rounded-lg border p-4", className)}>{children}</div>
@@ -254,30 +283,38 @@ export function Tile({ children, className, boxed }: { children: ReactNode; clas
 
 /** Two columns on a computer; one under another in a small window and on a phone. */
 export function Columns({ main, side, sideWidth = "20rem" }: { main: ReactNode; side: ReactNode; sideWidth?: string }) {
-  const size = useSize()
-  if (size !== "wide")
-    return (
-      <Groups>
-        {main}
-        {side}
-      </Groups>
-    )
   return (
-    <div className="grid items-start gap-10" style={{ gridTemplateColumns: `minmax(0,1fr) ${sideWidth}` }}>
-      <div className="min-w-0">{main}</div>
-      <div className="min-w-0">{side}</div>
-    </div>
+    <Groups columns={useSize() === "wide" ? sideWidth : undefined}>
+      {main}
+      {side}
+    </Groups>
   )
 }
 
+/** A page's heading: its size, weight and balanced lines. */
+export const PAGE_TITLE = "text-xl font-semibold text-balance"
+
 /** A page: its heading and the line under it, then its groups. */
-export function Page({ title, sub, head, children }: { title?: ReactNode; sub?: ReactNode; head?: ReactNode; children?: ReactNode }) {
+export function Page({
+  title,
+  heading,
+  sub,
+  head,
+  children,
+}: {
+  title?: ReactNode
+  /** In the title's place, a line the page draws itself: its own h1 (`PAGE_TITLE`), and what stands beside the heading outside it. */
+  heading?: ReactNode
+  sub?: ReactNode
+  head?: ReactNode
+  children?: ReactNode
+}) {
   return (
     <div className="mx-auto flex w-full max-w-[72rem] flex-col gap-6">
       <header className="flex flex-col gap-1">
         {head}
-        {title && <h1 className="text-xl font-semibold text-balance">{title}</h1>}
-        {sub && <p className="text-muted-foreground">{sub}</p>}
+        {heading ?? (title && <h1 className={PAGE_TITLE}>{title}</h1>)}
+        {sub && <div className="text-muted-foreground">{sub}</div>}
       </header>
       {children}
     </div>
@@ -294,14 +331,21 @@ export function TitleWith({ title, children }: { title: string; children: ReactN
   )
 }
 
-/** A section with nothing in it yet: what will come, and how; `top`, an editor open over it. */
-export function Empty({ title, text, top }: { title: ReactNode; text: string; top?: ReactNode }) {
+/**
+ * A section with nothing in it yet, as РЭХА's empty lists (B7): `empty` in
+ * the shared Empty, its first sentence the title, the rest the line under
+ * it; `top`, what goes over it, such as the button that fills it.
+ */
+export function Empty({ title, empty, top }: { title: ReactNode; empty: [title: string, text: string]; top?: ReactNode }) {
   return (
     <Page title={title}>
       {top}
-      <Tile>
-        <p className="text-muted-foreground">{text}</p>
-      </Tile>
+      <EmptyBox>
+        <EmptyHeader>
+          <EmptyTitle>{empty[0]}</EmptyTitle>
+          <EmptyDescription>{empty[1]}</EmptyDescription>
+        </EmptyHeader>
+      </EmptyBox>
     </Page>
   )
 }
@@ -333,20 +377,17 @@ type PillTo = { to: "/songs/$id"; params: { id: string } } | { to: "/rehearsals/
 export function Pill({ kind, children, ...to }: PillTo & { kind: "song" | "rehearsal"; children: ReactNode }) {
   const Icon = sectionIcon(kind === "song" ? "/songs" : "/rehearsals")
   return (
-    <Link
-      {...(to as { to: "/songs/$id"; params: { id: string } })}
-      data-pill={kind}
-      onClick={(e) => e.stopPropagation()}
-      className="inline-flex h-7 max-w-full items-center gap-1.5 rounded-full border bg-background px-2.5 text-sm font-normal text-foreground transition-colors hover:bg-accent"
-    >
-      <Icon className="size-3.5 shrink-0 text-muted-foreground" />
-      <span className="truncate">{children}</span>
-    </Link>
+    <Badge asChild variant="outline" className="h-7 max-w-full shrink gap-1.5 bg-background px-2.5 py-0 text-sm font-normal transition-colors [&>svg]:size-3.5">
+      <Link {...(to as { to: "/songs/$id"; params: { id: string } })} data-pill={kind} onClick={(e) => e.stopPropagation()}>
+        <Icon className="shrink-0 text-muted-foreground" />
+        <span className="truncate">{children}</span>
+      </Link>
+    </Badge>
   )
 }
 
-/** A grey line's look (Alex's pick А, 2026-11-10): a band of РЭХА's side panels' grey, lit under the pointer. */
-const LINE = "-mx-3 flex items-center gap-2.5 rounded-lg bg-panel px-3 py-2.5 transition-colors hover:bg-accent"
+/** A grey line's look (Alex's pick А, 2026-11-10): a band of РЭХА's side panels' grey, lit under the pointer. On the shared Item, a row that goes somewhere. */
+const LINE = "-mx-3 flex-nowrap gap-2.5 rounded-lg border-0 bg-panel px-3 py-2.5 hover:bg-accent [a]:hover:bg-accent"
 
 /** What a grey line says: its section's icon, its title a size up, grey facts, and ›. The title keeps its room; the facts give way first. */
 function LineWords({ section, title, facts }: { section: SectionTo; title: string; facts: string }) {
@@ -380,18 +421,22 @@ export function SongLine({
     .filter(Boolean)
     .join(" · ")
   return (
-    <Link to="/songs/$id" params={{ id: String(song.id) }} className={LINE}>
-      <LineWords section="/songs" title={song.title} facts={facts} />
-    </Link>
+    <Item asChild className={LINE}>
+      <Link to="/songs/$id" params={{ id: String(song.id) }}>
+        <LineWords section="/songs" title={song.title} facts={facts} />
+      </Link>
+    </Item>
   )
 }
 
 /** A rehearsal over its takes, on Home, as a song's line: the whole line opens the rehearsal's page. */
 export function RehearsalLine({ uid, date, facts }: { uid: string; date: string; facts: string }) {
   return (
-    <Link to="/rehearsals/$uid" params={{ uid }} className={LINE}>
-      <LineWords section="/rehearsals" title={longDay(date)} facts={facts} />
-    </Link>
+    <Item asChild className={LINE}>
+      <Link to="/rehearsals/$uid" params={{ uid }}>
+        <LineWords section="/rehearsals" title={longDay(date)} facts={facts} />
+      </Link>
+    </Item>
   )
 }
 
@@ -405,21 +450,36 @@ export function Back({ label, ...to }: BackTo & { label: string }) {
   )
 }
 
-/** A member's first letter in a circle. */
+/** A member's first letter in a circle, the shared Avatar. */
 export function Avatar({ letter, className }: { letter: string; className?: string }) {
   return (
-    <span className={cn("flex size-7 shrink-0 items-center justify-center rounded-full bg-secondary text-xs font-semibold", className)}>{letter}</span>
+    <Circle className={cn("size-7", className)}>
+      <AvatarFallback className="bg-secondary text-xs font-semibold text-foreground">{letter}</AvatarFallback>
+    </Circle>
   )
 }
 
-/** The band's picture, or the first letter of its name on the accent. */
+/**
+ * The band's picture, or the first letter of its name on the accent: the
+ * shared Avatar with a square's corners. The letter stands in when the
+ * picture is slow to come or does not come.
+ */
 export function Logo({ name, picture, className }: { name: string; picture: string | null; className?: string }) {
-  if (picture) return <img src={picture} alt="" className={cn("size-9 shrink-0 rounded-lg object-cover", className)} />
   return (
-    <span className={cn("flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary text-base font-semibold text-primary-foreground", className)}>
-      {(Array.from(name.trim())[0] ?? "B").toUpperCase()}
-    </span>
+    <Circle className={cn("size-9 rounded-lg text-base", className)}>
+      {picture && <AvatarImage src={picture} alt="" className="object-cover" />}
+      <AvatarFallback delayMs={picture ? 600 : undefined} className="rounded-none bg-primary text-[length:inherit] font-semibold text-primary-foreground">{(Array.from(name.trim())[0] ?? "B").toUpperCase()}</AvatarFallback>
+    </Circle>
   )
+}
+
+/**
+ * The line under a field where its error goes (S11): 20 px whether or not
+ * it has one, so nothing below moves when one comes (B4). `children` is
+ * what the line says while nothing is wrong, such as “Saved”.
+ */
+export function ErrorLine({ error, children, className }: { error?: ReactNode; children?: ReactNode; className?: string }) {
+  return <div className={cn("min-h-5", className)}>{error ? <FieldError>{error}</FieldError> : children}</div>
 }
 
 /** A page's words while it loads, or what went wrong. */
@@ -427,17 +487,23 @@ export function Note({ children }: { children: ReactNode }) {
   return <p className="text-sm text-muted-foreground">{children}</p>
 }
 
+/** How long a panel waits before it says in words what it is doing (B5). */
+const SAY_AFTER_MS = 10_000
+
 /**
- * A panel whose take or song is still on its way: nothing for the first
- * moment, so a quick answer does not flash, then a line that says it is coming.
+ * A panel whose take is still on its way, as B5 has it: nothing for the
+ * first second, so a quick answer does not flash, then the shared Spinner,
+ * and from 10 s “Opening…” beside it.
  */
 export function Waiting() {
-  const [late, setLate] = useState(false)
-  useEffect(() => {
-    const t = setTimeout(() => setLate(true), 300)
-    return () => clearTimeout(t)
-  }, [])
-  return late ? <p className="text-sm text-muted-foreground">Opening…</p> : null
+  const slow = useAfter(true, SAY_AFTER_MS)
+  return (
+    <div className="flex items-center gap-2 text-sm text-muted-foreground">
+      {/* "Loading" until the words come, then quiet beside them. */}
+      <Spinner quiet={slow} />
+      {slow && <span>Opening…</span>}
+    </div>
+  )
 }
 
 /**
@@ -447,12 +513,15 @@ export function Waiting() {
 export function Trouble({ error, retry }: { error: Error; retry: () => void }) {
   const offline = error instanceof TypeError || /failed to fetch|networkerror|load failed/i.test(error.message)
   return (
-    <div role="alert" className="flex flex-col items-start gap-3 text-sm">
-      <p className="text-muted-foreground">{offline ? "The band's service cannot be reached. Check the connection, then try again." : error.message}</p>
-      <Button variant="outline" size="row" onClick={retry}>
-        Try again
-      </Button>
-    </div>
+    <Alert variant="destructive">
+      <TriangleAlert />
+      <AlertDescription className="gap-3">
+        <p>{offline ? "The band's service cannot be reached. Check the connection, then try again." : error.message}</p>
+        <Button variant="outline" size="row" onClick={retry} className="text-foreground">
+          Try again
+        </Button>
+      </AlertDescription>
+    </Alert>
   )
 }
 

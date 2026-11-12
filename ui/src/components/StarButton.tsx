@@ -1,5 +1,5 @@
 import { Star } from "lucide-react"
-import { Button } from "@/components/ui/button"
+import { Toggle } from "@/components/ui/toggle"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { cn } from "@/lib/utils"
 import type { Take } from "@/lib/api"
@@ -13,6 +13,8 @@ import type { Take } from "@/lib/api"
  * It says what it will ask for, not "toggle": the click sends the opposite
  * of what this take says now, so two quick clicks on a stale row ask for
  * the same thing twice rather than undoing each other.
+ *
+ * The shared Toggle, with no fill when on: the filled star says it.
  */
 export function StarButton({
   take,
@@ -27,21 +29,21 @@ export function StarButton({
   return (
     <Tooltip>
       <TooltipTrigger asChild>
-        <Button
-          variant="ghost"
+        <Toggle
           size="icon-row"
           aria-label={`Star ${take.name}`}
-          aria-pressed={starred}
-          onClick={() => onStar(take, !starred)}
+          pressed={starred}
+          onPressedChange={(on) => onStar(take, on)}
+          // Its own on or off, where the tip's trigger would put its own state.
+          data-state={starred ? "on" : "off"}
           className={cn(
-            starred
-              ? "text-signal hover:text-signal"
-              : "text-muted-foreground hover:text-foreground",
+            "text-muted-foreground not-data-[state=on]:hover:text-foreground dark:not-data-[state=on]:hover:bg-accent/50",
+            "data-[state=on]:bg-transparent data-[state=on]:text-signal data-[state=on]:hover:bg-accent dark:data-[state=on]:hover:bg-accent/50",
             className
           )}
         >
           <Star className={cn(starred && "fill-current")} />
-        </Button>
+        </Toggle>
       </TooltipTrigger>
       <TooltipContent>{starred ? "Starred. Click to take the star off" : "Star this take"}</TooltipContent>
     </Tooltip>

@@ -88,9 +88,13 @@ test("type a length and empty it again", async ({ page }) => {
   expect(new Set(await linesOf(songs, ":scope > li"))).toEqual(new Set(["0px"]))
   await expect(viasna.getByRole("link", { name: "Viasna", exact: true })).toHaveCSS("text-decoration-style", "dotted")
   await expect(viasna.getByRole("button", { name: "0:10" })).toHaveCSS("text-decoration-style", "dotted")
+  // The field opens in the row's own room: the next song does not move.
+  const next = songs.locator('[data-song="Pałyn"]')
+  const top = (await next.boundingBox())!.y
   await viasna.getByRole("button", { name: "0:10" }).click()
   const field = main.getByRole("textbox", { name: "Length of Viasna" })
   await expect(field).toHaveValue("0:10")
+  expect((await next.boundingBox())!.y).toBe(top)
   for (const bad of ["4:5", "4:65", "abc", "-1:00"]) {
     await field.fill(bad)
     await field.press("Enter")
@@ -203,7 +207,7 @@ test("delete a set and restore it", async ({ page }) => {
   const sets = main.getByRole("list", { name: "Sets" })
   await main.getByRole("button", { name: "What to do with Vik's birthday" }).click()
   await page.getByRole("menuitem", { name: "Delete set" }).click()
-  const ask = page.getByRole("dialog")
+  const ask = page.getByRole("alertdialog")
   await expect(ask.getByRole("heading")).toHaveText("Delete “Vik's birthday”?")
   await expect(ask).toContainText("It goes to the Trash, where anyone in the band can put it back for 30 days. Its songs stay as they are.")
   await ask.getByRole("button", { name: "Delete set" }).click()
@@ -229,6 +233,65 @@ test("delete a set and restore it", async ({ page }) => {
 
   await page.getByRole("navigation", { name: "Sections" }).getByRole("link", { name: "Sets" }).click()
   await expect(sets.getByRole("link", { name: /^Vik's birthday/ })).toContainText("2 songs · 0:20")
+})
+
+test("the set's name opens as a field and a name turned down is said in the set's line, and nothing under it moves", async ({ page }) => {
+  await page.goto(`/sets/${band().sets["Club gig"]}`)
+  const main = page.getByRole("main")
+  const line = main.locator("p").filter({ hasText: /^3 songs/ })
+  const songs = main.getByRole("list", { name: "Songs of the set" })
+  const top = async (l: Locator) => Math.round((await l.boundingBox())!.y)
+  await expect(line).toHaveText("3 songs · 0:30")
+  const [lineTop, songsTop] = [await top(line), await top(songs)]
+  await main.getByRole("button", { name: "Rename set Club gig" }).click()
+  const name = main.getByRole("textbox", { name: "Set's name" })
+  await expect(name).toBeFocused()
+  // The field is as tall as the heading's row.
+  expect(await top(line)).toBe(lineTop)
+  expect(await top(songs)).toBe(songsTop)
+  await name.fill("vik's BIRTHDAY")
+  await name.press("Enter")
+  const said = main.getByRole("alert")
+  await expect(said).toHaveText("There is already a set called Vik's birthday.")
+  await expect(line).toHaveCount(0)
+  expect(await top(said)).toBe(lineTop)
+  expect(await top(songs)).toBe(songsTop)
+  await name.press("Escape")
+  await expect(name).toHaveCount(0)
+  await expect(line).toHaveText("3 songs · 0:30")
+  await expect(said).toHaveCount(0)
+})
+
+test("with a panel beside the page, the list of sets stands above the set, which stays where it was, and beside it again once the panel closes", async ({ page }) => {
+  for (const [width, height] of [
+    [960, 680],
+    [1180, 820],
+  ]) {
+    await page.setViewportSize({ width, height })
+    // A take in the player's bar, then Sets: Mark there opens a new mark's panel over the set.
+    await page.goto("/")
+    await page.getByRole("region", { name: "The last rehearsal" }).locator('[data-take="Viasna 11"]').getByRole("button", { name: "Play “Viasna 11”" }).click()
+    const bar = page.getByLabel("Player", { exact: true })
+    await bar.getByRole("button", { name: "Pause “Viasna 11”" }).click()
+    await page.getByRole("navigation", { name: "Sections" }).getByRole("link", { name: "Sets" }).click()
+    const main = page.getByRole("main")
+    const list = main.getByRole("list", { name: "Sets" })
+    const set = main.getByRole("heading", { level: 2 })
+    await expect(set).toBeVisible()
+    const was = (await set.boundingBox())!.y
+    await bar.getByRole("button", { name: "Mark", exact: true }).click()
+    const panel = page.getByLabel("Panel", { exact: true })
+    await expect(panel.getByRole("heading", { level: 2 }).first()).toHaveText(/^New mark at 0:0\d$/)
+    const [l, s] = [(await list.boundingBox())!, (await set.boundingBox())!]
+    expect(l.y + l.height, `at ${width}`).toBeLessThanOrEqual(s.y)
+    // The page scrolled by the list's height: the set is where it was on the screen.
+    expect(Math.abs(s.y - was), `at ${width}`).toBeLessThanOrEqual(1)
+    await panel.getByRole("button", { name: "Close", exact: true }).click()
+    await expect(panel).toHaveCount(0)
+    const [after, beside] = [(await list.boundingBox())!, (await set.boundingBox())!]
+    expect(after.x + after.width, `at ${width}`).toBeLessThanOrEqual(beside.x)
+    expect(Math.abs(beside.y - was), `at ${width}`).toBeLessThanOrEqual(1)
+  }
 })
 
 test.describe("on a phone", () => {

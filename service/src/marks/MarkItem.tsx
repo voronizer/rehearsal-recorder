@@ -2,11 +2,14 @@ import { useEffect, useState, type FormEvent, type ReactNode } from "react"
 import { flushSync } from "react-dom"
 import { Check, Ellipsis, Play } from "lucide-react"
 import { ConfirmDialog } from "@/components/ConfirmDialog"
+import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
+import { Field } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
-import { LabelDot } from "@/components/ui/mark"
+import { LabelDot, MarkLine } from "@/components/ui/mark"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Textarea } from "@/components/ui/textarea"
 import { cn } from "@/lib/utils"
 import {
   useAddComment,
@@ -19,7 +22,7 @@ import {
   type Mark,
   type MarkComment,
 } from "../api"
-import { Avatar, Group, Rows, TEXTAREA, Tile } from "../shell/parts"
+import { Avatar, ErrorLine, Group, Rows, Tile } from "../shell/parts"
 import { usePanel } from "../shell/panel"
 import { KeepWriting } from "../shell/unsent"
 import { clock, day, localDay } from "../shell/words"
@@ -90,15 +93,13 @@ export function MarkForm({
       <KeepWriting dirty={!sent && (n.trim() !== note.trim() || l !== label)} />
       <Tile boxed className="border-primary/40">
         <span className="text-muted-foreground">{title}</span>
-        <div className="flex gap-2">
-          <LabelSelect value={l} onChange={setL} />
-          <Input autoFocus value={n} maxLength={2000} onChange={(e) => setN(e.target.value)} placeholder="What is it about?" aria-label="Note" />
-        </div>
-        {error && (
-          <p role="alert" className="text-destructive">
-            {error}
-          </p>
-        )}
+        <Field className="gap-1">
+          <div className="flex gap-2">
+            <LabelSelect value={l} onChange={setL} />
+            <Input autoFocus value={n} maxLength={2000} onChange={(e) => setN(e.target.value)} placeholder="What is it about?" aria-label="Note" />
+          </div>
+          <ErrorLine error={error} />
+        </Field>
         <div className="flex gap-2">
           <Button size="row" type="submit" disabled={busy}>
             {button}
@@ -214,7 +215,7 @@ function CommentLine({ comment }: { comment: MarkComment }) {
  */
 function Reply({ value, onChange, label, autoFocus }: { value: string; onChange: (text: string) => void; label: string; autoFocus?: boolean }) {
   return (
-    <textarea
+    <Textarea
       autoFocus={autoFocus}
       value={value}
       rows={Math.min(6, Math.max(1, value.split("\n").length))}
@@ -230,7 +231,8 @@ function Reply({ value, onChange, label, autoFocus }: { value: string; onChange:
       }}
       placeholder={label}
       aria-label={label}
-      className={cn(TEXTAREA, "resize-none")}
+      // As the box was: its rows, 14 px on a phone too, no fill in dark.
+      className="min-h-0 resize-none text-sm field-sizing-fixed dark:bg-transparent"
     />
   )
 }
@@ -248,13 +250,11 @@ function CommentBox({ mark }: { mark: Mark }) {
         add.mutate({ mark: mark.id, text: text.trim() }, { onSuccess: () => setText("") })
       }}
     >
-      <Reply value={text} onChange={setText} label="Your comment" />
+      <Field className="gap-1">
+        <Reply value={text} onChange={setText} label="Your comment" />
+        <ErrorLine error={add.error?.message} />
+      </Field>
       <KeepWriting dirty={text.trim() !== ""} />
-      {add.error && (
-        <p role="alert" className="text-destructive">
-          {add.error.message}
-        </p>
-      )}
       {text.trim() && (
         <Button size="row" type="submit" className="self-start" disabled={add.isPending}>
           Send
@@ -282,8 +282,9 @@ function MarkBrief({ mark, take }: { mark: Mark; take?: "full" | "short" }) {
   const label = useLabelOf()(mark.label_id)
   const last = mark.comments.at(-1)
   const go = () => open({ kind: "mark", uid: mark.take.uid, id: mark.id })
-  // РЭХА's mark line (components/ui/mark.tsx): the label's dot, the time, the
-  // words; the label's name only when nothing is written (its colour says it).
+  // The shared mark line as the service has it (components/ui/mark.tsx): the
+  // label's dot, the time, the words, which wrap; the label's name only when
+  // nothing is written (its colour says it).
   return (
     <div
       data-mark={mark.id}
@@ -291,13 +292,7 @@ function MarkBrief({ mark, take }: { mark: Mark; take?: "full" | "short" }) {
       onClick={(e) => !(e.target as HTMLElement).closest("button, a") && go()}
       className={cn("grid grid-cols-[0.5rem_minmax(0,1fr)] items-baseline gap-x-2 gap-y-1", mark.closed && "opacity-60")}
     >
-      <span title={label.name} className="flex">
-        <LabelDot colour={label.colour} />
-      </span>
-      <button type="button" className="flex min-w-0 items-baseline gap-2 text-left" onClick={go}>
-        <span className="tnum shrink-0 text-muted-foreground">{clock(mark.at)}</span>
-        <span className="min-w-0">{mark.note || label.name}</span>
-      </button>
+      <MarkLine variant="service" wrap label={label} at={mark.at} note={mark.note} onPress={go} className="col-span-2" />
       <span className="col-start-2 flex flex-wrap items-center gap-x-1.5 text-xs text-muted-foreground">
         {take && <OnTake take={mark.take} short={take === "short"} />}
         {take && <span>·</span>}
@@ -357,10 +352,10 @@ export function MarkItem({ mark, take, compact }: { mark: Mark; take?: "full" | 
   return (
     <div data-mark={mark.id} data-closed={mark.closed} className="flex flex-col gap-3 py-1">
       <div className="flex flex-wrap items-center gap-2">
-        <span data-label className="inline-flex h-7 items-center gap-1.5 rounded-full bg-secondary px-2.5">
+        <Badge data-label variant="secondary" className="h-7 gap-1.5 border-0 px-2.5 py-0 text-sm font-normal">
           <LabelDot colour={label.colour} />
           {label.name}
-        </span>
+        </Badge>
         <Button variant="ghost" size="row" aria-label={`Play from ${clock(mark.at)}`} onClick={() => p.play(mark.take.uid, mark.at)}>
           <Play />
           <span className="tnum">{clock(mark.at)}</span>

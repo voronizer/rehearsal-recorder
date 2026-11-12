@@ -6,6 +6,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
+import { Label } from "@/components/ui/label"
 import type { Device } from "@/lib/api"
 
 const SYSTEM = "default"
@@ -108,9 +109,9 @@ export function DevicePicker<D extends Device>({
   const row = (caption: string | undefined, htmlFor: string, list: ReactNode) =>
     named ? (
       <div className="flex items-center gap-x-4">
-        <label htmlFor={htmlFor} className="min-w-20 shrink-0 text-sm">
+        <Label htmlFor={htmlFor} className="min-w-20 shrink-0 text-sm">
           {caption}
-        </label>
+        </Label>
         <div className="min-w-0 flex-1">{list}</div>
       </div>
     ) : (

@@ -166,7 +166,8 @@ export function MasterClickLane({
           STATE[state]
         ) : counting ? (
           <>
-            <Spinner className="inline size-3 align-[-0.125em]" />
+            {/* Quiet, as the whole tag is: the lane's name says it. */}
+            <Spinner quiet className="inline size-3 align-[-0.125em]" />
             {longWait && " Counting the tempo…"}
           </>
         ) : meter ? (

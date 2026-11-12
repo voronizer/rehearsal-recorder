@@ -5,6 +5,7 @@ import { NotesLane } from "@/components/midi/NotesLane"
 import { NotesPlate } from "@/components/midi/NotesPlate"
 import { Waveform } from "@/components/Waveform"
 import type { TakeNotes } from "@/lib/api"
+import { Collapsible } from "./collapsible"
 import { LanePlate } from "./lane-plate"
 
 const meta = {
@@ -131,8 +132,12 @@ export const NotesLight: Story = { ...Notes, globals: { theme: "light" } }
 export const NotesFolded: Story = {
   render: () => (
     <Fill>
-      <NotesPlate name="Keys" icon="keys" port="Launchkey Mini MK3" fold={{ open: false, onToggle: noop }} />
-      <NotesPlate name="Keys" icon="keys" port="Launchkey Mini MK3" fold={{ open: true, onToggle: noop }} />
+      <Collapsible open={false}>
+        <NotesPlate name="Keys" icon="keys" port="Launchkey Mini MK3" fold={{ open: false, controls: "keys-lane" }} />
+      </Collapsible>
+      <Collapsible open>
+        <NotesPlate name="Keys" icon="keys" port="Launchkey Mini MK3" fold={{ open: true, controls: "keys-lane" }} />
+      </Collapsible>
     </Fill>
   ),
 }

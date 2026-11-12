@@ -1,17 +1,21 @@
+import { spawnSync } from "node:child_process"
 import { readFileSync } from "node:fs"
+import { fileURLToPath } from "node:url"
 import { describe, expect, it } from "vitest"
-import { checkText, judge, missingStories, RULES } from "./design-rules.mjs"
+import { checkText, judge, missingStories, partsToCheck, RULES } from "./design-rules.mjs"
 
-const SCREEN = "src/screens/Example.tsx"
-const SHARED = "src/components/ui/example.tsx"
+const SCREEN = "ui/src/screens/Example.tsx"
+const SHARED = "ui/src/components/ui/example.tsx"
 
 // The rules a piece of source breaks, as names, in the order they were found.
 const broken = (text, path = SCREEN) => checkText(path, text).map((f) => f.rule)
 // The same, for a className made of the given classes.
 const classes = (list, path = SCREEN) => broken(`<div className="${list}" />`, path)
+// Source over several lines.
+const lines = (...list) => list.join("\n")
 
 describe("the rule list", () => {
-  it("names the nine rules the design check knows", () => {
+  it("names the fifteen rules the design check knows", () => {
     expect(RULES.map((r) => r.name)).toEqual([
       "px-text",
       "text-size",
@@ -21,8 +25,18 @@ describe("the rule list", () => {
       "raw-button",
       "radix",
       "dialog",
+      "raw-field",
+      "raw-label",
+      "spinner",
+      "native-tip",
+      "pressed-button",
+      "card",
       "story",
     ])
+  })
+
+  it("gives every rule its reason", () => {
+    for (const rule of RULES) expect(rule.why, rule.name).toMatch(/\w/)
   })
 })
 
@@ -196,7 +210,7 @@ describe("raw-colour", () => {
     expect(broken(`const css = "box-shadow: 0 0 0 1px #fff"`)).toEqual(["raw-colour"])
     expect(broken(`const css = "take: #123 saved"`)).toEqual([])
     expect(broken(`toast("error: #404")`)).toEqual([])
-    expect(broken(`<i title="note: #fee" />`)).toEqual([])
+    expect(broken(`<Group title="note: #fee" />`)).toEqual([])
     expect(broken(`const msg = "image: #123 uploaded, text: #add"`)).toEqual([])
   })
 
@@ -242,7 +256,7 @@ describe("raw-colour", () => {
     expect(broken(`<a href="#main">skip</a>`)).toEqual([])
     expect(broken(`<a href="#add">skip</a>`)).toEqual([])
     expect(broken(`<a aria-label="Take #123">go</a>`)).toEqual([])
-    expect(broken(`<a aria-label="Take #fee" title="Note: #add" />`)).toEqual([])
+    expect(broken(`<Item aria-label="Take #fee" title="Note: #add" />`)).toEqual([])
     expect(broken(`const link = { href: "#add", id: "#bad" }`)).toEqual([])
     expect(broken(`<use href="url(#abc)" />`)).toEqual([])
   })
@@ -369,26 +383,220 @@ describe("dialog", () => {
   })
 })
 
+describe("raw-field", () => {
+  it("catches <input, <textarea and <select outside components/ui", () => {
+    expect(broken(`<input value={name} onChange={change} />`)).toEqual(["raw-field"])
+    expect(broken(`<textarea rows={3} />`)).toEqual(["raw-field"])
+    expect(broken(`<select value={port}>`)).toEqual(["raw-field"])
+    expect(broken(`<motion.input />`)).toEqual(["raw-field"])
+  })
+
+  it("lets a file picker through, which shadcn has nothing for", () => {
+    expect(broken(`<input type="file" hidden />`)).toEqual([])
+    expect(broken(`<input hidden type='file' accept="image/png" />`)).toEqual([])
+    expect(broken(`<input type={"file"} />`)).toEqual([])
+  })
+
+  it("reads the type two lines under <input", () => {
+    expect(broken(lines(`<input`, `  ref={pick}`, `  type="file"`, `  hidden`, `/>`))).toEqual([])
+    expect(checkText(SCREEN, lines(`<input`, `  ref={pick}`, `  type="text"`, `/>`))).toEqual([
+      { rule: "raw-field", line: 1, text: "<input" },
+    ])
+  })
+
+  it("takes only the input's own type, not one further on", () => {
+    expect(broken(lines(`<input value={v} />`, `<input type="file" />`))).toEqual(["raw-field"])
+  })
+
+  it("lets Input, Textarea, Select and InputGroup through", () => {
+    expect(broken(`<Input value={name} />`)).toEqual([])
+    expect(broken(`<Textarea rows={3} />`)).toEqual([])
+    expect(broken(`<Select value={port}><SelectTrigger /></Select>`)).toEqual([])
+    expect(broken(`<InputGroup><InputGroupInput /></InputGroup>`)).toEqual([])
+    expect(broken(`const el = ref.current as HTMLInputElement`)).toEqual([])
+  })
+
+  it("lets components/ui build its own", () => {
+    expect(broken(`<input className="flex" />`, SHARED)).toEqual([])
+  })
+})
+
+describe("raw-label", () => {
+  it("catches <label outside components/ui", () => {
+    expect(broken(`<label htmlFor="name">Name</label>`)).toEqual(["raw-label"])
+    expect(broken(lines(`<label`, `  className="flex"`, `>`))).toEqual(["raw-label"])
+  })
+
+  it("lets Label, FieldLabel and aria-label through", () => {
+    expect(broken(`<Label htmlFor="name">Name</Label>`)).toEqual([])
+    expect(broken(`<FieldLabel>Name</FieldLabel>`)).toEqual([])
+    expect(broken(`<i aria-label="Name" />`)).toEqual([])
+  })
+
+  it("lets components/ui build its own", () => {
+    expect(broken(`<label className="flex" />`, SHARED)).toEqual([])
+  })
+})
+
+describe("spinner", () => {
+  it("catches animate-spin outside components/ui", () => {
+    expect(classes("size-4 animate-spin")).toEqual(["spinner"])
+    expect(classes("motion-safe:animate-spin")).toEqual(["spinner"])
+    expect(broken(`<Loader2Icon className={cn("size-4", busy && "animate-spin")} />`)).toEqual(["spinner"])
+  })
+
+  it("lets Spinner and other animations through", () => {
+    expect(broken(`<Spinner quiet />`)).toEqual([])
+    expect(classes("animate-pulse animate-spin-slow")).toEqual([])
+  })
+
+  it("lets components/ui build its own", () => {
+    expect(classes("size-4 animate-spin", SHARED)).toEqual([])
+  })
+})
+
+describe("native-tip", () => {
+  it("catches title= on an HTML element", () => {
+    expect(broken(`<span title={name}>{name}</span>`)).toEqual(["native-tip"])
+    expect(broken(`<a href={url} title="The take">x</a>`)).toEqual(["native-tip"])
+    expect(broken(`<motion.div title="x" />`)).toEqual(["native-tip"])
+  })
+
+  it("catches title= on a router Link", () => {
+    expect(broken(`<Link to="/songs" title="All songs">Songs</Link>`)).toEqual(["native-tip"])
+  })
+
+  it("names the tag in what it reports", () => {
+    expect(checkText(SCREEN, `<span title={name} />`)).toEqual([{ rule: "native-tip", line: 1, text: "<span title=" }])
+  })
+
+  it("finds the tag of a title= two lines under <span", () => {
+    expect(checkText(SCREEN, lines(`<span`, `  className="truncate"`, `  title={name}`, `>`))).toEqual([
+      { rule: "native-tip", line: 3, text: "<span title=" },
+    ])
+  })
+
+  it("lets an iframe's title through: it names the frame", () => {
+    expect(broken(`<iframe title="The take" src={url} />`)).toEqual([])
+    expect(broken(lines(`<iframe`, `  src={url}`, `  title="The take"`, `/>`))).toEqual([])
+  })
+
+  it("lets a title prop of our own component through", () => {
+    expect(broken(`<Group title="Notes" hint="2">`)).toEqual([])
+    expect(broken(lines(`<Group`, `  hint={String(n)}`, `  title="Tracks"`, `>`))).toEqual([])
+    expect(broken(`<ConfirmDialog title={asking && \`Delete “\${name}”?\`} />`)).toEqual([])
+  })
+
+  it("skips strings and braces on its way back to the tag", () => {
+    expect(broken(`<Group action={<Button size="row">Add</Button>} title="Files">`)).toEqual([])
+    expect(broken(lines(`<Group`, `  action={`, `    <span className="a">x</span>`, `  }`, `  title="Files"`, `>`))).toEqual([])
+    expect(broken(`<Group label="a > b" title="Files">`)).toEqual([])
+    expect(broken(`<Group onPick={(a) => a > 1} title="Files">`)).toEqual([])
+    expect(broken(`<Group action={<span title="x" />} title="Files">`)).toEqual(["native-tip"])
+  })
+
+  it("leaves a title that is not an attribute alone", () => {
+    expect(broken(`const title = song.title`)).toEqual([])
+    expect(broken(`el.title = "x"`)).toEqual([])
+    expect(broken(`const look = { title: "x" }`)).toEqual([])
+    expect(broken(`function Row({ title = "" }) {}`)).toEqual([])
+    expect(broken(`if (title === null) return`)).toEqual([])
+    expect(broken(`names.map(title => title.trim())`)).toEqual([])
+    expect(broken(`<p>The title= here</p>`)).toEqual([])
+    expect(broken(`<span data-title="x" aria-label="x" />`)).toEqual([])
+    expect(broken(`<PaneHead subtitle="x" />`)).toEqual([])
+  })
+
+  it("lets components/ui build its own", () => {
+    expect(broken(`<span title={name} />`, SHARED)).toEqual([])
+  })
+})
+
+describe("pressed-button", () => {
+  it("catches aria-pressed on Button", () => {
+    expect(broken(`<Button variant="ghost" aria-pressed={on}>Songs</Button>`)).toEqual(["pressed-button"])
+    expect(broken(`<Button aria-pressed>Songs</Button>`)).toEqual(["pressed-button"])
+    expect(checkText(SCREEN, lines(`<Button`, `  variant="ghost"`, `  aria-pressed={on}`, `>`))).toEqual([
+      { rule: "pressed-button", line: 3, text: "<Button aria-pressed" },
+    ])
+  })
+
+  it("lets Toggle and a selector that finds a pressed one through", () => {
+    expect(broken(`<Toggle pressed={on} onPressedChange={set}>Songs</Toggle>`)).toEqual([])
+    expect(broken(`const on = el.matches('[aria-pressed="true"]')`)).toEqual([])
+    expect(broken(`<Button aria-expanded={open}>More</Button>`)).toEqual([])
+  })
+
+  it("lets components/ui build its own", () => {
+    expect(broken(`<Button aria-pressed={on} />`, SHARED)).toEqual([])
+  })
+})
+
+describe("card", () => {
+  it("catches rounded-xl with bg-card in one class string", () => {
+    expect(classes("rounded-xl bg-card p-4")).toEqual(["card"])
+    expect(classes("flex rounded-xl border bg-card/60")).toEqual(["card"])
+    expect(broken(`<div className={cn("p-4", "md:rounded-xl bg-card")} />`)).toEqual(["card"])
+    expect(broken("const box = `bg-card ${pad} rounded-xl`")).toEqual(["card"])
+  })
+
+  it("reads a template literal over several lines as one string, from the line it starts on", () => {
+    expect(checkText(SCREEN, lines("const box = `rounded-xl", "  bg-card`"))).toEqual([
+      { rule: "card", line: 1, text: "rounded-xl bg-card" },
+    ])
+    expect(checkText(SCREEN, lines("const a = 1", "const box = `", "  rounded-xl", "", "  ${pad}", "  bg-card", "`"))).toEqual([
+      { rule: "card", line: 2, text: "rounded-xl bg-card" },
+    ])
+    expect(broken(lines("const a = `rounded-xl`", "const b = `bg-card`"))).toEqual([])
+    expect(broken(lines("const a = `x", "  rounded-xl` + `bg-card", "  y`"))).toEqual([])
+    expect(broken(lines("const c = cn(`rounded-xl", "`, `bg-card`)"))).toEqual([])
+  })
+
+  it("reads a template's text round a ${ } that ends in a string of its own", () => {
+    expect(checkText(SCREEN, lines("const c = `rounded-xl", "  ${x ? `a` : 'b'}", "  bg-card`"))).toEqual([
+      { rule: "card", line: 1, text: "rounded-xl bg-card" },
+    ])
+    expect(broken("const c = `rounded-xl ${x ? 'a' : 'b'} bg-card`")).toEqual(["card"])
+    expect(broken(lines("const c = `rounded-xl", "  ${x ? 'a' : 'b'} bg-card`"))).toEqual(["card"])
+    expect(broken("const c = `rounded-xl ${x ? 'a' : 'bg-card'}`")).toEqual([])
+  })
+
+  it("keeps two strings apart: one class string is the rule", () => {
+    expect(broken(`<div className={cn("rounded-xl", "bg-card")} />`)).toEqual([])
+  })
+
+  it("lets Card, and either class alone, through", () => {
+    expect(broken(`<Card className="p-4" />`)).toEqual([])
+    expect(classes("rounded-xl bg-muted")).toEqual([])
+    expect(classes("rounded-lg bg-card")).toEqual([])
+    expect(classes("rounded-xl text-card-foreground")).toEqual([])
+  })
+
+  it("lets components/ui build its own", () => {
+    expect(classes("rounded-xl bg-card", SHARED)).toEqual([])
+  })
+})
+
 describe("story", () => {
   it("asks for a stories file beside every component in components/ui", () => {
     const found = missingStories([
-      "src/components/ui/button.tsx",
-      "src/components/ui/button.stories.tsx",
-      "src/components/ui/card.tsx",
-      "src/screens/Example.tsx",
+      "ui/src/components/ui/button.tsx",
+      "ui/src/components/ui/button.stories.tsx",
+      "ui/src/components/ui/card.tsx",
+      "ui/src/screens/Example.tsx",
     ])
-    expect(found.map((f) => [f.path, f.rule])).toEqual([["src/components/ui/card.tsx", "story"]])
+    expect(found.map((f) => [f.path, f.rule])).toEqual([["ui/src/components/ui/card.tsx", "story"]])
     expect(found[0].line).toBe(1)
   })
 
   it("leaves stories, tests and files elsewhere alone", () => {
     expect(
       missingStories([
-        "src/components/ui/badge.stories.tsx",
-        "src/components/ui/button.test.ts",
-        "src/components/ui/button.stories.tsx",
-        "src/components/Other.tsx",
-        "src/components/ui/nested/thing.tsx",
+        "ui/src/components/ui/badge.stories.tsx",
+        "ui/src/components/ui/button.test.ts",
+        "ui/src/components/ui/button.stories.tsx",
+        "ui/src/components/Other.tsx",
+        "ui/src/components/ui/nested/thing.tsx",
       ]),
     ).toEqual([])
   })
@@ -484,69 +692,133 @@ describe("what counts as code", () => {
     expect(broken(`<p>It's a take</p>\n<button />`)).toEqual(["raw-button"])
   })
 
+  it("takes a ' straight after a letter or a digit for an apostrophe, not a string", () => {
+    expect(checkText(SCREEN, `<p>It's here <span title="z">x</span></p>`)).toEqual([
+      { rule: "native-tip", line: 1, text: "<span title=" },
+    ])
+    expect(broken(`<p>Don't</p> <Button aria-pressed={on}>Songs</Button>`)).toEqual(["pressed-button"])
+    expect(broken(`<p>The 90's</p> <Button aria-pressed={on}>Songs</Button>`)).toEqual(["pressed-button"])
+    expect(broken(`<span data-x="title=1" />`)).toEqual([])
+    expect(broken(`const s = 'title=1'`)).toEqual([])
+    expect(broken(`<p>Rock 'n' roll</p> <i className={cn('flex', on && 'uppercase')} />`)).toEqual(["uppercase"])
+  })
+
   it("takes a Windows path as well", () => {
-    expect(checkText("src\\screens\\Example.tsx", `<p className="text-lg" />`)).toEqual([
+    expect(checkText("ui\\src\\screens\\Example.tsx", `<p className="text-lg" />`)).toEqual([
       { rule: "text-size", line: 1, text: "text-lg" },
     ])
-    expect(checkText("src\\components\\ui\\card.tsx", `<button />`)).toEqual([])
-    expect(checkText("src\\components\\Other.tsx", `<button />`)).toEqual([
+    expect(checkText("ui\\src\\components\\ui\\card.tsx", `<button />`)).toEqual([])
+    expect(checkText("ui\\src\\components\\Other.tsx", `<button />`)).toEqual([
       { rule: "raw-button", line: 1, text: "<button" },
     ])
   })
 
   it("checks src/**/*.tsx and the .ts beside them, but not tests", () => {
     const bad = `<button className="uppercase text-lg" />`
-    expect(checkText("e2e/example.tsx", bad)).toEqual([])
-    expect(checkText("src/index.css", bad)).toEqual([])
-    expect(checkText("src/screens/Example.tsx", bad).length).toBeGreaterThan(0)
+    expect(checkText("ui/e2e/example.tsx", bad)).toEqual([])
+    expect(checkText("ui/src/index.css", bad)).toEqual([])
+    expect(checkText("ui/src/screens/Example.tsx", bad).length).toBeGreaterThan(0)
     // Class strings live in .ts too (lib/labels.ts).
-    expect(checkText("src/lib/example.ts", `const look = "rounded-[3px] text-[13px]"`)).toEqual([
+    expect(checkText("ui/src/lib/example.ts", `const look = "rounded-[3px] text-[13px]"`)).toEqual([
       { rule: "px-text", line: 1, text: "text-[13px]" },
       { rule: "radius", line: 1, text: "rounded-[3px]" },
     ])
-    expect(checkText("src/lib/example.test.ts", bad)).toEqual([])
-    expect(checkText("src/components/ui/button.test.ts", bad)).toEqual([])
+    expect(checkText("ui/src/lib/example.test.ts", bad)).toEqual([])
+    expect(checkText("ui/src/components/ui/button.test.ts", bad)).toEqual([])
   })
 
   it("checks stories like any other file", () => {
-    expect(broken(`<div className="text-lg" />`, "src/components/ui/card.stories.tsx")).toEqual(["text-size"])
+    expect(broken(`<div className="text-lg" />`, "ui/src/components/ui/card.stories.tsx")).toEqual(["text-size"])
+  })
+})
+
+describe("the three parts", () => {
+  const bad = `<button className="text-lg" />`
+
+  it("checks the app, the service and the site, by paths from the repository's root", () => {
+    expect(broken(bad, "ui/src/screens/Example.tsx")).toEqual(["text-size", "raw-button"])
+    expect(broken(bad, "service/src/shell/Shell.tsx")).toEqual(["text-size", "raw-button"])
+    expect(broken(bad, "site/src/page/Example.tsx")).toEqual(["text-size", "raw-button"])
+    expect(broken(bad, "service\\src\\shell\\Shell.tsx")).toEqual(["text-size", "raw-button"])
+  })
+
+  it("checks nothing outside the three parts' src/", () => {
+    expect(broken(bad, "src/screens/Example.tsx")).toEqual([])
+    expect(broken(bad, "service/worker/letters.ts")).toEqual([])
+    expect(broken(bad, "service/e2e/example.tsx")).toEqual([])
+    expect(broken(bad, "site/src/page/page.test.tsx")).toEqual([])
+    expect(broken(bad, "docs/src/Example.tsx")).toEqual([])
+  })
+
+  it("lets only ui/src/components/ui build its own", () => {
+    expect(broken(bad, "ui/src/components/ui/card.tsx")).toEqual(["text-size"])
+    expect(broken(bad, "service/src/components/ui/card.tsx")).toEqual(["text-size", "raw-button"])
+    expect(missingStories(["service/src/components/ui/card.tsx", "site/src/components/ui/card.tsx"])).toEqual([])
+    expect(judge([], { "service/src/components/ui/card.tsx": ["radius"] })[0].text).toMatch(/nothing breaks it/)
+  })
+
+  it("walks the parts named, and all three when none is", () => {
+    expect(partsToCheck([])).toEqual(["ui", "service", "site"])
+    expect(partsToCheck(["service"])).toEqual(["service"])
+    expect(partsToCheck(["site", "ui"])).toEqual(["ui", "site"])
+    expect(() => partsToCheck(["server"])).toThrow(/ui, service or site/)
+  })
+
+  it("walks only the part named on the command line", () => {
+    const script = fileURLToPath(new URL("./design-check.mjs", import.meta.url))
+    const checked = (args) => {
+      const run = spawnSync(process.execPath, [script, ...args], { encoding: "utf8" })
+      const ok = /^design-check: ok, (\d+) files checked in ([a-z, ]+);/.exec(run.stdout)
+      expect(ok, run.stdout).not.toBeNull()
+      return { files: Number(ok[1]), parts: ok[2] }
+    }
+    const site = checked(["site"])
+    const all = checked([])
+    expect(site.parts).toBe("site")
+    expect(all.parts).toBe("ui, service, site")
+    expect(site.files).toBeGreaterThan(0)
+    expect(site.files).toBeLessThan(all.files)
+
+    const odd = spawnSync(process.execPath, [script, "server"], { encoding: "utf8" })
+    expect(odd.status).toBe(2)
+    expect(odd.stderr).toMatch(/ui, service or site/)
   })
 })
 
 describe("the allow-list", () => {
   const found = [
-    { path: "src/screens/A.tsx", rule: "radius", line: 4, text: "rounded-2xl" },
-    { path: "src/screens/A.tsx", rule: "uppercase", line: 9, text: "uppercase" },
+    { path: "ui/src/screens/A.tsx", rule: "radius", line: 4, text: "rounded-2xl" },
+    { path: "ui/src/screens/A.tsx", rule: "uppercase", line: 9, text: "uppercase" },
   ]
 
   it("passes when every finding's file and rule is listed", () => {
-    expect(judge(found, { "src/screens/A.tsx": ["radius", "uppercase"] })).toEqual([])
+    expect(judge(found, { "ui/src/screens/A.tsx": ["radius", "uppercase"] })).toEqual([])
   })
 
   it("reports a finding whose file or rule is not listed, with its line", () => {
-    expect(judge(found, { "src/screens/A.tsx": ["radius"] })).toEqual([found[1]])
-    expect(judge(found, { "src/screens/B.tsx": ["radius", "uppercase"] }).map((p) => p.path)).toContain(
-      "src/screens/A.tsx",
+    expect(judge(found, { "ui/src/screens/A.tsx": ["radius"] })).toEqual([found[1]])
+    expect(judge(found, { "ui/src/screens/B.tsx": ["radius", "uppercase"] }).map((p) => p.path)).toContain(
+      "ui/src/screens/A.tsx",
     )
   })
 
   it("reports a listed pair with no finding left, so the list only shrinks", () => {
-    const left = judge([found[0]], { "src/screens/A.tsx": ["radius", "uppercase"] })
+    const left = judge([found[0]], { "ui/src/screens/A.tsx": ["radius", "uppercase"] })
     expect(left).toHaveLength(1)
-    expect(left[0]).toMatchObject({ path: "src/screens/A.tsx", rule: "uppercase" })
+    expect(left[0]).toMatchObject({ path: "ui/src/screens/A.tsx", rule: "uppercase" })
     expect(left[0].text).toMatch(/allow-list/)
   })
 
   it("reports a listed file that is gone", () => {
-    const left = judge([], { "src/screens/Gone.tsx": ["radius"] })
+    const left = judge([], { "ui/src/screens/Gone.tsx": ["radius"] })
     expect(left).toHaveLength(1)
-    expect(left[0]).toMatchObject({ path: "src/screens/Gone.tsx", rule: "radius" })
+    expect(left[0]).toMatchObject({ path: "ui/src/screens/Gone.tsx", rule: "radius" })
   })
 
   it("refuses a file of components/ui on the list, and a rule it does not know", () => {
-    const ui = judge([], { "src/components/ui/card.tsx": ["radius"] })
+    const ui = judge([], { "ui/src/components/ui/card.tsx": ["radius"] })
     expect(ui.some((p) => /components\/ui/.test(p.text))).toBe(true)
-    const odd = judge(found, { "src/screens/A.tsx": ["radius", "uppercase", "nonsense"] })
+    const odd = judge(found, { "ui/src/screens/A.tsx": ["radius", "uppercase", "nonsense"] })
     expect(odd.some((p) => p.rule === "nonsense")).toBe(true)
   })
 })

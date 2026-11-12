@@ -1,6 +1,7 @@
-import { useEffect, useId, useState, type ReactNode } from "react"
+import { useEffect, useState, type ReactNode } from "react"
 import { CloudOff, CloudUpload, FolderOpen, Layers, Music4, TriangleAlert } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { ButtonGroup, ButtonGroupText } from "@/components/ui/button-group"
 import {
   Dialog,
   DialogButtons,
@@ -9,9 +10,9 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
-import { Item } from "@/components/ui/item"
 import { Spinner } from "@/components/ui/spinner"
 import { cn } from "@/lib/utils"
+import { ShareOption } from "@/components/ShareOption"
 import { api, type ShareWhat, type Take } from "@/lib/api"
 import { pollSoon } from "@/lib/activity"
 import { dismiss } from "@/lib/notices"
@@ -135,33 +136,39 @@ export function ShareDialog({
           <DialogDescription>{SHARE_INTRO}</DialogDescription>
         </DialogHeader>
 
-        {/* With no folder, the shared warning look: the triangle in the
-            warn colour and the words in the text's own. Until the setting
-            is read, the folder's icon and nothing else, with the button's
-            room kept, so a folder that is set never shows as missing. */}
-        <div className="flex items-center gap-2 rounded-lg border bg-background/50 px-3 py-2">
-          {none ? (
-            <TriangleAlert className="size-3.5 shrink-0 text-warn" />
-          ) : (
-            <FolderOpen className="size-3.5 shrink-0 text-muted-foreground" />
-          )}
-          <span
-            className={cn(
-              "flex-1 truncate text-xs",
-              none ? "text-foreground" : "font-mono text-muted-foreground"
+        {/* The folder and its button in one frame, one control, as tall
+            as the row was with the button inside it. With no folder, the
+            shared warning look: the triangle in the warn colour and the
+            words in the text's own. Until the setting is read, the folder's
+            icon and nothing else, with the button's room kept, so a folder
+            that is set never shows as missing. In the dark theme the path
+            takes the outline button's fill and edge, as a field does. Named
+            "Cloud folder", as the path alone does not say what it is. */}
+        <ButtonGroup aria-label="Cloud folder" className="w-full">
+          <ButtonGroupText className="min-w-0 flex-1 rounded-lg bg-background/50 px-3 py-2 text-xs font-normal shadow-none dark:border-input dark:bg-input/30">
+            {none ? (
+              <TriangleAlert className="size-3.5 shrink-0 text-warn" />
+            ) : (
+              <FolderOpen className="size-3.5 shrink-0 text-muted-foreground" />
             )}
-          >
-            {none ? "No cloud folder chosen yet" : cloudDir}
-          </span>
+            <span
+              className={cn(
+                "flex-1 truncate leading-8",
+                none ? "text-foreground" : "font-mono text-muted-foreground"
+              )}
+            >
+              {none ? "No cloud folder chosen yet" : cloudDir}
+            </span>
+          </ButtonGroupText>
           <Button
-            variant="ghost"
+            variant="outline"
             size="row"
             onClick={pickFolder}
-            className={cn(cloudDir === undefined && "invisible")}
+            className={cn("h-auto rounded-lg", cloudDir === undefined && "invisible")}
           >
             {none ? "Choose" : "Change"}
           </Button>
-        </div>
+        </ButtonGroup>
 
         <div className="flex flex-col gap-2">
           {SHARE_OPTIONS.map((o) => (
@@ -202,66 +209,5 @@ export function ShareDialog({
         />
       </DialogContent>
     </Dialog>
-  )
-}
-
-function ShareOption({
-  icon,
-  title,
-  hint,
-  done,
-  busy,
-  disabled,
-  onClick,
-}: {
-  icon: React.ReactNode
-  title: string
-  hint: string
-  done: boolean
-  busy: boolean
-  disabled: boolean
-  onClick: () => void
-}) {
-  // The icon stays for the first second of a copy (B5).
-  const slow = useAfter(busy, SPINNER_AFTER_MS)
-  // The button is named by its title alone. "Already there" and the hint are
-  // what a screen reader says after the name, in that order.
-  const id = useId()
-  const thereId = `${id}-there`
-  const hintId = `${id}-hint`
-  return (
-    <Item
-      asChild
-      variant="outline"
-      size="sm"
-      className={cn("flex-nowrap items-start", done && "border-signal/40 bg-signal/5")}
-    >
-      <Button
-        type="button"
-        variant="ghost"
-        onClick={onClick}
-        disabled={disabled}
-        aria-label={title}
-        aria-describedby={done ? `${thereId} ${hintId}` : hintId}
-        className="h-auto w-full justify-start text-left whitespace-normal"
-      >
-        <span className="mt-0.5 shrink-0 text-muted-foreground [&>svg]:size-4">
-          {slow ? <Spinner after={0} /> : icon}
-        </span>
-        <span className="min-w-0 flex-1">
-          <span className="flex items-center gap-2 text-sm font-semibold">
-            {title}
-            {done && (
-              <span id={thereId} className="text-xs font-normal text-signal">
-                already there
-              </span>
-            )}
-          </span>
-          <span id={hintId} className="mt-0.5 block text-xs text-muted-foreground">
-            {hint}
-          </span>
-        </span>
-      </Button>
-    </Item>
   )
 }

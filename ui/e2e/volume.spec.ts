@@ -9,6 +9,7 @@ import {
   recordTake,
   settled,
   setFake,
+  sliderOf,
   startRehearsal,
   test,
   recordButton,
@@ -35,7 +36,7 @@ async function openVolume(page: Page): Promise<Locator> {
 
 /** Clicks a slider at a fraction of its width, the way a person turns it. */
 async function turn(page: Page, slider: Locator, fraction: number) {
-  const box = (await slider.boundingBox())!
+  const box = (await sliderOf(slider).boundingBox())!
   await page.mouse.click(box.x + box.width * fraction, box.y + box.height / 2)
 }
 
@@ -50,7 +51,7 @@ test.describe("Playback volume in the header", () => {
     await expect(headerVolume(page)).toHaveAccessibleDescription("Playback muted")
     await expect(headerVolume(page).locator("svg")).toHaveClass(/lucide-volume-x/)
     const slider = await openVolume(page)
-    await expect(slider).toHaveValue("0.4")
+    await expect(slider).toHaveAttribute("aria-valuenow", "0.4")
     await page.keyboard.press("Escape")
     await setFake(page, "__CONTROL_STATE__", { playback_muted: false, master_volume: 0.4 })
     await expect(headerVolume(page).locator("svg")).toHaveClass(/lucide-volume-1/)
@@ -74,12 +75,12 @@ test.describe("Playback volume in the header", () => {
     })
     const slider = await openVolume(page)
     await expect.poll(() => page.evaluate(() => (window as unknown as {__VOLUME_POLLS__:number}).__VOLUME_POLLS__)).toBeGreaterThan(1)
-    const box = (await slider.boundingBox())!
+    const box = (await sliderOf(slider).boundingBox())!
     await page.mouse.move(box.x + box.width * 0.8, box.y + box.height / 2)
     await page.mouse.down()
-    const value = await slider.inputValue()
+    const value = (await slider.getAttribute("aria-valuenow"))!
     await expect.poll(() => page.evaluate(() => (window as unknown as {__VOLUME_POLLS__:number}).__VOLUME_POLLS__)).toBeGreaterThan(4)
-    await expect(slider).toHaveValue(value)
+    await expect(slider).toHaveAttribute("aria-valuenow", value)
     await page.mouse.up()
   })
 
@@ -109,7 +110,7 @@ test.describe("Playback volume in the header", () => {
   test("opens at the level kept from last time, before anything plays", async ({ page }) => {
     await openApp(page, { before: savedAt(0.4) })
     const slider = await openVolume(page)
-    await expect(slider).toHaveValue("0.4")
+    await expect(slider).toHaveAttribute("aria-valuenow", "0.4")
     expect(await callCount(page, "player_open")).toBe(0)
   })
 
@@ -125,7 +126,7 @@ test.describe("Playback volume in the header", () => {
     await page.keyboard.press("Escape")
     await openHistory(page)
     await page.getByRole("button", { name: "Pałyn #1", exact: true }).click()
-    await expect(page.getByRole("slider", { name: "Master volume" })).toHaveValue(String(kept))
+    await expect(page.getByRole("slider", { name: "Master volume" })).toHaveAttribute("aria-valuenow", String(kept))
   })
 
   test("is the same level as the master fader under a take, both ways", async ({ page }) => {
@@ -133,7 +134,7 @@ test.describe("Playback volume in the header", () => {
     await openHistory(page)
     await page.getByRole("button", { name: "Pałyn #1", exact: true }).click()
     const fader = page.getByRole("slider", { name: "Master volume" })
-    await expect(fader).toHaveValue("1")
+    await expect(fader).toHaveAttribute("aria-valuenow", "1")
 
     await turn(page, await openVolume(page), 0.3)
     await expect.poll(() => lastArg(page, "player_set_master")).toBeLessThan(0.5)
@@ -143,12 +144,12 @@ test.describe("Playback volume in the header", () => {
     await page.keyboard.press("Escape")
     await expect(page.getByRole("dialog", { name: "Playback volume" })).toHaveCount(0)
     await expect(page.getByRole("button", { name: "Mute Guitar" })).toBeVisible()
-    await expect(fader).toHaveValue(String(fromHeader))
+    await expect(fader).toHaveAttribute("aria-valuenow", String(fromHeader))
 
     await turn(page, fader, 0.8)
     await expect.poll(() => lastArg(page, "player_set_master")).toBeGreaterThan(0.5)
     const fromFader = (await lastArg(page, "player_set_master"))!
-    await expect(await openVolume(page)).toHaveValue(String(fromFader))
+    await expect(await openVolume(page)).toHaveAttribute("aria-valuenow", String(fromFader))
   })
 
   test("leaves Space with the screen once it is shut, whichever way", async ({ page }) => {
@@ -184,7 +185,7 @@ test.describe("Playback volume in the header", () => {
     const slider = page.getByRole("dialog", { name: "Playback volume" }).getByRole("slider")
     await expect(slider).toBeFocused()
     await page.keyboard.press("ArrowLeft")
-    await expect(slider).toHaveValue("0.99")
+    await expect(slider).toHaveAttribute("aria-valuenow", "0.99")
     await expect.poll(() => lastArg(page, "save_master_volume")).toBe(0.99)
   })
 
@@ -210,24 +211,24 @@ test.describe("Playback volume in the header", () => {
 })
 
 test("a fader shows keyboard focus on its thumb", async ({ page }) => {
-  // Its own outline is off, as the thumb is drawn here: the focus is a ring
-  // round the thumb, so a keyboard sees which fader the arrows will turn.
+  // The focus is a ring round the thumb, not round the whole fader, so a
+  // keyboard sees which fader the arrows will turn.
   await openApp(page)
   await startRehearsal(page)
   await recordTake(page)
   await settled(page)
   const fader = page.getByRole("slider", { name: "Guitar volume" })
-  const box = (await fader.boundingBox())!
+  const box = (await sliderOf(fader).boundingBox())!
   // The thumb is a 0.875 rem square that runs from one end of the track to
   // the other as the value goes from 0 to 1, centred on the track's height.
   const thumb = await page.evaluate(
     () => 0.875 * parseFloat(getComputedStyle(document.documentElement).fontSize)
   )
-  const value = Number(await fader.inputValue())
+  const value = Number(await fader.getAttribute("aria-valuenow"))
   const x = box.x + thumb / 2 + value * (box.width - thumb)
   const y = box.y + box.height / 2
   // The thumb's square with its 3 px ring and a pixel to spare, and the
-  // half of the track the thumb is not on, with the input's edges.
+  // half of the track the thumb is not on, with the fader's edges.
   const side = thumb + 8
   const onThumb = { x: x - side / 2, y: y - side / 2, width: side, height: side }
   const away =

@@ -85,8 +85,9 @@ test("a take while it counts: nothing for a second, a spinner, then words", asyn
   await hold(page, "take_drift")
   await takeButton(page.locator("[aria-label='Rehearsal overview']"), "Take #1").click()
   await expect(lane(page)).toBeVisible()
-  // The tag is hidden from a screen reader, which hears the lane's label.
-  const spinner = tag(page).locator("[role=status]")
+  // The tag is hidden from a screen reader, which hears the lane's label;
+  // the spinner in it is quiet too.
+  const spinner = tag(page).locator("svg.animate-spin")
   await expect(spinner).toBeAttached()
   await expect(spinner).toHaveClass(/invisible/)
   await page.clock.runFor(1000)

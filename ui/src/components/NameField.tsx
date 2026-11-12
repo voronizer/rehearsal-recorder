@@ -1,3 +1,4 @@
+import { Textarea } from "@/components/ui/textarea"
 import { cn } from "@/lib/utils"
 
 /**
@@ -13,9 +14,8 @@ import { cn } from "@/lib/utils"
  *
  * No frame: one round every name in a band's rows would read as a form. A
  * faint line under it says it can be written in (owner's pick C,
- * 2026-11-02); it is brighter under the pointer, and the focus ring's
- * colour, twice as thick, while it is typed in. The thicker line grows
- * under the field, not into it, so nothing moves.
+ * 2026-11-02): the shared text area's `line`. Its own growing stays, as
+ * WebKit before Safari 26.2 cannot grow a field with its text (field-sizing).
  */
 export function NameField({
   label,
@@ -31,21 +31,19 @@ export function NameField({
   placeholder?: string
   className?: string
 }) {
-  // The same box for both: padding, size, line height and where lines break.
-  const text = "px-0 py-1.5 text-sm leading-5 break-words whitespace-pre-wrap"
   return (
-    <div
-      className={cn(
-        "grid min-w-0 flex-1 border-b border-muted-foreground/35 transition-colors hover:border-muted-foreground",
-        "focus-within:border-ring focus-within:shadow-[0_1px_0_0_var(--color-ring)]",
-        className
-      )}
-    >
-      {/* The space after it keeps an empty field one line tall. */}
-      <span aria-hidden className={cn("invisible col-start-1 row-start-1", text)}>
+    <div className={cn("grid min-w-0 flex-1", className)}>
+      {/* The same box as the field's `line`: padding, size, line height, the
+          line under it and where lines break. The space after it keeps an
+          empty field one line tall. */}
+      <span
+        aria-hidden
+        className="invisible col-start-1 row-start-1 border-b border-transparent py-1.5 text-sm leading-5 break-words whitespace-pre-wrap"
+      >
         {value + " "}
       </span>
-      <textarea
+      <Textarea
+        variant="line"
         rows={1}
         value={value}
         aria-label={label}
@@ -55,11 +53,7 @@ export function NameField({
         onKeyDown={(e) => {
           if (e.key === "Enter") e.preventDefault()
         }}
-        className={cn(
-          "col-start-1 row-start-1 block size-full min-w-0 resize-none overflow-hidden border-0 bg-transparent outline-none",
-          "selection:bg-primary selection:text-primary-foreground placeholder:text-muted-foreground",
-          text
-        )}
+        className="col-start-1 row-start-1 block size-full min-w-0 field-sizing-fixed overflow-hidden transition-colors"
       />
     </div>
   )

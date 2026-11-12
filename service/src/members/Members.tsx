@@ -3,6 +3,7 @@ import { Ellipsis, X } from "lucide-react"
 import { ConfirmDialog } from "@/components/ConfirmDialog"
 import { Button } from "@/components/ui/button"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
+import { FieldError } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import {
@@ -27,12 +28,7 @@ import { count } from "../shell/words"
 const letter = (s: string) => (Array.from(s.trim())[0] ?? "?").toUpperCase()
 
 function Said({ error }: { error: Error | null | undefined }) {
-  if (!error) return null
-  return (
-    <p role="alert" className="text-destructive">
-      {error.message}
-    </p>
-  )
+  return <FieldError>{error?.message}</FieldError>
 }
 
 /** **The band**, the owner's: its name, saved on Enter or on leaving the box, and its picture. */

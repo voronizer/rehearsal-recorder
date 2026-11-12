@@ -15,6 +15,7 @@ import {
 } from "lucide-react"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
+import { Card } from "@/components/ui/card"
 import { LabelDot } from "@/components/ui/mark"
 import { Spinner } from "@/components/ui/spinner"
 import { Toggle } from "@/components/ui/toggle"
@@ -429,10 +430,10 @@ function Transport({
   const slow = useAfter(player.loading, SPINNER_AFTER_MS)
 
   return (
-    <div
+    <Card
       role="toolbar"
       aria-label="Transport"
-      className="flex flex-wrap items-center gap-3 rounded-xl bg-card px-6 py-4"
+      className="flex-row flex-wrap items-center gap-3 px-6 py-4"
     >
       <Tooltip>
         <TooltipTrigger asChild>
@@ -551,6 +552,6 @@ function Transport({
 
         <PlayerKeys spaceKey={playsOnSpace} goKeys={goKeys} />
       </div>
-    </div>
+    </Card>
   )
 }

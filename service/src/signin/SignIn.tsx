@@ -1,15 +1,18 @@
 import { useState, type FormEvent } from "react"
 import { useNavigate, useSearch } from "@tanstack/react-router"
 import { Button } from "@/components/ui/button"
+import { Field } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
+import { InputOTP, InputOTPGroup, InputOTPSlot } from "@/components/ui/input-otp"
 import { Label } from "@/components/ui/label"
 import { client, data, queryClient } from "../api"
 import { authClient } from "../auth"
+import { ErrorLine } from "../shell/parts"
 import { Frame } from "./Frame"
 
 const SENT = "If this address is in the band, a code is on its way"
-const BAD_CODE = "This code does not work. Check it, or press Send code for a new one."
-const TOO_MANY = "Too many tries. Wait a minute, then press Send code again."
+const BAD_CODE = "Wrong code. Check it, or send a new one."
+const TOO_MANY = "Too many tries. Wait a minute."
 
 /**
  * Signing in: the address and **Send code**, then the code from the letter
@@ -23,7 +26,9 @@ export function SignIn() {
   const [email, setEmail] = useState("")
   const [code, setCode] = useState("")
   const [stage, setStage] = useState<"address" | "code" | "confirm">("address")
-  const [said, setSaid] = useState<string | null>(null)
+  // What the page says, and which press it answers: Send code's under the
+  // address, Sign in's under the code.
+  const [said, setSaid] = useState<{ text: string; by: "send" | "sign" } | null>(null)
   const [busy, setBusy] = useState(false)
 
   async function send(e: FormEvent) {
@@ -35,12 +40,12 @@ export function SignIn() {
     if (!error) {
       setStage("code")
       setCode("")
-    } else if (error.code === "TOO_MANY_CODES") setSaid(error.message ?? TOO_MANY)
-    else if (error.status === 429) setSaid(TOO_MANY)
+    } else if (error.code === "TOO_MANY_CODES") setSaid({ text: error.message ?? TOO_MANY, by: "send" })
+    else if (error.status === 429) setSaid({ text: TOO_MANY, by: "send" })
     else if (error.code === "CONFIRM_FIRST") {
       setStage("confirm")
-      setSaid(error.message ?? null)
-    } else setSaid(error.message ?? "Something went wrong in the band service")
+      setSaid(error.message ? { text: error.message, by: "send" } : null)
+    } else setSaid({ text: error.message ?? "Something went wrong in the band service", by: "send" })
   }
 
   async function signIn(e: FormEvent) {
@@ -50,7 +55,7 @@ export function SignIn() {
     const { error } = await authClient.signIn.emailOtp({ email: email.trim(), otp: code.trim() })
     if (error) {
       setBusy(false)
-      setSaid(error.status === 429 ? TOO_MANY : BAD_CODE)
+      setSaid({ text: error.status === 429 ? TOO_MANY : BAD_CODE, by: "sign" })
       return
     }
     queryClient.clear()
@@ -62,52 +67,65 @@ export function SignIn() {
   return (
     <Frame>
       <div className="flex flex-col gap-1">
-        <h1 className="text-lg font-semibold">The band's takes</h1>
+        <h1 className="text-base font-semibold">The band's takes</h1>
         <p className="text-sm text-muted-foreground">
           Type your email address. A letter brings a code to sign in with: no password.
         </p>
       </div>
       <form onSubmit={send} className="flex flex-col gap-2">
         <Label htmlFor="email">Email address</Label>
-        <Input
-          id="email"
-          type="email"
-          autoComplete="email"
-          required
-          value={email}
-          onChange={(e) => {
-            setEmail(e.target.value)
-            if (stage === "confirm") setStage("address")
-          }}
-        />
+        {/* What went wrong in the line under the field, there when empty (S11). */}
+        <Field className="gap-1">
+          <Input
+            id="email"
+            type="email"
+            autoComplete="email"
+            required
+            value={email}
+            onChange={(e) => {
+              setEmail(e.target.value)
+              if (stage === "confirm") setStage("address")
+            }}
+          />
+          {/* One line's room: what is said here fits one, and Send code stays where it is. */}
+          <ErrorLine error={stage !== "confirm" && said?.by === "send" ? said.text : undefined} />
+        </Field>
         <Button type="submit" variant={stage === "address" || stage === "confirm" ? "default" : "outline"} disabled={busy}>
           Send code
         </Button>
       </form>
-      {stage === "confirm" && said && <p className="text-sm">{said}</p>}
+      {stage === "confirm" && said && <p className="text-sm">{said.text}</p>}
       {stage === "code" && (
         <form onSubmit={signIn} className="flex flex-col gap-2">
           <p className="text-sm">{SENT}</p>
           <Label htmlFor="code">Code</Label>
-          <Input
-            id="code"
-            inputMode="numeric"
-            autoComplete="one-time-code"
-            pattern="[0-9]{6}"
-            maxLength={6}
-            required
-            value={code}
-            onChange={(e) => setCode(e.target.value)}
-          />
+          {/* Six boxes, a digit in each (S17): the phone still offers the code
+              from the letter, and the whole code pasted fills all six. */}
+          <Field className="gap-1">
+            <InputOTP
+              id="code"
+              inputMode="numeric"
+              autoComplete="one-time-code"
+              pattern="^[0-9]+$"
+              pasteTransformer={(text) => text.replace(/[^0-9]/g, "")}
+              maxLength={6}
+              minLength={6}
+              required
+              value={code}
+              onChange={setCode}
+            >
+              <InputOTPGroup>
+                {[0, 1, 2, 3, 4, 5].map((i) => (
+                  <InputOTPSlot key={i} index={i} />
+                ))}
+              </InputOTPGroup>
+            </InputOTP>
+            <ErrorLine error={said?.by === "sign" ? said.text : undefined} />
+          </Field>
           <Button type="submit" disabled={busy}>
             Sign in
           </Button>
         </form>
-      )}
-      {stage !== "confirm" && said && (
-        <p role="alert" className="text-sm text-destructive">
-          {said}
-        </p>
       )}
     </Frame>
   )

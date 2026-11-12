@@ -1,6 +1,7 @@
 import { useState, type ReactNode } from "react"
 import { Minus, Plus } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { ButtonGroup } from "@/components/ui/button-group"
 import { Input } from "@/components/ui/input"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { parseBarOne, stepBarOne } from "@/lib/backing"
@@ -43,7 +44,15 @@ export function BarOneField({
   const step = (label: string, tip: string, by: number, icon: ReactNode) => (
     <Tooltip>
       <TooltipTrigger asChild>
-        <Button variant="ghost" size="icon-tiny" aria-label={label} onClick={() => nudge(by)}>
+        <Button
+          variant="outline"
+          size="icon-tiny"
+          aria-label={label}
+          onClick={() => nudge(by)}
+          // As tall as the number; 2 px wider than before, the gaps the
+          // frame closed, so nothing after it moves.
+          className="h-8 w-6.5"
+        >
           {icon}
         </Button>
       </TooltipTrigger>
@@ -54,32 +63,36 @@ export function BarOneField({
   )
 
   return (
-    <div className="flex shrink-0 items-center gap-0.5">
-      <span aria-hidden className="mr-1 text-sm text-muted-foreground">
+    <div className="flex shrink-0 items-center">
+      <span aria-hidden className="mr-1.5 text-sm text-muted-foreground">
         Bar 1 at
       </span>
-      {step("Bar 1 earlier", "A hundredth of a second earlier", -0.01, <Minus />)}
-      <Input
-        aria-label="Bar 1 at"
-        inputMode="decimal"
-        autoComplete="off"
-        spellCheck={false}
-        value={draft ?? formatBarOne(value)}
-        onChange={(e) => setDraft(e.target.value)}
-        onBlur={commit}
-        onKeyDown={(e) => {
-          if (e.key === "Enter") {
-            e.preventDefault()
-            e.currentTarget.blur()
-          } else if (e.key === "ArrowUp" || e.key === "ArrowDown") {
-            e.preventDefault()
-            setDraft(null)
-            nudge((e.key === "ArrowUp" ? 1 : -1) * (e.shiftKey ? 0.1 : 0.01))
-          }
-        }}
-        className="tnum h-8 w-[4.75rem] px-1 text-center font-semibold"
-      />
-      {step("Bar 1 later", "A hundredth of a second later", 0.01, <Plus />)}
+      {/* − n + in one frame, as the tempo has them. No group of its own
+          (role="none"): the number is "Bar 1 at" already. */}
+      <ButtonGroup role="none">
+        {step("Bar 1 earlier", "A hundredth of a second earlier", -0.01, <Minus />)}
+        <Input
+          aria-label="Bar 1 at"
+          inputMode="decimal"
+          autoComplete="off"
+          spellCheck={false}
+          value={draft ?? formatBarOne(value)}
+          onChange={(e) => setDraft(e.target.value)}
+          onBlur={commit}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.preventDefault()
+              e.currentTarget.blur()
+            } else if (e.key === "ArrowUp" || e.key === "ArrowDown") {
+              e.preventDefault()
+              setDraft(null)
+              nudge((e.key === "ArrowUp" ? 1 : -1) * (e.shiftKey ? 0.1 : 0.01))
+            }
+          }}
+          className="tnum h-8 w-[4.75rem] px-1 text-center font-semibold"
+        />
+        {step("Bar 1 later", "A hundredth of a second later", 0.01, <Plus />)}
+      </ButtonGroup>
     </div>
   )
 }
