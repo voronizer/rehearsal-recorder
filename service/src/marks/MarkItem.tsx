@@ -7,10 +7,9 @@ import { Button } from "@/components/ui/button"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { Field } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
-import { LabelDot } from "@/components/ui/mark"
+import { LabelDot, MarkLine } from "@/components/ui/mark"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { cn } from "@/lib/utils"
 import {
   useAddComment,
@@ -23,7 +22,7 @@ import {
   type Mark,
   type MarkComment,
 } from "../api"
-import { Avatar, BARE, ErrorLine, Group, Rows, Tile } from "../shell/parts"
+import { Avatar, ErrorLine, Group, Rows, Tile } from "../shell/parts"
 import { usePanel } from "../shell/panel"
 import { KeepWriting } from "../shell/unsent"
 import { clock, day, localDay } from "../shell/words"
@@ -283,8 +282,9 @@ function MarkBrief({ mark, take }: { mark: Mark; take?: "full" | "short" }) {
   const label = useLabelOf()(mark.label_id)
   const last = mark.comments.at(-1)
   const go = () => open({ kind: "mark", uid: mark.take.uid, id: mark.id })
-  // РЭХА's mark line (components/ui/mark.tsx): the label's dot, the time, the
-  // words; the label's name only when nothing is written (its colour says it).
+  // The shared mark line as the service has it (components/ui/mark.tsx): the
+  // label's dot, the time, the words, which wrap; the label's name only when
+  // nothing is written (its colour says it).
   return (
     <div
       data-mark={mark.id}
@@ -292,18 +292,7 @@ function MarkBrief({ mark, take }: { mark: Mark; take?: "full" | "short" }) {
       onClick={(e) => !(e.target as HTMLElement).closest("button, a") && go()}
       className={cn("grid grid-cols-[0.5rem_minmax(0,1fr)] items-baseline gap-x-2 gap-y-1", mark.closed && "opacity-60")}
     >
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <span className="flex">
-            <LabelDot colour={label.colour} />
-          </span>
-        </TooltipTrigger>
-        <TooltipContent>{label.name}</TooltipContent>
-      </Tooltip>
-      <Button variant="ghost" className={cn(BARE, "flex min-w-0 items-baseline gap-2 whitespace-normal")} onClick={go}>
-        <span className="tnum shrink-0 text-muted-foreground">{clock(mark.at)}</span>
-        <span className="min-w-0">{mark.note || label.name}</span>
-      </Button>
+      <MarkLine variant="service" wrap label={label} at={mark.at} note={mark.note} onPress={go} className="col-span-2" />
       <span className="col-start-2 flex flex-wrap items-center gap-x-1.5 text-xs text-muted-foreground">
         {take && <OnTake take={mark.take} short={take === "short"} />}
         {take && <span>·</span>}

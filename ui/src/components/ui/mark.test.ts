@@ -32,6 +32,16 @@ describe("MarkLine", () => {
     expect(out).not.toContain(" · ")
   })
 
+  it("in the band service, says the note alone, or the label's name when nothing is written", () => {
+    const line = (note: string) =>
+      renderToStaticMarkup(createElement(MarkLine, { label: issue, at: 3725, note, variant: "service" }))
+    expect(line("chorus came in early")).toContain(">chorus came in early<")
+    expect(line("chorus came in early")).not.toContain("Issue")
+    expect(line(" ")).toMatch(/>Issue<\/span><\/span>$/)
+    // The time runs to hours, as the service's clock writes it.
+    expect(line("")).toContain(">1:02:05<")
+  })
+
   it("is a note line wherever it is, for the pages that count them", () => {
     const out = renderToStaticMarkup(createElement(MarkLine, { label: issue, at: 5, note: "" }))
     expect(out).toMatch(/^<span data-note="true"/)

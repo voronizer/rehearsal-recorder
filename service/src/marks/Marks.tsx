@@ -1,17 +1,14 @@
 import { useState, type MouseEvent } from "react"
 import { MessageSquare } from "lucide-react"
-import { Button } from "@/components/ui/button"
-import { LabelDot } from "@/components/ui/mark"
+import { MarkLine } from "@/components/ui/mark"
 import { Toggle } from "@/components/ui/toggle"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
-import { useCut, WholeTip } from "@/components/ui/whole"
 import { cn } from "@/lib/utils"
 import { useMarks, type Mark, type Show } from "../api"
-import { BARE, Empty, Group, Groups, Page, PANEL_TOGGLE, Rows, TitleWith, Trouble, useTitle } from "../shell/parts"
+import { Empty, Group, Groups, Page, PANEL_TOGGLE, Rows, TitleWith, Trouble, useTitle } from "../shell/parts"
 import { usePanel } from "../shell/panel"
 import { useSize } from "../shell/size"
-import { clock, count, day, localDay } from "../shell/words"
+import { count, day, localDay } from "../shell/words"
 import { useLabelOf } from "../takes/parts"
 import { OnTake } from "./MarkItem"
 
@@ -27,13 +24,11 @@ const SHOWS: [Show, string][] = [
  * the mark in the panel, with the talk and what can be done to it. On a
  * phone the take, who and when go to a second line.
  */
-function MarkLine({ mark }: { mark: Mark }) {
+function MarkRow({ mark }: { mark: Mark }) {
   const { open } = usePanel()
   const size = useSize()
   const label = useLabelOf()(mark.label_id)
-  const [ref, cut] = useCut<HTMLButtonElement>()
   const go = () => open({ kind: "mark", uid: mark.take.uid, id: mark.id })
-  const words = mark.note || label.name
   // The take's name opens the take; anywhere else on the line opens the mark.
   const row = (e: MouseEvent) => !(e.target as HTMLElement).closest("button, a") && go()
   const talk = mark.comments.length
@@ -64,22 +59,8 @@ function MarkLine({ mark }: { mark: Mark }) {
         mark.closed && "opacity-60"
       )}
     >
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <span className="flex">
-            <LabelDot colour={label.colour} />
-          </span>
-        </TooltipTrigger>
-        <TooltipContent>{label.name}</TooltipContent>
-      </Tooltip>
-      <span className="tnum text-muted-foreground">{clock(mark.at)}</span>
-      <span className="flex min-w-0 items-center gap-1.5">
-        <WholeTip cut={cut} text={words}>
-          <Button ref={ref} variant="ghost" onClick={go} className={cn(BARE, "block min-w-0 truncate")}>
-            {words}
-          </Button>
-        </WholeTip>
-      </span>
+      {/* The shared line's dot, time and words, each in its column of the row. */}
+      <MarkLine variant="service" label={label} at={mark.at} note={mark.note} onPress={go} className="contents" />
       {size !== "phone" && take}
       <span className="flex items-center gap-1 text-xs text-muted-foreground" aria-label={talk ? count(talk, "comment") : undefined}>
         {talk > 0 && (
@@ -138,7 +119,7 @@ export function Marks() {
               <Group key={s} title={s} hint={String(ks.length)} fold="open">
                 <Rows opens>
                   {ks.map((k) => (
-                    <MarkLine key={k.id} mark={k} />
+                    <MarkRow key={k.id} mark={k} />
                   ))}
                 </Rows>
               </Group>

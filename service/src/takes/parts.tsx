@@ -4,7 +4,7 @@ import { Star } from "lucide-react"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Button, OPENS } from "@/components/ui/button"
 import { Item } from "@/components/ui/item"
-import { LabelDot } from "@/components/ui/mark"
+import { MarkLine } from "@/components/ui/mark"
 import { PlayButton } from "@/components/ui/play-button"
 import { Toggle } from "@/components/ui/toggle"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
@@ -387,9 +387,7 @@ export function TakeLine({ take, marks, short, after }: { take: TakeLike; marks?
               k.closed && "opacity-60"
             )}
           >
-            <LabelDot colour={labelOf(k.label_id).colour} />
-            <span className="tnum shrink-0 text-muted-foreground">{clock(k.at)}</span>
-            <span className="truncate">{k.note || labelOf(k.label_id).name}</span>
+            <MarkLine variant="service" label={labelOf(k.label_id)} at={k.at} note={k.note} />
           </Button>
         ))}
     </div>
