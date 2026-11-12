@@ -235,16 +235,20 @@ test("delete a set and restore it", async ({ page }) => {
   await expect(sets.getByRole("link", { name: /^Vik's birthday/ })).toContainText("2 songs · 0:20")
 })
 
-test("a name turned down while a set is renamed is said in the set's line, and nothing under it moves", async ({ page }) => {
+test("the set's name opens as a field and a name turned down is said in the set's line, and nothing under it moves", async ({ page }) => {
   await page.goto(`/sets/${band().sets["Club gig"]}`)
   const main = page.getByRole("main")
   const line = main.locator("p").filter({ hasText: /^3 songs/ })
   const songs = main.getByRole("list", { name: "Songs of the set" })
   const top = async (l: Locator) => Math.round((await l.boundingBox())!.y)
+  await expect(line).toHaveText("3 songs · 0:30")
+  const [lineTop, songsTop] = [await top(line), await top(songs)]
   await main.getByRole("button", { name: "Rename set Club gig" }).click()
   const name = main.getByRole("textbox", { name: "Set's name" })
   await expect(name).toBeFocused()
-  const [lineTop, songsTop] = [await top(line), await top(songs)]
+  // The field is as tall as the heading's row.
+  expect(await top(line)).toBe(lineTop)
+  expect(await top(songs)).toBe(songsTop)
   await name.fill("vik's BIRTHDAY")
   await name.press("Enter")
   const said = main.getByRole("alert")

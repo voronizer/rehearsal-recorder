@@ -1,5 +1,5 @@
 import { writeFileSync } from "node:fs"
-import { expect, test } from "@playwright/test"
+import { expect, test, type Locator } from "@playwright/test"
 import { as, band, HEADERS } from "./band"
 import { linesOf, roomBetween } from "./rows"
 
@@ -186,16 +186,23 @@ test("a song's title changes where it stands, its takes with it", async ({ page 
   await page.goto(`/songs/${band().songs["Pałyn"]}`)
   const main = page.getByRole("main")
   const field = main.getByRole("textbox", { name: "Song title" })
+  // The facts' line and what is below it stay where they are: the field is as
+  // tall as the heading's row, and a refusal takes the facts' place as an
+  // error under a field.
+  const facts = main.getByText(/^\d:\d\d · 2 takes on 2 rehearsals$/)
+  const below = main.getByRole("region", { name: "Best take" })
+  const top = async (l: Locator) => Math.round((await l.boundingBox())!.y)
+  const [factsTop, belowTop] = [await top(facts), await top(below)]
   await main.getByRole("button", { name: "Rename song Pałyn" }).click()
   await expect(field).toBeFocused()
-  // In the facts' place, a line says what only it can; a refusal as an
-  // error under a field, and nothing below moves.
-  const below = main.getByRole("region", { name: "Best take" })
-  const top = (await below.boundingBox())!.y
+  expect(await top(facts)).toBe(factsTop)
+  expect(await top(below)).toBe(belowTop)
   await field.fill("viasna")
-  await expect(main.getByRole("alert")).toHaveText("“Viasna” is another song. Songs are merged in РЭХА: Rename song there.")
+  const said = main.getByRole("alert")
+  await expect(said).toHaveText("“Viasna” is another song. Songs are merged in РЭХА: Rename song there.")
   await expect(main.getByRole("button", { name: "Rename", exact: true })).toBeDisabled()
-  expect((await below.boundingBox())!.y).toBe(top)
+  expect(await top(said)).toBe(factsTop)
+  expect(await top(below)).toBe(belowTop)
   await field.fill("Take 3")
   await expect(main.getByRole("alert")).toHaveText("Take 3 is what a take with no song is called.")
   await field.fill("Pałyn vosień")

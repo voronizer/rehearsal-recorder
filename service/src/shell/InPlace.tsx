@@ -74,13 +74,16 @@ export function InPlace({
   /** ✕'s name. */
   leave: string
   onLeave: () => void
-  /** 28 px, in a line of words; else 36 px, a heading's. */
+  /**
+   * 28 px, in a line of words; else 32 px, as tall as a heading's row, so
+   * opening it moves nothing.
+   */
   small?: boolean
   className?: string
   inputClassName?: string
 }) {
   return (
-    <InputGroup className={cn(small ? "h-7" : "h-9", className)}>
+    <InputGroup className={cn(small ? "h-7" : "h-8", className)}>
       <InputGroupInput
         aria-label={label}
         autoFocus
@@ -101,9 +104,9 @@ export function InPlace({
             onLeave()
           }
         }}
-        className={cn("h-full min-w-0 px-2", inputClassName)}
+        className={cn("h-full min-w-0 px-2", !small && "py-0", inputClassName)}
       />
-      <InputGroupAddon align="inline-end" className={cn("gap-0.5", small && "py-0")}>
+      <InputGroupAddon align="inline-end" className="gap-0.5 py-0">
         <InputGroupButton size="icon-xs" aria-label={ok.label} disabled={ok.disabled} onClick={onOk}>
           <Check />
         </InputGroupButton>
