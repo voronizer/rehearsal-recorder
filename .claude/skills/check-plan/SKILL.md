@@ -80,6 +80,9 @@ rest.
   the writing rules for what people read, how the feature shows on
   reha.stream, pictures and the guide. Report the rules broken, not the ones
   kept.
+- Each new or changed piece of the interface names the component it is
+  built from, in `ui/src/components/ui/` or in shadcn's registry, or why
+  neither has it. A piece with none is a finding.
 
 ### E. Cases the spec leaves out
 - Each screen or step the spec changes says what the band sees when it is

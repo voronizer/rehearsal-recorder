@@ -61,6 +61,7 @@ Skills in `.claude/skills/`, unchanged, MIT: humanizer from blader/humanizer@8c3
 
 - Order: questions one at a time, each with a mockup; how it shows on reha.stream; the spec, then the plan, each waiting for their OK; then code. If they say to code at once while the plan is being written: write and check the plan, then code.
 - A mockup is the real app or site, built from its own components (`ui/src`, `site/`) on the last prototype they saw: the variants and a theme switch on one opening state, other switches only when the question needs them, windows 1180×820 and 960×680. Open it once, then send only the link.
+- Build every piece of the interface, mockups included, from `ui/src/components/ui/`, then from shadcn's registry (`npx shadcn add`); make one of our own only when neither has it. `npm run design-check` covers `ui/src`, `service/src` and `site/src`.
 - Each feature is its own module with its own settings panel. A switch picks the module; no rows hidden by conditions. Keep a feature's logic in one place.
 - Plans have fewer, larger tasks.
 - No interface text about obvious things. Edit in place rather than in a pop-up.
