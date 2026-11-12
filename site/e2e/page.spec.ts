@@ -142,8 +142,13 @@ for (const reduced of [true, false]) {
     await question.click()
     const answer = page.locator("#faq [data-slot='accordion-content']").first()
     await expect(answer).toBeVisible()
-    const name = await answer.evaluate((el) => getComputedStyle(el).animationName)
+    const { name, duration } = await answer.evaluate((el) => {
+      const style = getComputedStyle(el)
+      return { name: style.animationName, duration: style.animationDuration }
+    })
     expect(name).toBe(reduced ? "none" : "qa-open")
+    // The quarter of a second page.css gives it.
+    if (!reduced) expect(duration).toBe("0.25s")
     await context.close()
   })
 }
