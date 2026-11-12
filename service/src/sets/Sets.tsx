@@ -5,8 +5,9 @@ import { FieldError } from "@/components/ui/field"
 import { ITEM_CHOSEN, Item } from "@/components/ui/item"
 import { cn } from "@/lib/utils"
 import { useMakeSet, useSets, useSongs, type BandSet, type SongItem } from "../api"
+import { usePanel } from "../shell/panel"
 import { Empty, Page, Trouble, useTitle } from "../shell/parts"
-import { useSize } from "../shell/size"
+import { usePushes, useSize } from "../shell/size"
 import { setLine, songsOf } from "./length"
 import { madeNow, SetPage, SetPane } from "./SetPage"
 
@@ -40,13 +41,17 @@ function SetRow({ set, all, picked }: { set: BandSet; all: SongItem[]; picked: b
 /**
  * Sets: on a computer the list down the left with **New set** under it, and
  * the picked set beside it, as in РЭХА; on a phone the list, and a set opens
- * on its own page. **New set** makes the set at once and opens it.
+ * on its own page. While a panel stands beside the page, the list is above
+ * the set, so the set has the page's width for its songs. **New set** makes
+ * the set at once and opens it.
  */
 export function Sets() {
   const sets = useSets()
   const songs = useSongs()
   const make = useMakeSet()
   const size = useSize()
+  const pushes = usePushes()
+  const { panel } = usePanel()
   const navigate = useNavigate()
   const { id } = useParams({ strict: false })
   const all = sets.data?.sets ?? []
@@ -95,7 +100,7 @@ export function Sets() {
   if (size === "phone") return <Page title="Sets">{list}</Page>
   return (
     <Page title="Sets">
-      <div className="flex items-start gap-6">
+      <div className={cn("flex gap-6", panel && pushes ? "flex-col" : "items-start")}>
         {list}
         <SetPane key={picked.id} set={picked} />
       </div>

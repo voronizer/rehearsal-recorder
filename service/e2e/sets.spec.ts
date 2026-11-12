@@ -258,6 +258,28 @@ test("a name turned down while a set is renamed is said in the set's line, and n
   await expect(said).toHaveCount(0)
 })
 
+test("with a panel beside the page, the list of sets stands above the set, and beside it again once the panel closes", async ({ page }) => {
+  for (const [width, height] of [
+    [960, 680],
+    [1180, 820],
+  ]) {
+    await page.setViewportSize({ width, height })
+    // As Mark in the player's bar leaves it: a new mark's panel over the set.
+    await page.goto(`/sets/${band().sets["Club gig"]}?panel=mark:${band().takes["Viasna 11"]}@0`)
+    const main = page.getByRole("main")
+    const panel = page.getByLabel("Panel", { exact: true })
+    await expect(panel.getByRole("heading", { level: 2 }).first()).toHaveText("New mark at 0:00")
+    const list = main.getByRole("list", { name: "Sets" })
+    const set = main.getByRole("heading", { level: 2 })
+    const [l, s] = [(await list.boundingBox())!, (await set.boundingBox())!]
+    expect(l.y + l.height, `at ${width}`).toBeLessThanOrEqual(s.y)
+    await panel.getByRole("button", { name: "Close", exact: true }).click()
+    await expect(panel).toHaveCount(0)
+    const [after, beside] = [(await list.boundingBox())!, (await set.boundingBox())!]
+    expect(after.x + after.width, `at ${width}`).toBeLessThanOrEqual(beside.x)
+  }
+})
+
 test.describe("on a phone", () => {
   test.use({ viewport: { width: 390, height: 844 } })
 
