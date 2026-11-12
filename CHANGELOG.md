@@ -57,7 +57,7 @@ opening.
   share one frame: the recordings folder and **Browse** in
   **Settings › Folders**, and the cloud folder and **Change** in the dialog
   the cloud button opens. So do − and + with the number between them, for
-  the tempo on the rehearsal screen and on a song's page, and for a
+  the tempo in РЭХА and on a song's page in the band service, and for a
   backing track's **Bar 1 at**. The bar across the top of the window that
   says something went wrong keeps its red words and icon, now on a plain
   background with no red tint. A spinner now shows only after a second:
@@ -96,7 +96,8 @@ opening.
   for its take or song, nothing shows for the first second, then a
   spinner, and after 10 seconds “Opening…” beside it. A few headings are a
   size smaller, the letters in a star's circle and on a file a size
-  bigger, and “No key” beside a song's title is no longer bold.
+  bigger, and the key beside a song's title is no longer bold, like the
+  status beside it.
 - **The questions on reha.stream slide open.** An answer opens over a
   quarter of a second, or at once with Reduce motion on, and ↑ and ↓ move
   between the questions. The browser's Find no longer opens a closed
