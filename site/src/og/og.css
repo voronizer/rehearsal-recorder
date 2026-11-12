@@ -17,7 +17,7 @@
 body { width: 1200px; height: 630px; overflow: hidden; background: var(--og-tile); color: var(--og-fg); font-family: var(--og-sans); }
 .og-text { position: absolute; left: 72px; top: 0; bottom: 0; width: 470px; display: flex; flex-direction: column; justify-content: center; gap: 26px; }
 .og-brand { display: flex; align-items: center; gap: 14px; font-weight: 600; font-size: 34px; }
-.og-brand svg { width: 52px; height: 52px; margin: -4px; }
+.og-brand img { width: 52px; height: 52px; margin: -4px; }
 .og-text h1 { font-family: var(--og-display); font-size: 60px; line-height: 1.04; letter-spacing: -0.035em; font-weight: 600; text-wrap: balance; }
 .og-eyebrow { color: var(--og-rec); font-weight: 600; font-size: 24px; white-space: nowrap; }
 .og-eyebrow::before { content: ""; display: inline-block; width: 16px; height: 16px; margin-right: 14px; vertical-align: 0.05em; border-radius: 50%; background: var(--og-dot); box-shadow: 0 0 0 5px color-mix(in srgb, var(--og-dot) 22%, transparent); }

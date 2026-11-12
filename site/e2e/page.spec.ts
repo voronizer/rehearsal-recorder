@@ -101,6 +101,33 @@ test("on Windows, the Windows download is the button", async ({ page }) => {
   }
 })
 
+// Every answer is in the page while its question is closed (search
+// engines read it); a question opens on a click, the arrow keys move
+// between the questions, and any number can be open together.
+test("a question opens, the arrows move between them, the answers stay in the page", async ({ page }) => {
+  await page.goto("/")
+  const questions = page.locator("#faq [data-slot='accordion-trigger']")
+  const answers = page.locator("#faq [data-slot='accordion-content']")
+  const n = await questions.count()
+  expect(n).toBeGreaterThan(2)
+  await expect(answers).toHaveCount(n)
+  for (const text of await answers.allTextContents()) expect(text.trim().length).toBeGreaterThan(0)
+  await expect(answers.first()).toBeHidden()
+  await questions.first().scrollIntoViewIfNeeded()
+  await questions.first().click()
+  await expect(questions.first()).toHaveAttribute("aria-expanded", "true")
+  await expect(answers.first()).toBeVisible()
+  await questions.first().press("ArrowDown")
+  await expect(questions.nth(1)).toBeFocused()
+  await page.keyboard.press("Enter")
+  await expect(answers.nth(1)).toBeVisible()
+  await expect(answers.first()).toBeVisible()
+  await page.keyboard.press("ArrowUp")
+  await expect(questions.first()).toBeFocused()
+  await questions.first().click()
+  await expect(answers.first()).toBeHidden()
+})
+
 test("the page ends with the downloads again, after the questions", async ({ page }) => {
   await page.goto("/")
   const end = page.locator(".get-it")

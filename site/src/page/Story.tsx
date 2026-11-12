@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react"
+import { Button } from "@/components/ui/button"
+import { Toggle } from "@/components/ui/toggle"
 import { content, type Item, type ItemId } from "../content"
 import type { ToStage } from "../frame"
 import { BEAT_FOCUS, KIND, SHOWS, type Focus } from "./evening"
@@ -234,9 +236,9 @@ export function Story({ pieces }: { pieces: PieceData }) {
     return (
       <article key={id} className={`item ${KIND[id]}${on ? " on" : ""}`}>
         <h4>
-          <button type="button" aria-pressed={on} onClick={() => pick(id)}>
+          <Toggle pressed={on} onClick={() => pick(id)}>
             <Title text={item.title} />
-          </button>
+          </Toggle>
         </h4>
         {(KIND[id] === "tile" || on) && <Paragraphs text={item.line} />}
       </article>
@@ -281,16 +283,17 @@ export function Story({ pieces }: { pieces: PieceData }) {
           </div>
           <div className="rail" role="group" aria-label="Steps">
             {story.steps.map((s, i) => (
-              <button
+              <Button
                 key={s.id}
                 type="button"
+                variant="ghost"
                 className={i === active ? "on" : undefined}
                 aria-current={i === active ? "step" : undefined}
                 onClick={() => goTo(i)}
               >
                 <i ref={(el) => void (rail.current[i] = el)} />
                 {s.title.replace(/\.$/, "")}
-              </button>
+              </Button>
             ))}
           </div>
         </div>
