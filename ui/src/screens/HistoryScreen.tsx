@@ -1133,7 +1133,8 @@ export function HistoryScreen({
     >
       {reading && (
         <div className="flex items-center gap-2 text-sm text-muted-foreground">
-          <Spinner />
+          {/* "Loading" until the words come, then quiet beside them. */}
+          <Spinner quiet={slow} />
           {slow && <span>Reading the folder…</span>}
         </div>
       )}

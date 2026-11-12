@@ -122,8 +122,10 @@ export function FoldersSettings() {
     <>
       <SettingsGroup rise={1} title="Recordings folder" hint="Where everything is recorded to.">
         <div className="flex flex-col gap-3">
-          {/* The path and Browse in one frame, one control. */}
-          <ButtonGroup aria-label="Recordings folder" className="w-full">
+          {/* The path and Browse in one frame, one control. No group of its
+              own (role="none"): the field and the section already say
+              "Recordings folder". */}
+          <ButtonGroup role="none" className="w-full">
             <Input
               id="recordings-dir"
               aria-label="Recordings folder"

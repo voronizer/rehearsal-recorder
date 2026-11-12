@@ -226,7 +226,8 @@ function Choice({
         aria-describedby={hintId}
         className="h-auto w-full justify-start text-left whitespace-normal"
       >
-        <span className="mt-0.5 shrink-0 text-muted-foreground [&>svg]:size-4">{slow ? <Spinner after={0} /> : icon}</span>
+        {/* Quiet: "Mixing… n%" beside it says it. */}
+        <span className="mt-0.5 shrink-0 text-muted-foreground [&>svg]:size-4">{slow ? <Spinner after={0} quiet /> : icon}</span>
         <span className="min-w-0 flex-1">
           <span className="flex items-center gap-2 text-sm font-semibold">
             {title}

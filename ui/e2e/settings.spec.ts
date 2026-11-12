@@ -925,11 +925,14 @@ test.describe("Under the hood", () => {
     await hold(page, "under_the_hood")
     await page.clock.pauseAt((await page.evaluate(() => Date.now())) + 1000)
     await group(page, "Under the hood").click()
-    // Unseen for its first second, so found by its role in the markup.
-    const spinner = tabBody(page).locator("[role='status'][aria-label='Loading']")
+    // Unseen for its first second, so found in the markup. It says
+    // "Loading" until the words come.
+    const spinner = tabBody(page).locator("svg.animate-spin")
     const asking = tabBody(page).getByText("Asking the machine…", { exact: true })
     await expect(spinner).toBeAttached()
     await expect(spinner).toBeHidden()
+    await expect(spinner).toHaveAttribute("role", "status")
+    await expect(spinner).toHaveAttribute("aria-label", "Loading")
     await expect(asking).toHaveCount(0)
     const head = await box(tabHead(page))
     await page.clock.runFor(999)
@@ -940,6 +943,9 @@ test.describe("Under the hood", () => {
     const at = await box(spinner)
     await page.clock.runFor(9000)
     await expect(asking).toBeVisible()
+    // Then it is quiet: the words beside it say it.
+    await expect(spinner).toHaveAttribute("aria-hidden", "true")
+    await expect(spinner).not.toHaveAttribute("role", "status")
     // The words come beside the spinner, and nothing above them moves.
     expect(await box(spinner)).toEqual(at)
     expect(await box(tabHead(page))).toEqual(head)
