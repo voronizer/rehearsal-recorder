@@ -291,14 +291,30 @@ export function Columns({ main, side, sideWidth = "20rem" }: { main: ReactNode; 
   )
 }
 
+/** A page's heading: its size, weight and balanced lines. */
+export const PAGE_TITLE = "text-xl font-semibold text-balance"
+
 /** A page: its heading and the line under it, then its groups. */
-export function Page({ title, sub, head, children }: { title?: ReactNode; sub?: ReactNode; head?: ReactNode; children?: ReactNode }) {
+export function Page({
+  title,
+  heading,
+  sub,
+  head,
+  children,
+}: {
+  title?: ReactNode
+  /** In the title's place, a line the page draws itself: its own h1 (`PAGE_TITLE`), and what stands beside the heading outside it. */
+  heading?: ReactNode
+  sub?: ReactNode
+  head?: ReactNode
+  children?: ReactNode
+}) {
   return (
     <div className="mx-auto flex w-full max-w-[72rem] flex-col gap-6">
       <header className="flex flex-col gap-1">
         {head}
-        {title && <h1 className="text-xl font-semibold text-balance">{title}</h1>}
-        {sub && <p className="text-muted-foreground">{sub}</p>}
+        {heading ?? (title && <h1 className={PAGE_TITLE}>{title}</h1>)}
+        {sub && <div className="text-muted-foreground">{sub}</div>}
       </header>
       {children}
     </div>

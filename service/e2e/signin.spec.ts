@@ -86,12 +86,13 @@ test("the code pasted whole fills the six boxes, and Sign in is still pressed", 
   await expect(page.getByRole("heading", { name: "What should the band call you?" })).toBeVisible()
 })
 
-test("a wrong code is said under the boxes, above Sign in", async ({ page }) => {
+test("a wrong code is said under the boxes, and Sign in does not move", async ({ page }) => {
   await page.goto("/signin")
   await page.getByLabel("Email address").fill("nobody@example.com")
   await page.getByRole("button", { name: "Send code" }).click()
   await expect(page.getByText(SENT)).toBeVisible()
   const button = page.getByRole("button", { name: "Sign in" })
+  const top = (await button.boundingBox())!.y
   await page.getByLabel("Code").fill("000000")
   await button.click()
   const alert = page.getByRole("alert")
@@ -99,5 +100,7 @@ test("a wrong code is said under the boxes, above Sign in", async ({ page }) => 
   const boxes = (await page.locator("[data-slot=input-otp-slot]").first().boundingBox())!
   const said = (await alert.boundingBox())!
   expect(said.y).toBeGreaterThanOrEqual(boxes.y + boxes.height)
+  // Its two lines fit the room kept for them.
   expect(said.y + said.height).toBeLessThanOrEqual((await button.boundingBox())!.y)
+  expect((await button.boundingBox())!.y).toBe(top)
 })

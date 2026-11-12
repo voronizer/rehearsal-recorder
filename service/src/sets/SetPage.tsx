@@ -14,7 +14,7 @@ import { cn } from "@/lib/utils"
 import { same } from "../../worker/shared/names"
 import { useChangeSet, useDeleteSet, useSongs, useTypeLength, type BandSet, type SongItem } from "../api"
 import { InPlace } from "../shell/InPlace"
-import { Back, BARE, ErrorLine, Group, Groups, Page } from "../shell/parts"
+import { Back, BARE, ErrorLine, Group, Groups, Page, PAGE_TITLE } from "../shell/parts"
 import { useSize } from "../shell/size"
 import { clock, quoted } from "../shell/words"
 import { lengthOf, parseLength, setLine, songsOf } from "./length"
@@ -56,11 +56,13 @@ function useSetSongs(set: BandSet) {
 type SetSongs = ReturnType<typeof useSetSongs>
 
 /**
- * The name, renamed where it stands as a song's title is (songs/edit.tsx):
- * ✎ turns it into a field with ✓ and ✕; Enter or ✓ renames, Esc or ✕
- * leaves it. Beside it **Print**, **On stage** and ⋯ › **Delete set**.
+ * The set's heading line: the name, renamed where it stands as a song's
+ * title is (songs/edit.tsx): ✎ turns it into a field with ✓ and ✕; Enter
+ * or ✓ renames, Esc or ✕ leaves it. Beside it, outside the heading,
+ * **Print**, **On stage** and ⋯ › **Delete set**, and under it what went
+ * wrong. `big`: the page's own heading, on a phone.
  */
-function SetTitle({ set, songs, big }: { set: BandSet; songs: SongItem[]; big?: boolean }) {
+function SetHead({ set, songs, big }: { set: BandSet; songs: SongItem[]; big?: boolean }) {
   const [editing, setEditing] = useState(() => fresh === set.id)
   const [name, setName] = useState(set.name)
   const [asking, setAsking] = useState(false)
@@ -119,9 +121,10 @@ function SetTitle({ set, songs, big }: { set: BandSet; songs: SongItem[]; big?: 
       </Tooltip>
     </span>
   )
+  const Heading = big ? "h1" : "h2"
   const row = (
-    <span className="flex flex-wrap items-center gap-3">
-      {title}
+    <div className="flex flex-wrap items-center gap-3">
+      <Heading className={cn("min-w-0", big ? PAGE_TITLE : "text-base font-semibold")}>{title}</Heading>
       <span className="flex-1" />
       {/* The three wrap together on a phone, so ⋯ is never on a line of its own. */}
       <span className="flex items-center gap-3">
@@ -155,15 +158,14 @@ function SetTitle({ set, songs, big }: { set: BandSet; songs: SongItem[]; big?: 
         // Once it is gone, to the list: on a computer the first set is picked there.
         onConfirm={() => void remove.mutateAsync(set.id).then(() => navigate({ to: "/sets", replace: true }), () => {})}
       />
-    </span>
+    </div>
   )
-  if (!editing) return row
-  // While the name is a field, the line under it for what went wrong (S11).
   return (
-    <span className="flex flex-col gap-1">
+    <>
       {row}
-      <ErrorLine error={change.error?.message} />
-    </span>
+      {/* While the name is a field, the line under it for what went wrong (S11). */}
+      {editing && <ErrorLine error={change.error?.message} />}
+    </>
   )
 }
 
@@ -184,9 +186,10 @@ function LengthCell({ song }: { song: SongItem }) {
   }
   if (field)
     return (
-      // Its line for what went wrong lies in the row's room below it, so
-      // the row keeps its height (B4), and runs left from under the field.
-      <Field className="-mb-6 w-16 shrink-0 gap-1">
+      // The field, 4 px taller than the words it opens from, and its line
+      // for what went wrong lie in the row's own room above and below, so
+      // the row keeps its height (B4); the line runs left from under the field.
+      <Field className="-mt-0.5 -mb-6.5 w-16 shrink-0 gap-1">
         <Input
           autoFocus
           value={field.text}
@@ -392,9 +395,7 @@ export function SetPane({ set }: { set: BandSet }) {
   return (
     <div className="flex min-w-0 flex-1 flex-col gap-4">
       <div className="flex flex-col gap-1">
-        <h2 className="text-base font-semibold">
-          <SetTitle set={set} songs={songs.songs} />
-        </h2>
+        <SetHead set={set} songs={songs.songs} />
         <p className="text-muted-foreground">{setLine(songs.songs)}</p>
       </div>
       <SetBody songs={songs} />
@@ -407,7 +408,7 @@ export function SetPane({ set }: { set: BandSet }) {
 export function SetPage({ set }: { set: BandSet }) {
   const songs = useSetSongs(set)
   return (
-    <Page head={<Back to="/sets" label="Sets" />} title={<SetTitle set={set} songs={songs.songs} big />} sub={setLine(songs.songs)}>
+    <Page head={<Back to="/sets" label="Sets" />} heading={<SetHead set={set} songs={songs.songs} big />} sub={setLine(songs.songs)}>
       <SetBody songs={songs} />
       <PrintSheet set={set} songs={songs.songs} />
     </Page>

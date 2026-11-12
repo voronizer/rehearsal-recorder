@@ -87,7 +87,8 @@ export function SignIn() {
               if (stage === "confirm") setStage("address")
             }}
           />
-          <ErrorLine error={stage !== "confirm" && said?.by === "send" ? said.text : undefined} />
+          {/* Two lines' room: what is said here takes two in the card, and Send code stays where it is. */}
+          <ErrorLine error={stage !== "confirm" && said?.by === "send" ? said.text : undefined} className="min-h-10" />
         </Field>
         <Button type="submit" variant={stage === "address" || stage === "confirm" ? "default" : "outline"} disabled={busy}>
           Send code
@@ -119,7 +120,8 @@ export function SignIn() {
                 ))}
               </InputOTPGroup>
             </InputOTP>
-            <ErrorLine error={said?.by === "sign" ? said.text : undefined} />
+            {/* Two lines' room, as under the address. */}
+            <ErrorLine error={said?.by === "sign" ? said.text : undefined} className="min-h-10" />
           </Field>
           <Button type="submit" disabled={busy}>
             Sign in

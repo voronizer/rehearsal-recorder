@@ -6,7 +6,6 @@ import { Button } from "@/components/ui/button"
 import { FieldError } from "@/components/ui/field"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import type { Signature } from "@/lib/api"
-import { cn } from "@/lib/utils"
 import { same, TAKE_NAME } from "../../worker/shared/names"
 import { useChangeSong, useSongs, type SongPage } from "../api"
 import { InPlace } from "../shell/InPlace"
@@ -136,9 +135,14 @@ export function InPlaceTitle({ song, children }: { song: Song; children: ReactNo
   )
 }
 
-/** A song page's facts, or while its title is a field, what renaming it does. */
+/**
+ * A song page's facts, or while its title is a field, what renaming it does.
+ * Why a title is turned down is said as under any field (S11), in the line
+ * the facts keep for it, so nothing below moves.
+ */
 export function TitleFacts({ song, children }: { song: Song; children: ReactNode }) {
   const said = useLine(song.id)
   if (said === null || !said.text) return <>{children}</>
-  return <span className={cn("text-xs", said.bad && "text-destructive")}>{said.text}</span>
+  if (said.bad) return <FieldError>{said.text}</FieldError>
+  return <span className="text-xs">{said.text}</span>
 }

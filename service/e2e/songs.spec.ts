@@ -188,12 +188,16 @@ test("a song's title changes where it stands, its takes with it", async ({ page 
   const field = main.getByRole("textbox", { name: "Song title" })
   await main.getByRole("button", { name: "Rename song Pałyn" }).click()
   await expect(field).toBeFocused()
-  // In the facts' place, a line says what only it can.
+  // In the facts' place, a line says what only it can; a refusal as an
+  // error under a field, and nothing below moves.
+  const below = main.getByRole("region", { name: "Best take" })
+  const top = (await below.boundingBox())!.y
   await field.fill("viasna")
-  await expect(main.getByText("“Viasna” is another song. Songs are merged in РЭХА: Rename song there.")).toBeVisible()
+  await expect(main.getByRole("alert")).toHaveText("“Viasna” is another song. Songs are merged in РЭХА: Rename song there.")
   await expect(main.getByRole("button", { name: "Rename", exact: true })).toBeDisabled()
+  expect((await below.boundingBox())!.y).toBe(top)
   await field.fill("Take 3")
-  await expect(main.getByText("Take 3 is what a take with no song is called.")).toBeVisible()
+  await expect(main.getByRole("alert")).toHaveText("Take 3 is what a take with no song is called.")
   await field.fill("Pałyn vosień")
   await expect(main.getByText("Its 2 takes are renamed with it.")).toBeVisible()
   await field.press("Escape")

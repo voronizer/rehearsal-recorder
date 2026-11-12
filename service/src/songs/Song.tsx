@@ -1,6 +1,7 @@
 import { useNavigate, useParams } from "@tanstack/react-router"
+import { cn } from "@/lib/utils"
 import { useSong, type TakeRow } from "../api"
-import { Back, Columns, Group, Groups, Page, Pill, Rows, Trouble, useTitle } from "../shell/parts"
+import { Back, Columns, Group, Groups, Page, PAGE_TITLE, Pill, Rows, Trouble, useTitle } from "../shell/parts"
 import { clock, count, longDay } from "../shell/words"
 import { TakeLine } from "../takes/parts"
 import { InPlaceTitle, TempoControls, TitleFacts } from "./edit"
@@ -57,18 +58,21 @@ export function Song() {
   return (
     <Page
       head={<Back to="/songs" label="Songs" />}
-      title={
-        <span className="flex flex-wrap items-center gap-3">
-          <InPlaceTitle song={song}>
-            <span className="min-w-0 [overflow-wrap:anywhere]">{song.title}</span>
-          </InPlaceTitle>
+      // The heading is the title; what stands beside it is outside it.
+      heading={
+        <div className="flex flex-wrap items-center gap-3">
+          <h1 className={cn("min-w-0", PAGE_TITLE)}>
+            <InPlaceTitle song={song}>
+              <span className="min-w-0 [overflow-wrap:anywhere]">{song.title}</span>
+            </InPlaceTitle>
+          </h1>
           <StatusMenu song={song} />
           <KeySelect song={song} />
           <TempoControls song={song} />
           {/* ⋯ is the song's, not the tempo's: at the row's far end (Alex, 5 November). */}
           <span className="flex-1" />
           <SongMenu song={song} onGone={() => navigate({ to: "/songs", replace: true })} />
-        </span>
+        </div>
       }
       sub={<TitleFacts song={song}>{facts}</TitleFacts>}
     >

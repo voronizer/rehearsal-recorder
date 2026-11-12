@@ -88,9 +88,13 @@ test("type a length and empty it again", async ({ page }) => {
   expect(new Set(await linesOf(songs, ":scope > li"))).toEqual(new Set(["0px"]))
   await expect(viasna.getByRole("link", { name: "Viasna", exact: true })).toHaveCSS("text-decoration-style", "dotted")
   await expect(viasna.getByRole("button", { name: "0:10" })).toHaveCSS("text-decoration-style", "dotted")
+  // The field opens in the row's own room: the next song does not move.
+  const next = songs.locator('[data-song="Pałyn"]')
+  const top = (await next.boundingBox())!.y
   await viasna.getByRole("button", { name: "0:10" }).click()
   const field = main.getByRole("textbox", { name: "Length of Viasna" })
   await expect(field).toHaveValue("0:10")
+  expect((await next.boundingBox())!.y).toBe(top)
   for (const bad of ["4:5", "4:65", "abc", "-1:00"]) {
     await field.fill(bad)
     await field.press("Enter")
