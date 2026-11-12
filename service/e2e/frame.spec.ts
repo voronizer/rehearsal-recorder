@@ -48,7 +48,7 @@ test("a press on a take's wave opens its page and plays nothing", async ({ page 
   await expect(page.getByLabel("Player", { exact: true }).getByRole("button", { name: /^Pause/ })).toHaveCount(0)
 })
 
-test("a press on the bar moves the take to that spot, between whole seconds; the arrows move it a second, Shift ten, Home and End to its ends", async ({ page }) => {
+test("a press on the bar moves the take to that spot, between whole seconds; the arrows move it a second, Shift ten, Home and End to its ends; a drag moves it once, let go", async ({ page }) => {
   await page.goto("/")
   await page.getByRole("region", { name: "The last rehearsal" }).locator('[data-take="Viasna 11"]').getByRole("button", { name: "Play “Viasna 11”" }).click()
   const bar = page.getByLabel("Player", { exact: true })
@@ -82,6 +82,17 @@ test("a press on the bar moves the take to that spot, between whole seconds; the
     await page.keyboard.press(key)
     await expect.poll(now, key).toBeCloseTo(to, 2)
   }
+  // A drag: the thumb follows the pointer, and the take moves once, where it is let go, since a seek starts every track again.
+  const time = bar.getByTestId("bar-time")
+  await expect(time).toHaveText("0:00")
+  await page.mouse.move(b.x + b.width * 0.3, b.y + b.height / 2)
+  await page.mouse.down()
+  await page.mouse.move(b.x + b.width * 0.75, b.y + b.height / 2, { steps: 10 })
+  await expect.poll(now).toBeCloseTo(7.52, 1)
+  await expect(time).toHaveText("0:00")
+  await page.mouse.up()
+  await expect(time).toHaveText("0:07")
+  await expect.poll(now).toBeCloseTo(7.52, 1)
 })
 
 test.describe("on a phone", () => {

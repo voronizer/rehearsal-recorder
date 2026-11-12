@@ -1,3 +1,4 @@
+import { useState } from "react"
 import { useRouterState } from "@tanstack/react-router"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
@@ -36,7 +37,7 @@ function MarkHere({ take, at }: { take: TakePage | undefined; at: number }) {
   )
 }
 
-/** The bar's keys, in seconds; Shift makes an arrow's ten, as Page Up and Page Down are. */
+/** The bar's keys, in seconds; with Shift an arrow moves ten, as Page Up and Page Down do. */
 const KEY_SECONDS: Record<string, number> = { ArrowRight: 1, ArrowUp: 1, ArrowLeft: -1, ArrowDown: -1, PageUp: 10, PageDown: -10 }
 
 /** The bar's own step, in seconds: fine enough that a press or a drag lands where it is, as before the Slider. */
@@ -44,14 +45,20 @@ const FINE = 0.01
 
 /**
  * Where the take is (S5), the shared Slider drawn as the bar: a press or a
- * drag moves the take there, and once it has the focus ← and → move it a
- * second, with Shift ten; Home and End go to its ends. A screen reader
- * hears the take's name and where it is, “0:05 of 3:12”.
+ * drag moves the take there as it is let go, the thumb following the
+ * pointer till then, since a seek starts every track again. Once it has
+ * the focus, ← and → move the take a second at once, with Shift ten, and
+ * Home and End go to its ends. A screen reader hears the take's name and
+ * where it is, “0:05 of 3:12”.
  */
 function Line({ take, at, className, trackClassName, ...rest }: { take: TakePage; at: number; className?: string; trackClassName?: string; "data-testid": string }) {
   const p = usePlayer()
   const length = take.duration_sec || 1
   const now = Math.min(at, length)
+  // Where the thumb is while the bar is pressed.
+  const [held, setHeld] = useState<number | null>(null)
+  const shown = held ?? now
+  const seek = (to: number) => p.seek(take.uid, Math.max(0, Math.min(length, to)))
   return (
     <Slider
       {...rest}
@@ -59,18 +66,25 @@ function Line({ take, at, className, trackClassName, ...rest }: { take: TakePage
       min={0}
       max={length}
       step={FINE}
-      value={[now]}
-      onValueChange={([to]) => p.seek(take.uid, to)}
-      // The Slider would step by its fine step; these keys go by whole seconds here, and its own handler is skipped.
+      value={[shown]}
+      onValueChange={([to]) => setHeld(to)}
+      onValueCommit={([to]) => {
+        setHeld(null)
+        seek(to)
+      }}
+      // Let go where it was pressed, nothing is committed: the thumb goes back to the take all the same.
+      onLostPointerCapture={() => setHeld(null)}
+      // The keys move the take at once, by whole seconds, and the Slider's own handler is skipped:
+      // it would step by its fine step, and Home and End would leave the thumb held.
       onKeyDown={(e) => {
         const by = KEY_SECONDS[e.key]
-        if (by === undefined) return
+        const to = e.key === "Home" ? 0 : e.key === "End" ? length : by === undefined ? null : now + (e.shiftKey && Math.abs(by) === 1 ? by * 10 : by)
+        if (to === null) return
         e.preventDefault()
-        const far = e.shiftKey && Math.abs(by) === 1 ? by * 10 : by
-        p.seek(take.uid, Math.max(0, Math.min(length, now + far)))
+        seek(to)
       }}
       aria-label={take.name}
-      aria-valuetext={`${clock(now)} of ${clock(take.duration_sec)}`}
+      aria-valuetext={`${clock(shown)} of ${clock(take.duration_sec)}`}
       className={cn("cursor-pointer", className)}
       trackClassName={trackClassName}
     />
