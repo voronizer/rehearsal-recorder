@@ -15,7 +15,7 @@ import { setLine } from "./length"
 // letters' sizes, each on one line with why.
 // design-ok(raw-colour): a sheet made for paper, black on white whatever the theme, sized for A4
 const INK = { sheet: "bg-white text-black", head: "border-black/30", song: "border-black/15", number: "text-black/50" }
-// design-ok(px-text): the same sheet's letters, in the sizes a page of A4 is read in from the stage
+// design-ok(px-text): a sheet made for paper, its letters in the sizes a page of A4 is read at from the stage
 const SIZE = { head: "text-[15px]", number: "text-[28px]", title: "text-[40px]", facts: "text-[24px]" }
 const SHEET = `print-sheet ${INK.sheet}`
 const HEAD = `mb-6 flex items-baseline justify-between gap-6 border-b pb-3 ${INK.head} ${SIZE.head}`

@@ -92,6 +92,14 @@ runs:
         npm ci --prefix ui
         npm ci --prefix site
 
+    # The interface's design rules (ui/scripts/design-rules.mjs), read off
+    # the site's source (site/src): its pages draw with the interface's
+    # components and keep to the same rules. Node only, so it comes before
+    # the tests and the build.
+    - name: Design check
+      shell: bash
+      run: node ui/scripts/design-check.mjs site
+
     - name: Vitest
       shell: bash
       working-directory: site

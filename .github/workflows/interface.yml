@@ -97,13 +97,15 @@ jobs:
       - name: Install
         run: npm ci
 
-      # The design rules, read off the source: a text size off the scale, a
-      # colour round the theme, a hand-made button or dialog, Radix outside
-      # components/ui. Screens not yet redone are on ui/design-check.allow.json,
-      # which each screen's PR shortens. Node only, so it comes first.
+      # The design rules, read off the interface's source (ui/src): a text
+      # size off the scale, a colour round the theme, a hand-made button,
+      # dialog, field, label, spinner, tip, pressed button or card, Radix
+      # outside components/ui. The service and the site run the same check
+      # on their own source, in their own workflows. Node only, so it comes
+      # first.
       - name: Design check
         if: env.PART == '1'
-        run: npm run design-check
+        run: npm run design-check -- ui
 
       # tsc -b first, so a type error fails here rather than as a test.
       - name: Build
