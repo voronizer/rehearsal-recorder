@@ -159,18 +159,24 @@ and the Marks badge go; only C, the handle, stays).
   live, and `npx vitest run src/shell/` in `service/`; commit: "Service: a handle folds the menu to its icons, and the
   browser keeps it".
 
-### Task 2: The two pictures on reha.stream
+### Task 1b: The logo's corners (Alex, 11:19:27)
+
+- [x] `Logo` in `service/src/shell/parts.tsx` `rounded-md` at 36 px; the
+  phone header's 28 px `rounded-sm` (`Side.tsx` `BandName`); Members keeps
+  `rounded-xl`. CHANGELOG item gets a sentence.
+
+### Task 2: The band service's pictures on reha.stream (all nine, Alex, 11:26:49)
 
 **Files:**
 - Modify: `site/src/stories/band-service/downloads-light.webp`, `downloads-dark.webp`, `sets-light.webp`, `sets-dark.webp`
 
 - [ ] **Step 1:** With a throwaway copy of `service/playwright.pictures.config.ts`
   that sets `launchOptions.executablePath`, run
-  `npx playwright test -c <it> --grep "^(downloads|sets) (light|dark)$"` in
-  `service/`. Check each picture: the handle ‹ on the column's edge by the
-  band's name, nothing else changed.
-- [ ] **Step 2:** Commit: "Site: the computer pictures show the menu's handle".
-  Show Alex the four pictures as an artifact before the PR merges (CLAUDE.md:
+  `npx playwright test -c <it>` in `service/` (all nine, light and dark).
+  Check each picture: the logo's new corners; on `downloads` and `sets` the
+  handle ‹ on the column's edge by the band's name.
+- [ ] **Step 2:** Commit: "Site: the band service's pictures with the new logo and the menu's handle".
+  Show Alex the pictures as an artifact before the PR merges (CLAUDE.md:
   every new site picture before merge).
 
 ### After the tasks

@@ -43,6 +43,9 @@ All on 12 November 2026 (UTC).
   8 px corners at 36 px (the menu, sign-in), as a button has, and 4 px at
   28 px (a phone's header); 56 px on Members keeps 12 px. Before: 12 px
   and 8 px.
+- 11:26:49 card «Все девять»: every band service picture on reha.stream,
+  light and dark, is taken again, for the logo; `downloads` and `sets` show
+  the handle too. The site's words stay.
 
 ## What the band sees
 
@@ -122,9 +125,10 @@ the column, folded or open, and on the sign-in card; `rounded-sm` (4 px) at
 - `docs/design-system.md`: F4's paragraph on the band service says the left
   column folds by its handle and the browser keeps it; the `Sidebar` line in
   C8 says the band service keeps its left column's fold itself.
-- reha.stream: `downloads` and `sets`, light and dark, taken again by
-  `service/pictures/site.spec.ts`; no words change. Alex sees them before
-  the merge.
+- reha.stream: all nine band service pictures, light and dark, taken again
+  by `service/pictures/site.spec.ts` for the logo's corners (Alex, 11:26:49);
+  `downloads` and `sets` show the handle. No words change. Alex sees them
+  before the merge.
 
 ## Claude's calls
 
