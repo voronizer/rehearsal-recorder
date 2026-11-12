@@ -74,7 +74,8 @@ export function Side() {
   return (
     // Inside the frame's row, above the player's bar, not the window's height.
     <Sidebar side="left" collapsible="icon" className="absolute h-full group-data-[side=left]:border-r-0" style={PHONE_WIDTH}>
-      <div className="flex h-full flex-col gap-5 overflow-y-auto p-3 group-data-[collapsible=icon]:overflow-hidden group-data-[collapsible=icon]:px-1.5">
+      {/* A landmark of its own, as the column was before the Sidebar, whose parts are bare boxes. */}
+      <aside className="flex h-full flex-col gap-5 overflow-y-auto p-3 group-data-[collapsible=icon]:overflow-hidden group-data-[collapsible=icon]:px-1.5">
         <div className="flex items-center gap-3 px-2 pt-1 group-data-[collapsible=icon]:px-0">
           <Logo name={frame?.name ?? ""} picture={frame?.picture ?? null} />
           <div className="min-w-0 group-data-[collapsible=icon]:hidden">
@@ -100,7 +101,7 @@ export function Side() {
         </nav>
         <span className="flex-1" />
         <You />
-      </div>
+      </aside>
     </Sidebar>
   )
 }
