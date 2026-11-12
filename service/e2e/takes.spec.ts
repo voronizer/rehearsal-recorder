@@ -681,6 +681,19 @@ test.describe("as Ira", () => {
     await page.getByRole("main").getByRole("button", { name: "Take back your star from “Pałyn 3”" }).hover()
     await expect(page.getByRole("tooltip")).toContainText("Starred by Ira")
   })
+
+  test("while a star is on its way it cannot be pressed, and its tip still says who starred the take", async ({ page }) => {
+    // The answer never comes, so the star stays on its way and nothing is changed.
+    await page.route("**/api/takes/*/star", () => {})
+    await page.goto(`/takes/${band().takes["Viasna 11"]}`)
+    const star = page.getByRole("main").getByRole("button", { name: "Take back your star from “Viasna 11”" })
+    await star.click()
+    await expect(star).toBeDisabled()
+    await page.mouse.move(0, 0, { steps: 10 })
+    await expect(page.getByRole("tooltip")).toHaveCount(0)
+    await star.hover({ force: true })
+    await expect(page.getByRole("tooltip")).toHaveText("Starred by Dzima, Ira")
+  })
 })
 
 test.describe("as Dzima", () => {
