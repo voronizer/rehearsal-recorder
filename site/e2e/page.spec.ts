@@ -128,6 +128,26 @@ test("a question opens, the arrows move between them, the answers stay in the pa
   await expect(answers.first()).toBeHidden()
 })
 
+// F11: under Reduce motion an answer is there at once; otherwise it opens
+// with its own animation (page.css).
+for (const reduced of [true, false]) {
+  test(`an opened answer ${reduced ? "does not move" : "opens with an animation"} (reduced motion ${reduced ? "on" : "off"})`, async ({
+    browser,
+  }) => {
+    const context = await browser.newContext({ reducedMotion: reduced ? "reduce" : "no-preference" })
+    const page = await context.newPage()
+    await page.goto("/")
+    const question = page.locator("#faq [data-slot='accordion-trigger']").first()
+    await question.scrollIntoViewIfNeeded()
+    await question.click()
+    const answer = page.locator("#faq [data-slot='accordion-content']").first()
+    await expect(answer).toBeVisible()
+    const name = await answer.evaluate((el) => getComputedStyle(el).animationName)
+    expect(name).toBe(reduced ? "none" : "qa-open")
+    await context.close()
+  })
+}
+
 test("the page ends with the downloads again, after the questions", async ({ page }) => {
   await page.goto("/")
   const end = page.locator(".get-it")
