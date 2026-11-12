@@ -63,6 +63,7 @@ test("on a phone, long words on Marks are cut with … and shown whole in a tip"
   expect(w.x + w.width).toBeLessThanOrEqual(l.x + l.width)
   await words.hover()
   await expect(page.getByRole("tooltip")).toHaveText(long)
+  await page.unrouteAll({ behavior: "ignoreErrors" })
 })
 
 test("a mark's take opens the take's page, from Marks and from the mark's panel", async ({ page }) => {

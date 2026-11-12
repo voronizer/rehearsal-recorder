@@ -137,6 +137,7 @@ test.describe("on a phone", () => {
     expect(n.x + n.width).toBeLessThanOrEqual(t.x)
     expect(t.x + t.width).toBeLessThanOrEqual(m.x)
     expect(m.x + m.width).toBeLessThanOrEqual(b.x + b.width)
+    await page.unrouteAll({ behavior: "ignoreErrors" })
   })
 
   test("New song from a take's line opens its page with the name field", async ({ page }) => {
