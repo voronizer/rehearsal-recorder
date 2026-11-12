@@ -13,7 +13,7 @@ import { formatMeter } from "@/lib/format"
 import { cn } from "@/lib/utils"
 import { same } from "../../worker/shared/names"
 import { useChangeSet, useDeleteSet, useSongs, useTypeLength, type BandSet, type SongItem } from "../api"
-import { InPlace } from "../shell/InPlace"
+import { InPlace, lineUnder } from "../shell/InPlace"
 import { Back, BARE, ErrorLine, Group, Groups, Page, PAGE_TITLE } from "../shell/parts"
 import { useSize } from "../shell/size"
 import { clock, quoted } from "../shell/words"
@@ -29,6 +29,9 @@ import { PrintSheet } from "./Print"
 
 /** As long as a set's name can be, in РЭХА and the service (worker/sets/store.ts). */
 const NAME_MAX = 40
+
+/** The line under a set's name, its songs and length; while the name is a field, why a new one is turned down, in its place. */
+const { say, Line: NameLine } = lineUnder()
 
 /** The set **New set** just made: its page opens with the name selected, to be typed over. */
 let fresh: number | null = null
@@ -58,9 +61,10 @@ type SetSongs = ReturnType<typeof useSetSongs>
 /**
  * The set's heading line: the name, renamed where it stands as a song's
  * title is (songs/edit.tsx): ✎ turns it into a field with ✓ and ✕; Enter
- * or ✓ renames, Esc or ✕ leaves it. Beside it, outside the heading,
- * **Print**, **On stage** and ⋯ › **Delete set**, and under it what went
- * wrong. `big`: the page's own heading, on a phone.
+ * or ✓ renames, Esc or ✕ leaves it, and why a name is turned down takes
+ * the place of the set's line under it (`NameLine`), as a song's title
+ * does. Beside it, outside the heading, **Print**, **On stage** and ⋯ ›
+ * **Delete set**. `big`: the page's own heading, on a phone.
  */
 function SetHead({ set, songs, big }: { set: BandSet; songs: SongItem[]; big?: boolean }) {
   const [editing, setEditing] = useState(() => fresh === set.id)
@@ -72,8 +76,14 @@ function SetHead({ set, songs, big }: { set: BandSet; songs: SongItem[]; big?: b
   useEffect(() => {
     if (fresh === set.id) fresh = null
   }, [set.id])
+  const refused = change.error?.message ?? ""
+  useEffect(() => {
+    if (editing) say({ id: set.id, text: refused, bad: true })
+  }, [editing, refused, set.id])
+  useEffect(() => () => say(null), [])
   const stop = () => {
     setEditing(false)
+    say(null)
     change.reset()
   }
   const go = () => {
@@ -122,7 +132,7 @@ function SetHead({ set, songs, big }: { set: BandSet; songs: SongItem[]; big?: b
     </span>
   )
   const Heading = big ? "h1" : "h2"
-  const row = (
+  return (
     <div className="flex flex-wrap items-center gap-3">
       <Heading className={cn("min-w-0", big ? PAGE_TITLE : "text-base font-semibold")}>{title}</Heading>
       <span className="flex-1" />
@@ -159,13 +169,6 @@ function SetHead({ set, songs, big }: { set: BandSet; songs: SongItem[]; big?: b
         onConfirm={() => void remove.mutateAsync(set.id).then(() => navigate({ to: "/sets", replace: true }), () => {})}
       />
     </div>
-  )
-  return (
-    <>
-      {row}
-      {/* While the name is a field, the line under it for what went wrong (S11). */}
-      {editing && <ErrorLine error={change.error?.message} />}
-    </>
   )
 }
 
@@ -396,7 +399,9 @@ export function SetPane({ set }: { set: BandSet }) {
     <div className="flex min-w-0 flex-1 flex-col gap-4">
       <div className="flex flex-col gap-1">
         <SetHead set={set} songs={songs.songs} />
-        <p className="text-muted-foreground">{setLine(songs.songs)}</p>
+        <NameLine id={set.id}>
+          <p className="text-muted-foreground">{setLine(songs.songs)}</p>
+        </NameLine>
       </div>
       <SetBody songs={songs} />
       <PrintSheet set={set} songs={songs.songs} />
@@ -408,7 +413,7 @@ export function SetPane({ set }: { set: BandSet }) {
 export function SetPage({ set }: { set: BandSet }) {
   const songs = useSetSongs(set)
   return (
-    <Page head={<Back to="/sets" label="Sets" />} heading={<SetHead set={set} songs={songs.songs} big />} sub={setLine(songs.songs)}>
+    <Page head={<Back to="/sets" label="Sets" />} heading={<SetHead set={set} songs={songs.songs} big />} sub={<NameLine id={set.id}>{setLine(songs.songs)}</NameLine>}>
       <SetBody songs={songs} />
       <PrintSheet set={set} songs={songs.songs} />
     </Page>

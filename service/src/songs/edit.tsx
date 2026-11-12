@@ -1,4 +1,4 @@
-import { useEffect, useState, useSyncExternalStore, type ReactNode } from "react"
+import { useEffect, useState, type ReactNode } from "react"
 import { Pencil } from "lucide-react"
 import { SignatureSelect } from "@/components/metronome/SignatureSelect"
 import { TempoField } from "@/components/metronome/TempoField"
@@ -8,7 +8,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import type { Signature } from "@/lib/api"
 import { same, TAKE_NAME } from "../../worker/shared/names"
 import { useChangeSong, useSongs, type SongPage } from "../api"
-import { InPlace } from "../shell/InPlace"
+import { InPlace, lineUnder } from "../shell/InPlace"
 
 /**
  * A song's title, tempo and signature, changed where they stand (Alex,
@@ -54,17 +54,7 @@ function outcome(song: Song, typed: string, titles: { id: number; title: string 
 }
 
 /** The line a song page shows in its facts' place while its title is a field. */
-let line: { id: number; text: string; bad: boolean } | null = null
-const heard = new Set<() => void>()
-function say(next: typeof line) {
-  line = next
-  heard.forEach((f) => f())
-}
-const useLine = (id: number) =>
-  useSyncExternalStore(
-    (f) => (heard.add(f), () => heard.delete(f)),
-    () => (line && line.id === id ? line : null)
-  )
+const { say, Line: FactsLine } = lineUnder()
 
 /**
  * The title, renamed where it stands: ✎ turns it into a field with ✓ and ✕.
@@ -141,8 +131,5 @@ export function InPlaceTitle({ song, children }: { song: Song; children: ReactNo
  * the facts keep for it, so nothing below moves.
  */
 export function TitleFacts({ song, children }: { song: Song; children: ReactNode }) {
-  const said = useLine(song.id)
-  if (said === null || !said.text) return <>{children}</>
-  if (said.bad) return <FieldError>{said.text}</FieldError>
-  return <span className="text-xs">{said.text}</span>
+  return <FactsLine id={song.id}>{children}</FactsLine>
 }

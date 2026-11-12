@@ -235,6 +235,29 @@ test("delete a set and restore it", async ({ page }) => {
   await expect(sets.getByRole("link", { name: /^Vik's birthday/ })).toContainText("2 songs · 0:20")
 })
 
+test("a name turned down while a set is renamed is said in the set's line, and nothing under it moves", async ({ page }) => {
+  await page.goto(`/sets/${band().sets["Club gig"]}`)
+  const main = page.getByRole("main")
+  const line = main.locator("p").filter({ hasText: /^3 songs/ })
+  const songs = main.getByRole("list", { name: "Songs of the set" })
+  const top = async (l: Locator) => Math.round((await l.boundingBox())!.y)
+  await main.getByRole("button", { name: "Rename set Club gig" }).click()
+  const name = main.getByRole("textbox", { name: "Set's name" })
+  await expect(name).toBeFocused()
+  const [lineTop, songsTop] = [await top(line), await top(songs)]
+  await name.fill("vik's BIRTHDAY")
+  await name.press("Enter")
+  const said = main.getByRole("alert")
+  await expect(said).toHaveText("There is already a set called Vik's birthday.")
+  await expect(line).toHaveCount(0)
+  expect(await top(said)).toBe(lineTop)
+  expect(await top(songs)).toBe(songsTop)
+  await name.press("Escape")
+  await expect(name).toHaveCount(0)
+  await expect(line).toHaveText("3 songs · 0:30")
+  await expect(said).toHaveCount(0)
+})
+
 test.describe("on a phone", () => {
   test.use({ viewport: { width: 390, height: 844 } })
 
