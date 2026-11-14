@@ -72,6 +72,11 @@ class FakeBandService:
         self.keeps_tempo = True
         # False: a service from before Backing's mark on a take's tracks.
         self.keeps_kind = True
+        # uid: {"gen", "peak"}, the take's peak as sent, kept as the service
+        # keeps it: a take's details sent without one leave it as it was.
+        self.peaks = {}
+        # False: a service from before the take's peak.
+        self.keeps_peak = True
         # upload_id: {"uid", "gen", "name", "size", "parts": {number: bytes}}
         self.uploads = {}
         # "uid/gen/name": the file's bytes, once its upload is done.
@@ -380,7 +385,8 @@ class FakeBandService:
         if method == "GET" and parts == ["takes"]:
             with self._lock:
                 listed = [{"uid": uid, "trashed": t["trashed"], "mp3_gen": self.gens.get(uid, {}).get("mp3"),
-                           "flac_gen": self.gens.get(uid, {}).get("flac"), **self._drift_gen(uid)}
+                           "flac_gen": self.gens.get(uid, {}).get("flac"), **self._drift_gen(uid),
+                           **self._peak_gen(uid)}
                           for uid, t in self.takes.items()]
             self._said("list")
             return 200, listed
@@ -393,8 +399,12 @@ class FakeBandService:
             if not self.keeps_kind:
                 # As the service drops a key it does not know.
                 meta = {**meta, "tracks": [{k: v for k, v in t.items() if k != "kind"} for t in meta["tracks"]]}
+            if not self.keeps_peak:
+                meta = {k: v for k, v in meta.items() if k != "peak"}
             with self._lock:
                 was = self.takes.get(uid) or {}
+                if "peak" in meta:
+                    self.peaks[uid] = {"gen": meta["gen"], "peak": meta["peak"]}
                 if "song_id" in meta or "song" in meta:
                     # РЭХА names the take's song: by its number, or its title.
                     if meta.get("song_id") is not None:
@@ -612,6 +622,13 @@ class FakeBandService:
             return self._make_set(sent["name"], sent["songs"])["id"]
         self._change_set(s, sent["name"], sent["songs"], None)
         return s["id"]
+
+    def _peak_gen(self, uid):
+        """The generation whose peak the service has, as it lists it; a
+        service from before the peak says nothing."""
+        if not self.keeps_peak:
+            return {}
+        return {"peak_gen": (self.peaks.get(uid) or {}).get("gen")}
 
     def _drift_gen(self, uid):
         """The generation whose tempo the service has, as it says it; a

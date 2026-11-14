@@ -1424,6 +1424,33 @@ def main():
         first_sample = struct.unpack("<h", w.readframes(1)[:2])[0]
     ok("the saved balance is applied", saved["ok"] and abs(first_sample - 20000) < 30)
 
+    print("\n[12b] A take's peak for the band service")
+    from rehearsal_recorder.audio.mixdown import Stopped as _Stopped, mix_peak as _mix_peak
+
+    write_wav(loud / "mono.wav", 10000, seconds=0.5)
+    with wave.open(str(loud / "stereo24.wav"), "wb") as w:
+        w.setnchannels(2)
+        w.setsampwidth(3)
+        w.setframerate(SR)
+        frame = struct.pack("<i", 5000 * 256)[:3] + struct.pack("<i", -12000 * 256)[:3]
+        w.writeframes(frame * int(SR * 0.25))
+    both = [str(loud / "mono.wav"), str(loud / "stereo24.wav")]
+    peak = _mix_peak(both)
+    # Left: 10000 + 5000. Right: 10000 - 12000. The loudest sample of the
+    # sum, not the tracks' peaks added up (22000).
+    ok("a mono 16-bit and a stereo 24-bit track add up side by side, at full level",
+       peak is not None and abs(peak - 15000 / 32768) < 1e-4)
+    write_wav(loud / "silent.wav", 0, seconds=0.5)
+    ok("silence has a peak of 0", _mix_peak([str(loud / "silent.wav")]) == 0.0)
+    ok("a file that cannot be opened gives no peak",
+       _mix_peak([str(loud / "mono.wav"), str(loud / "gone.wav")]) is None)
+    try:
+        _mix_peak(both, stop=lambda: True)
+        stopped = False
+    except _Stopped:
+        stopped = True
+    ok("a count asked to stop stops, rather than giving no peak", stopped)
+
     print("\n[13] A crashed take survives and can be recovered")
     tmp2 = Path(tempfile.mkdtemp())
     apimod2, _ = fresh_api(tmp2)
