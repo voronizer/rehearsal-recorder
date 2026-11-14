@@ -228,6 +228,26 @@ test("Master's level is on the whole take as it goes out: set before it plays, a
   p.close()
 })
 
+test("the take's amount turns every heard track up by the same, on top of its level", () => {
+  withDecoder()
+  vi.stubGlobal("AudioContext", FakeSound)
+  vi.stubGlobal("fetch", () => new Promise(() => {}))
+  const p = new Player([{ url: "t1.mp3", gain: 1 }, { url: "t2.mp3", gain: 0.5 }, { url: "t3.mp3", gain: 0.8 }])
+  p.setBoost(2)
+  p.setMute(2, true)
+  p.play(0)
+  const splitters = FakeSound.splitters.slice(-3)
+  const gains = splitters.map((s) => FakeSound.made.find((g) => g.to.includes(s))!)
+  expect(gains.map((g) => g.gain.value)).toEqual([2, 1, 0])
+  // The faders still read the level the member set.
+  expect([p.gain(0), p.gain(1), p.gain(2)]).toEqual([1, 0.5, 0.8])
+  p.setGain(1, 0.25)
+  expect(gains[1].gain.value).toBe(0.5)
+  p.setBoost(1)
+  expect(gains.map((g) => g.gain.value)).toEqual([1, 0.25, 0])
+  p.close()
+})
+
 test("a stereo track's level is two numbers, left then right, after its level; a mono track's is one; closed, all let go", async () => {
   withDecoder()
   vi.stubGlobal("AudioContext", FakeSound)

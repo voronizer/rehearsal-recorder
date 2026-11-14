@@ -164,6 +164,8 @@ export class Player {
   /** The whole mix after Master, as it goes out. */
   private mixMeter: AnalyserNode | null = null
   private levels: number[]
+  /** The take's amount: every heard track's level is multiplied by it. */
+  private boost = 1
   private volume = 1
   private muted = new Set<number>()
   private solo: number | null = null
@@ -243,8 +245,8 @@ export class Player {
   }
 
   /**
-   * How loud each track comes out now, 0 to 1: after its level, M and S; 0
-   * while paused. A stereo file has a number a side, left then right, so a
+   * How loud each track comes out now, 0 to 1: after its level, the take's
+   * amount, M and S; 0 while paused. A stereo file has a number a side, left then right, so a
    * side that went quiet shows; a mono file, or one whose first frame has
    * not come, has one.
    */
@@ -255,7 +257,7 @@ export class Player {
     })
   }
 
-  /** How loud the whole take comes out now, 0 to 1: every track together, after Master; 0 while paused. */
+  /** How loud the whole take comes out now, 0 to 1: every track together, after the take's amount and Master; 0 while paused. */
   mixLoudness(): number {
     return this.peak(this.mixMeter)
   }
@@ -328,6 +330,12 @@ export class Player {
   setGain(i: number, v: number): void {
     if (i < 0 || i >= this.levels.length) return
     this.levels[i] = Math.min(1, Math.max(0, v))
+    this.mix()
+  }
+
+  /** How much louder the whole take plays, the same for every track, on top of their levels: the take page's `gain`. */
+  setBoost(v: number): void {
+    this.boost = Math.max(0, v)
     this.mix()
   }
 
@@ -482,7 +490,7 @@ export class Player {
       const heard = this.solo !== null ? this.solo === i : !this.muted.has(i)
       const g = this.gains[i]
       if (!g || !this.context) return
-      const v = heard ? this.levels[i] : 0
+      const v = heard ? this.levels[i] * this.boost : 0
       if (now) g.gain.value = v
       else g.gain.setTargetAtTime(v, this.context.currentTime, GLIDE_SEC)
     })

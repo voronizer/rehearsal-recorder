@@ -105,7 +105,7 @@ export type One = {
   master: () => number
   /** Master's level, heard at once on the take in the player and on every take after it. */
   setMaster: (volume: number) => void
-  /** How loud the take in the player comes out, 0 to 1, after Master; 0 while none plays. */
+  /** How loud the take in the player comes out, 0 to 1, after its amount and Master; 0 while none plays. */
   mixLoudness: () => number
   /** What a new Player of the take starts with; returns the way to stop. */
   ready: (uid: string, setup: () => Setup) => () => void
@@ -160,6 +160,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
       const setup = { ...kept, ...withBacking(t, kept, heard) }
       const p = new Player(t.tracks.map((k) => ({ url: k.mp3, gain: setup.moved[k.name] ?? levelOf(yoursNow.current, t, k.name) })))
       p.setMaster(master.current)
+      p.setBoost(t.gain)
       p.onChange = () => {
         tick(t.uid, p.time())
         redraw((n) => n + 1)

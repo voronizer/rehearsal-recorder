@@ -6,7 +6,7 @@ import { loadMarks } from "../worker/marks/view"
 import { database } from "../worker/shared/db"
 import { take } from "../worker/shared/schema"
 import { purgeTrash } from "../worker/takes/purge"
-import { TAKE, call, reha, shownTake, signInOwner, takeMeta } from "./helpers"
+import { ORIGIN, TAKE, call, reha, shownTake, signInOwner, takeMeta } from "./helpers"
 
 const MiB = 1024 * 1024
 const PART = 10 * MiB
@@ -451,6 +451,43 @@ test("the tempo through a take is kept for the generation REHA counted it for", 
 
   expect((await r.put(`/api/reha/takes/${crypto.randomUUID()}/drift`, { gen: 1, drift: DRIFT })).status).toBe(404)
   expect((await r.put(`/api/reha/takes/${TAKE}/drift`, { gen: 2, drift: { ok: false, why: "recording" } })).status).toBe(400)
+})
+
+test("a take's peak is kept for the generation it came with, and a take sent without one keeps it", async () => {
+  const r = await reha()
+  const put = (meta = {}) => r.put(`/api/reha/takes/${TAKE}`, takeMeta(meta))
+  const listed = async () => ((await (await r.get("/api/reha/takes")).json()) as { uid: string; peak_gen: number | null }[])[0]
+  expect((await put()).status).toBe(200)
+  expect(await listed()).toMatchObject({ uid: TAKE, peak_gen: null })
+  expect((await put({ peak: 0.3236 })).status).toBe(200)
+  expect(await listed()).toMatchObject({ peak_gen: 1 })
+  expect(await takeRow()).toMatchObject({ peak: 0.3236, peak_gen: 1 })
+  // A star from REHA, or a take from REHA 0.27, sends no peak.
+  expect((await put({ starred: true })).status).toBe(200)
+  expect(await takeRow()).toMatchObject({ peak: 0.3236, peak_gen: 1 })
+  // A crop sends the new generation's own.
+  expect((await put({ gen: 2, peak: 0.5 })).status).toBe(200)
+  expect(await takeRow()).toMatchObject({ peak: 0.5, peak_gen: 2 })
+  expect((await put({ gen: 2, peak: -0.1 })).status).toBe(400)
+})
+
+test("the take's page turns the take up by its peak, for the generation the band hears", async () => {
+  const owner = await signInOwner()
+  const { putTake, ready } = await import("../worker/takes/store")
+  const gainOf = async (uid: string) => ((await (await call(`/api/takes/${uid}`, {}, owner)).json()) as { gain: number }).gain
+  const uid = await shownTake({ peak: 0.3236 })
+  expect(await gainOf(uid)).toBeCloseTo(0.891 / 0.3236)
+  // A crop on its way with no peak: the band still hears generation 1, at its amount.
+  await putTake(env as never, uid, takeMeta({ gen: 2 }) as never)
+  expect(await gainOf(uid)).toBeCloseTo(0.891 / 0.3236)
+  // Generation 2 shown: generation 1's peak is not its own.
+  await ready(env as never, uid, 2, "mp3", ORIGIN)
+  expect(await gainOf(uid)).toBe(1)
+  // Silence, an almost silent take, one already over -1 dBFS, and no peak.
+  expect(await gainOf(await shownTake({ peak: 0 }))).toBe(1)
+  expect(await gainOf(await shownTake({ peak: 0.01 }))).toBe(16)
+  expect(await gainOf(await shownTake({ peak: 1.5 }))).toBeCloseTo(0.891 / 1.5)
+  expect(await gainOf(await shownTake())).toBe(1)
 })
 
 test("the take's page has its click, its notes' icons, and the tempo of the generation the band hears", async () => {

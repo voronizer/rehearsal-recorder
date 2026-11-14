@@ -97,6 +97,11 @@ export const TakeMeta = z
     /** The take's own click. Missing from РЭХА 0.21 and older: the take
      *  keeps what it had. */
     meter: Meter.optional(),
+    /** The loudest sample of the take's audio tracks added together at full
+     *  level, 1.0 at full scale, counted by РЭХА from its WAVs, for the
+     *  generation sent. Missing from РЭХА 0.27 and older, and when РЭХА could
+     *  not read the files: the take keeps the peak it has for that generation. */
+    peak: z.number().min(0).optional(),
     /** Sent with the cloud button or **Send starred**: a take the band
      *  deleted comes out of the trash only then. Missing from РЭХА 0.20
      *  and older. */
