@@ -1,4 +1,5 @@
 import { useEffect, useState, type ReactNode } from "react"
+import { useQuery } from "@tanstack/react-query"
 import { Pencil } from "lucide-react"
 import { SignatureSelect } from "@/components/metronome/SignatureSelect"
 import { TempoField } from "@/components/metronome/TempoField"
@@ -7,7 +8,7 @@ import { FieldError } from "@/components/ui/field"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import type { Signature } from "@/lib/api"
 import { same, TAKE_NAME } from "../../worker/shared/names"
-import { useChangeSong, useSongs, type SongPage } from "../api"
+import { songQuery, useChangeSong, useSongs, type SongPage } from "../api"
 import { InPlace, lineUnder } from "../shell/InPlace"
 
 /**
@@ -20,8 +21,18 @@ type Song = SongPage["song"]
 /** The signature the song has, or 4/4 for the list to start from. */
 const signatureOf = (song: { signature: Signature | null }): Signature => song.signature ?? "4/4"
 
-/** − tempo + and the signature, as РЭХА's metronome has them, saved at once as Key is. */
-export function TempoControls({ song }: { song: Song }) {
+/**
+ * − tempo + and the signature, as РЭХА's metronome has them, saved at once as Key is.
+ *
+ * The song is read here, not only handed down by the page: a part that
+ * reads it itself has the band's answer the moment the save ends, while
+ * the page hands it down a moment later. Read from the page alone, the
+ * controls showed the song as it was before the save for that moment, and
+ * a signature picked then was lost (CI, 14 November).
+ */
+export function TempoControls({ song: handed }: { song: Song }) {
+  // The page has just read it: not asked for again.
+  const song = useQuery({ ...songQuery(handed.id), refetchOnMount: false }).data?.song ?? handed
   const change = useChangeSong()
   // What was picked, until the band's answer has it.
   const [held, setHeld] = useState<{ tempo: number | null; signature: Signature } | null>(null)

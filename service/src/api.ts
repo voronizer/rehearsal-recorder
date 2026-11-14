@@ -114,8 +114,9 @@ export const useRehearsals = () => useQuery({ queryKey: ["rehearsals"], queryFn:
 export const useRehearsal = (uid: string) =>
   useQuery({ queryKey: ["rehearsal", uid], queryFn: () => data(client.api.rehearsals[":uid"].$get({ param: { uid } })) })
 export const useSongs = () => useQuery({ queryKey: ["songs"], queryFn: () => data(client.api.songs.$get()) })
-export const useSong = (id: number) =>
-  useQuery({ queryKey: ["song", id], queryFn: () => data(client.api.songs[":id"].$get({ param: { id: String(id) } })) })
+export const songQuery = (id: number) =>
+  queryOptions({ queryKey: ["song", id], queryFn: () => data(client.api.songs[":id"].$get({ param: { id: String(id) } })) })
+export const useSong = (id: number) => useQuery(songQuery(id))
 /** The Marks section; while another switch is read, the last one stays, so the page does not jump. */
 export const useMarks = (show: Show) =>
   useQuery({ queryKey: ["marks", show], placeholderData: keepPreviousData, queryFn: () => data(client.api.marks.$get({ query: { show } })) })

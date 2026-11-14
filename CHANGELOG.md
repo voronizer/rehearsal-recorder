@@ -27,6 +27,11 @@ opening.
   louder too: РЭХА works out each one's amount in the background, one take
   at a time. A take whose files are no longer on the computer plays as
   before.
+- **A song's time signature no longer goes back to 4/4.** On a song's page
+  in the band service, a time signature picked just as the tempo you had
+  typed was saved could go back to 4/4, and the band service never got it.
+  The tempo field also showed its old number for a moment after each
+  change, and now keeps the new one.
 
 ## 0.27.0
 
