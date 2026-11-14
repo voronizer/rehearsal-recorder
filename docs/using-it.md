@@ -811,7 +811,12 @@ Whoever runs it gives you a key, and РЭХА sends the takes there. What a band
 service does, and how to get one for your band, is on
 [reha.stream/band-service](https://reha.stream/band-service).
 
-A take plays there at the levels its tracks have in РЭХА's player. In the
+A take's tracks keep the levels they have in РЭХА's player, and the service
+turns the whole take up: every track by the same amount, until the take's
+loudest moment is just short of crackling. So a take sounds louder there
+than in РЭХА, with the band's balance as it was. A take sent by an older
+РЭХА gets louder after you update РЭХА, as long as its files are still on
+this computer. In the
 service each of you can turn a track up or down for yourself: only you hear
 it that way, and nothing comes back to РЭХА. **Master** under the tracks
 turns the whole take up or down on that phone or computer only. Under it,
