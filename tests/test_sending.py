@@ -1740,18 +1740,19 @@ def peaks(api, fake, service, drain, entries, keep, uid_of, take, folder):
            take(n6)["service"]["up"] and fake.peaks.get(uid6, {}).get("gen") == 1 and len(counted) == before + 1)
 
         # Cropped while its peak is counted: the old generation's details do not go.
+        # The crop comes as the count ends, once its files are closed: Windows
+        # will not let a crop move a file that is still being read.
         n7 = keep("Viasna", band=["Drums"])
         uid7 = uid_of(n7)
         crops = []
 
-        def crop_midway(files, stop=None):
-            def crop_then_go():
-                if not crops:
-                    crops.append(api.crop_take(folder(), n7, 2.0, 10.0))
-                return bool(stop and stop())
-            return real_peak(files, stop=crop_then_go)
+        def crop_as_it_ends(files, stop=None):
+            peak = real_peak(files, stop=stop)
+            if not crops:
+                crops.append(api.crop_take(folder(), n7, 2.0, 10.0))
+            return peak
 
-        band_service.mix_peak = crop_midway
+        band_service.mix_peak = crop_as_it_ends
         service().run_next()
         band_service.mix_peak = counting_peak
         ok("a take cropped while its peak is counted sends nothing of the old generation",
@@ -1759,7 +1760,8 @@ def peaks(api, fake, service, drain, entries, keep, uid_of, take, folder):
         drain()
         ok("and its own send takes the new generation up with that generation's peak",
            fake.takes[uid7]["gen"] == 2 and fake.peaks.get(uid7, {}).get("gen") == 2)
-        api.end_trash(crops[0]["undo"])
+        if crops and crops[0].get("undo"):
+            api.end_trash(crops[0]["undo"])
 
         # Owed both Backing's mark and its peak: the peak's details keep the mark.
         n8 = keep("Viasna", band=["Drums"], backing=True)
