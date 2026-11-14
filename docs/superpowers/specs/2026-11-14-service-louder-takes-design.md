@@ -63,6 +63,9 @@ https://claude.ai/artifact/M3QjdC6NHGpih6qhebe18i.
   for the whole rehearsal.
 - 12:33, card: **Ничего на сайте**. reha.stream does not change.
 - 12:40, «ок» to this spec.
+- 13:03, card: **Без настройки**. No setting turns the amount off; a member
+  who finds a take loud turns Master down (at 36% Ill never new 14 sounds
+  as now).
 
 ## What the band hears
 
@@ -198,7 +201,7 @@ Only the tests the change touches, each once; the full suites run on CI.
    covers the difference.
 9. РЭХА sends the peak, and the service works out the amount, so the
    ceiling and the cap live in one place.
-10. No setting turns this off.
+10. No setting turns this off (Alex's pick since, 13:03).
 11. The guide's sentence changes, though the site does not.
 12. No new pictures.
 13. While a cropped take's new files go up, it plays as now: the amount
