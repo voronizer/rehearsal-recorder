@@ -158,12 +158,14 @@ export class Player {
   private gains: GainNode[] = []
   /** Each track's level split into its sides, for its meters. */
   private splits: ChannelSplitterNode[] = []
-  /** Each track's meters after its level: its left side and its right. */
+  /** Each track's meters after its level and the take's amount: its left side and its right. */
   private meters: AnalyserNode[][] = []
   private master: GainNode | null = null
   /** The whole mix after Master, as it goes out. */
   private mixMeter: AnalyserNode | null = null
   private levels: number[]
+  /** The take's amount: every heard track's level is multiplied by it. */
+  private boost = 1
   private volume = 1
   private muted = new Set<number>()
   private solo: number | null = null
@@ -191,6 +193,13 @@ export class Player {
     } catch {
       return false
     }
+  }
+
+  /** A take page's player: each track at `level(name)`, the whole take turned up by the page's `gain`. */
+  static of(take: { tracks: { name: string; mp3: string }[]; gain: number }, level: (name: string) => number): Player {
+    const p = new Player(take.tracks.map((k) => ({ url: k.mp3, gain: level(k.name) })))
+    p.setBoost(take.gain)
+    return p
   }
 
   constructor(tracks: PlayerTrack[], pace: Partial<Pace> = {}) {
@@ -243,8 +252,8 @@ export class Player {
   }
 
   /**
-   * How loud each track comes out now, 0 to 1: after its level, M and S; 0
-   * while paused. A stereo file has a number a side, left then right, so a
+   * How loud each track comes out now, 0 to 1: after its level, the take's
+   * amount, M and S; 0 while paused. A stereo file has a number a side, left then right, so a
    * side that went quiet shows; a mono file, or one whose first frame has
    * not come, has one.
    */
@@ -255,7 +264,7 @@ export class Player {
     })
   }
 
-  /** How loud the whole take comes out now, 0 to 1: every track together, after Master; 0 while paused. */
+  /** How loud the whole take comes out now, 0 to 1: every track together, after the take's amount and Master; 0 while paused. */
   mixLoudness(): number {
     return this.peak(this.mixMeter)
   }
@@ -328,6 +337,13 @@ export class Player {
   setGain(i: number, v: number): void {
     if (i < 0 || i >= this.levels.length) return
     this.levels[i] = Math.min(1, Math.max(0, v))
+    this.mix()
+  }
+
+  /** How far the whole take is turned up, the same for every track, on top of their levels: the take page's
+   *  `gain`, below 1 for a take that would crackle. Anything but a number plays it as recorded. */
+  setBoost(v: number): void {
+    this.boost = Number.isFinite(v) ? Math.max(0, v) : 1
     this.mix()
   }
 
@@ -482,7 +498,7 @@ export class Player {
       const heard = this.solo !== null ? this.solo === i : !this.muted.has(i)
       const g = this.gains[i]
       if (!g || !this.context) return
-      const v = heard ? this.levels[i] : 0
+      const v = heard ? this.levels[i] * this.boost : 0
       if (now) g.gain.value = v
       else g.gain.setTargetAtTime(v, this.context.currentTime, GLIDE_SEC)
     })

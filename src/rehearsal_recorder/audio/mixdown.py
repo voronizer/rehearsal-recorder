@@ -24,6 +24,29 @@ CHUNK = 1 << 16
 TARGET_PEAK = 0.97
 
 
+class Stopped(Exception):
+    """A count of a take's peak stopped by its `stop`: it is counted again
+    from its start next time."""
+
+
+def mix_peak(files, stop=None):
+    """
+    The loudest sample of a take's audio files added together, each at full
+    level, as the mixdown's first pass adds them: 1.0 is full scale, and the
+    sum of several tracks can go over it. sending/band_service.py sends it
+    with the take, and the band service turns the take up by it
+    (service/worker/takes/gain.ts), so the band's faders cannot take it over
+    full scale there.
+
+    None when a file cannot be opened, or there are none. `stop()`, asked
+    before each chunk, raises Stopped when it answers true.
+    """
+    opened = _opened([{"name": "", "file": f} for f in files], {})
+    if not isinstance(opened, list) or not opened:
+        return None
+    return _loudest(opened, stop=stop) / 32768.0
+
+
 def mixdown(tracks, out_path, volumes=None, progress=None, acid=None):
     """
     tracks:  [{"name":.., "file":..}] — the tracks of one take
@@ -39,38 +62,19 @@ def mixdown(tracks, out_path, volumes=None, progress=None, acid=None):
     if not tracks:
         return {"ok": False, "error": "No tracks"}
 
-    volumes = volumes or {}
-    opened = []
-    samplerate = None
-    for t in tracks:
-        try:
-            data, frames, rate, sample_bytes, width = _open_track(t["file"])
-        except Exception as e:
-            return {"ok": False, "error": f"{Path(t['file']).name}: {e}"}
-        if samplerate is None:
-            samplerate = rate
-        gain = float(volumes.get(t["name"], 1.0))
-        # The mix is 16-bit — it is what gets sent to people, and every phone
-        # plays it. A 24-bit source is scaled down to that range on the way
-        # in, so tracks of different depths sum correctly.
-        scale = (1.0 / 256.0) if sample_bytes == 3 else 1.0
-        opened.append(
-            (data, frames, max(0.0, min(1.0, gain)) * scale, sample_bytes, width)
-        )
+    opened = _opened(tracks, volumes or {})
+    if isinstance(opened, str):
+        return {"ok": False, "error": opened}
+    samplerate = opened[0][5]
 
-    total = max(frames for _, frames, _, _, _ in opened)
+    total = max(frames for _, frames, _, _, _, _ in opened)
     if total == 0:
         return {"ok": False, "error": "The take is empty"}
 
-    # First pass: how loud does the sum actually get? Guessing from the peaks
-    # of the separate tracks would be far too pessimistic — they do not all
-    # peak at the same instant.
-    peak = 0.0
-    for start in range(0, total, CHUNK):
-        acc = _sum_chunk(opened, start, min(CHUNK, total - start))
-        peak = max(peak, float(np.abs(acc).max()))
-        if progress is not None:
-            progress(0.5 * min(start + CHUNK, total) / total)
+    peak = _loudest(
+        opened,
+        progress=None if progress is None else (lambda done: progress(0.5 * done)),
+    )
 
     limit = 32767.0
     gain = 1.0 if peak <= limit * TARGET_PEAK else (limit * TARGET_PEAK) / peak
@@ -93,13 +97,50 @@ def mixdown(tracks, out_path, volumes=None, progress=None, acid=None):
     }
 
 
+def _opened(tracks, volumes):
+    """Each track opened for summing, as (data, frames, gain, sample_bytes,
+    width, rate), or what went wrong with the first that would not open."""
+    opened = []
+    for t in tracks:
+        try:
+            data, frames, rate, sample_bytes, width = _open_track(t["file"])
+        except Exception as e:
+            return f"{Path(t['file']).name}: {e}"
+        gain = float(volumes.get(t["name"], 1.0))
+        # The mix is 16-bit — it is what gets sent to people, and every phone
+        # plays it. A 24-bit source is scaled down to that range on the way
+        # in, so tracks of different depths sum correctly.
+        scale = (1.0 / 256.0) if sample_bytes == 3 else 1.0
+        opened.append(
+            (data, frames, max(0.0, min(1.0, gain)) * scale, sample_bytes, width, rate)
+        )
+    return opened
+
+
+def _loudest(opened, progress=None, stop=None):
+    """The first pass: how loud the sum actually gets, at 16-bit scale.
+    Guessing from the peaks of the separate tracks would be far too
+    pessimistic — they do not all peak at the same instant. `progress` hears
+    the fraction done; `stop()` is asked before each chunk."""
+    total = max(frames for _, frames, _, _, _, _ in opened)
+    peak = 0.0
+    for start in range(0, total, CHUNK):
+        if stop is not None and stop():
+            raise Stopped()
+        acc = _sum_chunk(opened, start, min(CHUNK, total - start))
+        peak = max(peak, float(np.abs(acc).max()))
+        if progress is not None:
+            progress(min(start + CHUNK, total) / total)
+    return peak
+
+
 def _sum_chunk(opened, start, length):
     """One block of the mix, as (length, 2).
 
     A stereo track keeps its sides — left into left, right into right. A mono
     track goes to both, which is what a stereo file of a mono take means."""
     acc = np.zeros((length, 2), dtype=np.float32)
-    for data, frames, gain, sample_bytes, width in opened:
+    for data, frames, gain, sample_bytes, width, _ in opened:
         if start >= frames or gain == 0.0:
             continue  # this track has already ended, or is turned all the way down
         end = min(start + length, frames)

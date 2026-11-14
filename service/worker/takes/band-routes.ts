@@ -10,6 +10,7 @@ import { bandSet, rehearsal, setSong, song, star, take, user } from "../shared/s
 import { restoreSet } from "../sets/store"
 import { needMember } from "../signin/guards"
 import { Drift, Meter } from "./meta"
+import { gainOf } from "./gain"
 import { bare, initial, shownName, takeRows, TakeRow, waits, type Loaded } from "./rows"
 import { songBack, toTrash } from "./store"
 import { fillShapes } from "./shape"
@@ -49,6 +50,10 @@ const TakePage = z
     /** The band's tempo through the generation the band hears; null until
      *  РЭХА has counted it. */
     drift: Drift.nullable(),
+    /** How far every track is turned up, the same for all, by the take's
+     *  peak (takes/gain.ts): below 1 for a take that would crackle, and 1
+     *  when РЭХА has not sent the peak of the generation the band hears. */
+    gain: z.number(),
     /** The files **Download** lists; `mid` is null for a track with no notes. */
     files: z.array(
       z.object({ position: z.number(), name: z.string(), mp3: z.boolean(), flac: z.boolean(), mid: z.boolean().nullable() })
@@ -181,6 +186,7 @@ export const takeRoutes = newApp()
           meter: t.meter,
           // Counted for a generation the band does not hear yet, or no more.
           drift: t.driftGen === gen ? t.drift : null,
+          gain: gainOf(t.peak, t.peakGen, gen),
           files,
           flac_coming: files.some((f) => f.mp3) && !flacUp,
           trashed_at: t.trashedAt,

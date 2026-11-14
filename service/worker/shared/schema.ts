@@ -364,6 +364,11 @@ export const take = sqliteTable(
      *  was counted for; both null until РЭХА sends it. */
     drift: text("drift", { mode: "json" }).$type<Drift>(),
     driftGen: integer("drift_gen"),
+    /** The loudest sample of its audio tracks added together at full level,
+     *  1.0 at full scale, counted by РЭХА from its WAVs, and the generation it
+     *  was counted for; both null until РЭХА sends it. */
+    peak: real("peak"),
+    peakGen: integer("peak_gen"),
     /** Who moved it to another song in the service, until РЭХА has given it
      *  its number there; null otherwise. */
     movedBy: text("moved_by").references(() => user.id),

@@ -38,6 +38,8 @@ import time
 import uuid
 from pathlib import Path
 
+from rehearsal_recorder.audio.mixdown import Stopped as CountStopped
+from rehearsal_recorder.audio.mixdown import mix_peak
 from rehearsal_recorder.sending import false_start, service_files
 from rehearsal_recorder.sending.service_client import (
     NOT_A_KEY, Gone, Offline, Refused, ServiceClient, address_of, parse_key,
@@ -149,10 +151,18 @@ class BandService:
         # again in this run, unless the take changes.
         self._drift_refused = set()
         # Takes up in the service without one of the marks KEPT_HERE names:
-        # sent before РЭХА sent both sides of a stereo wave, or marked Backing.
-        # Each gets them on its own, with no line in the list, after the
-        # tempo's.
+        # sent before РЭХА sent both sides of a stereo wave, or marked Backing;
+        # and those in _owed_peaks. Each gets them on its own, with no line in
+        # the list, after the tempo's.
         self._owed_marks = set()
+        # Takes up in the service without their peak for the generation they
+        # are at: sent before РЭХА counted it, or when their WAVs could not be
+        # read. Asked again at each look at the service while they have none.
+        self._owed_peaks = set()
+        # take_id: (gen, peak), each take's peak as counted in this run, so a
+        # pass that starts again after a pause or with no internet does not
+        # read the WAVs again.
+        self._counted = {}
         # Takes whose marks could not be sent: not tried again in this run.
         self._marks_aside = set()
         self._active = None
@@ -168,8 +178,8 @@ class BandService:
         # Check the band service was pressed: the next check to finish says
         # so even when it brings nothing.
         self._manual = False
-        # Files are being made, or a take's WAVs read for its tempo: the
-        # names pass waits, since it moves folders.
+        # Files are being made, or a take's WAVs read for its tempo or its
+        # peak: the names pass waits, since it moves folders.
         self.making = False
         self._closing_anyway = False
         self._thread = None
@@ -367,6 +377,8 @@ class BandService:
             entry = self._entries.pop(take_id, None)
             self._owed.discard(take_id)
             self._owed_marks.discard(take_id)
+            self._owed_peaks.discard(take_id)
+            self._counted.pop(take_id, None)
         if entry is not None:
             entry.discard()
         if row is None:
@@ -550,6 +562,8 @@ class BandService:
             self._owed.clear()
             self._drift_refused.clear()
             self._owed_marks.clear()
+            self._owed_peaks.clear()
+            self._counted.clear()
             self._marks_aside.clear()
         for entry in entries:
             entry.discard()
@@ -585,6 +599,8 @@ class BandService:
             self._owed.clear()
             self._drift_refused.clear()
             self._owed_marks.clear()
+            self._owed_peaks.clear()
+            self._counted.clear()
             self._marks_aside.clear()
         for entry in entries:
             entry.discard()
@@ -891,6 +907,15 @@ class BandService:
                     # marked Backing, or from a service that did not keep the
                     # mark: asked again at each look until it does.
                     self._owed_marks.add(row["take_id"])
+                if (sent is not None and not row["due"] and row["error"] is None
+                        and row["mp3_gen"] == row["gen"] and "peak_gen" in t and t["peak_gen"] != row["gen"]
+                        and row["take_id"] not in self._marks_aside):
+                    # Up from before РЭХА sent the take's peak, or its WAVs
+                    # could not be read then: counted now, so the service
+                    # turns it up. A service that does not say which it has
+                    # is not asked to keep it.
+                    self._owed_peaks.add(row["take_id"])
+                    self._owed_marks.add(row["take_id"])
 
     def _delete(self, d):
         uid = d["uid"]
@@ -979,6 +1004,10 @@ class BandService:
         entry.start("Sending the details")
         cut = float(row["pending_cut"] or 0)
         meta = self._details(take, folder, gen, cut)
+        # Before the details go, so the service has it when the MP3s are ready.
+        peak = self._peak(take_id, gen, take, row["sent"])
+        if peak is not None:
+            meta["peak"] = peak
         backing = service_files.has_backing(take)
         answer = client.put_take(uid, {**self._put(meta, row["sent"]), "by_hand": bool(row["by_hand"])})
         if row["by_hand"]:
@@ -1159,18 +1188,20 @@ class BandService:
     def _mark_up(self, row):
         """
         A take that went up before РЭХА sent both sides of a stereo track's
-        wave, or marked its Backing track, gets them now, as a take gets its
-        tempo (_catch_up): no line in the list, no internet tries again
-        later, and a take taken out, changed or due again meanwhile is left
-        to its own pass. Its waves first: each track whose WAV is still here
-        and is stereo has its waveform made again and sent. A take whose
-        files are gone, or that is all mono, sends none, and is marked all
-        the same. Then its details, as they were last sent, with Backing
-        marked among its tracks; a take with no Backing needs none. A
-        service that does not say it keeps the mark is asked again after the
-        next look at it, so a band that updates its service later gets it.
-        Anything else that goes wrong sets the take aside until РЭХА starts
-        again.
+        wave, or marked its Backing track, or sent its peak, gets them now,
+        as a take gets its tempo (_catch_up): no line in the list, no
+        internet tries again later, and a take taken out, changed or due
+        again meanwhile is left to its own pass. Its waves first: each track
+        whose WAV is still here and is stereo has its waveform made again and
+        sent. A take whose files are gone, or that is all mono, sends none,
+        and is marked all the same. Then its details, as they were last
+        sent, with Backing marked among its tracks; a take with no Backing
+        needs none. A service that does not say it keeps the mark is asked
+        again after the next look at it, so a band that updates its service
+        later gets it. Then its details again with its peak, counted now
+        (_send_peak); a take whose WAVs are gone sends none, and the next
+        look asks again. Anything else that goes wrong sets the take aside
+        until РЭХА starts again.
         """
         take_id, gen = row["take_id"], row["gen"]
         try:
@@ -1188,6 +1219,9 @@ class BandService:
             if not row["sent"].get("kind"):
                 if not service_files.has_backing(take) or self._send_kind(client, take_id, gen, take):
                     self._mark(take_id, gen, "kind")
+            if take_id in self._owed_peaks:
+                self._send_peak(client, take_id, gen, take)
+                self._owed_peaks.discard(take_id)
             self._owed_marks.discard(take_id)
         except _Paused:
             pass  # once the sound has stopped
@@ -1195,10 +1229,12 @@ class BandService:
             self._later[("marks", take_id)] = time.monotonic() + self.RETRY_SEC
         except _Changed:
             self._owed_marks.discard(take_id)
+            self._owed_peaks.discard(take_id)
         except Exception as e:  # noqa: BLE001 - one take's marks must not stop the takes after it
-            print(f"A take's stereo waves or Backing mark could not be sent to the band service: {e}",
+            print(f"A take's stereo waves, Backing mark or peak could not be sent to the band service: {e}",
                   file=sys.stderr)
             self._owed_marks.discard(take_id)
+            self._owed_peaks.discard(take_id)
             self._marks_aside.add(take_id)
         return True
 
@@ -1264,6 +1300,51 @@ class BandService:
         tracks = self._details(take, row["folder"], gen, 0)["tracks"]
         answer = self._put_as_sent(client, take_id, row, gen, {"tracks": tracks})
         return isinstance(answer, dict) and answer.get("kind") is True
+
+    def _peak(self, take_id, gen, take, sent):
+        """
+        The take's peak, which the band service turns it up by
+        (audio/mixdown.mix_peak): the one last sent, when `sent` is of this
+        generation, or counted for it earlier in this run, or counted now
+        from the WAVs of the tracks that go, Backing among them, not the
+        notes. Counted only while nothing records or plays, with the names
+        pass waiting, since it moves folders; Play or Record stops the count,
+        and the take waits. A crop meanwhile leaves it to its own pass. None
+        when a WAV cannot be read.
+        """
+        if sent is not None and sent.get("gen") == gen and isinstance(sent.get("peak"), (int, float)):
+            return sent["peak"]
+        counted = self._counted.get(take_id)
+        if counted is not None and counted[0] == gen:
+            return counted[1]
+        self._check(take_id, gen)
+        self.making = True
+        try:
+            peak = mix_peak([i["source"] for i in service_files.plan(take, {"flac"})],
+                            stop=lambda: bool(self.api._sound_busy()))
+        except CountStopped:
+            raise _Paused(self.api._sound_busy() or "playing") from None
+        finally:
+            self.making = False
+        self._check(take_id, gen)
+        if peak is None:
+            return None
+        self._counted[take_id] = (gen, round(peak, 6))
+        return self._counted[take_id][1]
+
+    def _send_peak(self, client, take_id, gen, take):
+        """A take's details again, as they were last sent, with its peak: the
+        one sent before, for a service that did not keep it then, or counted
+        now. A take whose WAVs are gone sends nothing."""
+        row = self._check(take_id, gen)
+        peak = self._peak(take_id, gen, take, row["sent"])
+        if peak is None:
+            return
+        # Read again: the count took a while, and the details may have moved.
+        row = self._check(take_id, gen)
+        if row["sent"] is None:
+            raise _Changed()
+        self._put_as_sent(client, take_id, row, gen, {"peak": peak})
 
     def _mark(self, take_id, gen, mark):
         """One of the marks KEPT_HERE names, kept with the take's details."""

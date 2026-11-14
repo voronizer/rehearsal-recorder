@@ -128,8 +128,9 @@ class ServiceClient:
     def takes(self):
         """Every take the service has: its uid, whether it is in the trash
         ("trashed"), the generation whose MP3s ("mp3_gen") and whose FLAC
-        files ("flac_gen") are up, and, from a service that keeps it, the
-        generation whose tempo it has ("drift_gen"). An answer that is not such a list is
+        files ("flac_gen") are up, and, from a service that keeps them, the
+        generations whose tempo ("drift_gen") and peak ("peak_gen") it has.
+        An answer that is not such a list is
         refused, so a stray page is never read as "the service has none"."""
         answer = self._call("GET", "/api/reha/takes")
         if not isinstance(answer, list) or not all(isinstance(t, dict) and "uid" in t for t in answer):

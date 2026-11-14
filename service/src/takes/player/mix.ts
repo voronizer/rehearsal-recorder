@@ -6,10 +6,11 @@ import { parseFrames } from "./mp3"
   each track at the level the page plays it at, a muted track left out, and
   with a track on S only that track (Alex's pick, 2026-11-04 10:19). Master
   is the device's listening level, not the band's balance, so it is not in
-  it. The rest is as РЭХА makes a mix for the cloud folder
+  it. The take's amount is, as the page plays it (takes/gain.ts in the
+  Worker). The rest is as РЭХА makes a mix for the cloud folder
   (audio/mixdown.py, audio/encode.py): a mono track in the middle, a stereo
-  one keeping its sides, turned down if the tracks together go over full
-  scale and never up, and MP3 at LAME's best variable bit rate.
+  one keeping its sides, turned down if the tracks together still go over
+  full scale, and MP3 at LAME's best variable bit rate.
 
   The tracks are fetched and decoded one at a time and added into one
   buffer a side, a single buffer while every track is mono, so a phone
@@ -120,7 +121,7 @@ const stopped = () => new DOMException("The mix was stopped", "AbortError")
  * along it is, 0 to 1: fetching and decoding the tracks, then encoding. `signal` stops it.
  */
 export async function makeMix(
-  take: Pick<TakePage, "tracks">,
+  take: Pick<TakePage, "tracks" | "gain">,
   heard: Heard,
   { progress, signal, ways = browser }: { progress?: (done: number) => void; signal?: AbortSignal; ways?: MixWays } = {}
 ): Promise<Blob> {
@@ -128,7 +129,7 @@ export async function makeMix(
     take.tracks.map((t) => t.name),
     heard
   )
-  const tracks = take.tracks.flatMap((t, i) => (gains[i] > 0 ? [{ file: t.mp3, gain: gains[i] }] : []))
+  const tracks = take.tracks.flatMap((t, i) => (gains[i] > 0 ? [{ file: t.mp3, gain: gains[i] * take.gain }] : []))
   if (!tracks.length) throw new Error("No track is heard")
   let mix: Float32Array[] = []
   let sampleRate = 0

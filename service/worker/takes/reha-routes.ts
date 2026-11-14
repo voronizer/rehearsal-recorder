@@ -77,8 +77,8 @@ export const rehaRoutes = newApp()
       path: "/api/reha/takes",
       description:
         "Every take the service has: whether it is in the trash, which generation's MP3s and FLAC files are up, " +
-        "and which generation's tempo it has. РЭХА asks when it starts and every hour, to learn what the band " +
-        "deleted or put back, and which takes still need their tempo.",
+        "and which generation's tempo and peak it has. РЭХА asks when it starts and every hour, to learn what the band " +
+        "deleted or put back, and which takes still need their tempo or their peak.",
       middleware: [needKey] as const,
       security: rehaKey,
       request: { headers: RehaHeaders },
@@ -91,6 +91,7 @@ export const rehaRoutes = newApp()
               mp3_gen: z.number().nullable(),
               flac_gen: z.number().nullable(),
               drift_gen: z.number().nullable(),
+              peak_gen: z.number().nullable(),
             })
           )
         ),
@@ -99,7 +100,14 @@ export const rehaRoutes = newApp()
     }),
     async (c) => {
       const rows = await database(c.env)
-        .select({ uid: take.uid, trashedAt: take.trashedAt, shownGen: take.shownGen, flacGen: take.flacGen, driftGen: take.driftGen })
+        .select({
+          uid: take.uid,
+          trashedAt: take.trashedAt,
+          shownGen: take.shownGen,
+          flacGen: take.flacGen,
+          driftGen: take.driftGen,
+          peakGen: take.peakGen,
+        })
         .from(take)
       return c.json(
         rows.map((t) => ({
@@ -108,6 +116,7 @@ export const rehaRoutes = newApp()
           mp3_gen: t.shownGen,
           flac_gen: t.flacGen,
           drift_gen: t.driftGen,
+          peak_gen: t.peakGen,
         })),
         200
       )

@@ -76,6 +76,7 @@ export async function putTake(
     notes: meta.notes,
     gen: meta.gen,
     ...(meta.meter !== undefined && { meter: meta.meter }),
+    ...(meta.peak !== undefined && { peak: meta.peak, peakGen: meta.gen }),
     pendingCut: cut,
     ...(!stays && { trashedAt: null, trashedBy: null, withSong: false }),
     updatedAt: iso(),

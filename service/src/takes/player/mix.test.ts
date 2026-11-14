@@ -50,7 +50,7 @@ test("a mix over full scale is turned down to just under it; one under it is lef
 // A take's tracks as the page fetches them; the decoder is a stand-in that
 // gives each file a second of a sine, louder for each track.
 const MP3 = readFileSync(new URL("../../../test/fixtures/t1.mp3", import.meta.url))
-const take = { tracks: NAMES.map((name, i) => ({ position: i + 1, name, icon: null, mp3: `/files/t/1/${i + 1}.mp3`, peaks: "" })) }
+const take = { gain: 1, tracks: NAMES.map((name, i) => ({ position: i + 1, name, icon: null, mp3: `/files/t/1/${i + 1}.mp3`, peaks: "" })) }
 const fetched: string[] = []
 afterEach(() => {
   fetched.length = 0
@@ -88,6 +88,31 @@ test("the mix fetches only the tracks heard, at the first track's rate, and is a
   expect(mp3.frames.length).toBeGreaterThanOrEqual(Math.floor(rate / 1152))
   expect(done.at(-1)).toBe(1)
   expect(done).toEqual([...done].sort((a, b) => a - b))
+})
+
+test("the mix turns the take up by its amount, as the page plays it", async () => {
+  serve()
+  const loudest = async (gain: number) => {
+    let top = 0
+    const spy: MixWays = {
+      ...ways(),
+      encoder: async () => ({
+        configure() {},
+        encode(samples: readonly Float32Array[]) {
+          for (const side of samples) for (const v of side) top = Math.max(top, Math.abs(v))
+          return new Uint8Array()
+        },
+        finalize: () => new Uint8Array(),
+      }),
+    }
+    await makeMix({ ...take, gain }, heard({ soloed: "Drums" }), { ways: spy })
+    return top
+  }
+  // The first track decodes as a sine at 0.3.
+  expect(await loudest(1)).toBeCloseTo(0.3, 3)
+  expect(await loudest(2)).toBeCloseTo(0.6, 3)
+  // Over full scale it is still turned down.
+  expect(await loudest(4)).toBeCloseTo(0.97, 3)
 })
 
 test("with nothing heard there is no mix, and a stop stops it", async () => {

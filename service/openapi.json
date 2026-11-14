@@ -295,6 +295,10 @@
           "meter": {
             "$ref": "#/components/schemas/Meter"
           },
+          "peak": {
+            "type": "number",
+            "minimum": 0
+          },
           "by_hand": {
             "type": "boolean"
           }
@@ -1471,6 +1475,9 @@
           "drift": {
             "$ref": "#/components/schemas/Drift"
           },
+          "gain": {
+            "type": "number"
+          },
           "files": {
             "type": "array",
             "items": {
@@ -1536,6 +1543,7 @@
           "notes",
           "meter",
           "drift",
+          "gain",
           "files",
           "flac_coming",
           "trashed_at",
@@ -2529,7 +2537,7 @@
     },
     "/api/reha/takes": {
       "get": {
-        "description": "Every take the service has: whether it is in the trash, which generation's MP3s and FLAC files are up, and which generation's tempo it has. РЭХА asks when it starts and every hour, to learn what the band deleted or put back, and which takes still need their tempo.",
+        "description": "Every take the service has: whether it is in the trash, which generation's MP3s and FLAC files are up, and which generation's tempo and peak it has. РЭХА asks when it starts and every hour, to learn what the band deleted or put back, and which takes still need their tempo or their peak.",
         "security": [
           {
             "rehaKey": []
@@ -2579,6 +2587,12 @@
                           "number",
                           "null"
                         ]
+                      },
+                      "peak_gen": {
+                        "type": [
+                          "number",
+                          "null"
+                        ]
                       }
                     },
                     "required": [
@@ -2586,7 +2600,8 @@
                       "trashed",
                       "mp3_gen",
                       "flac_gen",
-                      "drift_gen"
+                      "drift_gen",
+                      "peak_gen"
                     ]
                   }
                 }
