@@ -156,12 +156,13 @@ No new words in the interface.
 ## Pictures, the guide and the site
 
 - The guide, `docs/using-it.md:814`: “A take plays there at the levels its
-  tracks have in РЭХА's player.” becomes three sentences: the tracks keep
+  tracks have in РЭХА's player.” becomes four sentences: the tracks keep
   the levels they have in РЭХА's player; the service turns the whole take
   up as far as its loudest moment allows, every track by the same amount,
-  so it sounds louder there than in РЭХА; a take sent by an older РЭХА is
-  turned up once РЭХА has been updated, if its files are still on the
-  computer.
+  so it sounds louder there than in РЭХА; a take that already crackles is
+  turned down just enough that it no longer does; a take sent by an older
+  РЭХА is turned up once РЭХА has been updated, if its files are still on
+  the computer.
 - reha.stream does not change (Alex, 12:33). The CHANGELOG item goes after
   the first item of “Unreleased”, so the site's news line, which reads the
   first item of a release, does not show it.

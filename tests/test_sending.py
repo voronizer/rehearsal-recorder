@@ -1607,7 +1607,6 @@ def stereo_and_backing(api, fake, service, drain, entries, keep, uid_of, take, f
     fake.keeps_kind = True
 
 
-
 def peaks(api, fake, service, drain, entries, keep, uid_of, take, folder):
     """A take's peak, which the band service turns it up by (louder takes
     spec): sent with its details, and to takes up from before by the pass
@@ -1658,6 +1657,7 @@ def peaks(api, fake, service, drain, entries, keep, uid_of, take, folder):
         api._lib.change_service_row(id2, lambda r: {"sent": {k: v for k, v in r["sent"].items() if k != "peak"}})
         fake.takes[uid2].pop("peak", None)
         fake.peaks.pop(uid2, None)
+        service()._counted.pop(id2, None)  # as a run of an older REHA left it
         lines, files, puts = len(entries()), fake.count(f"start {uid2} "), fake.count(f"put {uid2}")
         look()
         ok("a take up from before gets its peak after the next look, its details once, no files, no line in the list",
@@ -1674,6 +1674,7 @@ def peaks(api, fake, service, drain, entries, keep, uid_of, take, folder):
         api._lib.change_service_row(id3, lambda r: {"sent": {k: v for k, v in r["sent"].items() if k != "peak"}})
         fake.takes[uid3].pop("peak", None)
         fake.peaks.pop(uid3, None)
+        service()._counted.pop(id3, None)  # as a run of an older REHA left it
         wav = Path(take(n3)["tracks"][0]["file"])
         away = wav.with_name("away.wav")
         wav.rename(away)
@@ -1726,6 +1727,65 @@ def peaks(api, fake, service, drain, entries, keep, uid_of, take, folder):
            take(n5)["service"]["up"] and fake.peaks.get(uid5, {}).get("gen") == 1)
         listened.close()
         api._player = player_before
+
+        # No internet when its details go: counted once all the same.
+        before = len(counted)
+        n6 = keep("Viasna", band=["Drums"])
+        uid6 = uid_of(n6)
+        fake.drop = 1
+        service().run_next()
+        service()._later.clear()
+        drain()
+        ok("a take whose details met no internet goes once it is back, its peak counted once",
+           take(n6)["service"]["up"] and fake.peaks.get(uid6, {}).get("gen") == 1 and len(counted) == before + 1)
+
+        # Cropped while its peak is counted: the old generation's details do not go.
+        n7 = keep("Viasna", band=["Drums"])
+        uid7 = uid_of(n7)
+        crops = []
+
+        def crop_midway(files, stop=None):
+            def crop_then_go():
+                if not crops:
+                    crops.append(api.crop_take(folder(), n7, 2.0, 10.0))
+                return bool(stop and stop())
+            return real_peak(files, stop=crop_then_go)
+
+        band_service.mix_peak = crop_midway
+        service().run_next()
+        band_service.mix_peak = counting_peak
+        ok("a take cropped while its peak is counted sends nothing of the old generation",
+           crops and crops[0]["ok"] and fake.count(f"put {uid7}") == 0 and row_of(n7)["due"])
+        drain()
+        ok("and its own send takes the new generation up with that generation's peak",
+           fake.takes[uid7]["gen"] == 2 and fake.peaks.get(uid7, {}).get("gen") == 2)
+        api.end_trash(crops[0]["undo"])
+
+        # Owed both Backing's mark and its peak: the peak's details keep the mark.
+        n8 = keep("Viasna", band=["Drums"], backing=True)
+        drain()
+        uid8, id8 = uid_of(n8), row_of(n8)["take_id"]
+        api._lib.change_service_row(id8, lambda r: {"sent": {
+            **{k: v for k, v in r["sent"].items() if k not in ("kind", "peak")},
+            "tracks": [{k: v for k, v in t.items() if k != "kind"} for t in r["sent"]["tracks"]]}})
+        for t in fake.takes[uid8]["tracks"]:
+            t.pop("kind", None)
+        fake.peaks.pop(uid8, None)
+        look()
+        ok("a take owed Backing's mark and its peak gets both, the mark kept in the details last sent",
+           [t.get("kind") for t in fake.takes[uid8]["tracks"]] == [None, "backing"]
+           and fake.peaks.get(uid8, {}).get("gen") == 1 and row_of(n8)["sent"].get("kind") is True)
+
+        # Sent with its peak to a service from before it, which is then updated.
+        fake.keeps_peak = False
+        n9 = keep("Viasna", band=["Drums"])
+        drain()
+        uid9 = uid_of(n9)
+        fake.keeps_peak = True
+        before = len(counted)
+        look()
+        ok("once the service keeps the peak, the next look sends the one already counted, reading no WAVs",
+           fake.peaks.get(uid9, {}).get("gen") == 1 and len(counted) == before)
     finally:
         band_service.mix_peak = real_peak
         fake.keeps_peak = True

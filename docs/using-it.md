@@ -814,16 +814,16 @@ service does, and how to get one for your band, is on
 A take's tracks keep the levels they have in РЭХА's player, and the service
 turns the whole take up: every track by the same amount, until the take's
 loudest moment is just short of crackling. So a take sounds louder there
-than in РЭХА, with the band's balance as it was. A take sent by an older
-РЭХА gets louder after you update РЭХА, as long as its files are still on
-this computer. In the
-service each of you can turn a track up or down for yourself: only you hear
-it that way, and nothing comes back to РЭХА. **Master** under the tracks
-turns the whole take up or down on that phone or computer only. Under it,
-**РЭХА's levels** puts back the levels the take came with; it is faded until
-you move a fader. On a computer, a track that recorded MIDI shows its notes as
-in РЭХА's player, and they are not played; on a phone its row has the MIDI
-sign.
+than in РЭХА, with the band's balance as it was. A take that already
+crackles is turned down just enough that it no longer does. A take sent by
+an older РЭХА gets louder after you update РЭХА, as long as its files are
+still on this computer. In the service each of you can turn a track up or
+down for yourself: only you hear it that way, and nothing comes back to
+РЭХА. **Master** under the tracks turns the whole take up or down on that
+phone or computer only. Under it, **РЭХА's levels** puts back the levels the
+take came with; it is faded until you move a fader. On a computer, a track
+that recorded MIDI shows its notes as in РЭХА's player, and they are not
+played; on a phone its row has the MIDI sign.
 
 The tracks have their rings there too, one for a mono file and two for a
 stereo one, and a stereo track's meter has two bars, on a phone as well. On

@@ -33,8 +33,9 @@ def mix_peak(files, stop=None):
     """
     The loudest sample of a take's audio files added together, each at full
     level, as the mixdown's first pass adds them: 1.0 is full scale, and the
-    sum of several tracks can go over it. The band service turns the take up
-    by it (sending/band_service.py), so the band's faders cannot take it over
+    sum of several tracks can go over it. sending/band_service.py sends it
+    with the take, and the band service turns the take up by it
+    (service/worker/takes/gain.ts), so the band's faders cannot take it over
     full scale there.
 
     None when a file cannot be opened, or there are none. `stop()`, asked

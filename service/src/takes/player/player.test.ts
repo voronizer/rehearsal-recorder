@@ -245,6 +245,26 @@ test("the take's amount turns every heard track up by the same, on top of its le
   expect(gains[1].gain.value).toBe(0.5)
   p.setBoost(1)
   expect(gains.map((g) => g.gain.value)).toEqual([1, 0.25, 0])
+  // A page with no amount plays the take as recorded.
+  p.setBoost(Number.NaN)
+  expect(gains.map((g) => g.gain.value)).toEqual([1, 0.25, 0])
+  p.close()
+})
+
+test("a take page's player has each track at its level and the whole take at the page's amount", () => {
+  withDecoder()
+  vi.stubGlobal("AudioContext", FakeSound)
+  vi.stubGlobal("fetch", () => new Promise(() => {}))
+  const tracks = [
+    { name: "Drums", mp3: "t1.mp3" },
+    { name: "Bass", mp3: "t2.mp3" },
+  ]
+  const p = Player.of({ tracks, gain: 2.5 }, (name) => (name === "Bass" ? 0.4 : 1))
+  p.play(0)
+  const splitters = FakeSound.splitters.slice(-2)
+  const gains = splitters.map((s) => FakeSound.made.find((g) => g.to.includes(s))!)
+  expect(gains.map((g) => g.gain.value)).toEqual([2.5, 1])
+  expect([p.gain(0), p.gain(1)]).toEqual([1, 0.4])
   p.close()
 })
 

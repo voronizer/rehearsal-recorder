@@ -50,9 +50,9 @@ const TakePage = z
     /** The band's tempo through the generation the band hears; null until
      *  РЭХА has counted it. */
     drift: Drift.nullable(),
-    /** How much louder every track plays, the same for all, by the take's
-     *  peak (takes/gain.ts); 1 when РЭХА has not sent the peak of the
-     *  generation the band hears. */
+    /** How far every track is turned up, the same for all, by the take's
+     *  peak (takes/gain.ts): below 1 for a take that would crackle, and 1
+     *  when РЭХА has not sent the peak of the generation the band hears. */
     gain: z.number(),
     /** The files **Download** lists; `mid` is null for a track with no notes. */
     files: z.array(

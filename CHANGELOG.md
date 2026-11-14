@@ -19,12 +19,14 @@ opening.
   as with each channel of the mixer at about −18 dB, sounded quiet there.
   Now the service turns each take up, every track by the same amount, until
   its loudest moment is just short of crackling, so the band's balance stays
-  as it was. The faders and **Master** work as before, on top of that.
-  **Download** › **The mix** is turned up the same way; **Tracks in MP3**
-  and **Tracks in FLAC**, РЭХА's player and the cloud folder's mix stay as
-  recorded. Takes already in the service get louder too: РЭХА works out each
-  one's amount in the background, one take at a time. A take whose files are
-  no longer on the computer plays as before.
+  as it was. A take that already crackled is turned down just enough that it
+  no longer does. The faders and **Master** work as before, on top of that.
+  **Download** › **The mix** is turned up the same way, while **Tracks in
+  MP3** and **Tracks in FLAC** download as recorded. РЭХА's player and the
+  cloud folder's mix stay as they are. Takes already in the service get
+  louder too: РЭХА works out each one's amount in the background, one take
+  at a time. A take whose files are no longer on the computer plays as
+  before.
 
 ## 0.27.0
 

@@ -1,8 +1,11 @@
 /**
  * How much louder the service plays a take: one amount for all its tracks,
  * so the band's balance stays as recorded (Alex, 2026-11-14). It puts the
- * take's loudest moment, with every track at full level, at CEILING, so no
- * setting of the faders takes it over full scale.
+ * take's loudest moment, with every track at full level, at CEILING, so the
+ * faders do not take it over full scale. The exception is tracks that cancel
+ * each other, such as two mics on one cabinet in opposite polarity: turning
+ * one down can make the sum louder. A take already over CEILING is turned
+ * down to it.
  */
 
 /** −1 dBFS. MP3 raised a measured take's loudest moment by 0.25 dB, so the

@@ -158,7 +158,7 @@ export class Player {
   private gains: GainNode[] = []
   /** Each track's level split into its sides, for its meters. */
   private splits: ChannelSplitterNode[] = []
-  /** Each track's meters after its level: its left side and its right. */
+  /** Each track's meters after its level and the take's amount: its left side and its right. */
   private meters: AnalyserNode[][] = []
   private master: GainNode | null = null
   /** The whole mix after Master, as it goes out. */
@@ -193,6 +193,13 @@ export class Player {
     } catch {
       return false
     }
+  }
+
+  /** A take page's player: each track at `level(name)`, the whole take turned up by the page's `gain`. */
+  static of(take: { tracks: { name: string; mp3: string }[]; gain: number }, level: (name: string) => number): Player {
+    const p = new Player(take.tracks.map((k) => ({ url: k.mp3, gain: level(k.name) })))
+    p.setBoost(take.gain)
+    return p
   }
 
   constructor(tracks: PlayerTrack[], pace: Partial<Pace> = {}) {
@@ -333,9 +340,10 @@ export class Player {
     this.mix()
   }
 
-  /** How much louder the whole take plays, the same for every track, on top of their levels: the take page's `gain`. */
+  /** How far the whole take is turned up, the same for every track, on top of their levels: the take page's
+   *  `gain`, below 1 for a take that would crackle. Anything but a number plays it as recorded. */
   setBoost(v: number): void {
-    this.boost = Math.max(0, v)
+    this.boost = Number.isFinite(v) ? Math.max(0, v) : 1
     this.mix()
   }
 

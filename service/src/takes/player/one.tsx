@@ -158,9 +158,8 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
       // there and not kept yet; else the M and S it had in the player before.
       const kept: Setup = setups.current.get(t.uid)?.() ?? { loop: null, ...(desksNow.current[t.uid] ?? firstDesk(t)), moved: {} }
       const setup = { ...kept, ...withBacking(t, kept, heard) }
-      const p = new Player(t.tracks.map((k) => ({ url: k.mp3, gain: setup.moved[k.name] ?? levelOf(yoursNow.current, t, k.name) })))
+      const p = Player.of(t, (name) => setup.moved[name] ?? levelOf(yoursNow.current, t, name))
       p.setMaster(master.current)
-      p.setBoost(t.gain)
       p.onChange = () => {
         tick(t.uid, p.time())
         redraw((n) => n + 1)

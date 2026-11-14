@@ -159,6 +159,10 @@ class BandService:
         # are at: sent before РЭХА counted it, or when their WAVs could not be
         # read. Asked again at each look at the service while they have none.
         self._owed_peaks = set()
+        # take_id: (gen, peak), each take's peak as counted in this run, so a
+        # pass that starts again after a pause or with no internet does not
+        # read the WAVs again.
+        self._counted = {}
         # Takes whose marks could not be sent: not tried again in this run.
         self._marks_aside = set()
         self._active = None
@@ -374,6 +378,7 @@ class BandService:
             self._owed.discard(take_id)
             self._owed_marks.discard(take_id)
             self._owed_peaks.discard(take_id)
+            self._counted.pop(take_id, None)
         if entry is not None:
             entry.discard()
         if row is None:
@@ -558,6 +563,7 @@ class BandService:
             self._drift_refused.clear()
             self._owed_marks.clear()
             self._owed_peaks.clear()
+            self._counted.clear()
             self._marks_aside.clear()
         for entry in entries:
             entry.discard()
@@ -594,6 +600,7 @@ class BandService:
             self._drift_refused.clear()
             self._owed_marks.clear()
             self._owed_peaks.clear()
+            self._counted.clear()
             self._marks_aside.clear()
         for entry in entries:
             entry.discard()
@@ -1298,14 +1305,18 @@ class BandService:
         """
         The take's peak, which the band service turns it up by
         (audio/mixdown.mix_peak): the one last sent, when `sent` is of this
-        generation, or counted now from the WAVs of the tracks that go,
-        Backing among them, not the notes. Counted only while nothing records
-        or plays, with the names pass waiting, since it moves folders; Play
-        or Record stops the count, and the take waits. None when a WAV cannot
-        be read.
+        generation, or counted for it earlier in this run, or counted now
+        from the WAVs of the tracks that go, Backing among them, not the
+        notes. Counted only while nothing records or plays, with the names
+        pass waiting, since it moves folders; Play or Record stops the count,
+        and the take waits. A crop meanwhile leaves it to its own pass. None
+        when a WAV cannot be read.
         """
         if sent is not None and sent.get("gen") == gen and isinstance(sent.get("peak"), (int, float)):
             return sent["peak"]
+        counted = self._counted.get(take_id)
+        if counted is not None and counted[0] == gen:
+            return counted[1]
         self._check(take_id, gen)
         self.making = True
         try:
@@ -1315,14 +1326,21 @@ class BandService:
             raise _Paused(self.api._sound_busy() or "playing") from None
         finally:
             self.making = False
-        return None if peak is None else round(peak, 6)
+        self._check(take_id, gen)
+        if peak is None:
+            return None
+        self._counted[take_id] = (gen, round(peak, 6))
+        return self._counted[take_id][1]
 
     def _send_peak(self, client, take_id, gen, take):
-        """A take's details again, as they were last sent, with its peak
-        counted now. A take whose WAVs are gone sends nothing."""
-        peak = self._peak(take_id, gen, take, None)
+        """A take's details again, as they were last sent, with its peak: the
+        one sent before, for a service that did not keep it then, or counted
+        now. A take whose WAVs are gone sends nothing."""
+        row = self._check(take_id, gen)
+        peak = self._peak(take_id, gen, take, row["sent"])
         if peak is None:
             return
+        # Read again: the count took a while, and the details may have moved.
         row = self._check(take_id, gen)
         if row["sent"] is None:
             raise _Changed()
