@@ -13,10 +13,10 @@ themselves stay as recorded.
 What Claude found (main at 6399f0d, checked again at a53abae):
 
 1. Nothing turns a take up anywhere. РЭХА sends each track's MP3 and FLAC
-   at the level it was recorded at (`src/rehearsal_recorder/sending/service_files.py:184`,
+   at the level it was recorded at (`src/rehearsal_recorder/sending/service_files.py:222`,
    `src/rehearsal_recorder/audio/encode.py:117`). The faders and Master stop
-   at 100% in the service's player (`service/src/takes/player/player.ts:317`,
-   `:258`) and in РЭХА's (`src/rehearsal_recorder/audio/player.py:677`, `:711`).
+   at 100% in the service's player (`service/src/takes/player/player.ts:330`,
+   `:270`) and in РЭХА's (`src/rehearsal_recorder/audio/player.py:681`, `:713`).
    The cloud folder's mix and the service's **Download** mix turn a take
    down when it would go over full scale and never turn it up
    (`src/rehearsal_recorder/audio/mixdown.py:76`, `service/src/takes/player/mix.ts:65`).
@@ -62,16 +62,20 @@ https://claude.ai/artifact/M3QjdC6NHGpih6qhebe18i.
 - 12:32, card: **На каждый дубль**. Each take has its own amount, not one
   for the whole rehearsal.
 - 12:33, card: **Ничего на сайте**. reha.stream does not change.
+- 12:40, «ок» to this spec.
 
 ## What the band hears
 
 - In the service each take plays louder by its own amount. Every track gets
   the same amount, so the balance stays as recorded. The amount puts the
   take's loudest moment, with every track at full level, at −1 dBFS.
-  Ill never new 14 gets +8.8 dB and plays at −21.5 LUFS at РЭХА's balance.
+  Ill never new 14 gets about +8.8 dB and plays at about −21.5 LUFS at
+  РЭХА's balance, counted from the 5 tracks measured; with VOX2 it may get
+  a little less.
 - The faders and Master work as now, from 0 to 100%, on top of the amount.
-  The amount is counted with every track at full level, so no setting of
-  the faders makes a take crackle.
+  The amount is counted with every track at full level, so the faders
+  cannot make a take crackle, except in the rare case of tracks that cancel
+  each other (Stress cases).
 - A track's meter and Master's meter show what is heard, the amount
   included. The waves stay as recorded, as in РЭХА.
 - **Download** › **The mix** gets the same amount. **Tracks in MP3** and
@@ -100,15 +104,15 @@ https://claude.ai/artifact/M3QjdC6NHGpih6qhebe18i.
   which generation's peak each take has (`peak_gen`, as `drift_gen` for the
   tempo). РЭХА sends the details of a take without one again, with its
   peak, in the background, one take at a time, the way it caught up the
-  tempo line (`sending/band_service.py:1076`). A take whose files are gone
-  gets none.
+  tempo line (`_catch_up`, `sending/band_service.py:1121`, asked for at
+  `:880`). A take whose files are gone gets none.
 
 ### The service
 
 - A migration adds `peak` (a real number) and `peak_gen` (an integer) to
   `take`, both empty to begin with.
-- `TakeMeta` takes `peak` as an optional positive number. The service keeps
-  it with the generation it came with.
+- `TakeMeta` takes `peak` as an optional number, 0 or more; 0 (silence)
+  gives the amount 1. The service keeps it with the generation it came with.
 - The take page gets the take's `gain`: 0.891 / peak, at most 16 (+24 dB),
   and 1 when the take has no peak.
 - The player sets each track's gain node to its level times the take's
@@ -123,7 +127,8 @@ https://claude.ai/artifact/M3QjdC6NHGpih6qhebe18i.
 - A silent or almost silent take, such as a false start sent by hand: the
   amount stops at +24 dB, so its hiss is not raised further.
 - A take whose tracks together already go over −1 dBFS: its amount is
-  below 1, so it plays slightly quieter than now and no longer crackles.
+  below 1, so it plays quieter than now by as much as it went over −1 dBFS,
+  and no longer crackles.
 - Two tracks that cancel each other, such as two mics on one cabinet in
   opposite polarity: turning one down can make the sum louder than the
   counted peak, and the loudest moment may crackle in the player. The
@@ -133,6 +138,12 @@ https://claude.ai/artifact/M3QjdC6NHGpih6qhebe18i.
 - A take cropped after it went up: the new generation brings its own peak.
   The amount is used only with the generation it was counted for, so while
   the cropped files go up, the take plays as now for those minutes.
+- A band whose service is older than its РЭХА: the service ignores the
+  peak, and takes play as now. Once the service is updated, РЭХА's next look
+  at it, within an hour, sends the peak of every take whose files are still
+  on the computer.
+- A take open in the service while РЭХА sends its peak: it keeps playing at
+  its old level, and plays louder the next time it is opened.
 
 ## Words
 
@@ -140,12 +151,17 @@ No new words in the interface.
 
 ## Pictures, the guide and the site
 
-- The guide, `docs/using-it.md:809`: “A take plays there at the levels its
-  tracks have in РЭХА's player.” becomes a sentence saying that the levels
-  are those of РЭХА's player and that the service turns the whole take up
-  as far as its loudest moment allows, every track by the same amount, so
-  it sounds louder there than in РЭХА.
-- reha.stream does not change (Alex, 12:33).
+- The guide, `docs/using-it.md:814`: “A take plays there at the levels its
+  tracks have in РЭХА's player.” becomes three sentences: the tracks keep
+  the levels they have in РЭХА's player; the service turns the whole take
+  up as far as its loudest moment allows, every track by the same amount,
+  so it sounds louder there than in РЭХА; a take sent by an older РЭХА is
+  turned up once РЭХА has been updated, if its files are still on the
+  computer.
+- reha.stream does not change (Alex, 12:33). The CHANGELOG item goes after
+  the first item of “Unreleased”, so the site's news line, which reads the
+  first item of a release, does not show it.
+- README.md and service/README.md do not change: neither speaks of levels.
 - The service's pictures do not change: their takes have no peak, so they
   play and look as now.
 - CHANGELOG, under “Unreleased”: one item starting with
@@ -156,8 +172,9 @@ No new words in the interface.
 Only the tests the change touches, each once; the full suites run on CI.
 
 - Python: the peak function on a mono and a stereo track and on silence;
-  `service_files.meta` carries `peak`; the catch-up sends details for a
-  take whose `peak_gen` is behind.
+  a new take's details carry `peak`; a ★ sends the same peak without
+  counting again; the catch-up sends details for a take whose `peak_gen` is
+  behind.
 - Service: `TakeMeta` takes and keeps `peak` with its generation; the
   listing gives `peak_gen`; the take page's gain with its ceiling, its cap
   and no peak; the player's gain node is level times gain; the mix gets
@@ -184,11 +201,16 @@ Only the tests the change touches, each once; the full suites run on CI.
 10. No setting turns this off.
 11. The guide's sentence changes, though the site does not.
 12. No new pictures.
+13. While a cropped take's new files go up, it plays as now: the amount
+    of the old generation is not kept for the new one.
+14. A take open in the service when its peak arrives keeps its level until
+    it is opened again, so the sound does not jump during playback.
 
 ## Not in this
 
 - A limiter (Alex, 12:27).
 - Changing the files (Alex, 12:29).
+- Master above 100% (Claude's call).
 - РЭХА's player and the cloud folder's mix (Alex, 12:30).
 - Raising the gain on the mixer, or recording at 24 bits (this take is
   16-bit; РЭХА's **Depth** setting).
