@@ -196,7 +196,7 @@ test("a status whose only song is in the trash goes, and the song takes the firs
   expect(await read(`/api/songs/${id}`, alex)).toMatchObject({ song: { status_id: learning.id } })
 })
 
-test("РЭХА lists its takes with what is up, whether each is in the trash, and whose tempo it has", async () => {
+test("РЭХА lists its takes with what is up, whether each is in the trash, and whose tempo and peak it has", async () => {
   const alex = await signInOwner()
   const r = await reha()
   const live = await shownTake({ number: 1, name: "Viasna 1" })
@@ -208,8 +208,8 @@ test("РЭХА lists its takes with what is up, whether each is in the trash, an
   const byUid = (a: { uid: string }, b: { uid: string }) => a.uid.localeCompare(b.uid)
   expect(list.body.sort(byUid)).toEqual(
     [
-      { uid: live, trashed: false, mp3_gen: 1, flac_gen: null, drift_gen: null },
-      { uid: gone, trashed: true, mp3_gen: 1, flac_gen: null, drift_gen: null },
+      { uid: live, trashed: false, mp3_gen: 1, flac_gen: null, drift_gen: null, peak_gen: null },
+      { uid: gone, trashed: true, mp3_gen: 1, flac_gen: null, drift_gen: null, peak_gen: null },
     ].sort(byUid)
   )
 })
