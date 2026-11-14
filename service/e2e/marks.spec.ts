@@ -144,6 +144,9 @@ test("a label's colour: the picker opens on it, Enter takes the one reached, Esc
   const panel = page.getByLabel("Panel", { exact: true })
   const trigger = panel.getByRole("button", { name: /^Colour of/ }).first()
   const name = (await trigger.getAttribute("aria-label"))!
+  // The row's diamond, in the colour the band's answer has: the picker opens on that one.
+  const diamond = trigger.locator('span[aria-hidden="true"]')
+  const ownLook = (await diamond.getAttribute("style"))!
   await trigger.click()
   const picker = page.getByRole("dialog", { name })
   await expect(picker).toBeVisible()
@@ -163,12 +166,14 @@ test("a label's colour: the picker opens on it, Enter takes the one reached, Esc
   const next = (await focused.getAttribute("aria-label"))!
   await page.keyboard.press("Enter")
   await expect(picker).toHaveCount(0)
+  await expect(diamond).not.toHaveAttribute("style", ownLook)
   await trigger.click()
   await expect(page.locator(":focus")).toHaveAttribute("aria-label", next)
   await expect(page.locator(":focus")).toHaveAttribute("aria-checked", "true")
   // Back as it was, for the tests after.
   await picker.getByRole("radio", { name: own }).click()
   await expect(picker).toHaveCount(0)
+  await expect(diamond).toHaveAttribute("style", ownLook)
   await trigger.click()
   await expect(page.locator(":focus")).toHaveAttribute("aria-label", own)
   await page.keyboard.press("Escape")
