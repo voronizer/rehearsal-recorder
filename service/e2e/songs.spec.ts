@@ -247,6 +247,52 @@ test("a song's tempo and signature are set on its page and kept", async ({ page 
   await expect(tempo).toHaveValue("")
 })
 
+test("when the band answers a tempo, its field does not show the old one for a moment", async ({ page }) => {
+  const id = band().songs["Pałyn"]
+  // The song read again after each save, as it reaches the page.
+  const readAgain = () => page.waitForResponse((r) => r.request().method() === "GET" && r.url().endsWith(`/api/songs/${id}`))
+  await page.goto(`/songs/${id}`)
+  const main = page.getByRole("main")
+  const tempo = main.getByRole("textbox", { name: "Tempo" })
+  await expect(tempo).toHaveValue("")
+  let read = readAgain()
+  await tempo.fill("96")
+  await tempo.press("Enter")
+  await read
+  // The page takes the answer in a moment after it comes.
+  await page.waitForTimeout(300)
+  // Every number the page puts in the field, as it puts it there: the old
+  // one came back for a few milliseconds, too short to see by looking.
+  await tempo.evaluate((field: HTMLInputElement) => {
+    const put: string[] = ((window as unknown as { put: string[] }).put = [])
+    const own = Object.getOwnPropertyDescriptor(field, "value") ?? Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!
+    Object.defineProperty(field, "value", {
+      configurable: true,
+      get: () => own.get!.call(field),
+      set: (v: string) => {
+        put.push(v)
+        own.set!.call(field, v)
+      },
+    })
+  })
+  const faster = main.getByRole("button", { name: "Faster" })
+  for (const next of ["97", "98", "99", "100", "101"]) {
+    read = readAgain()
+    await faster.click()
+    await expect(tempo).toHaveValue(next)
+    await read
+    await page.waitForTimeout(300)
+  }
+  expect(await page.evaluate(() => (window as unknown as { put: string[] }).put)).toEqual(["97", "98", "99", "100", "101"])
+  // Empty again, for the tests after.
+  read = readAgain()
+  await tempo.fill("")
+  await tempo.press("Enter")
+  await read
+  await page.reload()
+  await expect(tempo).toHaveValue("")
+})
+
 test("a song page puts the best take on top", async ({ page }) => {
   await page.goto(`/songs/${band().songs["Viasna"]}`)
   // Viasna 11 has two members' stars; Viasna 12 is newer and has none.
