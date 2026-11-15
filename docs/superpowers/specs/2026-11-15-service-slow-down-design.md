@@ -68,8 +68,12 @@ Each with its mockup; the mockups' sources are in
   since the speed is kept nowhere.
 - **Q6, reha.stream**, 14:39:20Z card B: two sentences in the band service
   page's chapter «Hear your own part», no new picture.
-- **The spec**, 14:43:32Z «ок», with calls 1-12 below as listed; calls 13
-  and 14 came after it and go to him with the plan.
+- **The spec**, 14:43:32Z «ок», with calls 1-12 below as listed; call 13
+  came after it and goes to him with the plan.
+- **A speed picked on a take's page while another take plays**, 15:04:59Z
+  card A, after the plan check: as **Repeat**, M and S there. The page
+  keeps the speed, the take starts with it on its ▶, and the other take
+  plays on.
 
 ## What a band member sees
 
@@ -172,9 +176,10 @@ Each with its mockup; the mockups' sources are in
   transport row already wraps today, **Mark** and the keys going under
   it. The speed button goes under with them, at the left; the first row
   is as before (measured on the Q1 mockup).
-- On a take's page while another take plays: the page's button reads
-  100%; picking a speed puts this take in the player, paused, at that
-  speed, and the other take stops.
+- On a take's page while another take plays: the page's button shows the
+  page's own speed, 100% at first. A speed picked there is kept by the page,
+  as its **Repeat**, M and S are, and the take starts with it on its ▶;
+  the other take plays on (Alex, 15:04:59Z).
 
 ## Words
 
@@ -243,9 +248,7 @@ Each with its mockup; the mockups' sources are in
 13. “75%” with no space, as the app writes percentages, where the mockups
     showed a space before the % sign (found after the spec's OK, told to
     Alex with the plan).
-14. A speed picked on a take's page while another take plays puts this
-    take in the player, paused, at the speed, and the other one stops
-    (found while writing the plan, told to Alex with it).
+14. (Settled by Alex at 15:04:59Z, see his picks.)
 
 ## Not in this
 

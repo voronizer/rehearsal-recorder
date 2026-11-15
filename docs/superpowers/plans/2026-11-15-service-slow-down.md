@@ -216,12 +216,19 @@ signalsmith-stretch 1.3.2 (MIT, WASM AudioWorklet); vitest; Playwright
     `stretchOf(wakeSound())` then, if `speedNow.current === r` and
     `player.current === p`, `p.setRate(r, s)`; on failure
     `console.error`, and if still wanted, back to 1 (state, ref, player).
-  - `setSpeed(u, r)`: when `u` is not the take in the player (a speed
-    picked on a take's page while another take plays), `load(u, its
-    playhead, false)` first: that take goes in, paused, and the other
-    stops. Then set the ref and state, and `applySpeed` on
-    `player.current` if it holds `u`; a player still on its way picks the
-    speed up when it is made.
+  - `setSpeed(u, r)`: for the take in the player (or on its way in), set
+    the ref and state and `applySpeed` on `player.current` if it holds
+    `u`; a player still on its way picks the speed up when it is made.
+    For another take it does nothing: a take's page keeps its own speed
+    until its ▶ (next point).
+  - A take's page keeps its own speed while another take plays, as it
+    keeps **Repeat**, M and S (Alex's pick A, 2026-11-15 15:04:59Z):
+    `Setup` (`one.tsx:81`) gets `speed: number`; `sound.ts` keeps the
+    page's `speed` beside its `loop`, `muted` and `solo`, gives it in
+    `setup()`, and sets it with a new `setSpeed(r)` on the page's sound,
+    which passes it on to the one player when the take is in it. When the
+    take comes into the player from its page, the effect that makes the
+    Player takes `setup.speed` (in place of 1) for the speed.
   - `load(u, …)`: when `u !== uid`, the speed goes back to 1 (ref and
     state) before the new take is set (Alex's pick C, 14:34Z).
   - In the effect that makes a take's `Player`, after its setup:
@@ -281,8 +288,9 @@ signalsmith-stretch 1.3.2 (MIT, WASM AudioWorklet); vitest; Playwright
   none.”). Drawn right after **Repeat**'s tooltip, only when given.
 
 - [ ] **Step 3: the service.** `Full` in `Take.tsx` passes
-  `speed={{ value: p.uid === take.uid ? p.speed : 1, onChange: (r) => p.setSpeed(take.uid, r) }}`
-  from `usePlayer()`. `PlayerBar`:
+  `speed={{ value: sound speed of the page, onChange: (r) => sound.setSpeed(r) }}`:
+  the page's sound (`ServiceSound`) reads the one player's speed while its
+  take is in it, and its own kept speed while another take plays. `PlayerBar`:
   `{take && <SpeedButton value={p.speed} onChange={(r) => p.setSpeed(take.uid, r)} busy={p.speedLoading} disabled={p.supported === false} />}`
   before `MarkHere`. `PhoneBar`: the same with `bare`, before `MarkHere`.
   Update the two components' doc comments.
@@ -296,7 +304,8 @@ signalsmith-stretch 1.3.2 (MIT, WASM AudioWorklet); vitest; Playwright
   - "another take in the player starts at speed 100%" (from the song page,
     Play on another take: the bar's button reads `100%`; and, paused at
     75%, opening another take's page puts that take in at `100%`);
-  - "on a phone the bar has the speed as a number, between the time and Mark".
+  - "on a phone the bar has the speed as a number, between the time and Mark";
+  - "a speed picked on a take's page while another take plays waits for that take's Play, and the other plays on".
   `ui/e2e/player.spec.ts`: "REHA's player has no speed button".
   Run only these tests, once (`npx playwright test -g "Speed|speed"` in
   `service/` with `npm run e2e:serve` running; РЭХА's one test in `ui/`).
