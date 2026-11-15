@@ -451,6 +451,67 @@ test("at another speed on speakers slower than the files, each piece says the sp
   }
 })
 
+/** A decoder that keeps what it is given while `held`, as one fallen behind does, and gives it all out once let go. */
+class SlowDecoder extends FakeDecoder {
+  static held = false
+  static all: SlowDecoder[] = []
+  private kept: { timestamp: number }[] = []
+  constructor(init: { output: (data: unknown) => void }) {
+    super(init)
+    SlowDecoder.all.push(this)
+  }
+  decode(chunk: { timestamp: number }) {
+    if (!SlowDecoder.held) return super.decode(chunk)
+    this.kept.push(chunk)
+    this.decodeQueueSize = this.kept.length
+  }
+  static letGo() {
+    SlowDecoder.held = false
+    for (const d of SlowDecoder.all) {
+      const kept = d.kept
+      d.kept = []
+      d.decodeQueueSize = 0
+      for (const chunk of kept) FakeDecoder.prototype.decode.call(d, chunk)
+    }
+  }
+}
+
+test("a decoder fallen behind at 150% makes the take wait where it is heard, then go on, not play on in silence", async () => {
+  vi.stubGlobal("AudioDecoder", SlowDecoder)
+  vi.stubGlobal("EncodedAudioChunk", FakeChunk)
+  vi.stubGlobal("AudioContext", FakeSound)
+  vi.stubGlobal("fetch", async (url: string) => new Response(fixture(url)))
+  FakeSound.started = []
+  SlowDecoder.all = []
+  const p = new Player([{ url: "t1.mp3", gain: 1 }, { url: "t2.mp3", gain: 1 }])
+  try {
+    p.setRate(1.5, fakeStretch())
+    p.play(0)
+    await vi.waitFor(() => expect(p.waiting).toBe(false))
+    const sound = FakeSound.last!
+    const t0 = FakeSound.started[0].when
+    // The decoders stop keeping up; the clock reaches a tenth of a second before the sound placed runs out.
+    SlowDecoder.held = true
+    const end = Math.max(...FakeSound.started.map((s) => s.when + s.duration / s.rate))
+    sound.currentTime = end - 0.1
+    const heard = p.time()
+    await vi.waitFor(() => expect(p.waiting).toBe(true))
+    expect(p.playing).toBe(true)
+    expect(p.time()).toBeCloseTo(heard, 9)
+    // Let go, it plays on from there, every piece in time and none cut.
+    FakeSound.started = []
+    SlowDecoder.letGo()
+    await vi.waitFor(() => expect(p.waiting).toBe(false))
+    expect(FakeSound.started.every((s) => s.offset === 0 && s.when >= sound.currentTime)).toBe(true)
+    sound.currentTime = FakeSound.started[0].when + 0.05 + 1
+    expect(p.time()).toBeCloseTo(heard + 1.5, 9)
+    expect(t0).toBeLessThan(FakeSound.started[0].when)
+  } finally {
+    SlowDecoder.held = false
+    p.close()
+  }
+})
+
 test("a repeat goes round at the speed", async () => {
   const { p, sound, t0 } = await playAt(0.5, 2, (p) => p.setLoop(2, 4))
   // Two seconds of the take from 2 to 4 take four of the clock; the second pass starts there.
