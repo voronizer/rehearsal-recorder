@@ -4,7 +4,7 @@ import { parseFrames } from "./mp3"
 /*
   The take as one MP3, made in the page as the band member hears it there:
   each track at the level the page plays it at, a muted track left out, and
-  with a track on S only that track (Alex's pick, 2026-11-04 10:19). Master
+  with tracks on S only those tracks (Alex's pick, 2026-11-04 10:19). Master
   is the device's listening level, not the band's balance, so it is not in
   it. The take's amount is, as the page plays it (takes/gain.ts in the
   Worker). The rest is as РЭХА makes a mix for the cloud folder
@@ -21,19 +21,25 @@ import { parseFrames } from "./mp3"
 export const TARGET_PEAK = 0.97
 
 /** What the page plays now: levels, M and S. */
-export type Heard = { volumes: Record<string, number>; muted: string[]; soloed: string | null }
+export type Heard = { volumes: Record<string, number>; muted: string[]; soloed: string[] }
 
 /** Each track's level in the mix, in the take's order: 0 for one not heard. */
 export function gainsOf(names: string[], heard: Heard): number[] {
   return names.map((name) => {
-    if (heard.soloed !== null ? name !== heard.soloed : heard.muted.includes(name)) return 0
+    if (heard.soloed.length ? !heard.soloed.includes(name) : heard.muted.includes(name)) return 0
     return Math.max(0, heard.volumes[name] ?? 1)
   })
 }
 
-/** “Viasna 12.mp3”, “Viasna 12 - without Bass, Vocals.mp3”, “Viasna 12 - only Guitar.mp3”. */
+/**
+ * “Viasna 12.mp3”, “Viasna 12 - without Bass, Vocals.mp3”, “Viasna 12 - only Guitar.mp3”,
+ * “Viasna 12 - only Drums, Guitar.mp3”, the soloed tracks in the take's order. With S on
+ * every track nothing is left out: “Viasna 12.mp3”.
+ */
 export function mixName(take: string, names: string[], heard: Heard): string {
-  if (heard.soloed !== null && names.includes(heard.soloed)) return `${take} - only ${heard.soloed}.mp3`
+  const only = names.filter((n) => heard.soloed.includes(n))
+  if (only.length === names.length) return `${take}.mp3`
+  if (only.length) return `${take} - only ${only.join(", ")}.mp3`
   const without = names.filter((n) => heard.muted.includes(n))
   return without.length ? `${take} - without ${without.join(", ")}.mp3` : `${take}.mp3`
 }

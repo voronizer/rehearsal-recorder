@@ -2,7 +2,7 @@ import { createContext, useContext, useEffect, useMemo, useRef, useState, useSyn
 import { playLook, type PlayLook } from "@/lib/playLook"
 import { useLevels, useTake, type TakePage } from "../../api"
 import { firstDesk, whenHeard, withBacking } from "./backing"
-import { withMute, withSolo, type Desk } from "./desk"
+import { heard, withMute, withSolo, type Desk } from "./desk"
 import { levelOf } from "./levels"
 import { keptMaster } from "./master"
 import { Player, wakeSound } from "./player"
@@ -79,8 +79,8 @@ type PlayerApi = {
   speedFailed: boolean
 }
 
-/** A take's M and S: the tracks muted, the one soloed. */
-const NO_DESK: Desk = { muted: [], solo: null }
+/** A take's M and S: the tracks muted, the ones soloed. */
+const NO_DESK: Desk = { muted: [], solo: [] }
 
 const PlayerCtx = createContext<PlayerApi | null>(null)
 export const usePlayer = () => useContext(PlayerCtx)!
@@ -92,7 +92,7 @@ export const usePlayer = () => useContext(PlayerCtx)!
 export type Setup = {
   loop: { a: number; b: number } | null
   muted: number[]
-  solo: number | null
+  solo: number[]
   moved: Record<string, number>
   /** How fast the take is to play: the page keeps its own while another take plays. */
   speed: number
@@ -113,7 +113,7 @@ export type One = {
   pause: (uid: string) => void
   cue: (uid: string, at: number) => void
   setMute: (uid: string, i: number, on: boolean) => void
-  setSolo: (uid: string, i: number | null) => void
+  setSolo: (uid: string, i: number, on: boolean) => void
   /** Master's level, 0 to 1: how loud every take plays on this device. */
   master: () => number
   /** Master's level, heard at once on the take in the player and on every take after it. */
@@ -252,7 +252,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
       p.onEnd = () => redraw((n) => n + 1)
       if (setup.loop) p.setLoop(setup.loop.a, setup.loop.b)
       for (const i of setup.muted) p.setMute(i, true)
-      if (setup.solo !== null) p.setSolo(setup.solo, true)
+      for (const i of setup.solo) p.setSolo(i, true)
       const go = pending.current
       pending.current = null
       const at = go?.at ?? (clock.uid === t.uid ? clock.time : 0)
@@ -362,15 +362,12 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   }
 
   const soloOne = (u: string, i: number) => {
-    const on = deskOf(u).solo !== i
+    const on = !deskOf(u).solo.includes(i)
     heldOf(u)?.setSolo(i, on)
-    setDesk(u, (d) => withSolo(d, on ? i : null))
+    setDesk(u, (d) => withSolo(d, i, on))
   }
 
-  const sounds = (u: string, i: number) => {
-    const d = deskOf(u)
-    return d.solo !== null ? d.solo === i : !d.muted.includes(i)
-  }
+  const sounds = (u: string, i: number) => heard(deskOf(u), i)
 
   // The latest of everything above, for the take page's sound to call at any time.
   const latest = useRef({ uid, play, cue, setSpeed })
@@ -396,13 +393,11 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
         now.setMute(i, on)
         setDesk(u, (d) => withMute(d, i, on))
       },
-      setSolo: (u, i) => {
+      setSolo: (u, i, on) => {
         const now = mine(u)
         if (!now) return
-        const was = now.soloed
-        if (i !== null) now.setSolo(i, true)
-        else if (was !== null) now.setSolo(was, false)
-        setDesk(u, (d) => withSolo(d, i))
+        now.setSolo(i, on)
+        setDesk(u, (d) => withSolo(d, i, on))
       },
       master: () => master.current,
       mixLoudness: () => player.current?.mixLoudness() ?? 0,

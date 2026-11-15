@@ -49,14 +49,14 @@ beforeEach(() => {
 })
 
 test("a take starts with Backing muted before any player had it, and a take without one with nothing muted", () => {
-  expect(firstDesk(takeOf(1))).toEqual({ muted: [2], solo: null })
-  expect(firstDesk(noBacking)).toEqual({ muted: [], solo: null })
+  expect(firstDesk(takeOf(1))).toEqual({ muted: [2], solo: [] })
+  expect(firstDesk(noBacking)).toEqual({ muted: [], solo: [] })
 })
 
 test("a take with no song, or no Backing track, does not wait, and keeps its M as it was", () => {
   for (const take of [takeOf(null), noBacking]) expect(heard(take)()).toBeNull()
   expect(api.fetchQuery).not.toHaveBeenCalled()
-  const desk = { muted: [0], solo: null }
+  const desk = { muted: [0], solo: [] }
   expect(withBacking(takeOf(null), desk, null)).toBe(desk)
   expect(withBacking(noBacking, desk, false)).toBe(desk)
 })
@@ -69,9 +69,9 @@ test("Backing starts as the member hears it for the take's song, at once when th
   expect(heard(takeOf(5))()).toBe(false)
   expect(api.fetchQuery).not.toHaveBeenCalled()
   // Heard, its M off whatever the page or the take's last player had; muted, its S off too.
-  expect(withBacking(takeOf(3), { muted: [2, 0], solo: null }, true)).toEqual({ muted: [0], solo: null })
-  expect(withBacking(takeOf(3), { muted: [0], solo: 2 }, false)).toEqual({ muted: [0, 2], solo: null })
-  expect(withBacking(takeOf(3), { muted: [], solo: 1 }, false)).toEqual({ muted: [2], solo: 1 })
+  expect(withBacking(takeOf(3), { muted: [2, 0], solo: [] }, true)).toEqual({ muted: [0], solo: [] })
+  expect(withBacking(takeOf(3), { muted: [0], solo: [2, 1] }, false)).toEqual({ muted: [0, 2], solo: [1] })
+  expect(withBacking(takeOf(3), { muted: [], solo: [1] }, false)).toEqual({ muted: [2], solo: [1] })
 })
 
 test("a take played before the service has said waits for its answer; with none, Backing is muted", async () => {

@@ -19,7 +19,7 @@ const ROW = "h-14 rounded-lg"
  * after them says the track recorded its notes too. A track that recorded
  * notes alone has a row of its own after the tracks of sound, with M
  * pressed for good (NotesMute) where theirs is, its name greyed as a
- * track's is while another track is soloed. The take's Backing track comes
+ * track's is while other tracks are soloed. The take's Backing track comes
  * after them, in a dashed frame and with no fill, as in the player, and
  * Master is the last row, as on a desk.
  *

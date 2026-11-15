@@ -30,7 +30,7 @@ const songOf = (take: TakePage) => (take.song && backingOf(take) >= 0 ? take.son
 /** A take's M and S before any Player had it: Backing muted, the rest heard. */
 export function firstDesk(take: TakePage): Desk {
   const b = backingOf(take)
-  return { muted: b < 0 ? [] : [b], solo: null }
+  return { muted: b < 0 ? [] : [b], solo: [] }
 }
 
 /** M and S as a new Player of the take starts them: Backing muted unless `heard`; with

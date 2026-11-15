@@ -57,7 +57,7 @@ const player = (over: Partial<Record<keyof Player, unknown>> = {}) =>
     playing: false,
     waiting: false,
     repeat: null,
-    soloed: null,
+    soloed: [],
     time: () => 3,
     isMuted: () => false,
     gain: () => 1,
@@ -284,11 +284,11 @@ test("a stereo track's level is a number a side, a mono one's one", async () => 
 
 test("before the page has opened the take, Backing is muted, as a player made then starts it", async () => {
   const sound = serviceSound(withBacking, one(null))
-  expect(sound.setup()).toMatchObject({ muted: [2], solo: null })
+  expect(sound.setup()).toMatchObject({ muted: [2], solo: [] })
   expect((await sound.state()).muted).toEqual(["Backing"])
   // Turned on while another take plays, it goes with the take when it plays.
   await sound.setMuted("Backing", false)
-  expect(sound.setup()).toMatchObject({ muted: [], solo: null })
+  expect(sound.setup()).toMatchObject({ muted: [], solo: [] })
 })
 
 test("Backing's M is kept for you and its song, and a failure says so without throwing", async () => {
@@ -369,18 +369,40 @@ test("repeat, M and S set while another take plays go with the take when it play
   const sound = serviceSound(take, one(null))
   await sound.setLoop(2, 5)
   await sound.setMuted("Bass", true)
-  await sound.setSolo("Guitar")
-  expect(sound.setup()).toEqual({ loop: { a: 2, b: 5 }, muted: [0], solo: 1, moved: {}, speed: 1 })
-  expect(await sound.state()).toMatchObject({ position: 2, loop: { a: 2, b: 5 }, muted: ["Bass"], soloed: "Guitar" })
+  await sound.setSolo("Guitar", true)
+  expect(sound.setup()).toEqual({ loop: { a: 2, b: 5 }, muted: [0], solo: [1], moved: {}, speed: 1 })
+  expect(await sound.state()).toMatchObject({ position: 2, loop: { a: 2, b: 5 }, muted: ["Bass"], soloed: ["Guitar"] })
+})
+
+test("S on two tracks before the take plays: both kept for when it plays, in the take's order", async () => {
+  const sound = serviceSound(take, one(null))
+  await sound.setSolo("Guitar", true)
+  await sound.setSolo("Bass", true)
+  expect(sound.setup()).toMatchObject({ muted: [], solo: [1, 0] })
+  expect((await sound.state()).soloed).toEqual(["Bass", "Guitar"])
+  await sound.setSolo("Guitar", false)
+  expect((await sound.state()).soloed).toEqual(["Bass"])
+  // A name the take has no track for changes nothing.
+  await sound.setSolo("Keys", true)
+  expect((await sound.state()).soloed).toEqual(["Bass"])
+})
+
+test("S on the take in the player goes to the one player, track by track", async () => {
+  const o = one(player())
+  const sound = serviceSound(take, o)
+  await sound.setSolo("Guitar", true)
+  await sound.setSolo("Bass", false)
+  expect(o.setSolo).toHaveBeenNthCalledWith(1, take.uid, 1, true)
+  expect(o.setSolo).toHaveBeenNthCalledWith(2, take.uid, 0, false)
 })
 
 test("M and S on one track take each other off while another take plays, as they do in the player", async () => {
   const sound = serviceSound(take, one(null))
   await sound.setMuted("Bass", true)
-  await sound.setSolo("Bass")
-  expect(sound.setup()).toMatchObject({ muted: [], solo: 0 })
+  await sound.setSolo("Bass", true)
+  expect(sound.setup()).toMatchObject({ muted: [], solo: [0] })
   await sound.setMuted("Bass", true)
-  expect(sound.setup()).toMatchObject({ muted: [0], solo: null })
+  expect(sound.setup()).toMatchObject({ muted: [0], solo: [] })
 })
 
 test("Master's level comes with the take as it opens, and a poll leaves the fader where the hand has it", async () => {

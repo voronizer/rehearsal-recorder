@@ -52,6 +52,8 @@ const yoursNow = () => queryClient.getQueryData(levelsQuery.queryKey)?.levels
 export function serviceSound(take: TakePage, one: One): ServiceSound {
   const { uid, gen } = take
   const names = take.tracks.map((t) => t.name)
+  /** The soloed tracks' names, in the take's order. */
+  const inOrder = (solo: number[]) => names.filter((_, i) => solo.includes(i))
   const tracks: TrackFile[] = take.tracks.map((t) => ({
     name: t.name,
     file: t.mp3,
@@ -104,7 +106,7 @@ export function serviceSound(take: TakePage, one: One): ServiceSound {
         rate: p.speed,
         loop,
         muted: muted.map((i) => names[i]),
-        soloed: solo === null ? null : names[solo],
+        soloed: inOrder(solo),
         volumes: Object.fromEntries(names.map((n, i) => [n, p.gain(i)])),
         // A side each for a stereo file, left then right.
         levels: Object.fromEntries(names.map((n, i) => [n, loud[i]])),
@@ -117,7 +119,7 @@ export function serviceSound(take: TakePage, one: One): ServiceSound {
       position: coming?.at ?? position,
       loop,
       muted: muted.map((i) => names[i]),
-      soloed: solo === null ? null : names[solo],
+      soloed: inOrder(solo),
       volumes: Object.fromEntries(names.map((n) => [n, levelHere(n)])),
       levels: {},
     }
@@ -253,11 +255,11 @@ export function serviceSound(take: TakePage, one: One): ServiceSound {
       }
       return state()
     },
-    async setSolo(name) {
-      const i = name === null ? null : names.indexOf(name)
-      if (i !== -1) {
-        if (mine()) one.setSolo(uid, i)
-        else ({ muted, solo } = withSolo({ muted, solo }, i))
+    async setSolo(name, on) {
+      const i = names.indexOf(name)
+      if (i >= 0) {
+        if (mine()) one.setSolo(uid, i, on)
+        else ({ muted, solo } = withSolo({ muted, solo }, i, on))
       }
       return state()
     },
