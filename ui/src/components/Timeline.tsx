@@ -678,7 +678,11 @@ export function Timeline({
                       />
                     </PlateCell>
 
-                    <div data-lane={m.name} className={cn("min-w-0", paired ? "pt-[3px]" : "py-[3px]")}>
+                    <div
+                      data-lane={m.name}
+                      data-dimmed={dimmed || undefined}
+                      className={cn("min-w-0", paired ? "pt-[3px]" : "py-[3px]")}
+                    >
                       {/* On the group's fill, 50 px in the 56; above its
                           notes, down to the line over them. */}
                       <Waveform

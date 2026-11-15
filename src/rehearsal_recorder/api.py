@@ -209,7 +209,7 @@ class _LostPlayer:
     def state(self):
         seen = self.seen
         return {
-            "position": 0.0, "duration": 0.0, "finished": False, "loop": None, "soloed": None,
+            "position": 0.0, "duration": 0.0, "finished": False, "loop": None, "soloed": [],
             "muted": [], "volumes": {}, "master": 1.0, "master_muted": False, "click": False,
             **seen,
             "playing": False, "problem": PLAYBACK_STOPPED, "master_level": 0.0,
@@ -5384,10 +5384,10 @@ class Api:
         self._player.set_muted(name, muted)
         return {"ok": True, **self._player.state()}
 
-    def player_set_solo(self, name):
+    def player_set_solo(self, name, on):
         if self._player is None:
             return {"ok": False, "error": "No take open"}
-        self._player.set_solo(name)
+        self._player.set_solo(name, bool(on))
         return {"ok": True, **self._player.state()}
 
     def _output_channels(self):
@@ -5472,8 +5472,8 @@ class Api:
             player.set_master(seen["master"])
         for name in seen.get("muted") or []:
             player.set_muted(name, True)
-        if seen.get("soloed"):
-            player.set_solo(seen["soloed"])
+        for name in seen.get("soloed") or []:
+            player.set_solo(name, True)
         loop = seen.get("loop")
         if loop:
             player.set_loop(loop["a"], loop["b"])

@@ -154,12 +154,13 @@ function lineupName(lineups, name, renaming = null) {
   return other ? {error:`There is already a lineup called ${other.name}`} : {name:cut};
 }
 // Mirrors what audio/player.py measures in the mix: post-fader, silent when
-// muted or when another track is soloed, and nothing at all while stopped.
+// muted or when other tracks are soloed and it is not, and nothing at all
+// while stopped.
 function levels() {
   if (!P || !P.playing) return {};
   const t = position();
   return Object.fromEntries(Object.keys(P.volumes).map(n => {
-    const silent = P.muted.includes(n) || (P.soloed && P.soloed !== n);
+    const silent = P.muted.includes(n) || (P.soloed.length > 0 && !P.soloed.includes(n));
     const raw = Math.abs(Math.sin(t * 2.7)) * 0.9;
     const left = silent ? 0 : Math.round(raw * P.volumes[n] * 1000) / 1000;
     // A stereo track's right side at half the left, so the two can be told
@@ -184,7 +185,9 @@ async function held(name) {
 function playerState() {
   if (!P) return {open:false};
   return {open:true, ok:true, playing:P.playing, position:position(), duration:P.duration,
-          loop:P.loop, muted:P.muted, soloed:P.soloed, volumes:P.volumes, master:P.master,
+          loop:P.loop, muted:P.muted, volumes:P.volumes, master:P.master,
+          // In the take's order, as the real player sends them.
+          soloed:P.tracks.map(t => t.name).filter(n => P.soloed.includes(n)),
           levels:levels(), master_level:masterLevel(), click:playerClick};
 }
 function moveTo(t) { P.position = Math.max(0, Math.min(P.duration, t)); P.t0 = clock(); }
@@ -2313,7 +2316,7 @@ window.__MAKE_API__ = () => ({
     await held('player_open');
     if (reuseExisting && P && JSON.stringify(P.tracks) === JSON.stringify(tracks)) return {ok:true, ...playerState()};
     const dur = tracks.length ? (fileDurations[tracks[0].file] ?? TAKE) : TAKE;
-    P = {tracks, playing:false, position:0, t0:clock(), duration:dur, loop:null, muted:[], soloed:null,
+    P = {tracks, playing:false, position:0, t0:clock(), duration:dur, loop:null, muted:[], soloed:[],
          volumes:Object.fromEntries(tracks.map(t => [t.name, 1])),
          master:readCfg().master_volume ?? 1};
     const out = {ok:true, ...playerState()};
@@ -2358,12 +2361,14 @@ window.__MAKE_API__ = () => ({
   player_set_muted: track('player_set_muted', async (n, m) => {
     if (!P) return {ok:false};
     P.muted = m ? [...new Set([...P.muted, n])] : P.muted.filter(x => x !== n);
-    if (m && P.soloed === n) P.soloed = null;
+    if (m) P.soloed = P.soloed.filter(x => x !== n);
     return {ok:true, ...playerState()};
   }),
-  player_set_solo: track('player_set_solo', async (n) => {
-    if (P) {
-      P.soloed = n;
+  // Each S adds its track to the ones heard; off, it takes it away.
+  player_set_solo: track('player_set_solo', async (n, on) => {
+    if (P && !on) P.soloed = P.soloed.filter(x => x !== n);
+    else if (P && P.tracks.some(t => t.name === n)) {
+      P.soloed = [...new Set([...P.soloed, n])];
       P.muted = P.muted.filter(x => x !== n);
     }
     return {ok:true, ...playerState()};

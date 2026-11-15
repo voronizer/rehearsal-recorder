@@ -307,7 +307,7 @@ levels = function () {
   // A stereo file's right side a little quieter than its left, as its wave.
   const two = new Set(P.tracks.filter(isStereo).map(tr => tr.name));
   return Object.fromEntries(Object.keys(P.volumes).map(n => {
-    const silent = P.muted.includes(n) || (P.soloed && P.soloed !== n);
+    const silent = P.muted.includes(n) || (P.soloed.length > 0 && !P.soloed.includes(n));
     const v = silent ? 0 : VOICE[n](t, {seed: 2, end: SONG_END}) * P.volumes[n];
     return [n, two.has(n) ? [v, v * 0.85] : [v]];
   }));

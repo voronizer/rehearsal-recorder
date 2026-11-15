@@ -1,4 +1,4 @@
-import { withMute, withSolo, type Desk } from "./desk"
+import { heard, withMute, withSolo, type Desk } from "./desk"
 import { FRAME, loopTime, passFrames, passShift } from "./loop"
 import { parseFrames } from "./mp3"
 import { Fold } from "./peaks"
@@ -179,7 +179,7 @@ export class Player {
   private boost = 1
   private volume = 1
   private muted = new Set<number>()
-  private solo: number | null = null
+  private solo: number[] = []
   private loop: { a: number; b: number } | null = null
   /** How fast the take plays: 1 as recorded. */
   private rate = 1
@@ -281,8 +281,8 @@ export class Player {
     return this.muted.has(i)
   }
 
-  /** The track heard alone, or null. */
-  get soloed(): number | null {
+  /** The tracks soloed. */
+  get soloed(): number[] {
     return this.solo
   }
 
@@ -353,13 +353,13 @@ export class Player {
     this.desk(withMute(this.deskNow(), i, on))
   }
 
-  /** Only this track is heard, or, with `on` false, every track again. */
+  /** Track `i`'s S on or off: with S on, only the soloed tracks are heard (desk.ts). */
   setSolo(i: number, on: boolean): void {
-    this.desk(on ? withSolo(this.deskNow(), i) : this.solo === i ? withSolo(this.deskNow(), null) : this.deskNow())
+    this.desk(withSolo(this.deskNow(), i, on))
   }
 
   private deskNow(): Desk {
-    return { muted: [...this.muted], solo: this.solo }
+    return { muted: [...this.muted], solo: [...this.solo] }
   }
 
   private desk(d: Desk): void {
@@ -540,11 +540,11 @@ export class Player {
   }
 
   private mix(now = false) {
+    const d = this.deskNow()
     this.tracks.forEach((_, i) => {
-      const heard = this.solo !== null ? this.solo === i : !this.muted.has(i)
       const g = this.gains[i]
       if (!g || !this.context) return
-      const v = heard ? this.levels[i] * this.boost : 0
+      const v = heard(d, i) ? this.levels[i] * this.boost : 0
       if (now) g.gain.value = v
       else g.gain.setTargetAtTime(v, this.context.currentTime, GLIDE_SEC)
     })

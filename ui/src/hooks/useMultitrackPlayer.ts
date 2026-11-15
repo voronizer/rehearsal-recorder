@@ -97,7 +97,7 @@ export function useMultitrackPlayer(
   const [position, setPosition] = useState(0)
   const [duration, setDuration] = useState(fallbackDuration)
   const [muted, setMuted] = useState<string[]>([])
-  const [soloed, setSoloed] = useState<string | null>(null)
+  const [soloed, setSoloed] = useState<string[]>([])
   const [volumes, setVolumes] = useState<Record<string, number>>({})
   // The whole mix, after the faders. Python says where it was left when the
   // take opens. Shared with the header's speaker: lib/listening.ts.
@@ -150,7 +150,7 @@ export function useMultitrackPlayer(
       rate?: number
       duration?: number
       muted?: string[]
-      soloed?: string | null
+      soloed?: string[]
       volumes?: Record<string, number>
       master?: number
       master_level?: number
@@ -547,18 +547,20 @@ export function useMultitrackPlayer(
     },
 
     isMuted: (name: string) => muted.includes(name),
-    isSoloed: (name: string) => soloed === name,
-    hasSolo: soloed !== null,
+    isSoloed: (name: string) => soloed.includes(name),
+    hasSolo: soloed.length > 0,
     toggleMute: (name: string) => {
       const heardNext = muted.includes(name)
       void call(() => sound.setMuted(name, !heardNext))
       keepHeard(name, heardNext)
     },
     // M and S on one track take each other off: S on a muted track turns its
-    // M off, as M on the soloed track turns its S off (the sound does it).
+    // M off, as M on a soloed track turns its S off (the sound does it). Each
+    // S adds its track to the ones heard; pressed again, it takes it away
+    // (Alex, 2026-11-15 17:41:12Z).
     toggleSolo: (name: string) => {
-      const on = soloed !== name
-      void call(() => sound.setSolo(on ? name : null))
+      const on = !soloed.includes(name)
+      void call(() => sound.setSolo(name, on))
       if (on && muted.includes(name)) keepHeard(name, true)
     },
     getVolume: (name: string) => volumes[name] ?? 1,

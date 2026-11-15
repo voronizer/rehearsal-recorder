@@ -27,7 +27,7 @@ export type PlayerSound = {
   seek(seconds: number): Promise<PlayerState>
   setLoop(a: number | null, b: number | null): Promise<PlayerState>
   setMuted(name: string, muted: boolean): Promise<PlayerState>
-  setSolo(name: string | null): Promise<PlayerState>
+  setSolo(name: string, on: boolean): Promise<PlayerState>
   setVolume(name: string, volume: number): Promise<Ok>
   /** How loud the whole take plays, for listening: heard at once. */
   setMaster(volume: number): Promise<Ok>
@@ -55,7 +55,7 @@ export const pythonSound: PlayerSound = {
   seek: (seconds) => api().player_seek(seconds),
   setLoop: (a, b) => api().player_set_loop(a, b),
   setMuted: (name, muted) => api().player_set_muted(name, muted),
-  setSolo: (name) => api().player_set_solo(name),
+  setSolo: (name, on) => api().player_set_solo(name, on),
   setVolume: (name, volume) => api().player_set_volume(name, volume),
   setMaster: (volume) => api().player_set_master(volume),
   keepMaster: (volume) => api().save_master_volume(volume),

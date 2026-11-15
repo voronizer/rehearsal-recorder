@@ -250,26 +250,52 @@ def main():
     p.set_muted("B", True)
     ok("mute removes a track", abs(int(settle(p)[:, 0].mean()) - 1000) < 30)
     p.set_muted("B", False)
-    p.set_solo("B")
+    p.set_solo("B", True)
     ok("solo leaves one", abs(int(settle(p)[:, 0].mean()) - 2000) < 30)
-    p.set_solo(None)
+    p.set_solo("B", False)
     # M and S on one track take each other off: both are never lit. From
     # the start again: each settling spends a part of the two-second take.
     p.seek(0)
     p.set_muted("B", True)
-    p.set_solo("B")
+    p.set_solo("B", True)
     ok("S on a muted track takes its M off, and it plays alone",
-       p.state()["muted"] == [] and p.state()["soloed"] == "B"
+       p.state()["muted"] == [] and p.state()["soloed"] == ["B"]
        and abs(int(settle(p)[:, 0].mean()) - 2000) < 30)
     p.set_muted("B", True)
     ok("M on the soloed track takes its S off",
-       p.state()["muted"] == ["B"] and p.state()["soloed"] is None
+       p.state()["muted"] == ["B"] and p.state()["soloed"] == []
        and abs(int(settle(p)[:, 0].mean()) - 1000) < 30)
-    p.set_solo("A")
-    ok("S on another track leaves a muted one muted", p.state()["muted"] == ["B"] and p.state()["soloed"] == "A")
-    p.set_solo(None)
+    p.set_solo("A", True)
+    ok("S on another track leaves a muted one muted", p.state()["muted"] == ["B"] and p.state()["soloed"] == ["A"])
+    p.set_solo("A", False)
     p.set_muted("B", False)
+    # Each S adds its track to the ones heard (Alex, 2026-11-15).
     p.seek(0)
+    p.set_solo("B", True)
+    p.set_solo("A", True)
+    ok("S on two tracks plays both, in the take's order",
+       p.state()["soloed"] == ["A", "B"]
+       and abs(int(settle(p)[:, 0].mean()) - 3000) < 30)
+    p.seek(0)
+    p.set_solo("A", False)
+    ok("S off on one leaves the other alone",
+       p.state()["soloed"] == ["B"]
+       and abs(int(settle(p)[:, 0].mean()) - 2000) < 30)
+    p.set_solo("Z", True)
+    ok("S on a track the take lacks changes nothing", p.state()["soloed"] == ["B"])
+    p.set_solo("B", False)
+    p.seek(0)
+
+    # With the sound process gone, the stand-in says no S, and the take set up
+    # again gets every S the screen last saw.
+    ok("the stand-in's state has an empty list of S",
+       _api_at_start._LostPlayer({}).state()["soloed"] == [])
+    asked = []
+    again = types.SimpleNamespace(set_solo=lambda name, on: asked.append((name, on)))
+    _api_at_start.Api._mix_as_seen(
+        types.SimpleNamespace(_set_up_player=lambda player, tracks: None, _open_tracks=[]),
+        again, {"soloed": ["A", "B"]})
+    ok("a take set up again gets back each S", asked == [("A", True), ("B", True)])
     p.set_volume("A", 0.5)
     p.set_volume("B", 0.0)
     ok("volume applies", abs(int(settle(p)[:, 0].mean()) - 500) < 30)

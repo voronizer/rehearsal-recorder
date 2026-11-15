@@ -126,7 +126,9 @@ class TakePlayer:
         self._playing = False
         self._loop = None  # (start_frame, end_frame)
         self._loop_asked = None
-        self._soloed = None
+        # The tracks with S on, by name. A new frozenset is put in place each
+        # time, so the callback never reads one being changed.
+        self._soloed = frozenset()
         self._finished = False
         # How loud the whole mix comes out, after every track's own fader —
         # the knob on the speaker rather than the balance of the band. The
@@ -309,7 +311,7 @@ class TakePlayer:
     def _effective_gain(self, track):
         if track.muted:
             return 0.0
-        if self._soloed is not None and self._soloed != track.name:
+        if self._soloed and track.name not in self._soloed:
             return 0.0
         return track.volume
 
@@ -689,16 +691,21 @@ class TakePlayer:
             for t in self.tracks:
                 if t.name == name:
                     t.muted = bool(muted)
-            if muted and self._soloed == name:
-                self._soloed = None
+            if muted:
+                self._soloed = self._soloed - {name}
         self._changed()
 
-    def set_solo(self, name):
+    # Each S adds its track to the ones heard; off, it takes it away. A name
+    # the take has no track for changes nothing.
+    def set_solo(self, name, on):
         with self._lock:
-            self._soloed = name
-            for t in self.tracks:
-                if t.name == name:
-                    t.muted = False
+            if not on:
+                self._soloed = self._soloed - {name}
+            else:
+                for t in self.tracks:
+                    if t.name == name:
+                        t.muted = False
+                        self._soloed = self._soloed | {name}
         self._changed()
 
     def set_master_muted(self, muted):
@@ -829,7 +836,7 @@ class TakePlayer:
                     if self._loop_asked
                     else None
                 ),
-                "soloed": self._soloed,
+                "soloed": [t.name for t in self.tracks if t.name in self._soloed],
                 "muted": [t.name for t in self.tracks if t.muted],
                 "volumes": {t.name: t.volume for t in self.tracks},
                 "master": self.master,

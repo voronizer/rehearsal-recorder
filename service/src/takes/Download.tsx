@@ -122,7 +122,7 @@ function Choices({
 
   const mix = async () => {
     const state = await sound.state()
-    const heard: Heard = { volumes: state.volumes ?? {}, muted: state.muted ?? [], soloed: state.soloed ?? null }
+    const heard: Heard = { volumes: state.volumes ?? {}, muted: state.muted ?? [], soloed: state.soloed ?? [] }
     const names = take.tracks.map((t) => t.name)
     const heardAny = gainsOf(names, heard).some((g) => g > 0)
     setFailed(false)

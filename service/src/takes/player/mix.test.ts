@@ -5,18 +5,22 @@ import { addInto, gainsOf, makeMix, mixName, turnDown, type Heard, type MixWays 
 import { parseFrames } from "./mp3"
 
 const NAMES = ["Drums", "Bass", "Guitar", "Vocals"]
-const heard = (h: Partial<Heard> = {}): Heard => ({ volumes: {}, muted: [], soloed: null, ...h })
+const heard = (h: Partial<Heard> = {}): Heard => ({ volumes: {}, muted: [], soloed: [], ...h })
 
 test("each track is at its level; a muted one, or one left out by S, is not in the mix", () => {
   expect(gainsOf(NAMES, heard({ volumes: { Guitar: 0.8, Vocals: 0.5 } }))).toEqual([1, 1, 0.8, 0.5])
   expect(gainsOf(NAMES, heard({ muted: ["Bass", "Vocals"] }))).toEqual([1, 0, 1, 0])
-  expect(gainsOf(NAMES, heard({ soloed: "Guitar", muted: ["Guitar"], volumes: { Guitar: 0.7 } }))).toEqual([0, 0, 0.7, 0])
+  expect(gainsOf(NAMES, heard({ soloed: ["Guitar"], muted: ["Guitar"], volumes: { Guitar: 0.7 } }))).toEqual([0, 0, 0.7, 0])
+  expect(gainsOf(NAMES, heard({ soloed: ["Vocals", "Drums"], volumes: { Drums: 0.5 } }))).toEqual([0.5, 0, 0, 1])
 })
 
 test("the file is called after the take, and after what was left out", () => {
   expect(mixName("Viasna 12", NAMES, heard({ volumes: { Bass: 0.3 } }))).toBe("Viasna 12.mp3")
   expect(mixName("Viasna 12", NAMES, heard({ muted: ["Vocals", "Bass"] }))).toBe("Viasna 12 - without Bass, Vocals.mp3")
-  expect(mixName("Viasna 12", NAMES, heard({ soloed: "Guitar", muted: ["Bass"] }))).toBe("Viasna 12 - only Guitar.mp3")
+  expect(mixName("Viasna 12", NAMES, heard({ soloed: ["Guitar"], muted: ["Bass"] }))).toBe("Viasna 12 - only Guitar.mp3")
+  // The soloed tracks in the take's order; with S on every track nothing is left out.
+  expect(mixName("Viasna 12", NAMES, heard({ soloed: ["Guitar", "Drums"] }))).toBe("Viasna 12 - only Drums, Guitar.mp3")
+  expect(mixName("Viasna 12", NAMES, heard({ soloed: [...NAMES].reverse() }))).toBe("Viasna 12.mp3")
 })
 
 test("mono tracks add into one side; a stereo track makes the mix stereo; a longer one makes it longer", () => {
@@ -105,7 +109,7 @@ test("the mix turns the take up by its amount, as the page plays it", async () =
         finalize: () => new Uint8Array(),
       }),
     }
-    await makeMix({ ...take, gain }, heard({ soloed: "Drums" }), { ways: spy })
+    await makeMix({ ...take, gain }, heard({ soloed: ["Drums"] }), { ways: spy })
     return top
   }
   // The first track decodes as a sine at 0.3.
@@ -117,7 +121,7 @@ test("the mix turns the take up by its amount, as the page plays it", async () =
 
 test("with nothing heard there is no mix, and a stop stops it", async () => {
   serve()
-  await expect(makeMix(take, heard({ soloed: "Keys" }), { ways: ways() })).rejects.toThrow("No track is heard")
+  await expect(makeMix(take, heard({ soloed: ["Keys"] }), { ways: ways() })).rejects.toThrow("No track is heard")
   const stop = new AbortController()
   const going = makeMix(take, heard(), { ways: ways(), signal: stop.signal, progress: () => stop.abort() })
   await expect(going).rejects.toThrow("The mix was stopped")

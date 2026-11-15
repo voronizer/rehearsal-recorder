@@ -50,9 +50,21 @@ test.describe("as Alex", () => {
     await expect(solo).toHaveAttribute("aria-pressed", "true")
     // The drums' notes go pale with their sound while the bass plays alone.
     await expect(kit).toHaveAttribute("data-dimmed", "true")
+    // Each S adds its track: with the drums' on too, their notes are heard
+    // again and the guitar is not; S again takes one away.
+    const soloDrums = player.getByRole("button", { name: "Solo Drums" })
+    await soloDrums.click()
+    await expect(solo).toHaveAttribute("aria-pressed", "true")
+    await expect(soloDrums).toHaveAttribute("aria-pressed", "true")
+    await expect(kit).not.toHaveAttribute("data-dimmed")
+    await expect(player.locator("[data-lane='Guitar']")).toHaveAttribute("data-dimmed", "true")
     await solo.click()
     await expect(solo).toHaveAttribute("aria-pressed", "false")
+    await expect(soloDrums).toHaveAttribute("aria-pressed", "true")
+    await soloDrums.click()
+    await expect(soloDrums).toHaveAttribute("aria-pressed", "false")
     await expect(kit).not.toHaveAttribute("data-dimmed")
+    await expect(player.locator("[data-lane='Guitar']")).not.toHaveAttribute("data-dimmed")
     await expect(mute).toHaveAttribute("aria-pressed", "true")
 
     // On one track, S takes M off and M takes S off.
