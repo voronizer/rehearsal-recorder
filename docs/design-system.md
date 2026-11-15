@@ -340,7 +340,11 @@ the shared one when it is redone.
   plate and Master have none, nor has a file whose channels could not be
   read. The name has the rest of its row, between the icon and the rings,
   and a name cut at its end shows whole on hover and on keyboard focus
-  (`Whole reach`). Under it is the fader, with M and S after it. M and S are
+  (`Whole reach`). Under it is the fader, with M and S after it. In the band
+  service a fader you moved shows a notch at РЭХА's level (`reha`): a 2 by
+  14 px line in the text's colour at 45%, under the knob. A drag stops on
+  it while the knob covers it, and in the lanes a double-click goes back to
+  it and its tip says what it is. РЭХА's screens give no `reha`. M and S are
   `Toggle size="lane"`: 20 px, 12 px text and 4 px corners, 6 px apart,
   which keeps their 24 px touch areas apart (WCAG 2.5.8). Pressed, M is the
   accent blue with a white letter and S amber with a dark one (`tone="mute"`
@@ -918,7 +922,8 @@ as the `cn` import.
   chips, unseen, while a take is in hand, and Record keeps room for a number
   of two digits; Mark is as wide as Open mark; and the player keeps
   one line between the transport and the map for what it has to say, one
-  thing at a time (a load error, then Cropping, then the output's warning),
+  thing at a time (a load error, then, in the band service, your levels not
+  kept, then Cropping, then the output's warning),
   so the timeline never moves when it fills. On the recording screen the
   disk line holds the room of the longest thing it can say, and a tile's dB
   figure holds the room of "-100.0", the widest it can read. With a take

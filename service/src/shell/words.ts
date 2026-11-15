@@ -40,6 +40,9 @@ export function longDay(date: string, now = new Date()): string {
 /** "1 take", "3 takes". */
 export const count = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`
 
+/** Why your levels for a take's tracks were not kept, as the page says it. */
+export const notKept = (reason: string) => `Your levels were not kept: ${reason}`
+
 /** A take's or a song's name in a label, in curly quotes (design system B8). */
 export const quoted = (name: string) => `“${name}”`
 

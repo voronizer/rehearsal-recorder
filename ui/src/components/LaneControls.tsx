@@ -1,4 +1,4 @@
-import type { ReactNode } from "react"
+import { useEffect, useRef, useState, type ReactNode } from "react"
 import { Volume1, Volume2, VolumeX } from "lucide-react"
 import { ChannelsIcon } from "@/components/ChannelsIcon"
 import { InstrumentIcon } from "@/components/InstrumentIcon"
@@ -9,7 +9,7 @@ import { Toggle } from "@/components/ui/toggle"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { Whole } from "@/components/ui/whole"
 import { screenTakesKey } from "@/hooks/useSpacebar"
-import { CLIP_THRESHOLD } from "@/lib/levels"
+import { CLIP_THRESHOLD, atReha, stopAtReha } from "@/lib/levels"
 import { cn } from "@/lib/utils"
 
 /**
@@ -27,6 +27,14 @@ import { cn } from "@/lib/utils"
  * A stereo track's meter is in two along its length, left above right, the
  * way the setup screen's check draws it: one bar for the louder side would
  * hide a side that went quiet.
+ *
+ * In the band service a fader you moved shows a notch at the level РЭХА sent
+ * (`reha`), under the knob, and a drag stops on it while the knob covers it
+ * (lib/levels.ts). Where `onBack` is given (the lanes on a computer) a
+ * double-click goes back to it, and the pointer or keyboard focus opens a
+ * tip that says what it is, but not while the fader is dragged. Neither
+ * slider.tsx nor shadcn's slider draws a notch at a value, so it is drawn
+ * here. РЭХА's screens give no `reha`: none of this is there.
  */
 function MeteredFader({
   name,
@@ -36,6 +44,8 @@ function MeteredFader({
   onWell = false,
   onVolume,
   onVolumeCommit,
+  reha,
+  onBack,
 }: {
   /** On the plate's grey in the player: the meter's track is the selected
    *  grey, which reads on it, not the muted one, which does not. */
@@ -50,14 +60,32 @@ function MeteredFader({
   channels?: number
   onVolume: (value: number) => void
   onVolumeCommit: () => void
+  /** The band service: the level РЭХА sent for this track, for the notch. */
+  reha?: number
+  /** The lanes on a computer: what a double-click on the notch's fader does. */
+  onBack?: () => void
 }) {
   const sides = Array.from({ length: channels > 1 ? 2 : 1 }, (_, i) => levels[i] ?? 0)
   const level = Math.max(0, ...sides)
   const clipping = level > CLIP_THRESHOLD
   const split = sides.length > 1
+  const notch = reha !== undefined && !atReha(volume, reha)
+  // How far the knob's centre travels, read as a drag starts: the fader's
+  // width less the 14 px thumb.
+  const travel = useRef(0)
+  const dragging = useRef(false)
+  const [dragged, setDragged] = useState(false)
+  const [wanted, setWanted] = useState(false)
+  const letGo = () => {
+    dragging.current = false
+    setDragged(false)
+  }
 
-  return (
-    <div className="relative h-4 w-full">
+  const fader = (
+    <div
+      className="relative h-4 w-full"
+      onDoubleClick={onBack && notch ? onBack : undefined}
+    >
       <div
         role="meter"
         aria-label={`${name} level`}
@@ -89,14 +117,36 @@ function MeteredFader({
         ))}
       </div>
 
+      {notch && (
+        // Centred where the knob's centre would be at that level: Radix keeps
+        // the 14 px thumb inside the fader.
+        <span
+          data-reha-notch
+          aria-hidden
+          className="pointer-events-none absolute top-1/2 h-3.5 w-0.5 -translate-x-1/2 -translate-y-1/2 rounded-full bg-foreground/45"
+          style={{ left: `calc(${reha * 100}% + ${(0.5 - reha) * 14}px)` }}
+        />
+      )}
+
       <Slider
         variant="fader"
         min={0}
         max={1}
         step={0.01}
         value={[volume]}
-        onValueChange={([v]) => onVolume(v)}
-        onPointerUp={onVolumeCommit}
+        onValueChange={([v]) =>
+          onVolume(dragging.current && reha !== undefined ? stopAtReha(v, reha, travel.current) : v)
+        }
+        onPointerDown={(e) => {
+          travel.current = Math.max(0, e.currentTarget.clientWidth - 14)
+          dragging.current = true
+          setDragged(true)
+        }}
+        onPointerUp={() => {
+          letGo()
+          onVolumeCommit()
+        }}
+        onLostPointerCapture={letGo}
         onKeyUp={onVolumeCommit}
         onKeyDown={(e) => {
           // Left focused by the mouse, it hands the screen its keys (← and →
@@ -109,6 +159,14 @@ function MeteredFader({
         className="absolute inset-0 cursor-pointer"
       />
     </div>
+  )
+
+  if (!onBack) return fader
+  return (
+    <Tooltip open={notch && wanted && !dragged} onOpenChange={setWanted}>
+      <TooltipTrigger asChild>{fader}</TooltipTrigger>
+      <TooltipContent>Your level: only you hear it. The notch is РЭХА's.</TooltipContent>
+    </Tooltip>
   )
 }
 
@@ -156,6 +214,10 @@ function MeteredFader({
  * selected grey, and M and S that are off have the card's fill, so they read
  * as buttons on it (13:07Z). On the phone's desk and Backing's dashed plate,
  * on the card, they are as they were.
+ *
+ * The band service gives the level РЭХА sent (`reha`), for the fader's notch
+ * (MeteredFader); in the lanes on a computer (`back`) a double-click on the
+ * fader goes back to it and keeps that, as letting go of the fader does.
  */
 export function LaneControls({
   name,
@@ -174,6 +236,8 @@ export function LaneControls({
   onVolume,
   onVolumeCommit,
   onWell = false,
+  reha,
+  back = false,
 }: {
   name: string
   /** The band's icon for this name; none draws the neutral one. */
@@ -199,8 +263,27 @@ export function LaneControls({
   onVolumeCommit: () => void
   /** On the plate's grey in the player (above). */
   onWell?: boolean
+  /** The band service: the level РЭХА sent for this track. */
+  reha?: number
+  /** A double-click on the fader goes back to `reha` (the lanes only). */
+  back?: boolean
 }) {
   const file = channels === 2 ? "Stereo file" : channels === 1 ? "Mono file" : null
+  // The volume is kept once the screen holds it (MeteredFader), so going back
+  // keeps it after the render that sets it, with that render's commit.
+  const goneBack = useRef(false)
+  useEffect(() => {
+    if (!goneBack.current) return
+    goneBack.current = false
+    onVolumeCommit()
+  })
+  const onBack =
+    back && reha !== undefined
+      ? () => {
+          goneBack.current = true
+          onVolume(reha)
+        }
+      : undefined
   return (
     <LanePlate
       data-plate={name}
@@ -253,6 +336,8 @@ export function LaneControls({
             onWell={onWell}
             onVolume={onVolume}
             onVolumeCommit={onVolumeCommit}
+            reha={reha}
+            onBack={onBack}
           />
         </div>
         <span className="flex shrink-0 gap-1.5">

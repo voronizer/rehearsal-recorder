@@ -96,3 +96,26 @@ export function isSilent(watch: TrackWatch | undefined, now: number): boolean {
     watch?.quietSince != null && now - watch.quietSince >= SILENT_AFTER_MS
   )
 }
+
+/**
+ * In the band service a fader you moved shows a notch where РЭХА had the
+ * track (LaneControls). This close to РЭХА's level, half a key step, the
+ * fader is on it: the notch goes, and the service forgets your level.
+ */
+export const AT_REHA = 0.005
+/**
+ * A drag stops on the notch while the fader's knob covers it: half the knob
+ * with its ring (`size-3.5` and `ring-2`, 18 px). Alex, 2026-11-15 16:02Z.
+ */
+export const STOP_PX = 9
+
+/** The fader stands on РЭХА's level. */
+export const atReha = (v: number, reha: number) => Math.abs(v - reha) < AT_REHA
+
+/**
+ * Where a drag puts the fader: on РЭХА's level while the knob would cover
+ * the notch, else where the pointer is. `travel` is how far the knob's
+ * centre moves along the fader, in px; 0 when it is not known yet.
+ */
+export const stopAtReha = (v: number, reha: number, travel: number) =>
+  travel > 0 && Math.abs(v - reha) * travel < STOP_PX ? reha : v

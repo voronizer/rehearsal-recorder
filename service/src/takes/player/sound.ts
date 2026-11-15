@@ -1,5 +1,6 @@
 import { useEffect, useMemo } from "react"
 import type { PlayerState, TakeNotes, TrackFile, TrackMedia } from "@/lib/api"
+import { atReha } from "@/lib/levels"
 import type { PlayerSound } from "@/lib/playerSound"
 import {
   channelsQuery,
@@ -64,8 +65,8 @@ export function serviceSound(take: TakePage, one: One): ServiceSound {
   let { muted, solo } = firstDesk(take)
   /** Levels turned and not kept yet. */
   let moved: Record<string, number> = {}
-  /** Levels sent to be kept, not answered yet: yours once they are. */
-  let sent: Record<string, number> = {}
+  /** Levels sent to be kept, not answered yet: yours once they are; null forgets yours. */
+  let sent: Record<string, number | null> = {}
   /** The zoom whose wave is being decoded: a newer one stops it. */
   let zoom: AbortController | null = null
   // The page keeps its speed while another take plays, as it keeps its repeat, M and S
@@ -282,18 +283,29 @@ export function serviceSound(take: TakePage, one: One): ServiceSound {
     async keepLevels(volumes) {
       // Only what was turned: a track left alone plays at each take's own balance.
       // A level on its way counts as kept, so a turn back from it is sent too.
+      // Turned back to РЭХА's level (the fader's notch), yours is forgotten
+      // rather than kept equal to it, so every take plays the track as РЭХА
+      // sent it.
       const yours = yoursNow()
-      const turned: Record<string, number> = {}
+      const rehaOf = (n: string) => levelOf(undefined, take, n)
+      const turned: Record<string, number | null> = {}
       for (const [n, v] of Object.entries(volumes)) {
         if (!names.includes(n)) continue
-        if (Math.abs(v - (sent[n] ?? levelOf(yours, take, n))) > 1e-4) turned[n] = v
-        else if (!(n in sent)) delete moved[n]
+        const kept = sent[n] === null ? rehaOf(n) : (sent[n] ?? levelOf(yours, take, n))
+        if (Math.abs(v - kept) <= 1e-4) {
+          if (!(n in sent)) delete moved[n]
+        } else if (!atReha(v, rehaOf(n))) turned[n] = v
+        else if (yours?.[n] !== undefined || n in sent) turned[n] = null
+        else delete moved[n]
       }
       if (!Object.keys(turned).length) return { ok: true }
       Object.assign(sent, turned)
       try {
         await keepLevels(turned)
-        for (const n of Object.keys(turned)) if (moved[n] === turned[n]) delete moved[n]
+        for (const [n, v] of Object.entries(turned)) {
+          const hand = moved[n]
+          if (hand === v || (v === null && hand !== undefined && atReha(hand, rehaOf(n)))) delete moved[n]
+        }
         return { ok: true }
       } catch (e) {
         return { ok: false, error: e instanceof Error ? e.message : String(e) }

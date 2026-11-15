@@ -99,13 +99,12 @@ export function Timeline({
   take = null,
   drift = null,
   click = true,
-  underMaster,
+  reha,
 }: {
   player: MultitrackPlayer
-  /** A row under Master, on the same columns: the plate's, then the lane's.
-   *  The band's service puts the way back to РЭХА's levels there, under the
-   *  faders it sets. */
-  underMaster?: ReactNode
+  /** The band's service: the level РЭХА sent for each track, by name, for
+   *  the notch on a fader you moved (LaneControls). РЭХА gives none. */
+  reha?: Record<string, number>
   /** Master's click button, after its name. The band's service plays no
    *  click, so it has none; its Master lane is there all the same, for a
    *  take whose click it knows. */
@@ -674,6 +673,8 @@ export function Timeline({
                         onVolume={(v) => player.setVolume(m.name, v)}
                         onVolumeCommit={player.persistVolumes}
                         onWell={!backing}
+                        reha={reha?.[m.name]}
+                        back
                       />
                     </PlateCell>
 
@@ -779,15 +780,6 @@ export function Timeline({
               </div>
             )}
           </div>
-          {underMaster && (
-            <div
-              data-under-master
-              className="grid items-center pt-1.5"
-              style={{ gridTemplateColumns: COLUMNS, columnGap: COLUMN_GAP_PX }}
-            >
-              {underMaster}
-            </div>
-          )}
         </div>
       )}
     </>

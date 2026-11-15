@@ -26,8 +26,23 @@ const ROW = "h-14 rounded-lg"
  * Each row is there from the start, so nothing moves; what is in it comes
  * once the player has read the files, so the rings are never added to a
  * row already drawn.
+ *
+ * A fader you moved shows its notch at the level РЭХА sent (`reha`) and stops
+ * on it, as in the lanes. No double-click and no tip: a phone has no pointer
+ * to rest on a fader, and it can take a double tap for a zoom.
  */
-export function Desk({ take, player, notes }: { take: TakePage; player: MultitrackPlayer; notes: NotesFile[] }) {
+export function Desk({
+  take,
+  player,
+  notes,
+  reha,
+}: {
+  take: TakePage
+  player: MultitrackPlayer
+  notes: NotesFile[]
+  /** The level РЭХА sent for each track, by name. */
+  reha?: Record<string, number>
+}) {
   const withNotes = new Set(notes.map((n) => n.name))
   // A take that could not be opened still has its rows, with no rings.
   const ready = player.media.length > 0 || player.loadError !== null
@@ -56,6 +71,7 @@ export function Desk({ take, player, notes }: { take: TakePage; player: Multitra
             onToggleSolo={() => player.toggleSolo(t.name)}
             onVolume={(v) => player.setVolume(t.name, v)}
             onVolumeCommit={player.persistVolumes}
+            reha={reha?.[t.name]}
           />
         )}
       </div>

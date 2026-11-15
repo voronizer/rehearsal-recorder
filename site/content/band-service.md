@@ -33,9 +33,9 @@ Each of you has a track of your own in every take. Play yours alone to hear what
 
 To learn a fast bit, slow the take down: on a computer with **100%** beside **Repeat**, the two arrows in a loop, and on a phone in the bar at the bottom, by **Mark**. Pick from 50% to 150%; the take keeps its key, and the next take you play starts at 100% again.
 
-The levels are yours as well. Turn a track up or down once, and it plays that way for you in every take with a track of that name, on the phone and on the computer. Only you hear it that way; for the others nothing changes. **РЭХА's levels** brings back the mix the take came with.
+The levels are yours as well. Turn a track up or down once, and it plays that way for you in every take with a track of that name, on the phone and on the computer. Only you hear it that way; for the others nothing changes. A small notch on the fader shows where РЭХА had it. Bring the fader back to the notch and it stops there; on a computer a double-click does the same. **РЭХА's levels** in the take's ⋯ menu brings every track back at once.
 
-![Viasna #12 on Ivan's phone: a row for each track with its level, M and S, the guitar turned all the way up, and under Master the button for РЭХА's levels](lanes)
+![Viasna #12 on Ivan's phone: a row for each track with its level, M and S, and the guitar turned all the way up, past the notch where РЭХА had it](lanes)
 
 ## Point at the second
 

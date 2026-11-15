@@ -1,0 +1,228 @@
+# The way back to РЭХА's levels, on the faders (band service)
+
+On a take's page in the band service, **РЭХА's levels** sits on a row of its
+own under Master's plate. On 15 November 2026 Alex left a comment on the
+speed mockup, pinned to that button: «кстати эту кнопку нужно куда нибудь в
+нормальное место поставить» (15:15Z). Asked what was wrong with the place,
+he answered: «ничего не мешает. просто как будто ее просто влепили без
+оценки того что она делает. UX херовый» (15:27:58Z). This change takes the
+button away. A fader you moved shows a notch where РЭХА had it, and brings
+the track back when it reaches the notch. **РЭХА's levels** moves to the
+take's ⋯ menu, for every track at once. РЭХА does not change.
+
+What Claude found (main at d850487):
+
+1. The button is `Levels` in `service/src/takes/Take.tsx:104-145`. On a
+   computer it is drawn through the shared player's `underMaster` row
+   (`ui/src/components/Timeline.tsx:782-790`), inside the Master band that
+   sticks to the foot of the screen (`:733-736`). On a phone it is under the
+   desk, after Master (`Take.tsx:237`). It went under Master on Alex's
+   comment of 4 November («эту кнопку по моему лучше вынести под уровни»,
+   14:59Z, PR #140).
+2. It forgets your levels for the take's tracks
+   (`service/src/takes/player/sound.ts:296-300`). Master is kept apart
+   (`player/master.ts`) and the button does not touch it, though it stood
+   under Master.
+3. Your level for a track acts in every take with a track of that name
+   (`site/content/band-service.md:34`): what plays is yours, else the take's
+   balance as РЭХА sent it, else 100% (`service/src/takes/player/levels.ts:4-5`).
+   So it is a setting of the track, kept for you, not one of the take.
+4. Every fader of the take page is the shared `LaneControls`
+   (`ui/src/components/LaneControls.tsx`): in the lanes on a computer
+   (`Timeline.tsx:661`) and in the desk on a phone
+   (`service/src/takes/Desk.tsx:44`). РЭХА's own player draws the same
+   faders, and there a track's level is the take's own: nothing to go back
+   to.
+5. When your levels are not kept, the reason is said beside the button
+   ("Your levels were not kept: …", `Take.tsx:144`). The player keeps one
+   line under the transport for what it has to say, one thing at a time
+   (`ui/src/components/TakePlayer.tsx:282-302`, design system B4).
+6. The take's ⋯ (`service/src/takes/TakeMenu.tsx`) has **Move to song** and
+   **Delete take**. The same menu is by a take in a list (`row`).
+
+## Alex's picks
+
+Each with its mockup; the mockups' sources are in
+`/mnt/project-files/band-service/levels-button/`.
+
+- **When**, 15:23:52Z: «можно и сейчас наверное если не будет косяков с
+  тем что одни и те же файлы правяться», now, alongside the speed thread,
+  if the files both change cause no trouble (see Order).
+- **What is wrong with the place**, 15:27:58Z: nothing in the way; the
+  button looks stuck on without regard to what it does.
+- **Q1, the way back**, 15:35:20Z card A
+  (https://claude.ai/artifact/Jbss2TW12fxviA95AoCyct): a notch on the fader.
+  On a fader you moved, a notch shows РЭХА's level; the fader stops on it,
+  and a double-click brings it back. No button. (The others were an icon by
+  the track's name, and a Mine / РЭХА's switch.)
+- **Q2, every track at once**, 15:38:23Z card B
+  (https://claude.ai/artifact/K2zUF6g6iXbCwpCASVmHim): **РЭХА's levels** in
+  the take's ⋯ menu, off until you moved a fader. Claude had recommended
+  notches only.
+- **РЭХА**: Claude said (15:39Z) that nothing changes in РЭХА and nothing
+  syncs: there a track's level is the take's own.
+- **A tip**, 15:43:47Z, on call 6 of the spec as first sent: «лучше я
+  думаю сделать - при наведении тултип например».
+- **Q3, reha.stream**, 15:39:28Z card A: text only. The sentence about the
+  button and the alt text of the "lanes" picture change, "lanes" is
+  retaken, no new picture.
+- **The spec**, 15:45:03Z «ок», with calls 1-11 below as listed.
+- **The knob over the notch**, 16:02:52Z card A, «Липнуть шире», on the
+  plan check's first question: the knob (18 px with its ring) covers the
+  notch while the fader is within about 7% of it on a computer, 3% on a
+  phone, wider than the 3% stop first planned. The fader now stops on the
+  notch the whole time the knob covers it (call 3). The others were a notch
+  taller than the knob, and keeping 3%.
+- **The word**, 16:07:21Z card A, «notch»: the line on the fader is a
+  notch in all that people read, the tip included ("The notch is
+  РЭХА's."), since "mark" already names a take's mark (CLAUDE.md, one word
+  per thing). The others were keeping "mark", and "line". The cards for
+  Q1 and Q2 called it a mark.
+- **No setting**, 16:09:07Z card A, «Без настройки»: the fader always
+  stops on the notch while the knob covers it; no Settings option turns
+  that off (the service has no Settings page, `service/src/routes.tsx`).
+  The other was an on/off switch on a new Settings page.
+- **The plan**, 16:14:49Z «ок».
+
+## What a band member sees
+
+### The notch
+
+Ivan turns his guitar up on a take's page. As soon as the fader leaves
+РЭХА's level, a small upright notch shows on the fader's line where РЭХА had
+it. The guitar plays louder for him in every take with a Guitar track, and
+in each of those takes his fader shows the notch at that take's own РЭХА
+level.
+
+To go back he drags the fader to the notch: near it, the fader stops on it.
+Let go there, and his level for the guitar is forgotten, so every take plays
+the guitar as РЭХА sent it, and the notch goes. On a computer a double-click
+on the fader does the same.
+
+The same on a phone, in the desk's rows. Master has no notch: РЭХА sends no
+Master, and Master is kept on each device.
+
+### The menu
+
+The take's ⋯ on its own page gets **РЭХА's levels**, between **Move to
+song** and **Delete take**. It forgets your levels for this take's tracks,
+as the button did, and every notch of the page goes. It is off while none
+of this take's tracks has a level of yours kept that differs from РЭХА's.
+The ⋯ of a take in a list does not have it. A take in the Trash has no ⋯,
+so there the notches alone bring a track back.
+
+### When your levels are not kept
+
+"Your levels were not kept: …" goes to the player's line under the
+transport on a computer, and to a line kept under the desk on a phone. Both
+are one line, red as a failure, cut with "…" where the room ends and whole
+in the tip, as the player's line says its load error.
+
+### Under Master
+
+Nothing: the row under Master's plate goes, and the Master band is that
+much lower.
+
+## Words
+
+- reha.stream, `site/content/band-service.md:34`, «Hear your own part»: the
+  last sentence, "**РЭХА's levels** brings back the mix the take came
+  with.", becomes: "A small notch on the fader shows where РЭХА had it. Bring
+  the fader back to the notch and it stops there; on a computer a
+  double-click does the same. **РЭХА's levels** in the take's ⋯ menu brings
+  every track back at once." (Alex saw "a double-click does the same" in
+  the draft at 15:39Z; "on a computer" follows call 5.)
+- The "lanes" picture's alt text (`:36`): "Viasna #12 on Ivan's phone: a
+  row for each track with its level, M and S, and the guitar turned all the
+  way up, past the notch where РЭХА had it".
+- The guide, `docs/using-it.md:822-824`: "Under it, **РЭХА's levels** puts
+  back the levels the take came with; it is faded until you move a fader."
+  becomes: "A fader you moved shows a small notch where РЭХА had it: bring the
+  fader back to the notch, or on a computer double-click it, and the track
+  plays as РЭХА sent it. **РЭХА's levels** in the take's ⋯ menu does that for every
+  track."
+- CHANGELOG, under "Unreleased": an item that starts "**The way back to
+  РЭХА's levels is on the faders.**", then what a band member does, as
+  above.
+- README: nothing changes; no README names the button.
+- The menu item reads "РЭХА's levels". The fader's tip reads "Your level:
+  only you hear it. The notch is РЭХА's." No other new words in the app.
+
+## Pictures
+
+The site's band service pictures are retaken (`cd service && npm run
+pictures`): "lanes" shows the notch on Ivan's guitar. Every picture with
+a take's page on a computer loses the row under Master, and every one on a
+phone ("lanes", "mark", "three-weeks-ago") loses the button under the
+desk. Each changed picture
+is shown to Alex before the merge. The guide's pictures are РЭХА's and do
+not change.
+
+## Claude's calls
+
+1. The notch shows while the fader is more than 0.5% away from this take's
+   РЭХА level, so it comes as soon as the fader leaves it, during the first
+   drag, before the level is kept.
+2. The notch is a line 2 px wide and 14 px tall, in the text colour at 45%,
+   centred on РЭХА's level, under the knob. The same in both themes, on the
+   plate's grey and in the phone's desk.
+3. The fader stops on the notch while the knob covers it: within 9 px of
+   it, half the knob with its ring, which is about 7% of the fader on a
+   computer and 3% on a phone (Alex, 16:02:52Z). Only when dragged: the
+   arrow keys step past it, so a level just beside РЭХА's can still be set.
+4. A fader let go on the notch forgets your level for that track (as the
+   button did), rather than keeping one equal to РЭХА's: other takes, whose
+   РЭХА levels differ, then follow РЭХА too.
+5. Double-click on a computer only, in the lanes. The phone's desk (shown
+   in any window as narrow as a phone's) has the notch and the stop, and no
+   double-click or tip, since a phone can turn a double tap into one.
+6. A tip on a computer, at Alex's word (15:43:47Z, «лучше я думаю сделать
+   - при наведении тултип например»): the pointer over a fader that shows
+   its notch opens "Your level: only you hear it. The notch is РЭХА's.", and
+   so does keyboard focus on it, as every tip does. It does not open while
+   the fader is dragged. A fader with no notch has no
+   tip. A phone has no hover, so none there.
+7. **РЭХА's levels** in the menu is on while one of this take's tracks has
+   a level of yours kept that differs from РЭХА's, and forgets only this
+   take's tracks. A level still on its way, or one that failed to be kept,
+   shows its notch with the item off; the failure line says why.
+8. The menu item is on the take's own page only, not by a take in a list.
+9. The failure line: on a computer the player's line, after a load error
+   (one thing at a time, B4). On a phone a line kept under the desk, empty
+   until something fails, so the take's marks below do not move (B4). Red,
+   one line, as the player's line says a failure.
+10. The shared player loses its `underMaster` row; nothing else uses it.
+    The faders get РЭХА's level for each track as an optional input; РЭХА's
+    screens give none, so they show no notch and nothing stops the fader.
+11. A track with no level from РЭХА (a take from an older РЭХА) counts as
+    100%, as it plays now (`levels.ts:4-5`): its notch is at the right end.
+12. A take in the Trash has no ⋯ (`Take.tsx:274`), so **РЭХА's levels**
+    is not there; its notches work as on any take.
+13. Windows 1180×820 and 960×680 are the same: the plates keep their
+    200 px, so the fader and its notch do not change. The failure in the
+    player's line is cut with "…" in a narrow window, whole in its tip.
+
+## Tests
+
+- Service browser tests (`service/e2e/takes.spec.ts`): the tests of the
+  button move to the notch and the menu. No notch at first; a fader moved
+  shows its notch; dragged back near it, the fader stops on it and the notch
+  goes, and the level is forgotten (a null sent); a double-click does the
+  same; **РЭХА's levels** in ⋯ is off, then on after a move, and puts every
+  track back; the failure line in the player's line and under the desk; no
+  row under Master; on a phone the same in the desk.
+- Interface browser tests (`ui/e2e`): РЭХА's player shows no notch.
+- The pictures' script (`service/pictures/site.spec.ts:49`) waits for the
+  notch in place of the button.
+
+## Order
+
+The speed thread (#105) changes the same files: `Take.tsx`, the shared
+`TakePlayer.tsx`, the site's band service page and its pictures. The code
+here is rebased on main after that merge, its conflicts settled, and the
+pictures are taken after it (CLAUDE.md: whoever merges second rebases).
+
+## Not in this change
+
+- A Mine / РЭХА's switch to compare the two mixes.
+- Anything in РЭХА.

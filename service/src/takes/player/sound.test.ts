@@ -316,7 +316,7 @@ test("a level turned is the hand's until it is kept, so the player leaves it alo
   expect(sound.setup().moved).toEqual({})
 })
 
-test("a track turned back to its balance while the turn before is on its way is kept", async () => {
+test("a track turned back to its balance while the turn before is on its way is forgotten", async () => {
   const sound = serviceSound(take, one(player()))
   let answer = () => {}
   api.keepLevels.mockImplementationOnce(() => new Promise((done) => (answer = () => done({ levels: {} }))))
@@ -324,10 +324,30 @@ test("a track turned back to its balance while the turn before is on its way is 
   const first = sound.keepLevels({ Bass: 1, Guitar: 0.5 })
   await sound.setVolume("Guitar", 0.8)
   await sound.keepLevels({ Bass: 1, Guitar: 0.8 })
-  expect(api.keepLevels).toHaveBeenLastCalledWith({ Guitar: 0.8 })
+  expect(api.keepLevels).toHaveBeenLastCalledWith({ Guitar: null })
   answer()
   await first
   expect(sound.setup().moved).toEqual({})
+})
+
+test("a level turned back to REHA's is forgotten, not kept", async () => {
+  api.yours = { Guitar: 0.5 }
+  const sound = serviceSound(take, one(player()))
+  await sound.setVolume("Guitar", 0.8)
+  await sound.keepLevels({ Bass: 1, Guitar: 0.8 })
+  expect(api.keepLevels).toHaveBeenLastCalledWith({ Guitar: null })
+  expect(sound.setup().moved).toEqual({})
+  // Half a key step off is on it too.
+  await sound.keepLevels({ Bass: 1, Guitar: 0.803 })
+  expect(api.keepLevels).toHaveBeenLastCalledWith({ Guitar: null })
+})
+
+test("a track not turned is left alone, even at REHA's level", async () => {
+  // Kept at 0.8 in another take, where REHA had it elsewhere.
+  api.yours = { Guitar: 0.8 }
+  const sound = serviceSound(take, one(player()))
+  await sound.keepLevels({ Bass: 0.5, Guitar: 0.8 })
+  expect(api.keepLevels).toHaveBeenCalledWith({ Bass: 0.5 })
 })
 
 test("a track turned away and back in one go is left at its balance", async () => {

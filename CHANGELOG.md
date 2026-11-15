@@ -15,6 +15,13 @@ opening.
   the bar, by **Mark**. The next take you play starts at 100% again, and so
   does a take after a reload. **Download** gives the take as recorded, at
   its own speed. РЭХА's player has no speed button.
+- **The way back to РЭХА's levels is on the faders.** In the band service a
+  fader you moved shows a small notch where РЭХА had it. Drag it back near
+  the notch and it stops there, and your level for that track is
+  forgotten, so every take plays it as РЭХА sent it. On a computer a
+  double-click does the same, and the pointer over the fader says what the
+  notch is. **РЭХА's levels**, which sat under Master, is now in the take's
+  ⋯ menu, for every track at once.
 - **The band service's menu on the left folds to its icons.** Press the
   round handle on the edge of the column of sections, by the band's name,
   and press it again to open the menu. The browser remembers: next time

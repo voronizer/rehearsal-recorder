@@ -1,27 +1,25 @@
 import { useEffect, useMemo, useState, useSyncExternalStore } from "react"
 import { useNavigate, useParams, useSearch } from "@tanstack/react-router"
-import { RotateCcw } from "lucide-react"
-import { TakePlayer as RehaPlayer } from "@/components/TakePlayer"
+import { Said, TakePlayer as RehaPlayer } from "@/components/TakePlayer"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { FieldError } from "@/components/ui/field"
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { useMultitrackPlayer } from "@/hooks/useMultitrackPlayer"
 import { usePlayerKeys, useSpacebar } from "@/hooks/useSpacebar"
 import type { Label as RehaLabel, Marker, NotesFile } from "@/lib/api"
 import { labelsChanged } from "@/lib/labels"
-import { cn } from "@/lib/utils"
+import { atReha } from "@/lib/levels"
 import { useLabels, useLevels, useLevelsTrouble, useRestore, useTake, type TakePage } from "../api"
 import { TakeMarks } from "../marks/MarkItem"
 import { usePanel } from "../shell/panel"
 import { Group, Groups, Page, Pill, Tile, Trouble, useTitle } from "../shell/parts"
 import { useSize } from "../shell/size"
-import { clock, count, longDay, takeText } from "../shell/words"
+import { clock, count, longDay, notKept, takeText } from "../shell/words"
 import { chipsOf } from "./chips"
 import { Desk } from "./Desk"
 import { Download } from "./Download"
 import { useBackingSong } from "./player/backing"
 import { notesAlone, notesOf } from "./player/lanes"
+import { levelOf } from "./player/levels"
 import { CANNOT_PLAY, usePlayer, useTime } from "./player/one"
 import { useServiceSound, type ServiceSound } from "./player/sound"
 import { Play, StarButton, TakeName, Wave } from "./parts"
@@ -101,54 +99,28 @@ function useRehaLabels() {
   }, [labels])
 }
 
-/** The way back to РЭХА's levels, under the faders it sets (Alex,
- *  2026-11-04): under Master's plate on a computer (`under`, the player's
- *  row there), under the desk's Master on a phone. It is always there, so
- *  nothing moves, and faded while the levels are the ones РЭХА sent; the
- *  tip says whose they are. Moving a fader makes them yours and the button
- *  live. A failure to keep them is said beside it. */
-function Levels({ take, sound, under = false }: { take: TakePage; sound: ServiceSound; under?: boolean }) {
+/**
+ * The level РЭХА sent for each of the take's tracks, by name, for the notch on
+ * a fader you moved: the way back to it (Alex, 2026-11-15).
+ */
+function useReha(take: TakePage) {
+  return useMemo(
+    () => Object.fromEntries(take.tracks.map((t) => [t.name, levelOf(undefined, take, t.name)])),
+    [take]
+  )
+}
+
+/**
+ * **РЭХА's levels** in the take's ⋯: your levels for this take's tracks
+ * forgotten at once. On while one of them has a level of yours kept that is
+ * not РЭХА's. A failure is said where "Your levels were not kept" goes.
+ */
+function useBackToReha(take: TakePage, sound: ServiceSound, reha: Record<string, number>) {
   const yours = useLevels().data?.levels
-  const trouble = useLevelsTrouble()
-  const mine = take.tracks.some((t) => yours?.[t.name] !== undefined)
-  const [busy, setBusy] = useState(false)
-  const button = (
-    <Tooltip>
-      {/* On the span: a button that is off takes no pointer, and its tip
-          would never open. */}
-      <TooltipTrigger asChild>
-        <span className={cn("flex w-fit", under && "px-3")}>
-          <Button
-            variant="outline"
-            size="row"
-            disabled={!mine || busy}
-            onClick={() => {
-              setBusy(true)
-              // A failure is said beside it.
-              sound
-                .backToReha()
-                .catch(() => {})
-                .finally(() => setBusy(false))
-            }}
-          >
-            <RotateCcw />
-            РЭХА's levels
-          </Button>
-        </span>
-      </TooltipTrigger>
-      <TooltipContent>
-        {mine ? "Your levels: only you hear them. This puts back the ones РЭХА sent." : "The levels as РЭХА sent them"}
-      </TooltipContent>
-    </Tooltip>
-  )
-  const said = trouble && <FieldError className="min-w-0">Your levels were not kept: {trouble}</FieldError>
-  // Under Master the two are cells of the player's row, on its columns.
-  return (
-    <div data-levels className={under ? "contents" : "flex items-center gap-3"}>
-      {button}
-      {said}
-    </div>
-  )
+  return {
+    on: take.tracks.some((t) => yours?.[t.name] !== undefined && !atReha(yours[t.name], reha[t.name])),
+    back: () => void sound.backToReha().catch(() => {}),
+  }
 }
 
 /** The take's lanes of notes, made again only when its files are. */
@@ -183,7 +155,17 @@ function useSpeed(take: TakePage, sound: ServiceSound) {
 }
 
 /** РЭХА's player on the page itself, with no frame round it, as in РЭХА. */
-function Full({ take, notes, sound }: { take: TakePage; notes: NotesFile[]; sound: ServiceSound }) {
+function Full({
+  take,
+  notes,
+  sound,
+  reha,
+}: {
+  take: TakePage
+  notes: NotesFile[]
+  sound: ServiceSound
+  reha: Record<string, number>
+}) {
   // РЭХА counts it after the take's files are up: until then, the click alone.
   const drift = useMemo(() => ({ answer: take.drift, counting: false }), [take.drift])
   const player = useTakePlayer(take, sound)
@@ -193,6 +175,7 @@ function Full({ take, notes, sound }: { take: TakePage; notes: NotesFile[]; soun
   usePlayerKeys(player.skip)
   const { markers, markOf } = chipsOf(take.marks)
   const speed = useSpeed(take, sound)
+  const trouble = useLevelsTrouble()
   const talk = (m: Marker) => {
     const k = markOf(m)
     if (k) open({ kind: "mark", uid: take.uid, id: k.id })
@@ -214,7 +197,8 @@ function Full({ take, notes, sound }: { take: TakePage; notes: NotesFile[]; soun
           // A talk sign and how many comments, where РЭХА has its pencil (Alex's pick B, 2026-11-02).
           talkOf={(m) => markOf(m)?.comments.length ?? 0}
           spaceKey
-          underMaster={<Levels take={take} sound={sound} under />}
+          reha={reha}
+          failure={trouble && notKept(trouble)}
           speed={speed}
         />
       </div>
@@ -244,17 +228,36 @@ function TakePlayer({ take, height = 64 }: { take: TakePage; height?: number }) 
   )
 }
 
-/** On a phone: the take's wave with ▶, a row per track as on РЭХА's desk, then the marks. */
-function Phone({ take, notes, tracks, sound }: { take: TakePage; notes: NotesFile[]; tracks: number; sound: ServiceSound }) {
+/**
+ * On a phone: the take's wave with ▶, a row per track as on РЭХА's desk, then
+ * the marks. Under the desk, one line kept for "Your levels were not kept",
+ * empty until they are not, so the marks below never move (B4).
+ */
+function Phone({
+  take,
+  notes,
+  tracks,
+  sound,
+  reha,
+}: {
+  take: TakePage
+  notes: NotesFile[]
+  tracks: number
+  sound: ServiceSound
+  reha: Record<string, number>
+}) {
   const player = useTakePlayer(take, sound)
+  const trouble = useLevelsTrouble()
   return (
     <Groups>
       <Group>
         <TakePlayer take={take} height={72} />
       </Group>
       <Group title="Tracks" hint={String(tracks)}>
-        <Desk take={take} player={player} notes={notes} />
-        <Levels take={take} sound={sound} />
+        <Desk take={take} player={player} notes={notes} reha={reha} />
+        <div data-levels-trouble className="flex h-6 min-w-0 items-center">
+          {trouble && <Said variant="destructive" text={notKept(trouble)} />}
+        </div>
       </Group>
       <TakeMarks take={take} />
     </Groups>
@@ -271,6 +274,8 @@ function TakeView({ take }: { take: TakePage }) {
   const notes = useNotes(take)
   // One for the page: the player, the desk and Download read the same levels, M and S.
   const sound = useServiceSound(take)
+  const reha = useReha(take)
+  const levels = useBackToReha(take, sound, reha)
   // A track of notes alone is one of the band's tracks too, as in a lineup.
   const tracks = take.tracks.length + notesAlone(take, notes).length
   return (
@@ -294,6 +299,7 @@ function TakeView({ take }: { take: TakePage }) {
           {!take.trashed_at && (
             <TakeMenu
               take={take}
+              levels={levels}
               // Its rehearsal's page, where the take was, in place of its own.
               onGone={() => void navigate({ to: "/rehearsals/$uid", params: { uid: take.rehearsal.uid }, replace: true })}
             />
@@ -318,11 +324,11 @@ function TakeView({ take }: { take: TakePage }) {
     >
       {take.trashed_at && <InTrash uid={take.uid} />}
       {phone && !cannot ? (
-        <Phone take={take} notes={notes} tracks={tracks} sound={sound} />
+        <Phone take={take} notes={notes} tracks={tracks} sound={sound} reha={reha} />
       ) : (
         <>
           {/* On a computer РЭХА's player sits on the page itself, as in РЭХА, with no card round it. */}
-          {!cannot && <Full take={take} notes={notes} sound={sound} />}
+          {!cannot && <Full take={take} notes={notes} sound={sound} reha={reha} />}
           {/* The marks are the player's chips; with no player, a list. */}
           {cannot && (
             <Groups>
