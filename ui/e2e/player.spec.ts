@@ -583,7 +583,7 @@ test.describe("the mix", () => {
     await page.getByRole("button", { name: "Mute Guitar" }).click()
     await page.getByRole("button", { name: "Solo Vocals" }).click()
     await expect.poll(async () => (await calls(page, "player_set_muted")).at(-1)?.args).toEqual(["Guitar", true])
-    await expect.poll(async () => (await calls(page, "player_set_solo")).at(-1)?.args).toEqual(["Vocals"])
+    await expect.poll(async () => (await calls(page, "player_set_solo")).at(-1)?.args).toEqual(["Vocals", true])
 
     // Solo was clicked last and keeps focus; Space is the player's.
     const toggles = await callCount(page, "player_toggle")
@@ -602,7 +602,7 @@ test.describe("the mix", () => {
       "Solo Guitar"
     )
     await page.keyboard.press("Space")
-    await expect.poll(async () => (await calls(page, "player_set_solo")).at(-1)?.args).toEqual(["Guitar"])
+    await expect.poll(async () => (await calls(page, "player_set_solo")).at(-1)?.args).toEqual(["Guitar", true])
     expect(await callCount(page, "player_toggle")).toBe(toggles + 2)
   })
 
@@ -618,6 +618,41 @@ test.describe("the mix", () => {
     await mute.click()
     await expect(mute).toHaveAttribute("aria-pressed", "true")
     await expect(solo).toHaveAttribute("aria-pressed", "false")
+  })
+
+  test("S on two tracks: both lit, the third greyed, and S again takes one away", async ({ page }) => {
+    // Each S adds its track to the ones heard (Alex, 2026-11-15 17:41:12Z).
+    // The fake's take has Guitar and Vocals: its answer to stop_take gets a Bass too.
+    await openApp(page, {
+      after: `
+        const real = window.pywebview.api.stop_take;
+        window.pywebview.api.stop_take = async (...args) => ({
+          ...(await real(...args)),
+          tracks: ['Guitar', 'Bass', 'Vocals'].map((name) => ({name, file: '/rec/' + name + '.wav'})),
+        });`,
+    })
+    await startRehearsal(page)
+    await recordTake(page, 1)
+    const solo = (name: string) => page.getByRole("button", { name: `Solo ${name}` })
+    const lane = (name: string) => page.locator(`[data-lane='${name}']`)
+    await solo("Guitar").click()
+    await solo("Vocals").click()
+    await expect(solo("Guitar")).toHaveAttribute("aria-pressed", "true")
+    await expect(solo("Vocals")).toHaveAttribute("aria-pressed", "true")
+    expect((await calls(page, "player_set_solo")).map((c) => c.args)).toEqual([
+      ["Guitar", true],
+      ["Vocals", true],
+    ])
+    await expect(lane("Bass")).toHaveAttribute("data-dimmed", "true")
+    await expect(lane("Guitar")).not.toHaveAttribute("data-dimmed")
+    await expect(lane("Vocals")).not.toHaveAttribute("data-dimmed")
+
+    await solo("Guitar").click()
+    await expect(solo("Guitar")).toHaveAttribute("aria-pressed", "false")
+    await expect(solo("Vocals")).toHaveAttribute("aria-pressed", "true")
+    await expect.poll(async () => (await calls(page, "player_set_solo")).at(-1)?.args).toEqual(["Guitar", false])
+    await expect(lane("Guitar")).toHaveAttribute("data-dimmed", "true")
+    await expect(lane("Bass")).toHaveAttribute("data-dimmed", "true")
   })
 
   test("REHA's player shows no notch on a fader moved", async ({ page }) => {

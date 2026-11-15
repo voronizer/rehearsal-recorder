@@ -764,7 +764,8 @@ export type PlayerState = {
   duration?: number
   finished?: boolean
   loop?: { a: number; b: number } | null
-  soloed?: string | null
+  /** The tracks with S on, in the take's order; none, every track is heard. */
+  soloed?: string[]
   muted?: string[]
   volumes?: Record<string, number>
   /** 0..1, how loud the whole mix plays, after every track's fader. */
@@ -1677,7 +1678,7 @@ type PyApi = {
   player_set_volume(name: string, volume: number): Promise<Ok>
   player_set_master(volume: number): Promise<Ok>
   player_set_muted(name: string, muted: boolean): Promise<PlayerState>
-  player_set_solo(name: string | null): Promise<PlayerState>
+  player_set_solo(name: string, on: boolean): Promise<PlayerState>
 
   /** Counted in channels, not tracks: a stereo track writes two. */
   disk_estimate(

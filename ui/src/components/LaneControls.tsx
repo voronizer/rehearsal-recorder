@@ -252,7 +252,7 @@ export function LaneControls({
   channels: number
   muted: boolean
   soloed: boolean
-  /** Muted, or another track is soloed — either way, silent. */
+  /** Muted, or other tracks are soloed and this one is not: either way, silent. */
   dimmed: boolean
   volume: number
   /** One per channel, 0..1, already through the fader and the mute. */
