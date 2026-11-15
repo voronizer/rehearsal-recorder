@@ -28,6 +28,7 @@ import { setRoutes } from "./sets/routes"
 import { rehaSongRoutes } from "./songs/reha-routes"
 import { songRoutes } from "./songs/routes"
 import { fileRoutes } from "./files/routes"
+import { openLinkRoutes } from "./links/open-routes"
 import { linkRoutes } from "./links/routes"
 import { purgeLinks } from "./links/store"
 import { consumeChat } from "./chat/consume"
@@ -88,8 +89,8 @@ app.openAPIRegistry.registerComponent("securitySchemes", "rehaKey", {
   description: "The secret part of the key, after the last “:”",
 })
 
-// The band's picture and a song's files come before a take's files, whose
-// path would take theirs.
+// The band's picture, a song's files and a link's files come before a
+// take's files, whose path would take theirs.
 const routes = app
   .route("/", meRoutes)
   .route("/", memberRoutes)
@@ -109,6 +110,7 @@ const routes = app
   .route("/", markRoutes)
   .route("/", takeRoutes)
   .route("/", linkRoutes)
+  .route("/", openLinkRoutes)
   .route("/", fileRoutes)
   .route("/", standInRoutes)
 

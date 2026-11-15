@@ -1352,6 +1352,9 @@
           "gen": {
             "type": "number"
           },
+          "files_at": {
+            "type": "string"
+          },
           "balance": {
             "type": "object",
             "additionalProperties": {
@@ -1534,6 +1537,7 @@
           "duration_sec",
           "shape",
           "gen",
+          "files_at",
           "balance",
           "tracks",
           "stars",
@@ -1819,6 +1823,75 @@
           "volumes",
           "muted",
           "soloed"
+        ]
+      },
+      "LinkPage": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/TakePage"
+          },
+          {
+            "type": "object",
+            "properties": {
+              "link": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string"
+                  },
+                  "shows": {
+                    "type": "string",
+                    "enum": [
+                      "mix",
+                      "tracks",
+                      "marks"
+                    ]
+                  },
+                  "download": {
+                    "type": "string",
+                    "enum": [
+                      "none",
+                      "mix",
+                      "all"
+                    ]
+                  },
+                  "heard": {
+                    "allOf": [
+                      {
+                        "$ref": "#/components/schemas/LinkHeard"
+                      },
+                      {
+                        "type": [
+                          "object",
+                          "null"
+                        ]
+                      }
+                    ]
+                  },
+                  "mix": {
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "id",
+                  "shows",
+                  "download",
+                  "heard",
+                  "mix"
+                ]
+              },
+              "labels": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/Label"
+                }
+              }
+            },
+            "required": [
+              "link",
+              "labels"
+            ]
+          }
         ]
       }
     },
@@ -7655,6 +7728,239 @@
           },
           "401": {
             "description": "Not signed in, or the key does not work",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/l/{id}": {
+      "get": {
+        "description": "The page of a link to a take, for someone outside the band: what the link shows, without signing in.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Done",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LinkPage"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not there",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/files/l/{id}/{gen}/{name}": {
+      "get": {
+        "description": "A track's file through a link with tracks, from the generation the band hears: its MP3, wave and MIDI; its FLAC and `?download=1` only when the link lets download everything.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          },
+          {
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "required": true,
+            "name": "gen",
+            "in": "path"
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "name",
+            "in": "path"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "enum": [
+                "1"
+              ]
+            },
+            "required": false,
+            "name": "download",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The file",
+            "content": {
+              "application/octet-stream": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "206": {
+            "description": "A piece of the file",
+            "content": {
+              "application/octet-stream": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "304": {
+            "description": "The wave is the one the browser has"
+          },
+          "404": {
+            "description": "Not there",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/files/l/{id}/{name}": {
+      "get": {
+        "description": "The mix of a link that shows only the mix, and its wave; `?download=1` on the MP3 when the link lets download it.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "name",
+            "in": "path"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "enum": [
+                "1"
+              ]
+            },
+            "required": false,
+            "name": "download",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The file",
+            "content": {
+              "application/octet-stream": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "206": {
+            "description": "A piece of the file",
+            "content": {
+              "application/octet-stream": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "304": {
+            "description": "The wave is the one the browser has"
+          },
+          "404": {
+            "description": "Not there",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/l/{id}/played": {
+      "post": {
+        "description": "One play of the take through the link: its page's first ▶.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Done",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Ok"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not there",
             "content": {
               "application/json": {
                 "schema": {
