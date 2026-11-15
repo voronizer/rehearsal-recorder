@@ -1,11 +1,16 @@
-import type { Page } from "@playwright/test"
+/**
+ * The one thing `wrongPointers` needs of Playwright's page. Written out here
+ * rather than taken from "@playwright/test", so the band service can hand in
+ * a page of its own Playwright when its version differs from the interface's.
+ */
+type Evaluates = { evaluate<R>(fn: () => R): Promise<R> }
 
 /**
  * What `pointers` finds wrong on every screenful of the page, top to bottom,
  * each once and after `label`; "nothing to check" when it found nothing that
  * presses at all.
  */
-export async function wrongPointers(page: Page, label: string): Promise<string[]> {
+export async function wrongPointers(page: Evaluates, label: string): Promise<string[]> {
   const found = new Set<string>()
   let checked = 0
   for (let i = 0; i < 8; i++) {
