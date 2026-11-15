@@ -7,6 +7,9 @@ opening.
 
 ## Unreleased
 
+- **S on several tracks at once.** Press **S** on more than one track to
+  hear them together, and press it again to take that track away. In
+  РЭХА's player and in the band service, on a phone too.
 - **Slower or faster takes in the band service.** On a take's page press
   **100%** beside **Repeat**, or the same button in the bar at the bottom,
   and pick a speed from 50% to 150%. The take keeps its key, so you can

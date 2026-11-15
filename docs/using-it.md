@@ -411,10 +411,11 @@ rehearsal into the next.
   right, and its waveform two halves, the left side above the middle and
   the right side below.
 - Balance the band with the fader under each track name. **M**, after the
-  fader, mutes a track, and **S**, after **M**, plays it on its own. A
+  fader, mutes a track, and **S**, after **M**, plays it on its own. Press
+  **S** on more tracks to hear them together, and again to take one away. A
   pressed **M** is blue and a pressed **S** yellow, so you see at a glance
   which tracks you muted or soloed. On one track only one of them is on:
-  **S** on a muted track turns its **M** off, and **M** on the soloed track
+  **S** on a muted track turns its **M** off, and **M** on a soloed track
   turns its **S** off. Volumes are remembered by track name, so the next
   take starts with the same balance.
 - Turn the whole take up or down with **Master** under the tracks. It only
@@ -1140,8 +1141,8 @@ name of their own. On **MIDI** they are in the track's own place among the
 lanes, with its icon, its name and the MIDI sign. The plate has **M**
 pressed and faded, as there is nothing to hear: it cannot be turned off, and
 pointing at it says “Saved as .mid, not played here”. There is no **S** or fader. The
-notes go paler with their track's waveform when the track is muted or another
-is soloed; notes of a track on **MIDI** go paler while any track is soloed. A kit
+notes go paler with their track's waveform when the track is muted, or other
+tracks are soloed and it is not; notes of a track on **MIDI** go paler while any track is soloed. A kit
 is drawn in six rows, Crash, Ride, Hi-hat, Toms, Snare and Kick; anything
 else, by pitch. A track with the drums icon is drawn as a kit, and so is one
 whose notes are all on MIDI channel 10. A track with no notes in a take says

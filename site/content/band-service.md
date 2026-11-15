@@ -29,7 +29,7 @@ The phone loads a take as you listen, half a minute ahead of where you are, so a
 
 ## Hear your own part
 
-Each of you has a track of your own in every take. Play yours alone to hear what you really did, or mute it and practise along with the band as it played that night. With yours muted, press **Download**, then **The mix**: you get an MP3 of the band without you, to practise along anywhere.
+Each of you has a track of your own in every take. Play yours alone, or with the drums, to hear what you really did. Or mute it and practise along with the band as it played that night. With yours muted, press **Download**, then **The mix**: you get an MP3 of the band without you, to practise along anywhere.
 
 To learn a fast bit, slow the take down: on a computer with **100%** beside **Repeat**, the two arrows in a loop, and on a phone in the bar at the bottom, by **Mark**. Pick from 50% to 150%; the take keeps its key, and the next take you play starts at 100% again.
 
