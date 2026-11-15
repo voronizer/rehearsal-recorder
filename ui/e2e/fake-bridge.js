@@ -154,7 +154,8 @@ function lineupName(lineups, name, renaming = null) {
   return other ? {error:`There is already a lineup called ${other.name}`} : {name:cut};
 }
 // Mirrors what audio/player.py measures in the mix: post-fader, silent when
-// muted or when other tracks are soloed and it is not, and nothing at all while stopped.
+// muted or when other tracks are soloed and it is not, and nothing at all
+// while stopped.
 function levels() {
   if (!P || !P.playing) return {};
   const t = position();
@@ -184,7 +185,9 @@ async function held(name) {
 function playerState() {
   if (!P) return {open:false};
   return {open:true, ok:true, playing:P.playing, position:position(), duration:P.duration,
-          loop:P.loop, muted:P.muted, soloed:P.tracks.map(t => t.name).filter(n => P.soloed.includes(n)), volumes:P.volumes, master:P.master,
+          loop:P.loop, muted:P.muted, volumes:P.volumes, master:P.master,
+          // In the take's order, as the real player sends them.
+          soloed:P.tracks.map(t => t.name).filter(n => P.soloed.includes(n)),
           levels:levels(), master_level:masterLevel(), click:playerClick};
 }
 function moveTo(t) { P.position = Math.max(0, Math.min(P.duration, t)); P.t0 = clock(); }

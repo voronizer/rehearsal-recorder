@@ -639,7 +639,7 @@ test.describe("the mix", () => {
     await solo("Vocals").click()
     await expect(solo("Guitar")).toHaveAttribute("aria-pressed", "true")
     await expect(solo("Vocals")).toHaveAttribute("aria-pressed", "true")
-    expect((await calls(page, "player_set_solo")).map((c) => c.args)).toEqual([
+    await expect.poll(async () => (await calls(page, "player_set_solo")).map((c) => c.args)).toEqual([
       ["Guitar", true],
       ["Vocals", true],
     ])

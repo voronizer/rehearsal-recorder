@@ -1142,7 +1142,8 @@ lanes, with its icon, its name and the MIDI sign. The plate has **M**
 pressed and faded, as there is nothing to hear: it cannot be turned off, and
 pointing at it says “Saved as .mid, not played here”. There is no **S** or fader. The
 notes go paler with their track's waveform when the track is muted, or other
-tracks are soloed and it is not; notes of a track on **MIDI** go paler while any track is soloed. A kit
+tracks are soloed and it is not; notes of a track on **MIDI** go paler while
+any track is soloed. A kit
 is drawn in six rows, Crash, Ride, Hi-hat, Toms, Snare and Kick; anything
 else, by pitch. A track with the drums icon is drawn as a kit, and so is one
 whose notes are all on MIDI channel 10. A track with no notes in a take says
