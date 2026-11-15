@@ -14,10 +14,12 @@ import { askingPlayerClick, heardPlayerClick } from "@/hooks/usePlayerClick"
 
 export type MultitrackPlayer = ReturnType<typeof useMultitrackPlayer>
 
-/** Where the cursor runs on from between answers, from `now`: none while
- *  the sound is asked for and not heard yet, so it waits with the sound. */
-export function anchorOf(position: number, waiting: boolean | undefined, now: number) {
-  return waiting ? null : { position, at: now }
+/** Where the cursor runs on from between answers, from `now`, and how
+ *  fast: `rate` seconds of the take each second (the band service's speed;
+ *  РЭХА's are 1). None while the sound is asked for and not heard yet, so
+ *  it waits with the sound. */
+export function anchorOf(position: number, waiting: boolean | undefined, now: number, rate = 1) {
+  return waiting ? null : { position, at: now, rate }
 }
 
 /** How often the position is read back from Python while playing. */
@@ -121,7 +123,9 @@ export function useMultitrackPlayer(
   const [peaksWindow, setPeaksWindow] = useState({ from: 0, to: 0 })
 
   // Anchor for smoothing the position between answers from Python.
-  const anchor = useRef<{ position: number; at: number } | null>(null)
+  const anchor = useRef<{ position: number; at: number; rate: number } | null>(null)
+  /** How fast the take plays, as the last answer said. */
+  const rate = useRef(1)
   const openedRef = useRef(false)
   // Counts the takes opened, so a step waiting on Python's answer about one
   // take is not then sent to a take opened since.
@@ -143,6 +147,7 @@ export function useMultitrackPlayer(
       playing?: boolean
       waiting?: boolean
       position?: number
+      rate?: number
       duration?: number
       muted?: string[]
       soloed?: string | null
@@ -163,8 +168,9 @@ export function useMultitrackPlayer(
       if (s.reopened) setOutputWarning(s.warning ?? null)
       if (typeof s.playing === "boolean") setPlaying(s.playing)
       if (typeof s.position === "number") {
+        rate.current = s.rate ?? 1
         setPosition(s.position)
-        anchor.current = anchorOf(s.position, s.waiting, performance.now())
+        anchor.current = anchorOf(s.position, s.waiting, performance.now(), rate.current)
       }
       if (typeof s.duration === "number" && s.duration > 0) setDuration(s.duration)
       if (s.muted) setMuted(s.muted)
@@ -318,7 +324,7 @@ export function useMultitrackPlayer(
       const a = anchor.current
       if (a) {
         const elapsed = (performance.now() - a.at) / 1000
-        setPosition(Math.min(duration, a.position + elapsed))
+        setPosition(Math.min(duration, a.position + elapsed * a.rate))
       }
       raf = requestAnimationFrame(tick)
     }
@@ -389,7 +395,7 @@ export function useMultitrackPlayer(
     (seconds: number) => {
       const target = Math.max(0, Math.min(duration, seconds))
       setPosition(target)
-      anchor.current = { position: target, at: performance.now() }
+      anchor.current = { position: target, at: performance.now(), rate: rate.current }
       return call(() => sound.seek(target))
     },
     [call, duration, sound]

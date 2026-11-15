@@ -65,6 +65,7 @@ const player = (over: Partial<Record<keyof Player, unknown>> = {}) =>
     setGain: vi.fn(),
     setLoop: vi.fn(),
     seek: vi.fn(),
+    speed: 1,
     stretch: vi.fn(async (_i: number, _f: number, _t: number, _b: number, _s: AbortSignal, rows = 1) =>
       Array.from({ length: rows }, () => [1, 2, 3])
     ),
@@ -84,6 +85,9 @@ const one = (p: Player | null, out = 0): One => ({
   setMaster: vi.fn(),
   mixLoudness: () => out,
   ready: () => () => {},
+  speedOf: () => (p ? 1 : null),
+  setSpeed: vi.fn(),
+  onSpeed: () => () => {},
 })
 
 beforeEach(() => {
@@ -346,7 +350,7 @@ test("repeat, M and S set while another take plays go with the take when it play
   await sound.setLoop(2, 5)
   await sound.setMuted("Bass", true)
   await sound.setSolo("Guitar")
-  expect(sound.setup()).toEqual({ loop: { a: 2, b: 5 }, muted: [0], solo: 1, moved: {} })
+  expect(sound.setup()).toEqual({ loop: { a: 2, b: 5 }, muted: [0], solo: 1, moved: {}, speed: 1 })
   expect(await sound.state()).toMatchObject({ position: 2, loop: { a: 2, b: 5 }, muted: ["Bass"], soloed: "Guitar" })
 })
 
@@ -382,4 +386,31 @@ test("Master's level let go is kept on this device and on the take that plays, o
   expect(await serviceSound(take, o).keepMaster(0.35)).toEqual({ ok: true })
   expect(device.kept).toEqual([0.35])
   expect(o.setMaster).toHaveBeenCalledWith(0.35)
+})
+
+test("the state of the take in the player says its speed, so the playhead moves on at it; another take's, none", async () => {
+  expect(await serviceSound(take, one(player({ playing: true, speed: 0.75 }))).state()).toMatchObject({ rate: 0.75 })
+  expect(await serviceSound(take, one(null)).state()).not.toHaveProperty("rate")
+})
+
+test("a speed picked while another take plays is the page's until the take's play, and goes to the one player", async () => {
+  const o = one(null)
+  const sound = serviceSound(take, o)
+  const told = vi.fn()
+  sound.onSpeed(told)
+  expect(sound.speed()).toBe(1)
+  sound.setSpeed(0.6)
+  expect(sound.speed()).toBe(0.6)
+  expect(told).toHaveBeenCalledTimes(1)
+  expect(o.setSpeed).toHaveBeenCalledWith("t1", 0.6)
+  expect(sound.setup()).toMatchObject({ speed: 0.6 })
+  // The one player's speed for the take, changed in the bar, is the page's too.
+  sound.keepSpeed(1.25)
+  expect(sound.speed()).toBe(1.25)
+  expect(told).toHaveBeenCalledTimes(2)
+})
+
+test("a page opened on the take that plays starts at its speed", () => {
+  const o = { ...one(player({ playing: true })), speedOf: () => 0.8 }
+  expect(serviceSound(take, o).speed()).toBe(0.8)
 })

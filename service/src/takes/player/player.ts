@@ -2,6 +2,7 @@ import { withMute, withSolo, type Desk } from "./desk"
 import { FRAME, loopTime, passFrames, passShift } from "./loop"
 import { parseFrames } from "./mp3"
 import { Fold } from "./peaks"
+import type { Stretch } from "./stretch"
 
 /*
   A take's tracks played together, as tested on 24 October on Alex's Mac
@@ -27,6 +28,13 @@ import { Fold } from "./peaks"
   decoder has passed b, a new one starts ten frames before a, and its sound
   is placed one piece later on the same clock, so every track goes round
   together. The clock runs on; time() works out where in the piece it is.
+
+  At another speed (#105) every piece plays at that rate, placed on the
+  clock as far apart as it then takes, so the tracks still go together.
+  That moves the key with the speed; one stretch node (stretch.ts) between
+  Master and the speakers moves it back. The playhead counts the take's
+  own seconds at that rate, less the stretch's own delay, so it is where
+  the sound is. At 100% the stretch is not in the way.
 */
 
 const AHEAD_SEC = 5
@@ -170,6 +178,10 @@ export class Player {
   private muted = new Set<number>()
   private solo: number | null = null
   private loop: { a: number; b: number } | null = null
+  /** How fast the take plays: 1 as recorded. */
+  private rate = 1
+  /** What puts the key back while the rate is not 1. */
+  private keyBack: Stretch | null = null
   /** Told each time more of a file has come, or it failed. */
   private arrived = new Set<() => void>()
   /** Told when the files may be wanted further: the playhead moved, or a wave asked. */
@@ -230,6 +242,26 @@ export class Player {
     if (this.t0 === null) return Math.min(this.end(), this.from)
     const raw = this.raw()
     return this.loop ? loopTime(raw, this.loop.a, this.loop.b) : Math.min(this.end(), raw)
+  }
+
+  /** How fast the take plays, 1 as recorded. */
+  get speed(): number {
+    return this.rate
+  }
+
+  /**
+   * Plays at `rate` times the take's speed, in its own key, with `stretch`
+   * putting the key back; at 1 none is needed. While playing, it goes on
+   * from where it is, as a jump does.
+   */
+  setRate(rate: number, stretch: Stretch | null): void {
+    const at = this.time()
+    this.rate = rate > 0 && Number.isFinite(rate) ? rate : 1
+    this.keyBack = this.rate === 1 ? null : stretch
+    this.keyBack?.setRate(this.rate)
+    this.route()
+    if (this.wanted) this.play(at)
+    else this.changed()
   }
 
   /** The piece on repeat, or null. */
@@ -452,11 +484,10 @@ export class Player {
     this.context = context
     const master = context.createGain()
     master.gain.value = this.volume
-    master.connect(context.destination)
     this.master = master
     this.mixMeter = context.createAnalyser()
     this.mixMeter.fftSize = 1024
-    master.connect(this.mixMeter)
+    this.route()
     this.gains = this.tracks.map(() => {
       const g = context.createGain()
       g.connect(master)
@@ -483,6 +514,18 @@ export class Player {
     this.mix(true)
   }
 
+  /** Master out to the speakers, through the stretch while the speed is not 1; and to its meter. */
+  private route() {
+    const { master, context, mixMeter } = this
+    if (!master || !context || !mixMeter) return
+    master.disconnect()
+    if (this.keyBack) {
+      master.connect(this.keyBack.node)
+      this.keyBack.node.connect(context.destination)
+    } else master.connect(context.destination)
+    master.connect(mixMeter)
+  }
+
   /** The loudest sample a meter has just seen, 0 to 1; 0 while no sound comes. */
   private peak(meter: AnalyserNode | null | undefined): number {
     if (!meter || this.t0 === null) return 0
@@ -504,10 +547,16 @@ export class Player {
     })
   }
 
-  /** How far the clock has run since play, counted as if nothing repeats. */
-  private raw(): number {
+  /**
+   * How far the take has played since play, in its own seconds, counted as
+   * if nothing repeats: as heard, or, for the files, as far as the sound has
+   * gone in.
+   */
+  private raw(heard = true): number {
     if (this.t0 === null || !this.context) return this.from
-    return this.from + Math.max(0, this.context.currentTime - this.t0)
+    // The sound comes out of the stretch this much after it goes in.
+    const delay = heard ? (this.keyBack?.latency ?? 0) : 0
+    return this.from + Math.max(0, this.context.currentTime - this.t0 - delay) * this.rate
   }
 
   /** How much later than its place in the take a pass's sound is heard. */
@@ -682,7 +731,7 @@ export class Player {
       this.onEnd?.()
       return
     }
-    const raw = this.raw()
+    const raw = this.raw(false)
     for (const lane of this.lanes) {
       if (lane.done) continue
       const decoder = this.decoder(lane)
@@ -692,7 +741,8 @@ export class Player {
       // On repeat, a pass needs the frames up to the one b falls in, and one more.
       const { last, all } = passFrames(this.stop(lane), frames.length, lane.source.whole)
       const ahead = (frame: number) => (frame * FRAME) / sampleRate + shift - raw
-      while (lane.next < last && ahead(lane.next) < AHEAD_SEC && decoder.decodeQueueSize < QUEUE) {
+      // Five seconds of the clock ahead: at half speed, two and a half of the take.
+      while (lane.next < last && ahead(lane.next) < AHEAD_SEC * this.rate && decoder.decodeQueueSize < QUEUE) {
         decoder.decode(
           new EncodedAudioChunk({
             type: "key",
@@ -717,7 +767,7 @@ export class Player {
           .catch(() => {})
       }
       // The file has not come this far: wait here for a second more of it.
-      if (this.t0 !== null && !passed && lane.next >= frames.length && lane.cursor / sampleRate + shift - raw < 0.15) {
+      if (this.t0 !== null && !passed && lane.next >= frames.length && lane.cursor / sampleRate + shift - raw < 0.15 * this.rate) {
         this.play(now)
         return
       }
@@ -777,16 +827,18 @@ export class Player {
 
   private place(lane: Lane, at: number, pass: number, buffer: AudioBuffer) {
     const context = this.context!
-    let when = this.t0! + at / lane.source.sampleRate + this.shift(pass) - this.from
+    // At another speed the take's seconds go by on the clock at that rate.
+    let when = this.t0! + (at / lane.source.sampleRate + this.shift(pass) - this.from) / this.rate
     let offset = 0
     const soonest = context.currentTime + 0.01
     if (when < soonest) {
-      offset = soonest - when
+      offset = (soonest - when) * this.rate
       when = soonest
     }
     if (offset >= buffer.duration) return
     const node = context.createBufferSource()
     node.buffer = buffer
+    node.playbackRate.value = this.rate
     node.connect(this.gains[lane.index])
     node.start(when, offset)
     lane.nodes.add(node)

@@ -7,6 +7,14 @@ opening.
 
 ## Unreleased
 
+- **Slower or faster takes in the band service.** On a take's page press
+  **100%** beside **Repeat**, or the same button in the bar at the bottom,
+  and pick a speed from 50% to 150%. The take keeps its key, so you can
+  learn a fast bit slowly and play along. While the speed is not 100% the
+  button is grey, as **Repeat** is when pressed. On a phone the speed is in
+  the bar, by **Mark**. The next take you play starts at 100% again, and so
+  does a take after a reload. **Download** gives the take as recorded, at
+  its own speed. РЭХА's player has no speed button.
 - **The band service's menu on the left folds to its icons.** Press the
   round handle on the edge of the column of sections, by the band's name,
   and press it again to open the menu. The browser remembers: next time

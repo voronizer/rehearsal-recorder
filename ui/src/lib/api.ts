@@ -758,6 +758,9 @@ export type PlayerState = {
    *  service): the playhead stays where it is. Python never says it. */
   waiting?: boolean
   position?: number
+  /** How fast the take plays, 1 as recorded (the band service). The
+   *  playhead moves on at that pace between answers. Python never says it. */
+  rate?: number
   duration?: number
   finished?: boolean
   loop?: { a: number; b: number } | null

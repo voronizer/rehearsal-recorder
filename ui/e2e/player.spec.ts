@@ -110,6 +110,12 @@ test.describe("the take Stop opened", () => {
     expect(repeatAt.x).toBeLessThan(markAt.x)
   })
 
+  test("has no speed button, which only the band service has", async ({ page }) => {
+    await stopped(page)
+    await expect(transport(page).getByRole("button", { name: "Repeat" })).toBeVisible()
+    await expect(transport(page).getByRole("button", { name: /^Speed / })).toHaveCount(0)
+  })
+
   test("lists its keys behind ?, and Escape closes the list, not the take", async ({ page }) => {
     // Ctrl, as everywhere but a Mac, on whatever machine runs the tests: on
     // a Mac this said ⌘ and failed. The Mac's own list is the next test's.

@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs"
 import { afterEach, expect, test, vi } from "vitest"
 import { Player } from "./player"
+import type { Stretch } from "./stretch"
 
 const fixture = (name: string) => new Uint8Array(readFileSync(new URL(`../../../test/fixtures/${name}`, import.meta.url)))
 
@@ -149,6 +150,8 @@ class FakeNode {
   }
   disconnect() {
     this.gone = true
+    this.to.length = 0
+    this.outputs.length = 0
   }
   getFloatTimeDomainData(wave: Float32Array) {
     wave.fill(this.reads)
@@ -177,8 +180,15 @@ class FakeSound {
   static made: FakeNode[] = []
   static meters: FakeNode[] = []
   static splitters: FakeNode[] = []
+  /** Every piece started: when on the clock, from where in it, at what rate, and how long it is. */
+  static started: { when: number; offset: number; rate: number; duration: number }[] = []
+  /** The one sound the service makes; the tests move its clock. */
+  static last: FakeSound | null = null
   readonly destination = { speakers: true }
   currentTime = 0
+  constructor() {
+    FakeSound.last = this
+  }
   async resume() {}
   createGain() {
     const g = new FakeNode()
@@ -199,7 +209,17 @@ class FakeSound {
     return new FakeBuffer(channels, length, rate)
   }
   createBufferSource() {
-    return { buffer: null, onended: null, connect() {}, start() {}, stop() {} }
+    const node = {
+      buffer: null as FakeBuffer | null,
+      onended: null,
+      playbackRate: { value: 1 },
+      connect() {},
+      start(when: number, offset = 0) {
+        FakeSound.started.push({ when, offset, rate: node.playbackRate.value, duration: node.buffer!.duration })
+      },
+      stop() {},
+    }
+    return node
   }
 }
 
@@ -291,4 +311,117 @@ test("a stereo track's level is two numbers, left then right, after its level; a
   // Closed, no node of the take stays joined to the sound the next take plays through.
   p.close()
   expect([...gains, ...splitters, ...sides.flat()].filter((n) => !n.gone)).toEqual([])
+})
+
+/** A stretch as far as the player needs one: a node, its own delay, and the speeds it was told. */
+const fakeStretch = () => {
+  const stretch = { node: new FakeNode(), latency: 0.05, setRate: vi.fn() }
+  return stretch as typeof stretch & Stretch
+}
+
+/** t1.mp3 played from `from` at `rate`, until its first second is placed; `t0` is when the first piece starts on the clock. */
+async function playAt(rate: number, from = 0, before?: (p: Player) => void) {
+  withDecoder()
+  vi.stubGlobal("AudioContext", FakeSound)
+  vi.stubGlobal("fetch", async (url: string) => new Response(fixture(url)))
+  FakeSound.started = []
+  const stretch = fakeStretch()
+  const p = new Player([{ url: "t1.mp3", gain: 1 }])
+  before?.(p)
+  p.setRate(rate, stretch)
+  p.play(from)
+  await vi.waitFor(() => expect(p.waiting).toBe(false))
+  // The track's gain was made last; Master is the gain it goes to.
+  const master = FakeSound.made.find((g) => FakeSound.made.at(-1)!.to.includes(g))!
+  return { p, stretch, master, sound: FakeSound.last!, t0: FakeSound.started[0].when }
+}
+
+/** How much of the take is placed so far, in its own seconds. */
+const placed = () => FakeSound.started.reduce((n, s) => n + s.duration, 0)
+
+test("at half speed each piece plays at half its rate, twice as far apart on the clock, and the playhead runs at half", async () => {
+  const { p, sound, t0 } = await playAt(0.5)
+  const started = FakeSound.started
+  expect(started.length).toBeGreaterThan(1)
+  expect(started.every((s) => s.rate === 0.5)).toBe(true)
+  for (let i = 1; i < started.length; i++) expect(started[i].when - started[i - 1].when).toBeCloseTo(started[i - 1].duration / 0.5, 9)
+  // Five seconds of the clock are decoded ahead: two and a half of the take.
+  expect(placed()).toBeGreaterThan(2)
+  expect(placed()).toBeLessThan(2.6)
+  // Two seconds of the clock after the first sound comes out of the stretch, a second of the take is heard.
+  sound.currentTime = t0 + 0.05 + 2
+  expect(p.time()).toBeCloseTo(1, 9)
+  expect(p.speed).toBe(0.5)
+  p.close()
+})
+
+test("at 1.5 the playhead runs half as fast again", async () => {
+  const { p, sound, t0 } = await playAt(1.5)
+  const started = FakeSound.started
+  expect(started.every((s) => s.rate === 1.5)).toBe(true)
+  for (let i = 1; i < started.length; i++) expect(started[i].when - started[i - 1].when).toBeCloseTo(started[i - 1].duration / 1.5, 9)
+  expect(placed()).toBeGreaterThan(7)
+  expect(placed()).toBeLessThan(7.6)
+  sound.currentTime = t0 + 0.05 + 2
+  expect(p.time()).toBeCloseTo(3, 9)
+  p.close()
+})
+
+test("at 1 Master goes straight out and the stretch is not joined", async () => {
+  const { p, stretch, master, sound, t0 } = await playAt(1)
+  expect(master.to).toContain(sound.destination)
+  expect(master.to).not.toContain(stretch.node)
+  expect(stretch.node.to).toEqual([])
+  expect(stretch.setRate).not.toHaveBeenCalled()
+  expect(FakeSound.started.every((s) => s.rate === 1)).toBe(true)
+  // No stretch, no delay: the playhead is the clock.
+  sound.currentTime = t0 + 2
+  expect(p.time()).toBeCloseTo(2, 9)
+  p.close()
+})
+
+test("at another speed Master goes through the stretch, which is told the speed", async () => {
+  const { p, stretch, master, sound } = await playAt(0.75)
+  expect(stretch.setRate).toHaveBeenCalledWith(0.75)
+  expect(master.to).toContain(stretch.node)
+  expect(master.to).not.toContain(sound.destination)
+  expect(stretch.node.to).toContain(sound.destination)
+  // The whole mix's meter is still after Master.
+  expect(master.to.some((n) => FakeSound.meters.includes(n as FakeNode))).toBe(true)
+  p.close()
+})
+
+test("a speed changed while playing goes on from the same moment", async () => {
+  const { p, stretch, master, sound, t0 } = await playAt(1)
+  sound.currentTime = t0 + 3
+  FakeSound.started = []
+  p.setRate(0.5, stretch)
+  expect(p.playing).toBe(true)
+  expect(p.time()).toBeCloseTo(3, 9)
+  await vi.waitFor(() => expect(p.waiting).toBe(false))
+  expect(FakeSound.started.every((s) => s.rate === 0.5)).toBe(true)
+  expect(master.to).toContain(stretch.node)
+  sound.currentTime = FakeSound.started[0].when + 0.05 + 1
+  expect(p.time()).toBeCloseTo(3.5, 9)
+  // And back to 100%: straight out again, from where it was.
+  p.setRate(1, stretch)
+  expect(p.time()).toBeCloseTo(3.5, 9)
+  expect(master.to).toContain(sound.destination)
+  expect(master.to).not.toContain(stretch.node)
+  p.close()
+})
+
+test("a repeat goes round at the speed", async () => {
+  const { p, sound, t0 } = await playAt(0.5, 2, (p) => p.setLoop(2, 4))
+  // Two seconds of the take from 2 to 4 take four of the clock; the second pass starts there.
+  sound.currentTime = t0 + 2
+  await vi.waitFor(() => expect(FakeSound.started.some((s) => s.when > t0 + 4 - 1e-6)).toBe(true))
+  const first = FakeSound.started.filter((s) => s.when < t0 + 4 - 1e-6)
+  const second = FakeSound.started.filter((s) => s.when >= t0 + 4 - 1e-6)
+  expect(Math.max(...first.map((s) => s.when + s.duration / 0.5))).toBeCloseTo(t0 + 4, 9)
+  expect(Math.min(...second.map((s) => s.when))).toBeCloseTo(t0 + 4, 9)
+  // Five seconds of the clock in, the take is half a second into its second pass.
+  sound.currentTime = t0 + 0.05 + 5
+  expect(p.time()).toBeCloseTo(2.5, 9)
+  p.close()
 })

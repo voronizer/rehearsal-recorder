@@ -453,6 +453,7 @@ the shared one when it is redone.
   - `Collapsible` round what opens out where it stands (R13): the take strip, with Songs and the open tab's number as its triggers; the songs under Next take, with **All 12 songs** and **Fewer**; a notes lane, with `NotesFold`. None has a part of its own to fold, so none is a `CollapsibleContent`: each trigger's `aria-controls` names what it opens, the row of tabs, the list or the lane.
   - `--signal-foreground` and `--mark-foreground`: the text on a signal fill and on a mark's colour. `--sidebar-*` follow the theme's own tokens.
   - `ShareOption` (`components/ShareOption.tsx`): the row that hands a take on, in Share's dialog and in the service's Download.
+  - `SpeedButton` (`components/SpeedButton.tsx`): how fast a take plays in the band service, in its own key, from 50% to 150%. An outline button with the speed; a press opens the ten speeds. Grey while not 100%, as Repeat is when pressed (F2). It sits after Repeat on a take's page and in the bar at the bottom; `bare`, in the phone's bar, it is the number alone. While what keeps the key loads, a spinner from the second on (B5); if it cannot load, a warning sign and its tip until the next pick. Only the band service uses it: РЭХА's player has none.
   The rest are added by the first screen's pull request that needs them: one
   ✕, one link, one size of icon button and screen header. A take's name is
   written by
