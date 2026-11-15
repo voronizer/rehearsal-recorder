@@ -15,7 +15,8 @@ import { stretchOf, type Stretch } from "./stretch"
   take pressed in a list plays once its page has come; its files are
   fetched only then. A take with a Backing track and a song waits for the
   service to say whether you hear Backing, so Backing is never heard
-  where you have it muted (backing.ts).
+  where you have it muted (backing.ts). It holds the speed of the take in
+  it too (#105): another take starts at 100% (speed.ts).
 */
 
 let canPlay: boolean | null = null
@@ -190,8 +191,12 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
    * and the button says so until the next pick (Alex, 2026-11-15 15:10Z).
    */
   const applySpeed = (p: Player | null, u: string, r: number) => {
-    if (r === 1 || keyBack.current) return p?.setRate(r, keyBack.current)
+    // The last speed asked wins: one still loading for an earlier pick no longer shows.
     const asked = ++speedAsked.current
+    if (r === 1 || keyBack.current) {
+      setSpeedLoading(false)
+      return p?.setRate(r, keyBack.current)
+    }
     setSpeedLoading(true)
     stretchOf(wakeSound())
       .then(
