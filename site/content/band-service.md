@@ -31,6 +31,8 @@ The phone loads a take as you listen, half a minute ahead of where you are, so a
 
 Each of you has a track of your own in every take. Play yours alone to hear what you really did, or mute it and practise along with the band as it played that night. With yours muted, press **Download**, then **The mix**: you get an MP3 of the band without you, to practise along anywhere.
 
+To learn a fast bit, slow the take down: on a computer with **100%** beside **Repeat**, the two arrows in a loop, and on a phone in the bar at the bottom, by **Mark**. Pick from 50% to 150%; the take keeps its key, and the next take you play starts at 100% again.
+
 The levels are yours as well. Turn a track up or down once, and it plays that way for you in every take with a track of that name, on the phone and on the computer. Only you hear it that way; for the others nothing changes. **РЭХА's levels** brings back the mix the take came with.
 
 ![Viasna #12 on Ivan's phone: a row for each track with its level, M and S, the guitar turned all the way up, and under Master the button for РЭХА's levels](lanes)
