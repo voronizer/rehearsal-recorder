@@ -78,6 +78,10 @@ Each with its mockup; the mockups' sources are in
   РЭХА's."), since "mark" already names a take's mark (CLAUDE.md, one word
   per thing). The others were keeping "mark", and "line". The cards for
   Q1 and Q2 called it a mark.
+- **No setting**, 16:09:07Z card A, «Без настройки»: the fader always
+  stops on the notch while the knob covers it; no Settings option turns
+  that off (the service has no Settings page, `service/src/routes.tsx`).
+  The other was an on/off switch on a new Settings page.
 
 ## What a band member sees
 
