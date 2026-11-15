@@ -112,6 +112,8 @@ All on 15 November 2026, UTC.
   **The mix**. The window starts with **Shows** at **The mix**.
 - 23:38:13, in words: «Lasts по умолчанию месяц». The window starts with
   **Lasts** at **A month**, in place of **No end** from 22:32:32.
+- 23:44:13, «го» to the plan, sent with Claude doing it alone (one fresh
+  review of the branch at the end) recommended over an agent per task.
 
 ## What a band member sees
 

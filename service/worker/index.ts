@@ -28,6 +28,8 @@ import { setRoutes } from "./sets/routes"
 import { rehaSongRoutes } from "./songs/reha-routes"
 import { songRoutes } from "./songs/routes"
 import { fileRoutes } from "./files/routes"
+import { linkRoutes } from "./links/routes"
+import { purgeLinks } from "./links/store"
 import { consumeChat } from "./chat/consume"
 import { reportFailure } from "./chat/failures"
 import { botApi, keptTelegram, type KeptMessage } from "./chat/telegram"
@@ -106,6 +108,7 @@ const routes = app
   .route("/", backingRoutes)
   .route("/", markRoutes)
   .route("/", takeRoutes)
+  .route("/", linkRoutes)
   .route("/", fileRoutes)
   .route("/", standInRoutes)
 
@@ -134,6 +137,11 @@ export default {
       await purgeTrash(env)
     } catch (e) {
       await reportFailure(env, "emptying the trash", e)
+    }
+    try {
+      await purgeLinks(env)
+    } catch (e) {
+      await reportFailure(env, "closing ended links", e)
     }
     try {
       await forgetCodeAsks(database(env))

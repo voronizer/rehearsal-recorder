@@ -1653,6 +1653,173 @@
           "takes",
           "sets"
         ]
+      },
+      "LinkItem": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "take": {
+            "type": "object",
+            "properties": {
+              "uid": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              },
+              "song_id": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "moved": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "uid",
+              "name",
+              "song_id",
+              "moved"
+            ]
+          },
+          "by": {
+            "type": "string"
+          },
+          "made_at": {
+            "type": "string"
+          },
+          "for": {
+            "type": "string"
+          },
+          "shows": {
+            "type": "string",
+            "enum": [
+              "mix",
+              "tracks",
+              "marks"
+            ]
+          },
+          "download": {
+            "type": "string",
+            "enum": [
+              "none",
+              "mix",
+              "all"
+            ]
+          },
+          "until": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "plays": {
+            "type": "number"
+          },
+          "last_played_at": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "take",
+          "by",
+          "made_at",
+          "for",
+          "shows",
+          "download",
+          "until",
+          "plays",
+          "last_played_at"
+        ]
+      },
+      "NewLink": {
+        "type": "object",
+        "properties": {
+          "for": {
+            "type": "string",
+            "maxLength": 60,
+            "default": ""
+          },
+          "shows": {
+            "type": "string",
+            "enum": [
+              "mix",
+              "tracks",
+              "marks"
+            ]
+          },
+          "download": {
+            "type": "string",
+            "enum": [
+              "none",
+              "mix",
+              "all"
+            ]
+          },
+          "lasts": {
+            "type": "string",
+            "enum": [
+              "never",
+              "month",
+              "week",
+              "day"
+            ]
+          },
+          "heard": {
+            "$ref": "#/components/schemas/LinkHeard"
+          },
+          "peaks": {
+            "type": "array",
+            "items": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1
+            }
+          }
+        },
+        "required": [
+          "shows",
+          "download",
+          "lasts"
+        ]
+      },
+      "LinkHeard": {
+        "type": "object",
+        "properties": {
+          "volumes": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1
+            }
+          },
+          "muted": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "soloed": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "volumes",
+          "muted",
+          "soloed"
+        ]
       }
     },
     "parameters": {}
@@ -7282,6 +7449,212 @@
           },
           "409": {
             "description": "Already there",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/takes/{uid}/links": {
+      "post": {
+        "description": "**Make link**: a link to the take for someone outside the band. A link with tracks carries the maker's `heard` and is open at once. A link that shows only the mix carries its wave in `peaks` (1200 numbers) and opens once its MP3 is sent to `/api/links/{id}/mix`.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "required": true,
+            "name": "uid",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NewLink"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Done",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LinkItem"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Not as the service expects",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in, or the key does not work",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not there",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/links/{id}/mix": {
+      "put": {
+        "description": "The MP3 of a link that shows only the mix, as the body, up to 100 MB. Only the member who made the link sends it, once; the link opens after.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Done",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LinkItem"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Not as the service expects",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in, or the key does not work",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not there",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Too big",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/links": {
+      "get": {
+        "description": "Every open link of the band, newest first.",
+        "responses": {
+          "200": {
+            "description": "Done",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/LinkItem"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in, or the key does not work",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/links/{id}": {
+      "delete": {
+        "description": "**Close link**: any member closes any link, with its mix. A link already closed answers the same.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Done",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Ok"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in, or the key does not work",
             "content": {
               "application/json": {
                 "schema": {

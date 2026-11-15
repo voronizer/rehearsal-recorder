@@ -1,4 +1,5 @@
 import { and, eq, isNotNull, lt, notExists, sql } from "drizzle-orm"
+import { deleteTakeLinks } from "../links/store"
 import { database } from "../shared/db"
 import type { Bindings } from "../shared/env"
 import { bandSet, setSong, song, songFile, take } from "../shared/schema"
@@ -25,7 +26,7 @@ export async function deleteFiles(env: Bindings, prefix: string, drop: (key: str
 
 /**
  * Once a day, from the Cron Trigger: takes in the trash for more than 30
- * days are deleted for good, with their files, comments and stars, the
+ * days are deleted for good, with their files, comments, stars and links, the
  * longest there first and 20 at most. Then songs 30 days in the trash go
  * the same way with their files, once none of their takes is left, and
  * leave their sets. Sets 30 days in the trash go too, all at once: they
@@ -43,6 +44,7 @@ export async function purgeTrash(env: Bindings): Promise<number> {
   // One take at a time: its files first, so a take is never left with
   // files nobody can find.
   for (const { uid } of old) {
+    await deleteTakeLinks(env, uid)
     await deleteFiles(env, `takes/${uid}/`)
     await db.delete(take).where(eq(take.uid, uid))
   }
