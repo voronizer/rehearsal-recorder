@@ -68,7 +68,10 @@ All on 15 November 2026, UTC.
 - 22:28:27, in words: «я бы сделал настройку при создании ссылки с выбором
   что показывать». What the link shows is chosen for each link when it is
   made: the mix; the mix and the tracks; the mix, the tracks and the band's
-  marks.
+  marks. The card he answered described them: «Волна дубля и ▶, больше
+  ничего»; «Плеер как у группы: M, S, уровни, повтор куска, скорость. Меток,
+  ★ и кнопки Mark нет»; «То же, что Б, и метки группы с комментариями.
+  Читать можно, отвечать нельзя».
 - 22:30:35, card: **Выбирать при создании**. What the person can download
   is chosen for each link: nothing, the mix, or the mix and the tracks (MP3
   and FLAC). Nothing to begin with. The band's **Download** window is used.
@@ -90,8 +93,9 @@ All on 15 November 2026, UTC.
 - 22:41:30, card: **В списке ссылок**. A link's row says how many times it
   was played and the last day. A press of ▶ counts, opening the page does
   not. No Telegram message.
-- 22:42:28, card: **Фраза про Download**. reha.stream gets one or two
-  sentences in “Take your track home”, no new picture.
+- 22:42:28, card: **Фраза про Download**, whose line read «Одно-два
+  предложения в «Take your track home», картинки без изменений». reha.stream
+  gets one or two sentences in that chapter; its pictures stay.
 - 22:43:55, card: **3. Смешанно**. A link that shows only the mix plays one
   MP3, made by the maker's page at **Make link** and kept with the link. A
   link that shows the tracks plays the track files, as the band's player
@@ -103,6 +107,11 @@ All on 15 November 2026, UTC.
   **Members** page.
 - 22:56:44, card: **А. Members and links**. The section and its page are
   called **Members and links**.
+- 23:11:17, «ок» to this spec.
+- 23:37:08, card «Что выбрано в Shows, когда окно ссылки открывается?»:
+  **The mix**. The window starts with **Shows** at **The mix**.
+- 23:38:13, in words: «Lasts по умолчанию месяц». The window starts with
+  **Lasts** at **A month**, in place of **No end** from 22:32:32.
 
 ## What a band member sees
 
@@ -111,34 +120,64 @@ All on 15 November 2026, UTC.
 - In a take's title row, a button with the chain icon (`Link2`) stands just
   before **Download**, on a computer and on a phone. Its tooltip and its
   name for a screen reader: “Link for someone outside the band”. On a phone
-  it is a ghost button, as **Download** is there.
+  it is a ghost button, as **Download** is there. A take in the Trash has
+  none.
 - It opens the window **Link to “Viasna #12”**, `tall`, with the line “For
   someone outside the band: they open it without signing in.”
 - At the top, the take's open links, newest first, as rows. A row's title
-  is who the link is for, or, when that is empty, what it shows (“The
-  mix”). Under it two lines: what it shows and what it lets download
-  (“Mix and tracks, download everything”), then who made it and when,
-  until when, and the plays (“Vik, 12 November · until 19 November ·
-  played 3 times, last 14 November”; “no end”; “not played yet”; “played
-  once”). On the right: **Copy** (an icon button that copies the address
-  and shows ✓ for a moment) and **Close link**.
+  is who the link is for (“Mum”). Under it two lines: what it shows and
+  what the person can download (“Mix and tracks, download everything”),
+  then who made it and when, until when, and the plays (“Vik, 12 November ·
+  until 19 November · played 3 times, last 14 November”; “no end”; “not
+  played yet”; “played once”). When who it is for is empty, the title is
+  what it shows (“The mix”) and the first line only the download (“No
+  download”). On the right: **Copy link** (an icon button that copies the
+  address and shows ✓ for 1.5 seconds) and **Close link**.
 - Below, **New link**: the field “Who it is for (only the band sees this)”,
-  then three rows of choices:
+  at most 60 characters, then three rows of choices:
   - **Shows**: **The mix** · **Mix and tracks** · **And marks**
   - **Download**: **Nothing** · **The mix** · **Mix and tracks**
   - **Lasts**: **No end** · **A month** · **A week** · **A day**
-  and the line “The mix goes as you hear it now: your levels, M and S.”
+  and the line “The mix goes as you hear it now: your levels, mute and
+  solo.”, the words **Download** uses (`Download.tsx:161`).
   While **Shows** is **The mix**, **Download**'s **Mix and tracks** is greyed
   out; a choice of it falls back to **The mix**.
-- Buttons: **Close** and **Make link**.
+- Each time the window opens it starts at **Shows** **The mix**,
+  **Download** **Nothing**, **Lasts** **A month**, and an empty field.
+- Under the choices, one line keeps its room, empty until it has something
+  to say, so nothing below moves: “Mixing… 40%”, then “Sending the mix…”,
+  or what went wrong.
+- Buttons: **Close** and **Make link**. **Make link** keeps its width and is
+  greyed out while a mix is made or sent.
 - **Make link** makes the link and puts its row at the top with the whole
-  address in a field beside **Copy**; the member presses **Copy**. The field
-  empties for the next link; the choices stay. The window stays open.
-- A link that shows only the mix needs its MP3 first: **Make link** shows
-  how far the mix has got, as **Download** does, and the link appears when
-  the MP3 is up. Closing the window stops it and no link is made. If it
-  fails, a line under the buttons says so and no link is made.
-- **Close link** closes the link at once and takes its row away.
+  address in a field beside **Copy link**; the member presses **Copy link**.
+  The field **Who it is for** empties for the next link; the choices stay.
+  The window stays open. The address shows on the link made last, until the
+  window closes; the other rows have only **Copy link**.
+- A link that shows only the mix needs its MP3 first: the page mixes it
+  from what the member hears, as **Download** does, sends it, and the link
+  appears when the MP3 is up. Closing the window stops it and no link is
+  made. On a phone whose screen goes off, the mix waits and carries on when
+  it comes back (`mix.ts:104`); if sending broke off, the line says so and
+  no link is made.
+- What can go wrong, in that line, and no link is made:
+  - every track muted or off: “Every track is muted, so the mix would be
+    silent.” (`Download.tsx:163`);
+  - the mix fails: “Could not make the mix. Try again.”, Download's words;
+  - the MP3 is over 100 MB (a take of about 55 minutes): “This take is too
+    long for a link with the mix alone: pick Mix and tracks.”;
+  - sending fails: “Could not send the mix. Try again.”;
+  - a link with tracks cannot be made: “Could not make the link. Try
+    again.”
+- **Close link** closes the link at once and takes its row away. If the
+  service cannot be reached, the row stays and a line under the rows says
+  “Could not close the link. Try again.”
+- If the clipboard refuses **Copy link**, the row shows its address in a
+  field, selected, to copy by hand.
+- If the links cannot be read, the place of the rows says so with **Try
+  again**, as other pages do (`Trouble`, `Members.tsx:269`).
+- At 960×680 and on a phone each row of choices puts its name above its
+  switch, as `PickRow` does; long names and long “who it is for” wrap.
 
 ### Members and links
 
@@ -149,39 +188,49 @@ All on 15 November 2026, UTC.
   right after **People**, on the owner's page and on a member's page. It
   lists every open link of the band, newest first. Each row is as in the
   window, its title starting with the take's name, which opens the take:
-  “Viasna #12 · Mum”. With no links the group says “No links yet.”
-- Every member sees the list and can **Copy** and **Close link** on any row.
+  “Viasna #12 · Mum”, or “Pałyn #2 · The mix” when who it is for is empty.
+  With no links the group says “No links yet.” If the links cannot be read,
+  the group says so with **Try again**.
+- Every member sees the list and can **Copy link** and **Close link** on
+  any row.
 
 ## What the person with the link sees
 
 - The address is `https://<the band's address>/l/<22 letters and digits>`.
 - The page has a bar at the top with the band's picture and name, as the
-  band's pages have on a phone, and no menu. Then the take's name (“Viasna #12”), and under it the
-  song, the day and the length; with tracks, the number of tracks too. The
-  browser tab says “Viasna #12 · Kapela”.
+  band's pages have on a phone, and no menu. Then the take's name (“Viasna
+  #12”) with **Download** beside it when the link allows it, and under it
+  the song, the day and the length; with tracks, the number of tracks too.
+  The browser tab says “Viasna #12 · Kapela”. The page follows the device's
+  light or dark theme, as the band's pages do.
 - **The mix**: ▶ and one wave, the mix's own, as a take's row has them, on
   a computer and on a phone.
 - **Mix and tracks**: on a computer, РЭХА's player as the band's take page
   has it: a lane and a fader per track, M and S, the MIDI notes drawn,
   Master, **Repeat** and the speed. On a phone, ▶ and the wave, then the
-  tracks with their faders, M and S, as the band's phone page has them;
-  there is no bottom bar, so no speed. It starts at the maker's levels, M
-  and S. What the person changes stays in that page only.
+  tracks with their faders, M and S, as the band's phone page has them, and
+  the band's bar at the bottom with the speed, without **Mark** and ★. It
+  starts at the maker's levels, M and S, the Backing track's M included.
+  Faders, M, S and the speed the person changes stay in that page only;
+  Master stays on that device, as it does for the band (`master.ts:2`).
 - **And marks**: the same, with the band's marks on the wave and the list of
-  marks with their comments under the player, to read. No comment box, no
-  **Done**, no **Mark**.
+  marks with their comments under the player, to read, each with the name
+  of the member who wrote it. No comment box, no **Done**, no **Mark**.
 - No ★, no ⋯, no **Mark**, no comments of their own, nothing that changes the
   band's things.
 - **Download**, when the link allows it: the band's **Download** window. With
   **The mix**, only **The mix**; with **Mix and tracks**, also **Tracks in
   MP3** and **Tracks in FLAC**, with MIDI where a track has notes. A link
-  that shows only the mix gives its own MP3; a link with tracks makes the
+  that shows only the mix gives its own MP3, and **The mix**'s line there
+  says “The MP3 the band made for this link.”; a link with tracks makes the
   mix in the page from what the person hears, as the band's **Download**
-  does. **The mix**'s line there says “The MP3 the band made for this
-  link.” on a mix link.
+  does.
 - A link that is closed, past its end, or whose take is in the Trash or
   gone: the page says “This link no longer works.” under the band's name,
-  and nothing else. The same answer for a link that never existed.
+  and nothing else. The same answer for a link that never existed. Any
+  other failure to load says so with **Try again**.
+- A browser that cannot play the take gets the take page's line
+  (`Take.tsx:333`) in place of the player.
 - The first ▶ after the page opens counts one play and sets the day of the
   last one. Further presses in that page do not count.
 - The page does not tell search engines about itself (`noindex`).
@@ -191,23 +240,29 @@ All on 15 November 2026, UTC.
 ### Data
 
 - A migration adds a table `share_link`: its id (22 random characters from
-  the 57 letters and digits that cannot be confused, kept whole so it can be
-  copied again), the take's uid, who made it, when, who it is for (up to 60
-  characters, may be empty), what it shows (`mix`, `tracks`, `marks`), what
-  it lets download (`none`, `mix`, `all`), its end (a time, or empty for no
-  end), the maker's levels, M and S (JSON in the form of `Heard`, for a link
-  with tracks), the generation the mix was made from (for a mix link), the
-  plays and the last play's time.
+  the 57 letters and digits that cannot be confused), the take's uid, who
+  made it, when, who it is for (at most 60 characters, may be empty), what
+  it shows (`mix`, `tracks`, `marks`), what the person can download
+  (`none`, `mix`, `all`), its end (a time, or empty for no end), the maker's
+  levels, M and S (JSON in the form of `Heard`, for a link with tracks),
+  the generation the mix was made from (for a mix link), whether it is
+  ready, the plays and the last play's time. The id is kept whole, so a
+  member can copy the address again.
 - A mix link's MP3 and its wave go to R2 under `links/<id>/`.
-- An end is counted from the moment the link is made: **A day** 24 hours,
-  **A week** 7 days, **A month** the same day and hour next month. The list
-  shows its day in the member's browser.
+- An end is counted from the moment the link is made, in UTC: **A day** 24
+  hours, **A week** 7 days, **A month** the same day and hour next month,
+  or that month's last day when it has no such day (31 January → 28 or 29
+  February). The list shows its day in the member's browser.
 
 ### Routes for members (`needMember`)
 
 - Make a link to a take: the choices and who it is for; the levels, M and
-  S for a link with tracks; for a mix link, its MP3 and wave in the same
-  request, streamed to R2. The take must exist and not be in the Trash.
+  S for a link with tracks; the mix's wave for a mix link. The take must be
+  shown and not in the Trash. A tracks or marks link is ready at once.
+- A mix link takes two requests: the one above makes it not ready, and a
+  second sends its MP3, streamed to R2, and makes it ready. Only the member
+  who made it can send it. A link left not ready is not listed, answers
+  404, and the daily run deletes it after a day.
 - List the band's open links, newest first, with the take's name; the
   window takes the take's own from it.
 - Close a link: any member, any link. Its row and its mix files go at once.
@@ -215,12 +270,19 @@ All on 15 November 2026, UTC.
 
 ### Routes for the person with the link (no sign-in)
 
-- `GET /api/l/<id>`: the link's page, built like the take's page
-  (`service/worker/takes/band-routes.ts:116`) but only with what the link
-  shows: the take's name, song, day, length, the amount; the tracks with
-  their files at the link's own addresses, the notes, the levels, M and S
-  (tracks links); the marks with their comments (marks links); what it lets
-  download. No member's email or id, no stars, no other take.
+- `GET /api/l/<id>`: the link's page, built by the same code as the take's
+  page (`service/worker/takes/band-routes.ts:116`) but only with what the
+  link shows: the take's name, song, day, length, the amount; the tracks
+  with their files at the link's own addresses, the notes, the levels, M
+  and S (tracks links); the marks with their comments and the band's labels
+  for their colours (marks links); what the person can download. No
+  member's email or id: in marks and comments a member's id becomes a
+  stand-in for this answer (`m1`, `m2`…), so names and initials show as
+  for the band. No stars, no other take.
+- The take page's answer, for members and for links, says where its files
+  are (`/files/<uid>/<gen>` or `/files/l/<id>/<gen>`); the pages build the
+  addresses of the MIDI and the downloads from it (`lanes.ts:25`,
+  `Download.tsx:33`).
 - `/files/l/<id>/…`: the files the link allows, from the take's current
   generation (tracks links) or `links/<id>/` (mix links), with Range and
   ETag as `/files/…` has now. MP3, peaks and MIDI to play and draw; FLAC
@@ -229,9 +291,9 @@ All on 15 November 2026, UTC.
   A mix link reaches no track file.
 - `POST /api/l/<id>/played`: one play.
 - Each of these answers 404 with the same body for a link that is closed,
-  past its end, unknown, or whose take is in the Trash. They are added to
-  the Worker's routes without `needMember`, so `run_worker_first` stays as
-  it is.
+  past its end, unknown, not ready, or whose take is in the Trash. They are
+  added to the Worker's routes without `needMember`, so `run_worker_first`
+  stays as it is.
 
 ### The pages
 
@@ -241,11 +303,12 @@ All on 15 November 2026, UTC.
   to sign-in. `_headers` gets a rule for `/l/*` adding
   `X-Robots-Tag: noindex`. The tab's title is set by the page once the link
   has loaded; a messenger's preview shows the page's own title, “РЭХА”.
-- The link view reuses the take page's pieces: the player, the lanes, the
-  marks list read-only, **Download**. It has its own way of loading the
-  take and does not ask for the member's levels.
+- The link page reuses the take page's pieces: the player, the lanes, the
+  marks list read-only, **Download**, the phone's bottom bar. It reads only
+  the link's answer and the band's name and picture (`/api/band`), never a
+  member's route, and keeps nothing in the band.
 - **Make link** on a mix link runs `makeMix` with the maker's `Heard`, and
-  the wave is counted from the same buffer.
+  the wave is counted from the same sound.
 - `service/openapi.json` describes the new routes.
 
 ### When things change
@@ -259,43 +322,43 @@ All on 15 November 2026, UTC.
   its links and their files go with it.
 - **Past its end**: the link stops working at once and leaves the lists.
   The daily run (`wrangler.jsonc:30`) deletes it and its files.
-- **A member is removed**: the links they made stay, with their name.
+- **A member is removed**: the links they made stay, with their name
+  (removing keeps the member's row, `members/routes.ts:129-134`).
 - **The song or the take is renamed**: the link page and the lists show the
   new name.
 
 ### Words elsewhere
 
 - **reha.stream**, `site/content/band-service.md`, “Take your track home”,
-  after the first paragraph: “To let someone outside the band hear a take,
-  press the chain button beside **Download** and then **Make link**. You
-  choose whether they hear only the mix or the tracks too, whether they can
-  download, and how long the link works; they open it without signing in.”
+  after the paragraph about MIDI (`:70`), before the picture: “To let
+  someone outside the band hear a take, press the chain button beside
+  **Download** and then **Make link**. You choose whether they hear only
+  the mix or the tracks too, whether they can download, and how long the
+  link works; they open it without signing in.”
 - **Members** becomes **Members and links** in `service/README.md` (lines 5,
   86, 107, 110) and `docs/using-it.md` (lines 868, 892).
 - **CHANGELOG**, under “Unreleased”: “**A link to a take for someone outside
   the band.** In the band service press the chain button beside **Download**
-  on a take's page, choose what the link shows, what it lets download and
+  on a take's page, choose what the link shows, what they can download and
   how long it works, and press **Make link**. The person opens it without
   signing in. Every link of the band is on **Members and links**, the
   **Members** page's new name, where any member can close one.”
-- `docs/design-system.md` C3 gets the link window's case: a window that
-  lists things which act at once and also makes one says **Close**, not
-  **Cancel**, because what it made stays.
+- `docs/design-system.md` C3 gets: The link window's rows act at once (Copy
+  link, Close link) and Make link makes a new link, so its way out is
+  "Close": what it made stays.
 
 ### Pictures
 
-- No new picture. `npm run pictures` in `service/` retakes them all. Those
-  that change: `downloads` and `sets`, taken on a computer, whose menu says
-  **Members and links**; and those with a take's title row, which gets the
-  chain button: `downloads`, `lanes`, `three-weeks-ago`, and `mark` if its
-  row is in view. Alex sees them before the merge.
+- No new picture. Of the site's pictures only the two that show the menu
+  are retaken, `downloads` and `sets`: their menu says **Members and
+  links**, and `downloads`, a take's page, has the chain button beside
+  **Download**. The others stay as they are, as the Q9 card said. Alex sees
+  the two before the merge.
 
 ## Stress cases
 
 - A take of 15 minutes and eight tracks as a mix link: the mix takes about
   a minute and is about 27 MB, under the 100 MB a request may carry.
-- A phone that sleeps while **Make link** mixes: the mix stops with the page;
-  no link is made, and the line says so.
 - Two members close the same link at once: both rows go; the second gets
   “done”.
 - A link sent to a group chat and played by twenty people: twenty plays. A
@@ -315,32 +378,39 @@ All on 15 November 2026, UTC.
 ## Tests
 
 - Worker tests: making each kind of link; the list; closing by any member;
-  the routes without sign-in answering only what each link allows (a mix
-  link refuses track files, a link without download refuses FLAC and
-  `?download=1`, no link reaches another take's files); 404 for closed,
-  ended, unknown and trashed; **Restore** brings a link back; the daily run
-  deletes ended links and their files; purge deletes a take's links; a
-  crop keeps a tracks link working on the new generation; a play counts.
+  a mix link listed only once its MP3 is up; the routes without sign-in
+  answering only what each link allows (a mix link refuses track files, a
+  link without download refuses FLAC and `?download=1`, no link reaches
+  another take's files); 404 for closed, ended, unknown, not ready and
+  trashed; **Restore** brings a link back; the daily run deletes ended and
+  unfinished links and their files; purge deletes a take's links; a crop
+  keeps a tracks link working on the new generation; a play counts; no
+  member id in a link's answer.
 - Page tests: make a link in the window, see it at the top with its address,
   see it on **Members and links** with the take's name; open it in a fresh
-  browser without signing in, with each **Shows** and **Download**; ▶ adds a
-  play; **Close link** makes the page say “This link no longer works.”; the
-  menu and the heading say **Members and links** (`frame.spec.ts:17`,
-  `members.spec.ts`, `pointer.spec.ts:27`).
+  browser without signing in, with each **Shows** and **Download**; a marks
+  link of a take with a song, Backing and MIDI, made with download
+  everything, asks nothing of the members' routes; its MIDI lane draws
+  notes; a FLAC saved from it has the file's bytes; a mark another member
+  set shows their name; Backing the maker heard is heard; ▶ adds a play; **Close link**
+  makes the page say “This link no longer works.”; the menu and the heading
+  say **Members and links** (`frame.spec.ts:17`, `members.spec.ts`,
+  `pointer.spec.ts:27`).
 - Only the tests a change touches run while building; the full suites run on
   CI.
 
 ## Before the pull request
 
 - A fresh agent reviews the branch for security: the new open routes, what
-  each answers, the files they reach, the upload's size.
+  each answers, the files they reach, the upload's size and who may send it.
 
 ## Claude's calls
 
 1. The field **Who it is for** is Claude's addition (said on 15 November);
-   only the band sees it.
-2. The whole address shows only on a new link's row; every row has **Copy**.
-   Claude's offer to show it on every row has no answer yet.
+   only the band sees it, at most 60 characters.
+2. The whole address shows only on the link made last while the window is
+   open; every row has **Copy link**. Claude offered to show it on every
+   row; Alex's «ок» of 23:11:17 took the spec with this.
 3. The window's way out is **Close**, not **Cancel**, against C3 as written;
    C3 gets this case.
 4. **Close link** acts at once, with no question: a closed link costs only a
@@ -349,12 +419,13 @@ All on 15 November 2026, UTC.
    may be from an older cut than the tracks.
 6. A play counts once for each opening of the page.
 7. The person with the link may move faders, M, S, Master and the speed;
-   nothing is kept.
+   nothing is kept in the band, and Master stays on their device.
 8. Links of a take in the Trash leave the lists and come back on
    **Restore**; links past their end leave the lists and are deleted the
-   next day.
-9. A month is a calendar month, a week 7 days, a day 24 hours, from the
-   moment the link is made.
+   next day; a link not ready after a day is deleted.
+9. A month is a calendar month, or the next month's last day when it has no
+   such day; a week 7 days; a day 24 hours; from the moment the link is
+   made, in UTC.
 10. A messenger's preview shows “РЭХА”, not the take's name: the take's name
     there would need the Worker to answer `/l/*` first and write the title
     into the page.
@@ -362,18 +433,33 @@ All on 15 November 2026, UTC.
 12. The owner's page keeps its line “Only you see the addresses, the buttons
     and the keys.”; the links group is the same for every member.
 13. The comments in РЭХА's code that name the **Members** page stay as they
-    are, so РЭХА's checks do not run for this change.
+    are: they name the page as the code knows it, and no person reads them.
+    РЭХА's checks run anyway, because `service/openapi.json` changes.
 14. No limit on the number of links.
 15. **Make link** does not copy the address by itself: a mix link is made a
     minute later, when Safari no longer lets a page write to the clipboard.
 16. On a mix link, **Download**'s line for **The mix** says “The MP3 the band
     made for this link.”; the member's **Members and links** line becomes
     “Who is in the band, and the links for people outside it.”
-17. The link page's player follows the mockup Alex saw on 15 November: ▶
-    and the wave for the mix; for tracks, the band's computer and phone
-    take pages without the bottom bar, so a phone has no speed.
+17. The link page's player follows the mockup Alex saw: ▶ and the wave for
+    the mix; for tracks, the band's computer and phone take pages. On a
+    phone it also has the band's bar at the bottom, without **Mark** and ★,
+    because the Q1 card promised the speed for tracks.
 18. A link with tracks serves its MIDI files to draw the notes whatever it
     lets download.
+19. Any member can close any link. Claude said so with Q4; Alex did not
+    object, which is not a pick.
+20. The link's id is kept whole in the database, so its address can be
+    copied again.
+21. A take in the Trash has no link button.
+22. A marks link shows each mark's and comment's author by name, as the Q1
+    mockup did; a member's id never leaves the band.
+23. The window says “your levels, mute and solo”, as **Download** does,
+    where the Q6 mockup said “your levels, M and S”.
+24. Each time the window opens it starts from the defaults.
+25. Of the site's pictures only the two with the menu are retaken.
+26. A link with tracks that the service cannot make says “Could not make
+    the link. Try again.”
 
 ## Left to the plan
 
