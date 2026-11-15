@@ -471,48 +471,194 @@ test.describe("stereo, as Alex", () => {
   })
 })
 
+/** The take's ⋯ on its own page, opened. */
+async function menu(page: Page) {
+  await page.getByRole("main").getByRole("button", { name: /^What to do with / }).first().click()
+}
+
+/** ⋯ › РЭХА's levels on the take's page, and the answer to it. */
+async function backToReha(page: Page) {
+  const answered = page.waitForResponse((r) => r.request().method() === "PUT" && r.url().endsWith("/api/me/levels"))
+  await menu(page)
+  await page.getByRole("menuitem", { name: "РЭХА's levels" }).click()
+  await answered
+}
+
+/** The answer to the first levels sent that `which` picks. */
+const levelsSent = (page: Page, which: (levels: Record<string, number | null>) => boolean) =>
+  page.waitForResponse(
+    (r) => r.request().method() === "PUT" && r.url().endsWith("/api/me/levels") && which(r.request().postDataJSON().levels)
+  )
+
+/** A track's plate in the player. */
+const plate = (page: Page, name: string) => page.locator(`[data-take-player] [data-plate="${name}"]`)
+
+/** A fader along its length, not its thumb, which is what its name finds. */
+const fader = (thumb: Locator) => thumb.locator("xpath=ancestor::*[@data-slot='slider'][1]")
+
+/** How far a plate's notch is from where the knob stands at the fader's end, in px. */
+const notchFromEnd = (plate: Locator) =>
+  plate.evaluate((el) => {
+    const notch = el.querySelector("[data-reha-notch]")!.getBoundingClientRect()
+    const line = el.querySelector("[data-slot='slider']")!.getBoundingClientRect()
+    return Math.abs(notch.left + notch.width / 2 - (line.right - 7))
+  })
+
 test.describe("as Ira", () => {
   test.use({ storageState: as("ira") })
 
-  test("a level moved is yours after a reload, and the way back is the balance, under Master", async ({ page }) => {
+  test("a level moved is yours after a reload, with a notch at REHA's level", async ({ page }) => {
     await page.goto(`/takes/${band().takes["Viasna 12"]}`)
     const player = page.locator("[data-take-player]")
-    // The way back is under the faders it sets: under Master's plate, there
-    // all the time, faded while the levels are РЭХА's.
-    const back = player.getByRole("button", { name: "РЭХА's levels" })
-    await expect(back).toBeDisabled()
-    const master = (await player.locator("[data-master-plate]").boundingBox())!
-    const at = (await back.boundingBox())!
-    expect(at.y).toBeGreaterThanOrEqual(master.y + master.height)
-    expect(at.x + at.width).toBeLessThanOrEqual(master.x + master.width)
-    await expect(page.getByText("Levels as РЭХА sent them.")).toHaveCount(0)
     const guitar = player.getByRole("slider", { name: "Guitar volume" })
+    const vocals = player.getByRole("slider", { name: "Vocals volume" })
     await expect(guitar).toHaveAttribute("aria-valuetext", "100%")
+    // Nothing under Master any more, and no notch on a fader at РЭХА's level.
+    await expect(page.locator("[data-under-master]")).toHaveCount(0)
+    await expect(player.locator("[data-reha-notch]")).toHaveCount(0)
+    await menu(page)
+    await expect(page.getByRole("menuitem", { name: "РЭХА's levels" })).toBeDisabled()
+    await page.keyboard.press("Escape")
+
     // The page is read again only once the last turn has reached the service.
-    const kept = page.waitForResponse(
-      (r) =>
-        r.request().method() === "PUT" &&
-        r.url().endsWith("/api/me/levels") &&
-        Math.round(r.request().postDataJSON().levels.Guitar * 100) === 95
-    )
+    const kept = levelsSent(page, (l) => Math.round((l.Vocals ?? 0) * 100) === 60)
     await guitar.focus()
     for (let i = 0; i < 5; i++) await page.keyboard.press("ArrowLeft")
     await expect(guitar).toHaveAttribute("aria-valuetext", "95%")
-    await expect(back).toBeEnabled()
-    await back.hover()
-    await expect(page.getByRole("tooltip")).toHaveText("Your levels: only you hear them. This puts back the ones РЭХА sent.")
+    await vocals.focus()
+    for (let i = 0; i < 10; i++) await page.keyboard.press("ArrowLeft")
+    await expect(vocals).toHaveAttribute("aria-valuetext", "60%")
     await kept
+    await expect(plate(page, "Guitar").locator("[data-reha-notch]")).toHaveCount(1)
+    await expect(plate(page, "Vocals").locator("[data-reha-notch]")).toHaveCount(1)
+    await expect(player.locator("[data-reha-notch]")).toHaveCount(2)
+    // The notch is where the knob is at РЭХА's level: Guitar's at the end.
+    await expect.poll(() => notchFromEnd(plate(page, "Guitar"))).toBeLessThan(1)
+    // Focus from the keys opens a fader's tip too; the pointer's is wanted here.
+    await vocals.blur()
+    await expect(page.getByRole("tooltip")).toHaveCount(0)
+    await page.mouse.move(0, 0)
+    await guitar.hover()
+    await expect(page.getByRole("tooltip")).toHaveText("Your level: only you hear it. The notch is РЭХА's.")
 
     await page.reload()
-    await expect(page.locator("[data-take-player]").getByRole("slider", { name: "Guitar volume" })).toHaveAttribute("aria-valuetext", "95%")
-    // A track not moved stays at the take's balance.
-    await expect(page.locator("[data-take-player]").getByRole("slider", { name: "Vocals volume" })).toHaveAttribute("aria-valuetext", "70%")
+    await expect(guitar).toHaveAttribute("aria-valuetext", "95%")
+    await expect(vocals).toHaveAttribute("aria-valuetext", "60%")
+    // A track not moved stays at the take's balance, with no notch.
+    await expect(player.getByRole("slider", { name: "Bass volume" })).toHaveAttribute("aria-valuetext", "100%")
+    await expect(plate(page, "Bass").locator("[data-reha-notch]")).toHaveCount(0)
 
-    await page.locator("[data-take-player]").getByRole("button", { name: "РЭХА's levels" }).click()
-    await expect(page.locator("[data-take-player]").getByRole("button", { name: "РЭХА's levels" })).toBeDisabled()
-    await expect(page.locator("[data-take-player]").getByRole("slider", { name: "Guitar volume" })).toHaveAttribute("aria-valuetext", "100%")
+    const forgotten = levelsSent(page, (l) => l.Guitar === null && l.Vocals === null)
+    await backToReha(page)
+    await forgotten
+    await expect(guitar).toHaveAttribute("aria-valuetext", "100%")
+    await expect(vocals).toHaveAttribute("aria-valuetext", "70%")
+    await expect(player.locator("[data-reha-notch]")).toHaveCount(0)
     await page.reload()
-    await expect(page.locator("[data-take-player]").getByRole("slider", { name: "Guitar volume" })).toHaveAttribute("aria-valuetext", "100%")
+    await expect(guitar).toHaveAttribute("aria-valuetext", "100%")
+    await expect(vocals).toHaveAttribute("aria-valuetext", "70%")
+    await menu(page)
+    await expect(page.getByRole("menuitem", { name: "РЭХА's levels" })).toBeDisabled()
+    await page.keyboard.press("Escape")
+  })
+
+  test("a fader dragged back near the notch stops on it and the level is forgotten", async ({ page }) => {
+    await page.goto(`/takes/${band().takes["Viasna 12"]}`)
+    const player = page.locator("[data-take-player]")
+    const guitar = player.getByRole("slider", { name: "Guitar volume" })
+    const kept = levelsSent(page, (l) => Math.round((l.Guitar ?? 0) * 100) === 95)
+    await guitar.focus()
+    for (let i = 0; i < 5; i++) await page.keyboard.press("ArrowLeft")
+    await kept
+    await expect(plate(page, "Guitar").locator("[data-reha-notch]")).toHaveCount(1)
+
+    const box = (await fader(guitar).boundingBox())!
+    const travel = box.width - 14
+    const y = box.y + box.height / 2
+    await page.mouse.move(box.x + box.width * 0.6, y)
+    await page.mouse.down()
+    // Past the knob's 9 px from the notch, the fader goes where the hand is.
+    await page.mouse.move(box.x + box.width * (1 - 14 / travel), y, { steps: 5 })
+    await expect(guitar).not.toHaveAttribute("aria-valuetext", "100%")
+    // Nearer, while the knob would cover the notch, it stops on it.
+    await page.mouse.move(box.x + box.width * (1 - 5 / travel), y, { steps: 3 })
+    await expect(guitar).toHaveAttribute("aria-valuetext", "100%")
+    await expect(plate(page, "Guitar").locator("[data-reha-notch]")).toHaveCount(0)
+    // No tip while the fader is dragged.
+    await expect(page.getByRole("tooltip")).toHaveCount(0)
+    const forgotten = levelsSent(page, (l) => l.Guitar === null)
+    await page.mouse.up()
+    await forgotten
+    await page.reload()
+    await expect(guitar).toHaveAttribute("aria-valuetext", "100%")
+    await expect(player.locator("[data-reha-notch]")).toHaveCount(0)
+  })
+
+  test("a double-click on a fader with a notch takes it back", async ({ page }) => {
+    await page.goto(`/takes/${band().takes["Viasna 12"]}`)
+    const player = page.locator("[data-take-player]")
+    const vocals = player.getByRole("slider", { name: "Vocals volume" })
+    const kept = levelsSent(page, (l) => Math.round((l.Vocals ?? 0) * 100) === 60)
+    await vocals.focus()
+    for (let i = 0; i < 10; i++) await page.keyboard.press("ArrowLeft")
+    await kept
+    const forgotten = levelsSent(page, (l) => l.Vocals === null)
+    await vocals.dblclick()
+    await forgotten
+    await expect(vocals).toHaveAttribute("aria-valuetext", "70%")
+    await expect(player.locator("[data-reha-notch]")).toHaveCount(0)
+    await page.reload()
+    await expect(vocals).toHaveAttribute("aria-valuetext", "70%")
+  })
+
+  test("the keys step past the notch, so a level beside REHA's can be set", async ({ page }) => {
+    await page.goto(`/takes/${band().takes["Viasna 12"]}`)
+    const player = page.locator("[data-take-player]")
+    const guitar = player.getByRole("slider", { name: "Guitar volume" })
+    await guitar.focus()
+    for (let i = 0; i < 5; i++) await page.keyboard.press("ArrowLeft")
+    const kept = levelsSent(page, (l) => Math.round((l.Guitar ?? 0) * 100) === 99)
+    for (let i = 0; i < 4; i++) await page.keyboard.press("ArrowRight")
+    await expect(guitar).toHaveAttribute("aria-valuetext", "99%")
+    await kept
+    await expect(plate(page, "Guitar").locator("[data-reha-notch]")).toHaveCount(1)
+    await backToReha(page)
+    await expect(guitar).toHaveAttribute("aria-valuetext", "100%")
+    await page.reload()
+    await expect(guitar).toHaveAttribute("aria-valuetext", "100%")
+  })
+
+  test("on a phone, a fader moved shows its notch on the desk and stops on it", async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 })
+    await page.goto(`/takes/${band().takes["Viasna 12"]}`)
+    const row = page.getByRole("main").getByRole("region", { name: "Tracks" }).locator('[data-desk-row="Guitar"]')
+    const guitar = row.getByRole("slider", { name: "Guitar volume" })
+    await expect(guitar).toHaveAttribute("aria-valuetext", "100%")
+    await expect(page.locator("[data-reha-notch]")).toHaveCount(0)
+    const kept = levelsSent(page, (l) => Math.round((l.Guitar ?? 0) * 100) === 95)
+    await guitar.focus()
+    for (let i = 0; i < 5; i++) await page.keyboard.press("ArrowLeft")
+    await kept
+    await expect(row.locator("[data-reha-notch]")).toHaveCount(1)
+    // No tip on a phone.
+    await page.mouse.move(0, 0)
+    await guitar.hover()
+    await page.waitForTimeout(600)
+    await expect(page.getByRole("tooltip")).toHaveCount(0)
+
+    const box = (await fader(guitar).boundingBox())!
+    const travel = box.width - 14
+    const y = box.y + box.height / 2
+    await page.mouse.move(box.x + box.width * 0.6, y)
+    await page.mouse.down()
+    await page.mouse.move(box.x + box.width * (1 - 5 / travel), y, { steps: 5 })
+    await expect(guitar).toHaveAttribute("aria-valuetext", "100%")
+    const forgotten = levelsSent(page, (l) => l.Guitar === null)
+    await page.mouse.up()
+    await forgotten
+    await expect(row.locator("[data-reha-notch]")).toHaveCount(0)
+    await page.reload()
+    await expect(guitar).toHaveAttribute("aria-valuetext", "100%")
   })
 
   test("an answer to an earlier level comes late: the fader stays where the keys or the hand put it", async ({ page }) => {
@@ -548,7 +694,8 @@ test.describe("as Ira", () => {
     // Along the whole fader, not its thumb, which is what its name finds.
     const box = (await guitar.locator("xpath=ancestor::*[@data-slot='slider'][1]").boundingBox())!
     const y = box.y + box.height / 2
-    await page.mouse.move(box.x + box.width * 0.96, y)
+    // Well away from Guitar's notch at 100%, which a drag stops on.
+    await page.mouse.move(box.x + box.width * 0.8, y)
     await page.mouse.down()
     await page.mouse.move(box.x + box.width * 0.6, y, { steps: 5 })
     await page.mouse.up()
@@ -569,8 +716,7 @@ test.describe("as Ira", () => {
     await expect(player.getByRole("slider", { name: "Guitar volume" })).toHaveAttribute("aria-valuetext", hand)
 
     // The take's balance back, for the tests after this one.
-    await player.getByRole("button", { name: "РЭХА's levels" }).click()
-    await expect(player.getByRole("button", { name: "РЭХА's levels" })).toBeDisabled()
+    await backToReha(page)
     await page.reload()
     await expect(player.getByRole("slider", { name: "Guitar volume" })).toHaveAttribute("aria-valuetext", "100%")
   })
@@ -606,14 +752,12 @@ test.describe("as Ira", () => {
     await page.getByRole("toolbar", { name: "Transport" }).getByRole("button", { name: "Pause", exact: true }).click()
 
     // The take's balance back, for the tests after this one.
-    await expect(player.getByRole("button", { name: "РЭХА's levels" })).toBeEnabled()
-    await player.getByRole("button", { name: "РЭХА's levels" }).click()
-    await expect(player.getByRole("button", { name: "РЭХА's levels" })).toBeDisabled()
+    await backToReha(page)
     await page.reload()
     await expect(player.getByRole("slider", { name: "Guitar volume" })).toHaveAttribute("aria-valuetext", "100%")
   })
 
-  test("a level that could not be kept says so beside the way back", async ({ page }) => {
+  test("a level that could not be kept says so in the player's line", async ({ page }) => {
     await page.route("**/api/me/levels", (route) =>
       route.request().method() === "PUT"
         ? route.fulfill({ status: 500, json: { error: "The band service is resting" } })
@@ -623,7 +767,35 @@ test.describe("as Ira", () => {
     const bass = page.locator("[data-take-player]").getByRole("slider", { name: "Bass volume" })
     await bass.focus()
     await page.keyboard.press("ArrowLeft")
-    await expect(page.locator("[data-levels]").getByRole("alert")).toHaveText("Your levels were not kept: The band service is resting")
+    await expect(page.locator("[data-player-line]").getByRole("alert")).toHaveText(
+      "Your levels were not kept: The band service is resting"
+    )
+    // Not kept, so the item has nothing to forget; the notch is there all the same.
+    await expect(plate(page, "Bass").locator("[data-reha-notch]")).toHaveCount(1)
+    await menu(page)
+    await expect(page.getByRole("menuitem", { name: "РЭХА's levels" })).toBeDisabled()
+    await page.keyboard.press("Escape")
+  })
+
+  test("on a phone, a level that could not be kept says so under the desk, and nothing below moves", async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 })
+    await page.route("**/api/me/levels", (route) =>
+      route.request().method() === "PUT"
+        ? route.fulfill({ status: 500, json: { error: "The band service is resting" } })
+        : route.fallback()
+    )
+    await page.goto(`/takes/${band().takes["Viasna 12"]}`)
+    const main = page.getByRole("main")
+    const bass = main.getByRole("region", { name: "Tracks" }).getByRole("slider", { name: "Bass volume" })
+    await expect(bass).toBeVisible()
+    const marks = main.getByRole("region", { name: "Marks" })
+    const before = (await marks.boundingBox())!.y
+    await bass.focus()
+    await page.keyboard.press("ArrowLeft")
+    const line = page.locator("[data-levels-trouble]")
+    await expect(line.getByRole("alert")).toHaveText("Your levels were not kept: The band service is resting")
+    expect((await line.boundingBox())!.height).toBeCloseTo(24, 0)
+    expect((await marks.boundingBox())!.y).toBe(before)
   })
 
   test("Play shows Pause at once while the files come, and a second press pauses", async ({ page }) => {

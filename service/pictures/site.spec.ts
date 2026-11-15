@@ -44,9 +44,11 @@ const SHOTS: Record<string, Shot> = {
     who: "ivan",
     path: () => `/takes/${pictured().takes["Viasna 12"]}?at=102`,
     then: async (page) => {
+      const kept = page.waitForResponse((r) => r.request().method() === "PUT" && r.url().endsWith("/api/me/levels"))
       await page.getByRole("slider", { name: "Guitar volume" }).press("End")
-      // His levels: the way back to РЭХА's, under Master, is live.
-      await page.locator("[data-levels] button:not([disabled])").waitFor()
+      // His level, kept: the notch shows where РЭХА had the guitar.
+      await kept
+      await page.locator('[data-desk-row="Guitar"] [data-reha-notch]').waitFor()
     },
   },
   mark: {

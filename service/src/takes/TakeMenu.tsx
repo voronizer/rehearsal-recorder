@@ -13,8 +13,22 @@ import { MoveSub, type Movable } from "./move"
  * the Trash, where anyone can put it back for 30 days, so the button is the
  * accent, not red. `onGone` takes the panel or page away from the take
  * before it goes. `row`: the menu of a take in a list.
+ *
+ * On the take's own page (`levels`) **РЭХА's levels** comes between them: it
+ * forgets your levels for the take's tracks, and is off while none of them
+ * has one of yours that is not РЭХА's.
  */
-export function TakeMenu({ take, onGone, row }: { take: Movable & TakeNaming; onGone?: () => void; row?: boolean }) {
+export function TakeMenu({
+  take,
+  onGone,
+  row,
+  levels,
+}: {
+  take: Movable & TakeNaming
+  onGone?: () => void
+  row?: boolean
+  levels?: { on: boolean; back: () => void }
+}) {
   const remove = useDeleteTake()
   const move = useMoveTake()
   const [asking, setAsking] = useState(false)
@@ -39,6 +53,11 @@ export function TakeMenu({ take, onGone, row }: { take: Movable & TakeNaming; on
           }}
         >
           <MoveSub take={take} move={move} row={row} onNew={() => (naming.current = true)} onDone={() => setOpen(false)} />
+          {levels && (
+            <DropdownMenuItem disabled={!levels.on} onSelect={levels.back}>
+              РЭХА's levels
+            </DropdownMenuItem>
+          )}
           <DropdownMenuItem onSelect={() => setAsking(true)}>Delete take</DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
