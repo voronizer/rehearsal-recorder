@@ -820,8 +820,10 @@ an older РЭХА gets louder after you update РЭХА, as long as its files ar
 still on this computer. In the service each of you can turn a track up or
 down for yourself: only you hear it that way, and nothing comes back to
 РЭХА. **Master** under the tracks turns the whole take up or down on that
-phone or computer only. Under it, **РЭХА's levels** puts back the levels the
-take came with; it is faded until you move a fader. On a computer, a track
+phone or computer only. A fader you moved shows a small notch where РЭХА
+had it: bring the fader back to the notch, or on a computer double-click it,
+and the track plays as РЭХА sent it. **РЭХА's levels** in the take's ⋯ menu
+does that for every track. On a computer, a track
 that recorded MIDI shows its notes as in РЭХА's player, and they are not
 played; on a phone its row has the MIDI sign.
 

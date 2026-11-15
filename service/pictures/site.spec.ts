@@ -44,10 +44,8 @@ const SHOTS: Record<string, Shot> = {
     who: "ivan",
     path: () => `/takes/${pictured().takes["Viasna 12"]}?at=102`,
     then: async (page) => {
-      const kept = page.waitForResponse((r) => r.request().method() === "PUT" && r.url().endsWith("/api/me/levels"))
       await page.getByRole("slider", { name: "Guitar volume" }).press("End")
-      // His level, kept: the notch shows where РЭХА had the guitar.
-      await kept
+      // His level: the notch shows where РЭХА had the guitar.
       await page.locator('[data-desk-row="Guitar"] [data-reha-notch]').waitFor()
     },
   },
