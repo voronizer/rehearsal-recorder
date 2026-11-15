@@ -269,9 +269,10 @@ signalsmith-stretch 1.3.2 (MIT, WASM AudioWorklet); vitest; Playwright
 
   A `DropdownMenu`: trigger a `Button` `variant="outline" size="row"`
   with `Gauge` (unless bare), `formatPercent(value)`, `ChevronDown`
-  `size-3.5 opacity-60` (unless bare); `tnum gap-1 px-2.5`; lit with
-  `border-primary bg-primary/10 text-primary hover:bg-primary/15` when
-  `value !== 1`; `aria-label={\`Speed ${formatPercent(value)}\`}`. `busy`:
+  `size-3.5 opacity-60` (unless bare); `tnum gap-1 px-2.5`; lit while `value !== 1` with Toggle's “on” grey
+  (`bg-selected text-foreground`, and the `dark:` pair the outline variant
+  needs so its own dark background does not win), Alex's pick A of
+  2026-11-15 15:08:10Z (design-system F2); `aria-label={\`Speed ${formatPercent(value)}\`}`. `busy`:
   from 1 s (`SPINNER_AFTER_MS`, as `PlayButton` waits) a `Spinner` from
   `ui/src/components/ui/spinner.tsx` in place of the gauge (B5).
   `disabled` as ▶'s. Not bare, a

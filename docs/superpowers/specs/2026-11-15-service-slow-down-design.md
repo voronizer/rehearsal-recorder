@@ -74,6 +74,10 @@ Each with its mockup; the mockups' sources are in
   card A, after the plan check: as **Repeat**, M and S there. The page
   keeps the speed, the take starts with it on its ▶, and the other take
   plays on.
+- **How the button is lit**, 15:08:10Z card A, after the plan check
+  (https://claude.ai/artifact/FYpgC7Bz9EvM8ooo9aw1nd): while the speed is
+  not 100%, grey like **Repeat** pressed (`bg-selected`, design-system F2),
+  in place of the blue of the earlier mockups (call 7).
 
 ## What a band member sees
 
@@ -81,8 +85,8 @@ Each with its mockup; the mockups' sources are in
   icon, “100%” and a small arrow. A press opens the list 50, 60, 70, 75,
   80, 90, 100, 110, 125 and 150%, the speed now ticked. Picking one plays
   the take at that speed at once, in the same key.
-- While the speed is not 100%, the button is lit in the accent colour, as
-  on the mockup. Its tooltip: “Speed, in the same key”.
+- While the speed is not 100%, the button is grey, as **Repeat** is when
+  pressed (Alex, 15:08:10Z). Its tooltip: “Speed, in the same key”.
 - The bottom bar on a computer has the same button, between the line and
   **Mark**, while a take is in it. The phone's bar has it between the time
   and **Mark**, with the number alone (“75%”), no icon or arrow.
@@ -236,7 +240,7 @@ Each with its mockup; the mockups' sources are in
 5. A new generation of the same take keeps the speed; only another take
    resets it.
 6. No key for the speed.
-7. The lit look is the mockup's accent tint, not **Repeat**'s grey "on".
+7. (Replaced by Alex's pick of 15:08:10Z: grey, as **Repeat** pressed.)
 8. The phone's bar shows the number alone.
 9. If the stretch cannot load, the speed goes back to 100% with no
    message.
