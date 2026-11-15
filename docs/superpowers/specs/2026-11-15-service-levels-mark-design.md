@@ -58,6 +58,8 @@ Each with its mockup; the mockups' sources are in
   marks only.
 - **РЭХА**: Claude said (15:39Z) that nothing changes in РЭХА and nothing
   syncs: there a track's level is the take's own.
+- **A tip**, 15:43:47Z, on call 6 of the spec as first sent: «лучше я
+  думаю сделать - при наведении тултип например».
 - **Q3, reha.stream**, 15:39:28Z card A: text only. The sentence about the
   button and the alt text of the "lanes" picture change, "lanes" is
   retaken, no new picture.
@@ -117,7 +119,8 @@ much lower.
 - CHANGELOG, under "Unreleased": an item that starts "**The way back to
   РЭХА's levels is on the faders.**", then what a band member does, as
   above.
-- The menu item reads "РЭХА's levels". No other new words in the app.
+- The menu item reads "РЭХА's levels". The fader's tip reads "Your level:
+  only you hear it. The mark is РЭХА's." No other new words in the app.
 
 ## Pictures
 
@@ -142,8 +145,11 @@ not change.
    РЭХА levels differ, then follow РЭХА too.
 5. Double-click on a computer only. On a phone the fader stopping on the
    mark does it.
-6. No tip on the fader or the mark: the site and the guide say what the
-   mark is.
+6. A tip on a computer, at Alex's word (15:43:47Z, «лучше я думаю сделать
+   - при наведении тултип например»): the pointer over a fader that shows
+   its mark opens "Your level: only you hear it. The mark is РЭХА's." It
+   does not open while the fader is dragged. A fader with no mark has no
+   tip. A phone has no hover, so none there.
 7. **РЭХА's levels** in the menu is on while at least one fader of the take
    shows a mark, and forgets only this take's tracks.
 8. The menu item is on the take's own page only, not by a take in a list.
