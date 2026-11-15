@@ -22,7 +22,8 @@ import type { Stretch } from "./stretch"
   a take left after its first minute costs a phone a quarter of its files,
   not all of them. A seek past what has come so far (a slow connection, or
   a press far ahead) waits there, and starts again once there is a second
-  more.
+  more. So does a take whose sound is about to run out while it plays,
+  whether its file has not come or its decoder has fallen behind.
 
   A piece on repeat, from a to b, plays without a gap: once a track's
   decoder has passed b, a new one starts ten frames before a, and its sound
@@ -768,12 +769,19 @@ export class Player {
           })
           .catch(() => {})
       }
-      // The file has not come this far: wait here for a second more of it.
-      if (this.t0 !== null && !passed && lane.next >= frames.length && lane.cursor / sampleRate + shift - raw < 0.15 * this.rate) {
+      // The sound placed runs out in a moment: the file has not come this far, or the decoder has
+      // fallen behind (#105, at 150% on Alex's Mac a take went silent with ⏸ on). Wait here for a
+      // second more, as at the start, rather than let the pieces come too late to be heard.
+      if (this.t0 !== null && !passed && this.placedTo(lane) / sampleRate + shift - raw < 0.15 * this.rate) {
         this.play(now)
         return
       }
     }
+  }
+
+  /** The sample a lane's placed sound goes up to in its pass: what is decoded and not yet cut is not placed. */
+  private placedTo(lane: Lane): number {
+    return Math.min(Math.max(lane.cursor - lane.pendingLength, lane.start), this.stop(lane))
   }
 
   private take(lane: Lane, p: Float32Array[]) {
