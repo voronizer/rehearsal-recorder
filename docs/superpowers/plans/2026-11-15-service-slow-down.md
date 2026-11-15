@@ -215,7 +215,9 @@ signalsmith-stretch 1.3.2 (MIT, WASM AudioWorklet); vitest; Playwright
   - `applySpeed(p, r)`: at 1, `p.setRate(1, null)`; else
     `stretchOf(wakeSound())` then, if `speedNow.current === r` and
     `player.current === p`, `p.setRate(r, s)`; on failure
-    `console.error`, and if still wanted, back to 1 (state, ref, player).
+    `console.error`, and if still wanted, back to 1 (state, ref, player)
+    and `speedFailed = true` until the next `setSpeed` (Alex's pick A,
+    2026-11-15 15:10:08Z).
   - `setSpeed(u, r)`: for the take in the player (or on its way in), set
     the ref and state and `applySpeed` on `player.current` if it holds
     `u`; a player still on its way picks the speed up when it is made.
@@ -236,7 +238,8 @@ signalsmith-stretch 1.3.2 (MIT, WASM AudioWorklet); vitest; Playwright
     generation of the same take keeps the speed.
   - `speedLoading: boolean`, true while `stretchOf` is on its way for the
     speed asked; the button shows it (B5).
-  - Pass `speed`, `setSpeed` and `speedLoading` in the provider's value.
+  - Pass `speed`, `setSpeed`, `speedLoading` and `speedFailed` in the
+    provider's value.
   Run `cd service && npx tsc --noEmit` and the two test files once → PASS.
 
 - [ ] **Step 5: commit.** `git commit -m "Service: the one player holds the take's speed, another take starts at 100% (#105)"`.
@@ -264,7 +267,7 @@ signalsmith-stretch 1.3.2 (MIT, WASM AudioWorklet); vitest; Playwright
    * Lit while not 100% (Alex's pick A, 2026-11-15 14:14Z). `bare`, in the
    * phone's bar: the number alone.
    */
-  export function SpeedButton({ value, onChange, bare = false, busy = false, disabled = false }: { value: number; onChange: (rate: number) => void; bare?: boolean; busy?: boolean; disabled?: boolean })
+  export function SpeedButton({ value, onChange, bare = false, busy = false, failed = false, disabled = false }: { value: number; onChange: (rate: number) => void; bare?: boolean; busy?: boolean; failed?: boolean; disabled?: boolean })
   ```
 
   A `DropdownMenu`: trigger a `Button` `variant="outline" size="row"`
@@ -275,12 +278,14 @@ signalsmith-stretch 1.3.2 (MIT, WASM AudioWorklet); vitest; Playwright
   2026-11-15 15:08:10Z (design-system F2); `aria-label={\`Speed ${formatPercent(value)}\`}`. `busy`:
   from 1 s (`SPINNER_AFTER_MS`, as `PlayButton` waits) a `Spinner` from
   `ui/src/components/ui/spinner.tsx` in place of the gauge (B5).
-  `disabled` as ▶'s. Not bare, a
+  `disabled` as ▶'s. `failed`: a `TriangleAlert` in `text-warn` in place
+  of the gauge (in front of the number when bare), and the tooltip “The
+  speed could not load. Pick it again.” (Alex's pick A, 15:10:08Z). Not bare, a
   `Tooltip` “Speed, in the same key”. Content `align="end" className="w-32"`,
   a `DropdownMenuRadioGroup` over `SPEEDS`, each item `tnum`. As on the
   mockups (`/mnt/project-files/band-service/slow-down/q2-mock/Speed.tsx`).
-  Stories: 100%, 75% (lit), bare at 75%, busy, in both themes by the
-  toolbar. Add SpeedButton's line to `docs/design-system.md`, “Shared
+  Stories: 100%, 75% (lit), bare at 75%, busy, failed, in both themes by
+  the toolbar. Add SpeedButton's line to `docs/design-system.md`, “Shared
   components” (U5): what it is, where it is used, the service only.
 
 - [ ] **Step 2: `TakePlayer`.** Prop
@@ -306,7 +311,9 @@ signalsmith-stretch 1.3.2 (MIT, WASM AudioWorklet); vitest; Playwright
     Play on another take: the bar's button reads `100%`; and, paused at
     75%, opening another take's page puts that take in at `100%`);
   - "on a phone the bar has the speed as a number, between the time and Mark";
-  - "a speed picked on a take's page while another take plays waits for that take's Play, and the other plays on".
+  - "a speed picked on a take's page while another take plays waits for that take's Play, and the other plays on";
+  - "a speed that could not load says so on the button and is tried again on the next pick"
+    (the test routes the module's request to an error once).
   `ui/e2e/player.spec.ts`: "REHA's player has no speed button".
   Run only these tests, once (`npx playwright test -g "Speed|speed"` in
   `service/` with `npm run e2e:serve` running; РЭХА's one test in `ui/`).

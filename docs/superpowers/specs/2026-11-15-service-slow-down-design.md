@@ -78,6 +78,11 @@ Each with its mockup; the mockups' sources are in
   (https://claude.ai/artifact/FYpgC7Bz9EvM8ooo9aw1nd): while the speed is
   not 100%, grey like **Repeat** pressed (`bg-selected`, design-system F2),
   in place of the blue of the earlier mockups (call 7).
+- **When the speed could not load**, 15:10:08Z card A
+  (https://claude.ai/artifact/F7w1bp8PEQ6PpiQL6p3stU): the button goes
+  back to 100% with a warn sign in place of its gauge and the tooltip
+  “The speed could not load. Pick it again.”; the next pick tries again.
+  In place of call 9's silence.
 
 ## What a band member sees
 
@@ -134,8 +139,8 @@ Each with its mockup; the mockups' sources are in
 - `one.tsx` keeps the speed of the take in the player (`speed`,
   `setSpeed`). A different take in the player sets it back to 1. A new
   generation of the same take (РЭХА sent its files again) keeps it. If the
-  stretch cannot be made, the speed goes back to 1 and the error goes to
-  the console.
+  stretch cannot be made, the speed goes back to 1, the error goes to the
+  console, and the button says so (Alex, 15:10:08Z) until the next pick.
 
 ### The button
 
@@ -168,7 +173,9 @@ Each with its mockup; the mockups' sources are in
 - A take that ends at 150%: it stops at its end and goes back to 0:00,
   as now; the speed stays.
 - The tab hidden while playing slowly: the sound goes on, as now.
-- A browser that cannot run the stretch: the take stays at 100%.
+- A browser that cannot run the stretch, or a connection lost while it
+  loads: the take stays at 100%, and the button shows a warn sign with
+  “The speed could not load. Pick it again.” (Alex, 15:10:08Z).
 - A browser that cannot play the takes at all (`supported === false`): the
   bars keep the take with ▶ turned off; the speed button is turned off
   with it.
@@ -242,8 +249,7 @@ Each with its mockup; the mockups' sources are in
 6. No key for the speed.
 7. (Replaced by Alex's pick of 15:08:10Z: grey, as **Repeat** pressed.)
 8. The phone's bar shows the number alone.
-9. If the stretch cannot load, the speed goes back to 100% with no
-   message.
+9. (Replaced by Alex's pick of 15:10:08Z: the button says so.)
 10. The shared playhead hook learns the rate, so РЭХА's player code
     changes a little, with no change in what РЭХА does.
 11. The guide and READMEs stay as they are.
