@@ -6,6 +6,8 @@ import { withMute, withSolo, type Desk } from "./desk"
 import { levelOf } from "./levels"
 import { keptMaster } from "./master"
 import { Player, wakeSound } from "./player"
+import { speedFor } from "./speed"
+import { stretchOf, type Stretch } from "./stretch"
 
 /*
   The service's one player: ▶ in a list, the take's panel and page, and the
@@ -66,6 +68,14 @@ type PlayerApi = {
   soloOne: (uid: string, i: number) => void
   /** Whether track `i` of the take is heard. */
   sounds: (uid: string, i: number) => boolean
+  /** How fast the take in the player plays, in its own key: 1 as recorded (#105). */
+  speed: number
+  /** A speed picked for take `uid`: heard at once on the take in the player; another take's page keeps its own. */
+  setSpeed: (uid: string, rate: number) => void
+  /** The speed asked is on its way: what keeps the key is still loading. */
+  speedLoading: boolean
+  /** What keeps the key could not load: the take went back to 100%, until the next pick. */
+  speedFailed: boolean
 }
 
 /** A take's M and S: the tracks muted, the one soloed. */
@@ -83,6 +93,8 @@ export type Setup = {
   muted: number[]
   solo: number | null
   moved: Record<string, number>
+  /** How fast the take is to play: the page keeps its own while another take plays. */
+  speed: number
 }
 
 /**
@@ -109,6 +121,12 @@ export type One = {
   mixLoudness: () => number
   /** What a new Player of the take starts with; returns the way to stop. */
   ready: (uid: string, setup: () => Setup) => () => void
+  /** The speed of the take while it is in the player or on its way in; null for another take. */
+  speedOf: (uid: string) => number | null
+  /** A speed picked on the take's page. */
+  setSpeed: (uid: string, rate: number) => void
+  /** Told each time the speed of the take in the player changes; returns the way to stop. */
+  onSpeed: (heard: (uid: string, rate: number) => void) => () => void
 }
 
 const OneCtx = createContext<One | null>(null)
@@ -144,6 +162,66 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   // Read from the browser's storage once, not on every render.
   const [kept] = useState(keptMaster)
   const master = useRef(kept)
+  /** The take in the player, or on its way in, as of the last call: read where a render's may be old. */
+  const uidNow = useRef(uid)
+  uidNow.current = uid
+
+  // The speed of the take in the player (#105): 1 as recorded. Another take
+  // starts at 100%, or at the speed its open page kept (speed.ts).
+  const [speed, setSpeedShown] = useState(1)
+  const speedNow = useRef(1)
+  const [speedLoading, setSpeedLoading] = useState(false)
+  const [speedFailed, setSpeedFailed] = useState(false)
+  /** What keeps the key, once it has loaded. */
+  const keyBack = useRef<Stretch | null>(null)
+  const speedAsked = useRef(0)
+  const speedHeard = useRef(new Set<(uid: string, rate: number) => void>())
+
+  /** The take in the player, or on its way in, is to go at `r`; its open page is told. */
+  const toSpeed = (u: string, r: number) => {
+    speedNow.current = r
+    setSpeedShown(r)
+    speedHeard.current.forEach((f) => f(u, r))
+  }
+
+  /**
+   * Puts speed `r` on `p`, take `u`'s Player: at once at 100% or once what
+   * keeps the key has loaded. If it cannot load, the take goes back to 100%
+   * and the button says so until the next pick (Alex, 2026-11-15 15:10Z).
+   */
+  const applySpeed = (p: Player | null, u: string, r: number) => {
+    if (r === 1 || keyBack.current) return p?.setRate(r, keyBack.current)
+    const asked = ++speedAsked.current
+    setSpeedLoading(true)
+    stretchOf(wakeSound())
+      .then(
+        (s) => {
+          keyBack.current = s
+          const now = held.current?.uid === u ? player.current : null
+          if (speedNow.current === r) now?.setRate(r, s)
+        },
+        (e: unknown) => {
+          console.error("The speed could not load:", e)
+          if (speedNow.current !== r || uidNow.current !== u) return
+          toSpeed(u, 1)
+          setSpeedFailed(true)
+        }
+      )
+      .finally(() => {
+        if (speedAsked.current === asked) setSpeedLoading(false)
+      })
+  }
+
+  const setSpeed = (u: string, r: number) => {
+    if (u !== uidNow.current) {
+      // Another take's page keeps its own; what keeps the key loads now, ready for its ▶.
+      if (r !== 1 && !keyBack.current) stretchOf(wakeSound()).then((s) => (keyBack.current = s), () => {})
+      return
+    }
+    setSpeedFailed(false)
+    toSpeed(u, r)
+    applySpeed(held.current?.uid === u ? player.current : null, u, r)
+  }
 
   useEffect(() => {
     const t = take.data
@@ -156,10 +234,12 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
       if (gone) return
       // As the take's page left it: its repeat, M and S, and the levels turned
       // there and not kept yet; else the M and S it had in the player before.
-      const kept: Setup = setups.current.get(t.uid)?.() ?? { loop: null, ...(desksNow.current[t.uid] ?? firstDesk(t)), moved: {} }
+      const kept: Setup = setups.current.get(t.uid)?.() ?? { loop: null, ...(desksNow.current[t.uid] ?? firstDesk(t)), moved: {}, speed: 1 }
       const setup = { ...kept, ...withBacking(t, kept, heard) }
       const p = Player.of(t, (name) => setup.moved[name] ?? levelOf(yoursNow.current, t, name))
       p.setMaster(master.current)
+      // At the speed load() gave the take, or, a new generation, the one it had.
+      if (speedNow.current !== 1) applySpeed(p, t.uid, speedNow.current)
       p.onChange = () => {
         tick(t.uid, p.time())
         redraw((n) => n + 1)
@@ -232,6 +312,10 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   /** Another take into the player, at `at`; `play` starts it once its page has come. */
   const load = (u: string, at: number, play: boolean) => {
     if (play) wakeSound()
+    if (u !== uid) setSpeedFailed(false)
+    const r = speedFor(u, uid, speedNow.current, setups.current.get(u)?.().speed)
+    uidNow.current = u
+    if (r !== speedNow.current) toSpeed(u, r)
     pending.current = { at, play }
     tick(u, at)
     setUid(u)
@@ -284,8 +368,8 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   }
 
   // The latest of everything above, for the take page's sound to call at any time.
-  const latest = useRef({ uid, play, cue })
-  latest.current = { uid, play, cue }
+  const latest = useRef({ uid, play, cue, setSpeed })
+  latest.current = { uid, play, cue, setSpeed }
   const one = useMemo<One>(() => {
     const mine = (u: string) => (held.current?.uid === u ? player.current : null)
     return {
@@ -327,11 +411,19 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
           if (setups.current.get(u) === setup) setups.current.delete(u)
         }
       },
+      speedOf: (u) => (u === uidNow.current ? speedNow.current : null),
+      setSpeed: (u, r) => latest.current.setSpeed(u, r),
+      onSpeed: (heard) => {
+        speedHeard.current.add(heard)
+        return () => speedHeard.current.delete(heard)
+      },
     }
   }, [])
 
   return (
-    <PlayerCtx.Provider value={{ uid, take: take.data, supported, look, play, seek, cue, deskOf, mute, soloOne, sounds }}>
+    <PlayerCtx.Provider
+      value={{ uid, take: take.data, supported, look, play, seek, cue, deskOf, mute, soloOne, sounds, speed, setSpeed, speedLoading, speedFailed }}
+    >
       <OneCtx.Provider value={one}>{children}</OneCtx.Provider>
     </PlayerCtx.Provider>
   )

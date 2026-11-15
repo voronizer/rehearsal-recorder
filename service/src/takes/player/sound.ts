@@ -28,8 +28,16 @@ export type ServiceSound = PlayerSound & {
   tracks: TrackFile[]
   /** Forgets your levels for this take's tracks: they play at РЭХА's balance again. */
   backToReha(): Promise<void>
-  /** The repeat, M and S set while another take was in the player, and the levels turned and not kept yet. */
+  /** The repeat, M, S and speed set while another take was in the player, and the levels turned and not kept yet. */
   setup(): Setup
+  /** How fast the take plays here: the one player's speed while the take is in it, else the page's own (#105). */
+  speed(): number
+  /** Told each time speed() changes; returns the way to stop. */
+  onSpeed(change: () => void): () => void
+  /** A speed picked on the page: heard at once while the take is in the player, else from its ▶. */
+  setSpeed(rate: number): void
+  /** The one player's speed for this take, as it changed there: the page keeps it for when another take plays. */
+  keepSpeed(rate: number): void
 }
 
 const yoursNow = () => queryClient.getQueryData(levelsQuery.queryKey)?.levels
@@ -37,8 +45,8 @@ const yoursNow = () => queryClient.getQueryData(levelsQuery.queryKey)?.levels
 /**
  * РЭХА's player screen on the service's one player (one.tsx). While the
  * take is the one in the player, every call goes to its Player; while
- * another take plays, the page keeps its own playhead, repeat, M and S,
- * and the take starts with them once its ▶ is pressed.
+ * another take plays, the page keeps its own playhead, repeat, M, S and
+ * speed, and the take starts with them once its ▶ is pressed.
  */
 export function serviceSound(take: TakePage, one: One): ServiceSound {
   const { uid, gen } = take
@@ -60,6 +68,15 @@ export function serviceSound(take: TakePage, one: One): ServiceSound {
   let sent: Record<string, number> = {}
   /** The zoom whose wave is being decoded: a newer one stops it. */
   let zoom: AbortController | null = null
+  // The page keeps its speed while another take plays, as it keeps its repeat, M and S
+  // (Alex, 2026-11-15 15:04Z); opened anew, it starts at the speed the take plays at, or 100%.
+  let speed = one.speedOf(uid) ?? 1
+  const speedHeard = new Set<() => void>()
+  const keepSpeed = (rate: number) => {
+    if (rate === speed) return
+    speed = rate
+    speedHeard.forEach((f) => f())
+  }
 
   const mine = () => one.playerOf(uid, gen)
   const levelHere = (name: string) => moved[name] ?? levelOf(yoursNow(), take, name)
@@ -82,6 +99,8 @@ export function serviceSound(take: TakePage, one: One): ServiceSound {
         playing: p.playing,
         waiting: p.waiting,
         position,
+        // The playhead moves on at the take's speed between polls.
+        rate: p.speed,
         loop,
         muted: muted.map((i) => names[i]),
         soloed: solo === null ? null : names[solo],
@@ -299,7 +318,18 @@ export function serviceSound(take: TakePage, one: One): ServiceSound {
       await keepLevels(Object.fromEntries(names.map((n) => [n, null])))
     },
 
-    setup: () => ({ loop, muted, solo, moved }),
+    setup: () => ({ loop, muted, solo, moved, speed }),
+
+    speed: () => speed,
+    onSpeed: (change) => {
+      speedHeard.add(change)
+      return () => speedHeard.delete(change)
+    },
+    setSpeed(rate) {
+      keepSpeed(rate)
+      one.setSpeed(uid, rate)
+    },
+    keepSpeed,
 
     // The bar at the bottom plays on after the page is left, with no repeat:
     // it has no Repeat to stop one with.
@@ -319,5 +349,6 @@ export function useServiceSound(take: TakePage): ServiceSound {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const sound = useMemo(() => serviceSound(take, one), [take.uid, take.gen, one])
   useEffect(() => one.ready(take.uid, sound.setup), [one, take.uid, sound])
+  useEffect(() => one.onSpeed((u, rate) => u === take.uid && sound.keepSpeed(rate)), [one, take.uid, sound])
   return sound
 }

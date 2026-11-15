@@ -3,8 +3,12 @@ import { anchorOf } from "@/hooks/useMultitrackPlayer"
 
 describe("the cursor between the player's answers", () => {
   it("runs on from where the last answer put it", () => {
-    expect(anchorOf(12, undefined, 500)).toEqual({ position: 12, at: 500 })
-    expect(anchorOf(12, false, 500)).toEqual({ position: 12, at: 500 })
+    expect(anchorOf(12, undefined, 500)).toEqual({ position: 12, at: 500, rate: 1 })
+    expect(anchorOf(12, false, 500)).toEqual({ position: 12, at: 500, rate: 1 })
+  })
+
+  it("runs at the take's speed when the sound says one", () => {
+    expect(anchorOf(12, false, 500, 0.5)).toEqual({ position: 12, at: 500, rate: 0.5 })
   })
 
   it("stays put while the sound is asked for and not heard yet", () => {

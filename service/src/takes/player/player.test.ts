@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs"
 import { afterEach, expect, test, vi } from "vitest"
 import { Player } from "./player"
+import type { Stretch } from "./stretch"
 
 const fixture = (name: string) => new Uint8Array(readFileSync(new URL(`../../../test/fixtures/${name}`, import.meta.url)))
 
@@ -313,7 +314,10 @@ test("a stereo track's level is two numbers, left then right, after its level; a
 })
 
 /** A stretch as far as the player needs one: a node, its own delay, and the speeds it was told. */
-const fakeStretch = () => ({ node: new FakeNode(), latency: 0.05, setRate: vi.fn() })
+const fakeStretch = () => {
+  const stretch = { node: new FakeNode(), latency: 0.05, setRate: vi.fn() }
+  return stretch as typeof stretch & Stretch
+}
 
 /** t1.mp3 played from `from` at `rate`, until its first second is placed; `t0` is when the first piece starts on the clock. */
 async function playAt(rate: number, from = 0, before?: (p: Player) => void) {
