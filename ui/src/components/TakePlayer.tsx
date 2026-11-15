@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from "react"
+import { useEffect, useState } from "react"
 import {
   CircleAlert,
   Flag,
@@ -116,7 +116,8 @@ export function TakePlayer({
   onAddMarker,
   onEditMarker,
   talkOf,
-  underMaster,
+  reha,
+  failure = null,
   onRemoveMarker,
   onCrop,
   canCrop = true,
@@ -152,8 +153,12 @@ export function TakePlayer({
    *  says how many comments the talk has. The chip then shows a talk sign
    *  and that number where РЭХА shows its pencil. */
   talkOf?: (marker: Marker) => number
-  /** A row under Master's plate (Timeline's underMaster). */
-  underMaster?: ReactNode
+  /** The band's service: the level РЭХА sent for each track, by name, for
+   *  the notch on a fader you moved (Timeline). */
+  reha?: Record<string, number>
+  /** The band's service: a failure of its own to say in the player's line,
+   *  after a take that did not load (your levels not kept). */
+  failure?: string | null
   onRemoveMarker?: (seconds: number) => void
   /** Trim the take down to the region, at once: the take as it was can be
    *  had back with the notice's Undo. Absent where that is not offered. */
@@ -203,14 +208,14 @@ export function TakePlayer({
         speed={speed}
       />
 
-      <PlayerLine error={player.loadError} status={status} warning={player.outputWarning} />
+      <PlayerLine error={player.loadError ?? failure} status={status} warning={player.outputWarning} />
 
       {/* The take is one group, 24 px apart inside it. The line above holds
           that room itself, so it has no gap round it. */}
       <div className="flex min-h-0 flex-1 flex-col gap-6">
         <Timeline
           player={player}
-          underMaster={underMaster}
+          reha={reha}
           click={click}
           take={take}
           drift={drift}
@@ -265,7 +270,7 @@ export function TakePlayer({
  *  and not the words: the words are cut at their own box, which would clip a
  *  ring drawn outside them. A tip's trigger takes over the data-slot of what
  *  it is put on, which the Alert's own look does not use. */
-function Said({ variant, text }: { variant: "warning" | "destructive"; text: string }) {
+export function Said({ variant, text }: { variant: "warning" | "destructive"; text: string }) {
   const [ref, cut] = useCut<HTMLSpanElement>()
   const Icon = variant === "destructive" ? CircleAlert : TriangleAlert
   return (
@@ -292,7 +297,8 @@ function Said({ variant, text }: { variant: "warning" | "destructive"; text: str
  * transport and the map: always there, 24 px tall, empty until something
  * comes. So nothing under it moves when a crop starts or the output goes
  * quiet. One thing at a time: a take that did not load, since its lanes
- * never come; else how far a crop is; else the output's warning.
+ * never come, then, in the band service, your levels not kept; else how far
+ * a crop is; else the output's warning.
  */
 export function PlayerLine({
   error,

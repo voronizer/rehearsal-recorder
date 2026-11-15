@@ -2,9 +2,11 @@ import { describe, expect, it } from "vitest"
 import {
   QUIET_THRESHOLD,
   SILENT_AFTER_MS,
+  atReha,
   fallBack,
   isSilent,
   meterReach,
+  stopAtReha,
   watchStep,
 } from "@/lib/levels"
 
@@ -97,5 +99,25 @@ describe("watchStep: what a track has been doing, poll by poll", () => {
     expect(w.shown[0]).toBeGreaterThan(0.4)
     w = watchStep(w, [0], 3070)
     expect(meterReach(w.shown[0])).toBe(0)
+  })
+})
+
+describe("REHA's level on a fader", () => {
+  it("is where the fader stands within half a key step", () => {
+    expect(atReha(0.996, 1)).toBe(true)
+    expect(atReha(0.99, 1)).toBe(false)
+  })
+
+  it("stops a drag while the knob covers the notch", () => {
+    // 120 px of travel, as on a computer: 9 px is 7.5% of it.
+    expect(stopAtReha(0.74, 0.8, 120)).toBe(0.8)
+    expect(stopAtReha(0.72, 0.8, 120)).toBe(0.72)
+    // 265 px, as on a phone: 9 px is 3.4%.
+    expect(stopAtReha(0.77, 0.8, 265)).toBe(0.8)
+    expect(stopAtReha(0.76, 0.8, 265)).toBe(0.76)
+  })
+
+  it("stops nothing while the fader's length is not known", () => {
+    expect(stopAtReha(0.79, 0.8, 0)).toBe(0.79)
   })
 })

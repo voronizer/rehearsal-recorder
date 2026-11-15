@@ -620,6 +620,17 @@ test.describe("the mix", () => {
     await expect(solo).toHaveAttribute("aria-pressed", "false")
   })
 
+  test("REHA's player shows no notch on a fader moved", async ({ page }) => {
+    // The notch at the level the take came with is the band service's: in
+    // РЭХА a track's level is the take's own.
+    await savedTake(page)
+    const guitar = page.getByRole("slider", { name: "Guitar volume" })
+    const spot = (await sliderOf(guitar).boundingBox())!
+    await page.mouse.click(spot.x + spot.width * 0.3, spot.y + spot.height / 2)
+    await expect(guitar).not.toHaveAttribute("aria-valuenow", "1")
+    await expect(page.locator("[data-reha-notch]")).toHaveCount(0)
+  })
+
   test("one master turns the whole take down, for listening only", async ({ page }) => {
     await savedTake(page)
     const master = page.getByRole("slider", { name: "Master volume", exact: true })
