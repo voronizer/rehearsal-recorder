@@ -63,6 +63,7 @@ Each with its mockup; the mockups' sources are in
 - **Q3, reha.stream**, 15:39:28Z card A: text only. The sentence about the
   button and the alt text of the "lanes" picture change, "lanes" is
   retaken, no new picture.
+- **The spec**, 15:45:03Z «ок», with calls 1-11 below as listed.
 
 ## What a band member sees
 
