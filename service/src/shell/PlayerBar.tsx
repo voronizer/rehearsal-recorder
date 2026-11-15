@@ -3,6 +3,7 @@ import { useRouterState } from "@tanstack/react-router"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import { PlayButton } from "@/components/ui/play-button"
+import { SpeedButton } from "@/components/SpeedButton"
 import { Slider } from "@/components/ui/slider"
 import type { TakePage } from "../api"
 import { usePlayer, useTime } from "../takes/player/one"
@@ -23,6 +24,22 @@ function BarPlay({ take }: { take: TakePage | undefined }) {
       disabled={!take || p.supported === false}
       onClick={() => take && p.play(take.uid)}
       className="size-10"
+    />
+  )
+}
+
+/** How fast the take in the player plays, in its key (#105): the same button as beside Repeat on its page. */
+function BarSpeed({ take, bare = false }: { take: TakePage | undefined; bare?: boolean }) {
+  const p = usePlayer()
+  if (!take) return null
+  return (
+    <SpeedButton
+      value={p.speed}
+      onChange={(rate) => p.setSpeed(take.uid, rate)}
+      bare={bare}
+      busy={p.speedLoading}
+      failed={p.speedFailed}
+      disabled={p.supported === false}
     />
   )
 }
@@ -102,7 +119,7 @@ function useOnItsPage(uid: string | undefined) {
   return !!uid && p.supported !== false && path === `/takes/${uid}`
 }
 
-/** The player along the bottom: ▶, the take and its day, the time, where it is, **Mark**, your ★. */
+/** The player along the bottom: ▶, the take and its day, the time, where it is, its speed, **Mark**, your ★. */
 export function PlayerBar() {
   const p = usePlayer()
   const take = p.take
@@ -137,6 +154,7 @@ export function PlayerBar() {
         </div>
       )}
       <div className="flex items-center gap-2">
+        <BarSpeed take={take} />
         <MarkHere take={take} at={at} />
         {take && <StarButton take={take} disabled={!!take.trashed_at} />}
       </div>
@@ -144,7 +162,7 @@ export function PlayerBar() {
   )
 }
 
-/** On a phone: a thin line of where the take is, ▶, the take, the time, **Mark**. */
+/** On a phone: a thin line of where the take is, ▶, the take, the time, its speed as a number, **Mark**. */
 export function PhoneBar() {
   const p = usePlayer()
   const take = p.take
@@ -173,6 +191,7 @@ export function PhoneBar() {
         ) : (
           <span className="flex-1 text-xs text-muted-foreground">{NOTHING}</span>
         )}
+        <BarSpeed take={take} bare />
         <MarkHere take={take} at={at} />
       </div>
     </footer>

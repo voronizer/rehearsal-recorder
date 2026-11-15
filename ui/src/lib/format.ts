@@ -290,3 +290,9 @@ export function formatMeter(tempo: number, signature: Signature): string {
 export function formatMeterShort(tempo: number, signature: Signature): string {
   return `${tempo} · ${signature}`
 }
+
+/** "75%" for 0.75, "125%" for 1.25: a share written as the app writes it,
+ *  with no space before the sign (B8). */
+export function formatPercent(share: number): string {
+  return `${Math.round(share * 100)}%`
+}

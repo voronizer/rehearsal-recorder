@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useState, useSyncExternalStore } from "react"
 import { useNavigate, useParams, useSearch } from "@tanstack/react-router"
 import { RotateCcw } from "lucide-react"
 import { TakePlayer as RehaPlayer } from "@/components/TakePlayer"
@@ -164,6 +164,24 @@ function useTakePlayer(take: TakePage, sound: ServiceSound) {
   return useMultitrackPlayer(song === undefined ? null : sound.tracks, take.duration_sec, song ?? null, sound)
 }
 
+/**
+ * The speed beside Repeat (#105): the one player's while the take is in it,
+ * with what keeps the key loading or failed; the page's own while another
+ * take plays, heard from the take's ▶ (sound.ts).
+ */
+function useSpeed(take: TakePage, sound: ServiceSound) {
+  const p = usePlayer()
+  const value = useSyncExternalStore(sound.onSpeed, sound.speed)
+  const here = p.uid === take.uid
+  return {
+    value,
+    onChange: (rate: number) => sound.setSpeed(rate),
+    busy: here && p.speedLoading,
+    failed: here && p.speedFailed,
+    disabled: p.supported === false,
+  }
+}
+
 /** РЭХА's player on the page itself, with no frame round it, as in РЭХА. */
 function Full({ take, notes, sound }: { take: TakePage; notes: NotesFile[]; sound: ServiceSound }) {
   // РЭХА counts it after the take's files are up: until then, the click alone.
@@ -174,6 +192,7 @@ function Full({ take, notes, sound }: { take: TakePage; notes: NotesFile[]; soun
   useSpacebar(player.toggle)
   usePlayerKeys(player.skip)
   const { markers, markOf } = chipsOf(take.marks)
+  const speed = useSpeed(take, sound)
   const talk = (m: Marker) => {
     const k = markOf(m)
     if (k) open({ kind: "mark", uid: take.uid, id: k.id })
@@ -196,6 +215,7 @@ function Full({ take, notes, sound }: { take: TakePage; notes: NotesFile[]; soun
           talkOf={(m) => markOf(m)?.comments.length ?? 0}
           spaceKey
           underMaster={<Levels take={take} sound={sound} under />}
+          speed={speed}
         />
       </div>
     </div>

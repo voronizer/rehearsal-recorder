@@ -15,6 +15,7 @@ import {
   formatDuration,
   formatMMSS,
   formatMonth,
+  formatPercent,
   formatWhen,
   inCloudLabel,
   inputsLabel,
@@ -195,5 +196,14 @@ describe("formatDate", () => {
   })
   it("is nothing for what it cannot read", () => {
     expect(formatDate("", now)).toBe("")
+  })
+})
+
+describe("shares", () => {
+  it("writes a share as a whole percent, with no space before the sign", () => {
+    expect(formatPercent(0.75)).toBe("75%")
+    expect(formatPercent(1)).toBe("100%")
+    expect(formatPercent(1.25)).toBe("125%")
+    expect(formatPercent(0.6)).toBe("60%")
   })
 })

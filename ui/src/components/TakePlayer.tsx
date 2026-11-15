@@ -23,6 +23,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { WholeTip, useCut } from "@/components/ui/whole"
 import { Timeline } from "@/components/Timeline"
 import { PlayerKeys } from "@/components/PlayerKeys"
+import { SpeedButton } from "@/components/SpeedButton"
 import { useAfter } from "@/hooks/useAfter"
 import { useTakeDrift } from "@/hooks/useTakeDrift"
 import { useKey } from "@/hooks/useSpacebar"
@@ -97,6 +98,15 @@ function useTakeNotes(read: PlayerSound["notes"], notes?: NotesFile[], missing?:
  * waveform/volume/M-S, and the loop band all live there now. The same
  * component on the rehearsal screen, in History and in the band service.
  */
+/** The band service's speed for the take on the page (SpeedButton). */
+export type TakeSpeed = {
+  value: number
+  onChange: (rate: number) => void
+  busy?: boolean
+  failed?: boolean
+  disabled?: boolean
+}
+
 export function TakePlayer({
   player,
   take = null,
@@ -116,6 +126,7 @@ export function TakePlayer({
   status,
   click = true,
   drift: given,
+  speed,
 }: {
   player: MultitrackPlayer
   /** Master's click button; the band's service has none. */
@@ -162,6 +173,9 @@ export function TakePlayer({
   /** The marks as chips under the lanes. The rehearsal screen lists them
    *  in its right panel instead. */
   markChips?: boolean
+  /** How fast the take plays, in its key: the band service's, drawn after
+   *  Repeat. РЭХА has none. */
+  speed?: TakeSpeed
 }) {
   const notesRead = useTakeNotes(player.readNotes, notes, notesMissing)
   const asked = useTakeDrift(given ? null : take)
@@ -186,6 +200,7 @@ export function TakePlayer({
         markers={markers}
         onAddMarker={onAddMarker}
         onEditMarker={onEditMarker}
+        speed={speed}
       />
 
       <PlayerLine error={player.loadError} status={status} warning={player.outputWarning} />
@@ -402,6 +417,7 @@ function Transport({
   onEditMarker,
   spaceKey,
   goKeys,
+  speed,
 }: {
   player: MultitrackPlayer
   spaceKey: boolean
@@ -409,6 +425,7 @@ function Transport({
   markers: Marker[]
   onAddMarker?: (seconds: number) => void
   onEditMarker?: (marker: Marker) => void
+  speed?: TakeSpeed
 }) {
   const { looping, position, duration } = player
 
@@ -525,6 +542,8 @@ function Transport({
           <span aria-hidden>Repeat</span>
         </TooltipContent>
       </Tooltip>
+      {/* How fast it plays, also part of how the take plays: after Repeat. */}
+      {speed && <SpeedButton {...speed} />}
 
       <div className="ml-auto flex items-center gap-1.5">
         {onAddMarker && (

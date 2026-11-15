@@ -7,10 +7,12 @@ import worklet from "signalsmith-stretch?url"
   one node on the whole mix moves it back: Signalsmith Stretch (MIT), as
   WebAssembly on the sound's own thread, on live input.
 
-  The library comes only when a speed other than 100% is first picked. The
-  sound thread loads it as a file of the band's own address, which the
-  pages' Content-Security-Policy allows (cloudflare/_headers); the
-  library's own way, a `blob:` made from its text, it refuses.
+  The library comes only when a speed other than 100% is first picked:
+  one file of the band's own address, which the page imports and the sound
+  thread loads, as the pages' Content-Security-Policy allows
+  (cloudflare/_headers). The library's own way, a `blob:` made from its
+  text, it refuses. The sound thread is given the file here, not by the
+  library, which would keep a failure for good: the next pick tries again.
 */
 
 export type Stretch = {
@@ -25,14 +27,22 @@ export type Stretch = {
 export const semitonesFor = (rate: number) => -12 * Math.log2(rate)
 
 const made = new WeakMap<BaseAudioContext, Promise<Stretch>>()
+/** The sounds whose thread has the library already: it cannot be given it twice. */
+const given = new WeakSet<BaseAudioContext>()
+let tries = 0
 
 /** The one stretch of this sound, made the first time it is asked for. */
 export function stretchOf(context: BaseAudioContext): Promise<Stretch> {
   let stretch = made.get(context)
   if (!stretch) {
+    // A browser keeps a file that did not come as not there: another try asks under another address.
+    const url = tries++ ? `${worklet}?try=${tries}` : worklet
     stretch = (async () => {
-      const { default: make } = await import("signalsmith-stretch")
-      make.moduleUrl = worklet
+      const [{ default: make }] = await Promise.all([
+        import(/* @vite-ignore */ url) as Promise<typeof import("signalsmith-stretch")>,
+        given.has(context) || context.audioWorklet.addModule(url).then(() => given.add(context)),
+      ])
+      make.moduleUrl = url
       const node = await make(context)
       await node.start()
       const latency = await node.latency()

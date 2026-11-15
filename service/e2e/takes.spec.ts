@@ -1038,3 +1038,162 @@ test.describe("the drawer on a take's page, as Alex", () => {
     await expect(panel).toBeVisible()
   })
 })
+
+test.describe("the speed, as Ira", () => {
+  test.use({ storageState: as("ira") })
+
+  /** Picks a speed from the button: its list opens under it. */
+  const pick = async (page: Page, button: Locator, speed: string) => {
+    await button.click()
+    await page.getByRole("menuitemradio", { name: speed, exact: true }).click()
+  }
+
+  test("Speed beside Repeat: 50% plays the take slower, grey as Repeat pressed, and the bar has it on another page", async ({ page }) => {
+    const lost: string[] = []
+    page.on("console", (m) => void (m.type() === "error" && lost.push(m.text())))
+    await page.goto(`/takes/${band().takes["Pałyn 3"]}`)
+    const transport = page.getByRole("toolbar", { name: "Transport" })
+    const repeat = transport.getByRole("button", { name: "Repeat" })
+    const speed = transport.getByRole("button", { name: "Speed 100%" })
+    await expect(speed).toBeVisible()
+    // Right after Repeat, on its line.
+    const r = (await repeat.boundingBox())!
+    const s = (await speed.boundingBox())!
+    expect(s.x).toBeGreaterThanOrEqual(r.x + r.width)
+    expect(Math.abs(s.y + s.height / 2 - (r.y + r.height / 2))).toBeLessThan(2)
+    const fill = (l: Locator) => l.evaluate((e) => getComputedStyle(e).backgroundColor)
+    const plain = await fill(speed)
+    await pick(page, speed, "50%")
+    const slow = transport.getByRole("button", { name: "Speed 50%" })
+    await expect(slow).toBeVisible()
+    // The number keeps the room of 100%: nothing in the row moves.
+    expect((await slow.boundingBox())!.width).toBeCloseTo(s.width, 0)
+    // Grey while not 100%, as Repeat is when pressed.
+    await repeat.click()
+    await expect(repeat).toHaveAttribute("aria-pressed", "true")
+    expect(await fill(slow)).not.toBe(plain)
+    // Both fade in: read once they have.
+    await expect.poll(async () => (await fill(repeat)) === (await fill(slow))).toBe(true)
+    await repeat.click()
+    await expect(repeat).toHaveAttribute("aria-pressed", "false")
+
+    // Two seconds of the take take four of the clock.
+    await transport.getByRole("button", { name: "Play", exact: true }).click()
+    const time = transport.getByText(/^\d:\d\d \/ 0:10$/)
+    await expect.poll(() => time.textContent(), { intervals: [50], timeout: 10_000 }).toMatch(/^0:01 /)
+    const from = Date.now()
+    await expect.poll(() => time.textContent(), { intervals: [50], timeout: 10_000 }).toMatch(/^0:03 /)
+    const took = Date.now() - from
+    expect(took).toBeGreaterThan(3000)
+    expect(took).toBeLessThan(5500)
+    // What keeps the key loaded under the pages' policy: the speed is still 50%, with no warning.
+    await expect(slow).not.toHaveAttribute("aria-description")
+    expect(lost.filter((t) => /speed|Content Security|worklet/i.test(t))).toEqual([])
+    await transport.getByRole("button", { name: "Pause", exact: true }).click()
+
+    // On the song's page the bar holds the take, at its speed.
+    await page.getByRole("main").getByRole("link", { name: "Pałyn", exact: true }).first().click()
+    const bar = page.getByLabel("Player", { exact: true })
+    await expect(bar.getByRole("button", { name: "Speed 50%" })).toBeVisible()
+  })
+
+  test("another take in the player starts at speed 100%, from a list and from its page", async ({ page }) => {
+    await page.goto(`/rehearsals/${band().rehearsals.second}`)
+    const bar = page.getByLabel("Player", { exact: true })
+    await page.locator('[data-take="Viasna 11"]').getByRole("button", { name: "Play “Viasna 11”" }).click()
+    await expect(bar.getByRole("button", { name: "Pause “Viasna 11”" })).toBeVisible()
+    await pick(page, bar.getByRole("button", { name: "Speed 100%" }), "75%")
+    await expect(bar.getByRole("button", { name: "Speed 75%" })).toBeVisible()
+    await page.locator('[data-take="Kupalle 2"]').getByRole("button", { name: "Play “Kupalle 2”" }).click()
+    await expect(bar.getByRole("button", { name: "Pause “Kupalle 2”" })).toBeVisible()
+    await expect(bar.getByRole("button", { name: "Speed 100%" })).toBeVisible()
+
+    // Paused at 75%, the page of another take puts that take in at 100%.
+    await pick(page, bar.getByRole("button", { name: "Speed 100%" }), "75%")
+    await bar.getByRole("button", { name: "Pause “Kupalle 2”" }).click()
+    await expect(bar.getByRole("button", { name: "Play “Kupalle 2”" })).toBeVisible()
+    await page.locator('[data-take="Pałyn 9"]').getByRole("link", { name: "Pałyn 9", exact: true }).click()
+    await expect(page).toHaveURL(`/takes/${band().takes["Pałyn 9"]}`)
+    await expect(page.getByRole("toolbar", { name: "Transport" }).getByRole("button", { name: "Speed 100%" })).toBeVisible()
+    await page.getByRole("main").getByRole("link", { name: "Pałyn", exact: true }).first().click()
+    await expect(bar.getByRole("button", { name: "Play “Pałyn 9”" })).toBeVisible()
+    await expect(bar.getByRole("button", { name: "Speed 100%" })).toBeVisible()
+  })
+
+  test("a speed picked on a take's page while another take plays waits for that take's Play, and the other plays on", async ({ page }) => {
+    await page.goto(`/rehearsals/${band().rehearsals.second}`)
+    const bar = page.getByLabel("Player", { exact: true })
+    await page.locator('[data-take="Viasna 11"]').getByRole("button", { name: "Play “Viasna 11”" }).click()
+    await expect(bar.getByRole("button", { name: "Pause “Viasna 11”" })).toBeVisible()
+    await page.locator('[data-take="Viasna 12"]').getByRole("link", { name: "Viasna 12", exact: true }).click()
+    await expect(page).toHaveURL(`/takes/${band().takes["Viasna 12"]}`)
+    const transport = page.getByRole("toolbar", { name: "Transport" })
+    await pick(page, transport.getByRole("button", { name: "Speed 100%" }), "60%")
+    await expect(transport.getByRole("button", { name: "Speed 60%" })).toBeVisible()
+    // Viasna 11 plays on in the bar, as it was.
+    await expect(bar.getByRole("button", { name: "Pause “Viasna 11”" })).toBeVisible()
+    await expect(bar.getByRole("button", { name: "Speed 100%" })).toBeVisible()
+
+    // Its Play: the take comes in at 60%, and the bar steps aside on its page.
+    await transport.getByRole("button", { name: "Play", exact: true }).click()
+    await expect(transport.getByRole("button", { name: "Pause", exact: true })).toBeVisible()
+    await expect(bar).toHaveCount(0)
+    await expect(transport.getByRole("button", { name: "Speed 60%" })).toBeVisible()
+    await transport.getByRole("button", { name: "Pause", exact: true }).click()
+    await page.getByRole("main").getByRole("link", { name: "Viasna", exact: true }).first().click()
+    await expect(bar.getByRole("button", { name: "Speed 60%" })).toBeVisible()
+  })
+
+  test("a speed that could not load says so on the button and is tried again on the next pick", async ({ page }) => {
+    let failing = true
+    await page.route(/\/assets\/SignalsmithStretch-[^/]+\.mjs/, (route) =>
+      failing ? route.fulfill({ status: 503, body: "" }) : route.fallback()
+    )
+    const lost: string[] = []
+    page.on("console", (m) => void (m.type() === "error" && lost.push(m.text())))
+    await page.goto(`/takes/${band().takes["Pałyn 3"]}`)
+    const transport = page.getByRole("toolbar", { name: "Transport" })
+    await pick(page, transport.getByRole("button", { name: "Speed 100%" }), "75%")
+    // Back at 100%, with the sign and its words.
+    const back = transport.getByRole("button", { name: "Speed 100%" })
+    await expect(back).toHaveAttribute("aria-description", "The speed could not load. Pick it again.")
+    await back.hover()
+    await expect(page.getByRole("tooltip")).toHaveText("The speed could not load. Pick it again.")
+    await expect.poll(() => lost.some((t) => t.includes("The speed could not load"))).toBe(true)
+
+    failing = false
+    await pick(page, back, "75%")
+    const slow = transport.getByRole("button", { name: "Speed 75%" })
+    await expect(slow).toBeVisible()
+    await transport.getByRole("button", { name: "Play", exact: true }).click()
+    await expect(transport.getByRole("button", { name: "Pause", exact: true })).toBeVisible()
+    await page.waitForTimeout(500)
+    await expect(slow).not.toHaveAttribute("aria-description")
+    await transport.getByRole("button", { name: "Pause", exact: true }).click()
+  })
+})
+
+test.describe("the speed on a phone, as Ira", () => {
+  test.use({ storageState: as("ira"), viewport: { width: 390, height: 844 } })
+
+  test("on a phone the bar has the speed as a number, between the time and Mark", async ({ page }) => {
+    await page.goto(`/takes/${band().takes["Pałyn 3"]}`)
+    const bar = page.getByLabel("Player", { exact: true })
+    const speed = bar.getByRole("button", { name: "Speed 100%" })
+    await expect(speed).toBeVisible()
+    // The number alone: no gauge and no arrow.
+    await expect(speed.locator("svg")).toHaveCount(0)
+    const time = (await bar.getByTestId("bar-time").boundingBox())!
+    const at = (await speed.boundingBox())!
+    const mark = (await bar.getByRole("button", { name: "Mark" }).boundingBox())!
+    expect(at.x).toBeGreaterThanOrEqual(time.x + time.width)
+    expect(mark.x).toBeGreaterThanOrEqual(at.x + at.width)
+    // The take's page on a phone has none of its own: the bar's is the one.
+    await expect(page.getByRole("main").getByRole("button", { name: /^Speed / })).toHaveCount(0)
+    await speed.click()
+    await page.getByRole("menuitemradio", { name: "75%", exact: true }).click()
+    const slow = bar.getByRole("button", { name: "Speed 75%" })
+    await expect(slow).toBeVisible()
+    expect((await slow.boundingBox())!.width).toBeCloseTo(at.width, 0)
+  })
+})
