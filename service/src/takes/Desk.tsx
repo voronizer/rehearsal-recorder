@@ -28,7 +28,8 @@ const ROW = "h-14 rounded-lg"
  * row already drawn.
  *
  * A fader you moved shows its notch at the level РЭХА sent (`reha`) and stops
- * on it, as in the lanes; no double-click or tip, which a phone has no use for.
+ * on it, as in the lanes. No double-click and no tip: a phone has no pointer
+ * to rest on a fader, and it can take a double tap for a zoom.
  */
 export function Desk({
   take,
