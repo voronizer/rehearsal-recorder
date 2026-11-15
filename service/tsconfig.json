@@ -21,7 +21,10 @@
       "react/*": ["../ui/node_modules/@types/react/*"],
       "react-dom": ["../ui/node_modules/@types/react-dom"],
       "react-dom/*": ["../ui/node_modules/@types/react-dom/*"],
-      "lucide-react": ["../ui/node_modules/lucide-react"]
+      "lucide-react": ["../ui/node_modules/lucide-react"],
+      // The interface's checks that e2e borrows (ui/e2e) take the
+      // service's own Playwright, the one its tests run with.
+      "@playwright/test": ["./node_modules/@playwright/test"]
     }
   },
   "include": ["worker", "test", "src", "e2e", "pictures", "scripts", "*.ts"]
