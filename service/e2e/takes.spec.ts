@@ -1171,6 +1171,61 @@ test.describe("the speed, as Ira", () => {
     await expect(slow).not.toHaveAttribute("aria-description")
     await transport.getByRole("button", { name: "Pause", exact: true }).click()
   })
+
+  test("at 50% the take has no holes, with its files at 48 kHz on speakers at 44.1 kHz", async ({ page }) => {
+    // Chrome cut a slowed piece short when it said a higher rate than the speakers': a hole every half second of the take.
+    await page.addInitScript(() => {
+      // The speakers at 44.1 kHz, as on many a Mac; the test files are at 48 kHz.
+      const Real = window.AudioContext
+      window.AudioContext = class extends Real {
+        constructor(options?: AudioContextOptions) {
+          super({ ...options, sampleRate: 44100 })
+        }
+      }
+      // Master's mix on its way into the stretch, kept as it goes.
+      const heard: number[] = []
+      Object.assign(window, { heard })
+      const taps = new WeakMap<BaseAudioContext, ScriptProcessorNode>()
+      const connect = AudioNode.prototype.connect as (this: AudioNode, ...args: unknown[]) => unknown
+      AudioNode.prototype.connect = function (this: AudioNode, ...args: unknown[]) {
+        if (args[0] instanceof AudioWorkletNode) {
+          let tap = taps.get(this.context)
+          if (!tap) {
+            tap = this.context.createScriptProcessor(4096, 1, 1)
+            tap.onaudioprocess = (e) => void heard.push(...e.inputBuffer.getChannelData(0))
+            connect.call(tap, this.context.destination)
+            taps.set(this.context, tap)
+          }
+          connect.call(this, tap)
+        }
+        return connect.apply(this, args)
+      } as typeof AudioNode.prototype.connect
+    })
+    await page.goto(`/takes/${band().takes["Viasna 12"]}`)
+    const transport = page.getByRole("toolbar", { name: "Transport" })
+    await pick(page, transport.getByRole("button", { name: "Speed 100%" }), "50%")
+    await transport.getByRole("button", { name: "Play", exact: true }).click()
+    await expect(transport.getByRole("button", { name: "Pause", exact: true })).toBeVisible()
+    await page.waitForTimeout(4000)
+    await transport.getByRole("button", { name: "Pause", exact: true }).click()
+    // The longest stretch of silence between the first sound and the last, in ms.
+    const longest = await page.evaluate(() => {
+      const x = (window as unknown as { heard: number[] }).heard
+      const loud = (v: number) => Math.abs(v) > 1e-4
+      const first = x.findIndex(loud)
+      const last = x.findLastIndex(loud)
+      let most = 0
+      let run = 0
+      for (let i = first; i <= last; i++) {
+        run = loud(x[i]) ? 0 : run + 1
+        most = Math.max(most, run)
+      }
+      return { sec: (last - first) / 44100, ms: (most / 44100) * 1000 }
+    })
+    // Three seconds and more of the mix came, at 100% it has no silence this long.
+    expect(longest.sec).toBeGreaterThan(3)
+    expect(longest.ms).toBeLessThan(10)
+  })
 })
 
 test.describe("the speed on a phone, as Ira", () => {

@@ -180,11 +180,16 @@ class FakeSound {
   static made: FakeNode[] = []
   static meters: FakeNode[] = []
   static splitters: FakeNode[] = []
-  /** Every piece started: when on the clock, from where in it, at what rate, and how long it is. */
-  static started: { when: number; offset: number; rate: number; duration: number }[] = []
+  /** Every piece started: when on the clock, from where in it, at what rate, how long it is, and the rate its buffer says. */
+  static started: { when: number; offset: number; rate: number; duration: number; sampleRate: number }[] = []
   /** The one sound the service makes; the tests move its clock. */
   static last: FakeSound | null = null
+  /** The speakers' rate: as the test files' unless a test says otherwise. The one sound is made once, so it reads this. */
+  static rate = 48000
   readonly destination = { speakers: true }
+  get sampleRate() {
+    return FakeSound.rate
+  }
   currentTime = 0
   constructor() {
     FakeSound.last = this
@@ -215,7 +220,7 @@ class FakeSound {
       playbackRate: { value: 1 },
       connect() {},
       start(when: number, offset = 0) {
-        FakeSound.started.push({ when, offset, rate: node.playbackRate.value, duration: node.buffer!.duration })
+        FakeSound.started.push({ when, offset, rate: node.playbackRate.value, duration: node.buffer!.duration, sampleRate: node.buffer!.sampleRate })
       },
       stop() {},
     }
@@ -409,6 +414,41 @@ test("a speed changed while playing goes on from the same moment", async () => {
   expect(master.to).toContain(sound.destination)
   expect(master.to).not.toContain(stretch.node)
   p.close()
+})
+
+test("at another speed on speakers slower than the files, each piece says the speakers' rate and plays that much faster, with no gap", async () => {
+  // Chrome cuts a slowed piece short when its buffer's rate is above the sound's: a hole after every piece.
+  FakeSound.rate = 44100
+  const playing: Player[] = []
+  try {
+    const { p, sound, t0 } = await playAt(0.5)
+    playing.push(p)
+    const fold = 48000 / 44100
+    expect(FakeSound.started.every((s) => s.sampleRate === 44100)).toBe(true)
+    expect(FakeSound.started.every((s) => Math.abs(s.rate - 0.5 * fold) < 1e-12)).toBe(true)
+    // A piece late for its place starts at once, that much into it.
+    sound.currentTime = t0 + 5.5
+    await vi.waitFor(() => expect(FakeSound.started.some((s) => s.offset > 0)).toBe(true))
+    await vi.waitFor(() => expect(FakeSound.started.at(-1)!.offset).toBe(0))
+    const late = FakeSound.started.findIndex((s) => s.offset > 0)
+    expect(FakeSound.started[late].when).toBeCloseTo(t0 + 5.51, 9)
+    // Each piece ends on the clock where the next one starts, as at the files' own rate.
+    const started = FakeSound.started
+    for (let i = late; i < started.length - 1; i++)
+      expect(started[i].when + (started[i].duration - started[i].offset) / started[i].rate).toBeCloseTo(started[i + 1].when, 9)
+    for (let i = 1; i < late; i++) expect(started[i - 1].when + started[i - 1].duration / started[i - 1].rate).toBeCloseTo(started[i].when, 9)
+    // The playhead is as at any speed.
+    sound.currentTime = t0 + 0.05 + 2
+    expect(p.time()).toBeCloseTo(1, 9)
+    p.close()
+    // At 100% a piece keeps its file's rate, as before the speed was there.
+    const { p: q } = await playAt(1)
+    playing.push(q)
+    expect(FakeSound.started.every((s) => s.sampleRate === 48000 && s.rate === 1)).toBe(true)
+  } finally {
+    for (const p of playing) p.close()
+    FakeSound.rate = 48000
+  }
 })
 
 test("a repeat goes round at the speed", async () => {

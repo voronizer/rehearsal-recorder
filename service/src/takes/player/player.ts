@@ -34,7 +34,9 @@ import type { Stretch } from "./stretch"
   That moves the key with the speed; one stretch node (stretch.ts) between
   Master and the speakers moves it back. The playhead counts the take's
   own seconds at that rate, less the stretch's own delay, so it is where
-  the sound is. At 100% the stretch is not in the way.
+  the sound is. At 100% the stretch is not in the way. At another speed a
+  piece says it is at the speakers' rate and plays that much faster: Chrome
+  cuts a slowed piece short when its rate is above the speakers'.
 */
 
 const AHEAD_SEC = 5
@@ -791,7 +793,11 @@ export class Player {
     if (!lane.pendingLength || !this.context) return
     const length = lane.pendingLength
     const channels = lane.pending[0].length
-    const buffer = this.context.createBuffer(channels, length, lane.source.sampleRate)
+    // At another speed a piece says it is at the speakers' rate and plays that much faster
+    // (place): Chrome cuts a slowed piece short when it says a higher rate than the speakers',
+    // the last 7% of it at 48 kHz on 44.1 kHz, so a take stuttered every half second (#105).
+    const rate = this.rate === 1 ? lane.source.sampleRate : this.context.sampleRate
+    const buffer = this.context.createBuffer(channels, length, rate)
     for (let c = 0; c < channels; c++) {
       const out = buffer.getChannelData(c)
       let o = 0
@@ -829,16 +835,18 @@ export class Player {
     const context = this.context!
     // At another speed the take's seconds go by on the clock at that rate.
     let when = this.t0! + (at / lane.source.sampleRate + this.shift(pass) - this.from) / this.rate
+    // A piece that says another rate than its file's (cut) goes that much faster, and its seconds are that much longer.
+    const fold = lane.source.sampleRate / buffer.sampleRate
     let offset = 0
     const soonest = context.currentTime + 0.01
     if (when < soonest) {
-      offset = (soonest - when) * this.rate
+      offset = (soonest - when) * this.rate * fold
       when = soonest
     }
     if (offset >= buffer.duration) return
     const node = context.createBufferSource()
     node.buffer = buffer
-    node.playbackRate.value = this.rate
+    node.playbackRate.value = this.rate * fold
     node.connect(this.gains[lane.index])
     node.start(when, offset)
     lane.nodes.add(node)
