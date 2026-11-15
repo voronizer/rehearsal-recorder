@@ -41,7 +41,8 @@ pictures).
   design-check` in `ui/` covers `ui/src`, `service/src` and `site/src`.
 - One number for "at РЭХА's level", in one place: within 0.005 of it
   (`AT_REHA`), half a key step. The mark shows outside it, the sound
-  forgets inside it. A drag stops on the mark within 0.03 (`STOP_AT_REHA`).
+  forgets inside it. A drag stops on the mark while the knob covers it:
+  within 9 px (`STOP_PX`), measured on the fader as it is drawn.
 - No session link in commits or the PR; the PR body ends with the line
   “🤖 Generated with [Claude Code](https://claude.com/claude-code)”.
 - After the last task: review the whole branch, fix every finding (minors
@@ -53,7 +54,7 @@ pictures).
 ## Task 1: The mark on the shared fader
 
 **Files:**
-- Modify: `ui/src/lib/levels.ts` (`AT_REHA`, `STOP_AT_REHA`, `atReha`, `stopAtReha`), with `ui/src/lib/levels.test.ts`
+- Modify: `ui/src/lib/levels.ts` (`AT_REHA`, `STOP_PX`, `atReha`, `stopAtReha`), with `ui/src/lib/levels.test.ts`
 - Modify: `ui/src/components/LaneControls.tsx` (`MeteredFader`, `LaneControls`)
 - Modify: `ui/src/components/Timeline.tsx` (prop `reha`, no `underMaster`)
 - Modify: `ui/src/components/TakePlayer.tsx` (props `reha` and `failure`, `Said` exported, no `underMaster`)
@@ -61,11 +62,15 @@ pictures).
 - Test: `ui/e2e/player.spec.ts`
 
 - [ ] **Step 1: the rule, test first.** In `ui/src/lib/levels.ts`:
-  `export const AT_REHA = 0.005`, `export const STOP_AT_REHA = 0.03`,
+  `export const AT_REHA = 0.005`, `export const STOP_PX = 9` (half the
+  thumb with its ring: `size-3.5` and `ring-2`, 18 px),
   `atReha(v, reha) = Math.abs(v - reha) < AT_REHA`, and
-  `stopAtReha(v, reha) = Math.abs(v - reha) < STOP_AT_REHA ? reha : v`.
-  Tests in `levels.test.ts`: 0.996 is at 1, 0.99 is not; a drag at 0.78
-  stops at 0.8, at 0.76 does not. Run
+  `stopAtReha(v, reha, travel) = travel > 0 && Math.abs(v - reha) *
+  travel < STOP_PX ? reha : v`, where `travel` is how far the thumb's
+  centre moves, in px (the fader's width less the 14 px thumb).
+  Tests in `levels.test.ts`: 0.996 is at 1, 0.99 is not; with 120 px of
+  travel a drag at 0.74 stops at 0.8 and at 0.72 does not; with 265 px,
+  0.77 stops and 0.76 does not; with 0 px nothing stops. Run
   `cd ui && npx vitest run src/lib/levels.test.ts`: fail, write, pass.
 - [ ] **Step 2: `MeteredFader`.** Props `reha?: number` and
   `onBack?: () => void` (the double-click and the tip; given only in the
@@ -86,7 +91,10 @@ pictures).
   - with `onBack` only: a double-click on that `div` calls `onBack`.
   `dragging` is set by `onPointerDown` on the `Slider` and cleared in the
   `onPointerUp` that already commits. While dragging, `onValueChange`
-  passes `stopAtReha(v, reha)`; keys pass `v` as now. Without `reha`
+  passes `stopAtReha(v, reha, travel)`, `travel` read from the slider's
+  `clientWidth` less 14 at `onPointerDown`; keys pass `v` as now. Check
+  in the browser that the mark comes out from under the knob where the
+  stop ends, on a computer and at 390 px wide. Without `reha`
   nothing of this is drawn or done.
 - [ ] **Step 3: `LaneControls`.** Props `reha?: number` and `back?:
   boolean`. `reha` goes to the fader; with `back`, so does `onBack`:
@@ -208,8 +216,8 @@ pictures).
   - nothing under Master: `[data-under-master]` has count 0.
   - the cleanups at `:571-576` and `:608-614` use ⋯ › **РЭХА's levels**.
   - the late-answer test (`:529-576`): its drag starts at 96% of the
-    fader, near Guitar's 100%; start it at 90% so the stop does not catch
-    it.
+    fader, near Guitar's 100%; start it at 80% so the stop (about 7.5% on
+    a computer) does not catch it.
   Run each changed test alone, in the e2e server the service's README
   describes, once each.
 - [ ] **Step 6: pictures' wait.** `service/pictures/site.spec.ts:49` waits

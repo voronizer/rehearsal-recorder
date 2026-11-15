@@ -67,6 +67,12 @@ Each with its mockup; the mockups' sources are in
   button and the alt text of the "lanes" picture change, "lanes" is
   retaken, no new picture.
 - **The spec**, 15:45:03Z «ок», with calls 1-11 below as listed.
+- **The knob over the mark**, 16:02:52Z card A, «Липнуть шире», on the
+  plan check's first question: the knob (18 px with its ring) covers the
+  mark while the fader is within about 7% of it on a computer, 3% on a
+  phone, wider than the 3% stop first planned. The fader now stops on the
+  mark the whole time the knob covers it (call 3). The others were a mark
+  taller than the knob, and keeping 3%.
 
 ## What a band member sees
 
@@ -150,7 +156,9 @@ not change.
 2. The mark is a line 2 px wide and 14 px tall, in the text colour at 45%,
    centred on РЭХА's level, under the knob. The same in both themes, on the
    plate's grey and in the phone's desk.
-3. The fader stops on the mark within 3% of it, only when dragged. The
+3. The fader stops on the mark while the knob covers it: within 9 px of
+   it, half the knob with its ring, which is about 7% of the fader on a
+   computer and 3% on a phone (Alex, 16:02:52Z). Only when dragged: the
    arrow keys step past it, so a level just beside РЭХА's can still be set.
 4. A fader let go on the mark forgets your level for that track (as the
    button did), rather than keeping one equal to РЭХА's: other takes, whose
