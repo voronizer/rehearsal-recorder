@@ -45,6 +45,9 @@ What Claude found (main at d850487):
 Each with its mockup; the mockups' sources are in
 `/mnt/project-files/band-service/levels-button/`.
 
+- **When**, 15:23:52Z: «можно и сейчас наверное если не будет косяков с
+  тем что одни и те же файлы правяться», now, alongside the speed thread,
+  if the files both change cause no trouble (see Order).
 - **What is wrong with the place**, 15:27:58Z: nothing in the way; the
   button looks stuck on without regard to what it does.
 - **Q1, the way back**, 15:35:20Z card A
@@ -87,13 +90,17 @@ Master, and Master is kept on each device.
 
 The take's ⋯ on its own page gets **РЭХА's levels**, between **Move to
 song** and **Delete take**. It forgets your levels for this take's tracks,
-as the button did, and every mark of the page goes. It is off while no
-fader of the take shows a mark. The ⋯ of a take in a list does not have it.
+as the button did, and every mark of the page goes. It is off while none
+of this take's tracks has a level of yours kept that differs from РЭХА's.
+The ⋯ of a take in a list does not have it. A take in the Trash has no ⋯,
+so there the marks alone bring a track back.
 
 ### When your levels are not kept
 
 "Your levels were not kept: …" goes to the player's line under the
-transport on a computer, and to a line kept under the desk on a phone.
+transport on a computer, and to a line kept under the desk on a phone. Both
+are one line, red as a failure, cut with "…" where the room ends and whole
+in the tip, as the player's line says its load error.
 
 ### Under Master
 
@@ -105,29 +112,33 @@ much lower.
 - reha.stream, `site/content/band-service.md:34`, «Hear your own part»: the
   last sentence, "**РЭХА's levels** brings back the mix the take came
   with.", becomes: "A thin mark on the fader shows where РЭХА had it. Bring
-  the fader back to the mark and it stops there; a double-click does the
-  same. **РЭХА's levels** in the take's ⋯ menu brings every track back at
-  once."
+  the fader back to the mark and it stops there; on a computer a
+  double-click does the same. **РЭХА's levels** in the take's ⋯ menu brings
+  every track back at once." (Alex saw "a double-click does the same" in
+  the draft at 15:39Z; "on a computer" follows call 5.)
 - The "lanes" picture's alt text (`:36`): "Viasna #12 on Ivan's phone: a
   row for each track with its level, M and S, and the guitar turned all the
   way up, past the mark where РЭХА had it".
 - The guide, `docs/using-it.md:822-824`: "Under it, **РЭХА's levels** puts
   back the levels the take came with; it is faded until you move a fader."
   becomes: "A fader you moved shows a thin mark where РЭХА had it: bring the
-  fader back to the mark, or double-click it, and the track plays as РЭХА
-  sent it. **РЭХА's levels** in the take's ⋯ menu does that for every
+  fader back to the mark, or on a computer double-click it, and the track
+  plays as РЭХА sent it. **РЭХА's levels** in the take's ⋯ menu does that for every
   track."
 - CHANGELOG, under "Unreleased": an item that starts "**The way back to
   РЭХА's levels is on the faders.**", then what a band member does, as
   above.
+- README: nothing changes; no README names the button.
 - The menu item reads "РЭХА's levels". The fader's tip reads "Your level:
   only you hear it. The mark is РЭХА's." No other new words in the app.
 
 ## Pictures
 
 The site's band service pictures are retaken (`cd service && npm run
-pictures`): "lanes" shows the mark on Ivan's guitar, and every picture with
-a take's page on a computer loses the row under Master. Each changed picture
+pictures`): "lanes" shows the mark on Ivan's guitar. Every picture with
+a take's page on a computer loses the row under Master, and every one on a
+phone ("lanes", "mark", "three-weeks-ago") loses the button under the
+desk. Each changed picture
 is shown to Alex before the merge. The guide's pictures are РЭХА's and do
 not change.
 
@@ -144,24 +155,34 @@ not change.
 4. A fader let go on the mark forgets your level for that track (as the
    button did), rather than keeping one equal to РЭХА's: other takes, whose
    РЭХА levels differ, then follow РЭХА too.
-5. Double-click on a computer only. On a phone the fader stopping on the
-   mark does it.
+5. Double-click on a computer only, in the lanes. The phone's desk (shown
+   in any window as narrow as a phone's) has the mark and the stop, and no
+   double-click or tip, since a phone can turn a double tap into one.
 6. A tip on a computer, at Alex's word (15:43:47Z, «лучше я думаю сделать
    - при наведении тултип например»): the pointer over a fader that shows
-   its mark opens "Your level: only you hear it. The mark is РЭХА's." It
-   does not open while the fader is dragged. A fader with no mark has no
+   its mark opens "Your level: only you hear it. The mark is РЭХА's.", and
+   so does keyboard focus on it, as every tip does. It does not open while
+   the fader is dragged. A fader with no mark has no
    tip. A phone has no hover, so none there.
-7. **РЭХА's levels** in the menu is on while at least one fader of the take
-   shows a mark, and forgets only this take's tracks.
+7. **РЭХА's levels** in the menu is on while one of this take's tracks has
+   a level of yours kept that differs from РЭХА's, and forgets only this
+   take's tracks. A level still on its way, or one that failed to be kept,
+   shows its mark with the item off; the failure line says why.
 8. The menu item is on the take's own page only, not by a take in a list.
 9. The failure line: on a computer the player's line, after a load error
    (one thing at a time, B4). On a phone a line kept under the desk, empty
-   until something fails, so the marks below do not move (B4).
+   until something fails, so the take's marks below do not move (B4). Red,
+   one line, as the player's line says a failure.
 10. The shared player loses its `underMaster` row; nothing else uses it.
     The faders get РЭХА's level for each track as an optional input; РЭХА's
     screens give none, so they show no mark and nothing stops the fader.
 11. A track with no level from РЭХА (a take from an older РЭХА) counts as
     100%, as it plays now (`levels.ts:4-5`): its mark is at the right end.
+12. A take in the Trash has no ⋯ (`Take.tsx:274`), so **РЭХА's levels**
+    is not there; its marks work as on any take.
+13. Windows 1180×820 and 960×680 are the same: the plates keep their
+    200 px, so the fader and its mark do not change. The failure in the
+    player's line is cut with "…" in a narrow window, whole in its tip.
 
 ## Tests
 
@@ -180,7 +201,8 @@ not change.
 
 The speed thread (#105) changes the same files: `Take.tsx`, the shared
 `TakePlayer.tsx`, the site's band service page and its pictures. The code
-here is built on main after that merge, and the pictures are taken after it.
+here is rebased on main after that merge, its conflicts settled, and the
+pictures are taken after it (CLAUDE.md: whoever merges second rebases).
 
 ## Not in this change
 
