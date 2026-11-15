@@ -82,6 +82,7 @@ Each with its mockup; the mockups' sources are in
   stops on the notch while the knob covers it; no Settings option turns
   that off (the service has no Settings page, `service/src/routes.tsx`).
   The other was an on/off switch on a new Settings page.
+- **The plan**, 16:14:49Z «ок».
 
 ## What a band member sees
 
