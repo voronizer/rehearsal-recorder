@@ -30,8 +30,6 @@ import { TakePlayer, useNotes, useReha, useRehaLabels, useSpeed, useTakePlayer }
   changes the band's things: no ★, no ⋯, no **Mark**, no comments.
 */
 
-const GONE = "This link no longer works."
-
 /** M and S as the maker left them; a link that shows only the mix starts with none. */
 function deskOf(page: Answer): DeskState {
   const heard = page.link.heard
@@ -142,7 +140,7 @@ function View({ page }: { page: Answer }) {
     <Page
       title={
         <span className="flex flex-wrap items-center gap-3">
-          <TakeName take={page} wrap className="min-w-0" />
+          <TakeName take={page} wrap outside className="min-w-0" />
           <span className="flex-1" />
           {download && (
             <span className="text-sm font-normal">
@@ -208,7 +206,8 @@ export function LinkPage() {
   useEffect(() => {
     if (page.data) document.title = name ? `${takeText(page.data)} · ${name}` : takeText(page.data)
   }, [page.data, name])
-  const gone = page.error instanceof Refused && page.error.status === 404
+  // A closed link: the service's own words, “This link no longer works.”
+  const gone = page.error instanceof Refused && page.error.status === 404 ? page.error.message : null
   return (
     <div className="flex h-full flex-col">
       {/* As the band's pages have it on a phone, with no menu. */}
@@ -227,7 +226,7 @@ export function LinkPage() {
       ) : (
         <Main>
           {gone ? (
-            <p className="text-muted-foreground">{GONE}</p>
+            <p className="text-muted-foreground">{gone}</p>
           ) : (
             page.error && <Trouble error={page.error} retry={() => void page.refetch()} />
           )}

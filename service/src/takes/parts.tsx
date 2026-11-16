@@ -48,18 +48,21 @@ export const colourCss = (l: Label) => `var(${labelLook(l.colour).cssVar})`
  * and the number stays, so two takes of one song never read the same.
  * `wrap`: a heading's, the whole name over as many lines as it takes. A take
  * moved to another song here is the song's title alone until РЭХА numbers
- * it, and one taken out of its song is “Take” alone; a heading says so.
+ * it, and one taken out of its song is “Take” alone; a heading says so,
+ * except on a link's page (`outside`), where that is the band's business.
  */
 export function TakeName({
   take,
   short,
   wrap,
+  outside,
   className,
   titleRef,
 }: {
   take: TakeNaming
   short?: boolean
   wrap?: boolean
+  outside?: boolean
   className?: string
   /** On the title, the part that is cut where there is no room. */
   titleRef?: Ref<HTMLSpanElement>
@@ -71,7 +74,7 @@ export function TakeName({
       <span className={cn("[overflow-wrap:anywhere]", className)}>
         {title}
         {parts && <span className="tnum text-muted-foreground">{"\u00a0"}#{parts.number}</span>}
-        {take.moved && <span className="text-sm font-normal text-muted-foreground"> · number from РЭХА</span>}
+        {take.moved && !outside && <span className="text-sm font-normal text-muted-foreground"> · number from РЭХА</span>}
       </span>
     )
   return (

@@ -1786,7 +1786,8 @@
               "type": "number",
               "minimum": 0,
               "maximum": 1
-            }
+            },
+            "maxItems": 1200
           }
         },
         "required": [
@@ -1809,14 +1810,18 @@
           "muted": {
             "type": "array",
             "items": {
-              "type": "string"
-            }
+              "type": "string",
+              "maxLength": 200
+            },
+            "maxItems": 64
           },
           "soloed": {
             "type": "array",
             "items": {
-              "type": "string"
-            }
+              "type": "string",
+              "maxLength": 200
+            },
+            "maxItems": 64
           }
         },
         "required": [
@@ -7745,9 +7750,7 @@
         "parameters": [
           {
             "schema": {
-              "type": "string",
-              "minLength": 1,
-              "maxLength": 64
+              "type": "string"
             },
             "required": true,
             "name": "id",
@@ -7784,9 +7787,7 @@
         "parameters": [
           {
             "schema": {
-              "type": "string",
-              "minLength": 1,
-              "maxLength": 64
+              "type": "string"
             },
             "required": true,
             "name": "id",
@@ -7794,8 +7795,7 @@
           },
           {
             "schema": {
-              "type": "integer",
-              "minimum": 1
+              "type": "string"
             },
             "required": true,
             "name": "gen",
@@ -7866,9 +7866,7 @@
         "parameters": [
           {
             "schema": {
-              "type": "string",
-              "minLength": 1,
-              "maxLength": 64
+              "type": "string"
             },
             "required": true,
             "name": "id",
@@ -7939,9 +7937,7 @@
         "parameters": [
           {
             "schema": {
-              "type": "string",
-              "minLength": 1,
-              "maxLength": 64
+              "type": "string"
             },
             "required": true,
             "name": "id",

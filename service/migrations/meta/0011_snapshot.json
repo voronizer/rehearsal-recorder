@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "06e88930-d25d-446f-8346-66ecec607fd0",
+  "id": "5185889e-477e-442b-a1ab-f70acd6a7209",
   "prevId": "d1efaf98-cf80-48f6-a8e3-9532dca94525",
   "tables": {
     "account": {
@@ -1233,12 +1233,27 @@
           "notNull": false,
           "autoincrement": false
         },
+        "mix_sec": {
+          "name": "mix_sec",
+          "type": "real",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
         "ready": {
           "name": "ready",
           "type": "integer",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
+        },
+        "sending": {
+          "name": "sending",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": false
         },
         "plays": {
           "name": "plays",

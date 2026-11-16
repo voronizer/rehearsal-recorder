@@ -11,6 +11,7 @@ import {
   useBand,
   useBandPicture,
   useKeys,
+  useLinks,
   useMakeKey,
   useMe,
   useMembers,
@@ -267,8 +268,10 @@ function Keys({ keys }: { keys: Key[] }) {
 function OwnersPage({ me }: { me: string }) {
   const members = useMembers()
   const keys = useKeys()
+  // Asked for with the others: the links come in above Add a member, which would move down after.
+  const links = useLinks()
   if (members.error) return <Trouble error={members.error} retry={() => void members.refetch()} />
-  if (!members.data || !keys.data) return null
+  if (!members.data || !keys.data || !(links.data || links.error)) return null
   return (
     <Page title="Members and links" sub="Only you see the addresses, the buttons and the keys.">
       <Groups>

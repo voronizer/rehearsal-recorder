@@ -48,6 +48,25 @@ test.describe("as Alex", () => {
     await expect(keys.getByRole("listitem").filter({ hasText: "Rehearsal room" }).getByRole("button", { name: "Remove" })).toBeVisible()
   })
 
+  test("the owner's page waits for the links, so what is below them does not move", async ({ page }) => {
+    let release = () => {}
+    const held = new Promise<void>((go) => (release = go))
+    await page.route("**/api/links", async (route) => {
+      await held
+      await route.continue()
+    })
+    const members = page.waitForResponse("**/api/members")
+    const keys = page.waitForResponse("**/api/keys")
+    await page.goto("/members")
+    await Promise.all([members, keys])
+    await page.waitForTimeout(300)
+    await expect(page.getByRole("region", { name: "Add a member" })).toHaveCount(0)
+    release()
+    const links = page.getByRole("region", { name: "Links for people outside the band" })
+    await expect(page.getByRole("region", { name: "Add a member" })).toBeVisible()
+    await expect(links.locator("[data-link-row]").first().or(links.getByText("No links yet."))).toBeVisible()
+  })
+
   test("a key for REHA is shown once", async ({ page }) => {
     await page.goto("/members")
     const keys = page.getByRole("region", { name: "Keys for РЭХА" })

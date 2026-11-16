@@ -26,7 +26,7 @@ const NewLink = z
     download: Takes,
     lasts: Lasts,
     heard: Heard.optional(),
-    peaks: z.array(z.number().min(0).max(1)).optional(),
+    peaks: z.array(z.number().min(0).max(1)).max(PEAKS).optional(),
   })
   .openapi("NewLink")
 
@@ -92,7 +92,7 @@ export const linkRoutes = newApp()
       if (mix && asked.peaks?.length !== PEAKS) return fail(c, 400, `A link with the mix alone needs its wave, ${PEAKS} numbers`)
       if (!mix && !asked.heard) return fail(c, 400, "A link with tracks needs the levels, M and S it plays at")
       const [t] = await db
-        .select({ shownGen: take.shownGen })
+        .select({ shownGen: take.shownGen, durationSec: take.durationSec })
         .from(take)
         .where(and(eq(take.uid, uid), isNotNull(take.shownGen), isNull(take.trashedAt)))
         .limit(1)
@@ -115,6 +115,7 @@ export const linkRoutes = newApp()
         until: endOf(asked.lasts, at),
         heard: mix ? null : asked.heard!,
         mixGen: mix ? t.shownGen : null,
+        mixSec: mix ? t.durationSec : null,
         ready: !mix,
       })
       const [item] = await linkItems(db, eq(shareLink.id, id))
@@ -137,14 +138,29 @@ export const linkRoutes = newApp()
       const size = sizeOf(c)
       if (size === null) return fail(c, 400, "Send the file's size")
       if (size > MAX_MIX) return fail(c, 413, "The mix is over 100 MB")
+      // The link is claimed before the file goes, so a second PUT at the same time finds nothing to send.
       const [link] = await db
-        .select({ id: shareLink.id })
-        .from(shareLink)
-        .where(and(eq(shareLink.id, id), eq(shareLink.shows, "mix"), eq(shareLink.ready, false), eq(shareLink.madeBy, c.var.member.id)))
-        .limit(1)
+        .update(shareLink)
+        .set({ sending: true })
+        .where(
+          and(
+            eq(shareLink.id, id),
+            eq(shareLink.shows, "mix"),
+            eq(shareLink.ready, false),
+            eq(shareLink.sending, false),
+            eq(shareLink.madeBy, c.var.member.id)
+          )
+        )
+        .returning({ id: shareLink.id })
       if (!link) return fail(c, 404, "No such link")
+      // A put that fails leaves the link claimed: the member's page closes it, or the day's sweep does.
       await c.env.FILES.put(`links/${id}/mix.mp3`, c.req.raw.body ?? new Uint8Array(), { httpMetadata: { contentType: "audio/mpeg" } })
-      await db.update(shareLink).set({ ready: true }).where(eq(shareLink.id, id))
+      const [landed] = await db.update(shareLink).set({ ready: true, sending: false }).where(eq(shareLink.id, id)).returning({ id: shareLink.id })
+      // Closed while the MP3 was on its way: the file goes too, or nothing would ever find it.
+      if (!landed) {
+        await c.env.FILES.delete(`links/${id}/mix.mp3`)
+        return fail(c, 404, "No such link")
+      }
       const [item] = await linkItems(db, and(eq(shareLink.id, id), isOpen()))
       if (!item) return fail(c, 404, "No such link")
       return c.json(item, 200)

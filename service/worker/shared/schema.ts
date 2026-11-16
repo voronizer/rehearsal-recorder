@@ -411,7 +411,11 @@ export const shareLink = sqliteTable(
     heard: text("heard", { mode: "json" }).$type<LinkHeard>(),
     /** The generation the mix was made from; null for a link with tracks. */
     mixGen: integer("mix_gen"),
+    /** The mix's length, from the take as it was then: a crop later does not change it. */
+    mixSec: real("mix_sec"),
     ready: integer("ready", { mode: "boolean" }).notNull(),
+    /** A mix on its way from the member's page: a second one is refused until it lands. */
+    sending: integer("sending", { mode: "boolean" }).notNull().default(false),
     plays: integer("plays").notNull().default(0),
     lastPlayedAt: text("last_played_at"),
   },

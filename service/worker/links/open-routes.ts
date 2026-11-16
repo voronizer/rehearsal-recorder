@@ -52,14 +52,16 @@ function withStandIns(marks: MarkView[]): MarkView[] {
     if (!ids.has(id)) ids.set(id, `m${ids.size + 1}`)
     return ids.get(id)!
   }
-  // shownName falls back to the address for a member with no name.
-  const named = (author: string) => (author.includes("@") ? NAMELESS : author)
+  // shownName and the initial fall back to the address for a member with no name.
+  const nameless = (author: string | null) => author !== null && author.includes("@")
+  const writer = <W extends { author: string | null; initial: string | null }>(w: W) =>
+    nameless(w.author) ? { author: NAMELESS, initial: NAMELESS[0] } : { author: w.author, initial: w.initial }
   return marks.map((m) => ({
     ...m,
+    ...writer(m),
     member_id: m.member_id === null ? null : standIn(m.member_id),
-    author: m.author === null ? null : named(m.author),
     mine: false,
-    comments: m.comments.map((c) => ({ ...c, member_id: standIn(c.member_id), author: named(c.author), mine: false })),
+    comments: m.comments.map((c) => ({ ...c, ...(writer(c) as { author: string; initial: string }), member_id: standIn(c.member_id), mine: false })),
   }))
 }
 
@@ -96,6 +98,7 @@ async function linkPage(env: Bindings, db: Database, { link, take: t }: Open): P
   const { peaks } = ((await object?.json().catch(() => ({}))) ?? {}) as { peaks?: number[] }
   return {
     ...common,
+    duration_sec: link.mixSec ?? page.duration_sec,
     tracks: [{ position: 1, name: "The mix", icon: null, mp3: `/files/l/${link.id}/mix.mp3`, peaks: `/files/l/${link.id}/mix.peaks`, kind: null }],
     notes: [],
     balance: {},
@@ -106,7 +109,8 @@ async function linkPage(env: Bindings, db: Database, { link, take: t }: Open): P
   }
 }
 
-const Id = z.object({ id: z.string().min(1).max(64) })
+// Any address answers: one that is no link, however long, no longer works.
+const Id = z.object({ id: z.string() })
 const FILE = {
   304: { description: "The wave is the one the browser has" },
   200: { description: "The file", content: { "application/octet-stream": { schema: z.string().openapi({ format: "binary" }) } } },
@@ -117,9 +121,12 @@ const Download = z.object({ download: z.literal("1").optional() })
 
 const gone = (c: Context) => fail(c, 404, GONE)
 
-/** A take's own file, as РЭХА sent it: `<position>.<mp3|peaks|flac|mid>`. */
+/** The kinds of file РЭХА sends a take with: `<position>.<mp3|peaks|flac|mid>`. */
+const TAKE_FILE = /^\d+\.(mp3|peaks|flac|mid)$/
+
+/** A take's own file, as РЭХА sent it, and of a kind it sends: nothing else its list may name. */
 const isTakeFile = (t: Open["take"], name: string) =>
-  t.tracks.some((k) => k.files.includes(name)) || t.notes.some((n) => n.file === name)
+  TAKE_FILE.test(name) && (t.tracks.some((k) => k.files.includes(name)) || t.notes.some((n) => n.file === name))
 
 /** The routes open to whoever has a link's address. */
 export const openLinkRoutes = newApp()
@@ -144,17 +151,17 @@ export const openLinkRoutes = newApp()
       path: "/files/l/{id}/{gen}/{name}",
       description:
         "A track's file through a link with tracks, from the generation the band hears: its MP3, wave and MIDI; its FLAC and `?download=1` only when the link lets download everything.",
-      request: { params: Id.extend({ gen: z.coerce.number().int().min(1), name: z.string() }), query: Download },
+      request: { params: Id.extend({ gen: z.string(), name: z.string() }), query: Download },
       responses: FILE,
     }),
     async (c) => {
       const { id, gen, name } = c.req.valid("param")
       const download = c.req.valid("query").download !== undefined
       const open = await openLink(database(c.env), id)
-      if (!open || open.link.shows === "mix") return gone(c)
+      if (!open) return gone(c)
       const { link, take: t } = open
       const everything = link.download === "all"
-      if (gen !== t.shownGen || !isTakeFile(t, name) || ((name.endsWith(".flac") || download) && !everything))
+      if (link.shows === "mix" || gen !== String(t.shownGen) || !isTakeFile(t, name) || ((name.endsWith(".flac") || download) && !everything))
         return fail(c, 404, "No such file")
       return serveFile(c, `takes/${t.uid}/${gen}/${name}`, download ? downloadName(t, name) : undefined)
     }
@@ -171,9 +178,9 @@ export const openLinkRoutes = newApp()
       const { id, name } = c.req.valid("param")
       const download = c.req.valid("query").download !== undefined
       const open = await openLink(database(c.env), id)
-      if (!open || open.link.shows !== "mix") return gone(c)
+      if (!open) return gone(c)
       const ok = name === "mix.mp3" ? !download || open.link.download !== "none" : name === "mix.peaks" && !download
-      if (!ok) return fail(c, 404, "No such file")
+      if (open.link.shows !== "mix" || !ok) return fail(c, 404, "No such file")
       return serveFile(c, `links/${id}/${name}`, download ? `${open.take.name}.mp3` : undefined)
     }
   )

@@ -589,7 +589,9 @@ The other shared components, each with its stories:
   otherwise. It is 24 px tall whatever it says, with no box or wash, and
   cut with "…" where the room ends, whole in the shared tip. `line` is for a
   place that keeps one line for whatever it has to say, as the player does
-  (B4). `Warning`, from the same file, is a `warning` box with its triangle
+  (B4). `lines` is `line` with room for two, 32 px tall, for words that say
+  what to do next and must not be cut where a phone has no tip: the band
+  service's link window. `Warning`, from the same file, is a `warning` box with its triangle
   and one paragraph, said as a status: for a warning over a list that stays
   as long as it holds, as the start screen's tracks and the unsaved takes
   have.

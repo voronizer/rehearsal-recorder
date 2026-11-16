@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react"
-import { Link as To } from "@tanstack/react-router"
-import { Check, Copy, Link2 } from "lucide-react"
+import { Check, CircleAlert, Copy, Link2 } from "lucide-react"
 import { Said } from "@/components/TakePlayer"
+import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogButtons, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
@@ -14,6 +14,7 @@ import { closeLinkNow, linkAddress, putMix, useCloseLink, useLinks, useMakeLink,
 import { Trouble } from "../shell/parts"
 import { dayMonth, localDay, quoted, takeText } from "../shell/words"
 import { MIX_FAILED, MIX_SILENT } from "../takes/Download"
+import { TakeLink } from "../takes/parts"
 import { gainsOf, makeMix, type Heard } from "../takes/player/mix"
 import { peaksOf } from "../takes/player/peaks"
 import type { ServiceSound } from "../takes/player/sound"
@@ -130,9 +131,7 @@ export function LinkRow({ link, withTake, fresh, onClose }: { link: LinkItem; wi
           <span className="min-w-0 break-words">
             {withTake && (
               <>
-                <To to="/takes/$uid" params={{ uid: link.take.uid }} className="underline-offset-4 hover:underline">
-                  {takeText(link.take)}
-                </To>
+                <TakeLink take={link.take} className="align-baseline" />
                 {" · "}
               </>
             )}
@@ -189,6 +188,8 @@ function LinkWindow({ take, sound, open, onOpenChange }: { take: TakePage; sound
   const stop = useRef<AbortController | null>(null)
   /** A mix link made and not sent yet: closed if the window closes first. */
   const unsent = useRef<string | null>(null)
+  /** The links and the form, which scroll between the title and the buttons. */
+  const area = useRef<HTMLDivElement>(null)
   const giveUp = () => {
     stop.current?.abort()
     if (unsent.current) void closeLinkNow(unsent.current)
@@ -209,6 +210,8 @@ function LinkWindow({ take, sound, open, onOpenChange }: { take: TakePage; sound
     setFresh(item.id)
     setForWhom("")
     setLine(null)
+    // The new link is the first row: back to the top to show it.
+    area.current?.scrollTo({ top: 0 })
   }
 
   const make = async () => {
@@ -265,61 +268,71 @@ function LinkWindow({ take, sound, open, onOpenChange }: { take: TakePage; sound
   const mine = links.data?.filter((l) => l.take.uid === take.uid) ?? []
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent size="tall" className="overflow-y-auto">
+      <DialogContent size="tall">
         <DialogHeader>
           <DialogTitle>Link to {quoted(takeText(take))}</DialogTitle>
           <DialogDescription>For someone outside the band: they open it without signing in.</DialogDescription>
         </DialogHeader>
-        {links.error ? (
-          <Trouble error={links.error} retry={() => void links.refetch()} />
-        ) : (
-          mine.length > 0 && <LinkList links={mine} fresh={fresh} />
-        )}
-        <div className="flex flex-col gap-3 border-t pt-4">
-          <span className="text-sm font-semibold">New link</span>
-          <Input
-            value={forWhom}
-            maxLength={60}
-            onChange={(e) => setForWhom(e.target.value)}
-            placeholder="Who it is for (only the band sees this)"
-            aria-label="Who it is for"
-          />
-          <PickRow<Shows>
-            label="Shows"
-            value={shows}
-            onChange={pickShows}
-            options={[
-              { value: "mix", label: "The mix" },
-              { value: "tracks", label: "Mix and tracks" },
-              { value: "marks", label: "And marks" },
-            ]}
-          />
-          <PickRow<Takes>
-            label="Download"
-            value={download}
-            onChange={setDownload}
-            options={[
-              { value: "none", label: "Nothing" },
-              { value: "mix", label: "The mix" },
-              { value: "all", label: "Mix and tracks", disabled: shows === "mix" },
-            ]}
-          />
-          <PickRow<Lasts>
-            label="Lasts"
-            value={lasts}
-            onChange={setLasts}
-            options={[
-              { value: "never", label: "No end" },
-              { value: "month", label: "A month" },
-              { value: "week", label: "A week" },
-              { value: "day", label: "A day" },
-            ]}
-          />
-          <p className="text-xs text-muted-foreground">The mix goes as you hear it now: your levels, mute and solo.</p>
-          <div data-link-line className="flex h-6 min-w-0 items-center">
-            {line &&
-              (line.trouble ? <Said variant="destructive" text={line.text} /> : <span className="text-sm text-muted-foreground">{line.text}</span>)}
+        <div ref={area} className="-mx-6 flex min-h-0 flex-col gap-4 overflow-y-auto px-6 pb-1">
+          {links.error ? (
+            <Trouble error={links.error} retry={() => void links.refetch()} />
+          ) : (
+            mine.length > 0 && <LinkList links={mine} fresh={fresh} />
+          )}
+          <div className="flex flex-col gap-3 border-t pt-4">
+            <span className="text-sm font-semibold">New link</span>
+            <Input
+              value={forWhom}
+              maxLength={60}
+              onChange={(e) => setForWhom(e.target.value)}
+              placeholder="Who it is for (only the band sees this)"
+              aria-label="Who it is for"
+            />
+            <PickRow<Shows>
+              label="Shows"
+              value={shows}
+              onChange={pickShows}
+              options={[
+                { value: "mix", label: "The mix" },
+                { value: "tracks", label: "Mix and tracks" },
+                { value: "marks", label: "And marks" },
+              ]}
+            />
+            <PickRow<Takes>
+              label="Download"
+              value={download}
+              onChange={setDownload}
+              options={[
+                { value: "none", label: "Nothing" },
+                { value: "mix", label: "The mix" },
+                { value: "all", label: "Mix and tracks", disabled: shows === "mix" },
+              ]}
+            />
+            <PickRow<Lasts>
+              label="Lasts"
+              value={lasts}
+              onChange={setLasts}
+              options={[
+                { value: "never", label: "No end" },
+                { value: "month", label: "A month" },
+                { value: "week", label: "A week" },
+                { value: "day", label: "A day" },
+              ]}
+            />
+            <p className="text-xs text-muted-foreground">The mix goes as you hear it now: your levels, mute and solo.</p>
           </div>
+        </div>
+        {/* Over the buttons, so it is in sight whatever is scrolled; room for two lines: the longest says what to pick instead. */}
+        <div data-link-line className="flex h-8 min-w-0 shrink-0 items-start">
+          {line &&
+            (line.trouble ? (
+              <Alert variant="destructive" size="lines">
+                <CircleAlert />
+                <AlertDescription>{line.text}</AlertDescription>
+              </Alert>
+            ) : (
+              <span className="text-sm text-muted-foreground">{line.text}</span>
+            ))}
         </div>
         <DialogButtons
           cancel="Close"

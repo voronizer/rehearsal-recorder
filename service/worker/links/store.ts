@@ -16,12 +16,18 @@ export type Shows = LinkShows
 export type Takes = LinkDownload
 export type Lasts = "never" | "month" | "week" | "day"
 
+/** The most tracks a take's levels name, and the longest name: far more than a band records. */
+const MOST_TRACKS = 64
+const TrackName = z.string().max(200)
+
 /** The levels, M and S the maker heard, by track name. */
 export const Heard = z
   .object({
-    volumes: z.record(z.string(), z.number().min(0).max(1)),
-    muted: z.array(z.string()),
-    soloed: z.array(z.string()),
+    volumes: z
+      .record(TrackName, z.number().min(0).max(1))
+      .refine((v) => Object.keys(v).length <= MOST_TRACKS, { error: `At most ${MOST_TRACKS} tracks` }),
+    muted: z.array(TrackName).max(MOST_TRACKS),
+    soloed: z.array(TrackName).max(MOST_TRACKS),
   })
   .openapi("LinkHeard")
 

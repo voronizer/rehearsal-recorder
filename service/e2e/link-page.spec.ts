@@ -181,6 +181,20 @@ test("a link page that cannot load says so", async ({ page }) => {
   await expect(page.locator("[data-take-player]")).toBeVisible()
 })
 
+test("a take moved to another song has no note for the band, and search engines leave the page out", async ({ page }) => {
+  const id = await link("Viasna 12", { shows: "tracks" })
+  // As a member who moved it here would have it: РЭХА has not numbered it yet.
+  await page.route(`**/api/l/${id}`, async (route) => {
+    const res = await route.fetch()
+    await route.fulfill({ response: res, json: { ...(await res.json()), moved: true } })
+  })
+  const res = await page.goto(`/l/${id}`)
+  expect(res?.headers()["x-robots-tag"]).toBe("noindex")
+  const title = page.getByRole("heading", { level: 1 })
+  await expect(title).toContainText("Viasna")
+  await expect(title).not.toContainText("number from")
+})
+
 test.describe("on a phone", () => {
   test.use({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true })
 

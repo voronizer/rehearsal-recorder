@@ -1,7 +1,7 @@
 import { env } from "cloudflare:workers"
 import { eq } from "drizzle-orm"
 import { expect, test } from "vitest"
-import { endOf, newLinkId, purgeLinks } from "../worker/links/store"
+import { deleteLink, endOf, newLinkId, purgeLinks } from "../worker/links/store"
 import { database } from "../worker/shared/db"
 import type { Bindings } from "../worker/shared/env"
 import { shareLink, take } from "../worker/shared/schema"
@@ -183,4 +183,43 @@ test("link ids are 22 characters from the 57", () => {
   const ids = Array.from({ length: 200 }, newLinkId)
   for (const id of ids) expect(id).toMatch(/^[A-HJ-NP-Za-km-z2-9]{22}$/)
   expect(new Set(ids).size).toBe(200)
+})
+
+test("what a link carries of the maker's levels and its wave has bounds", async () => {
+  const owner = await signInOwner()
+  const uid = await shownTake()
+  const names = (n: number) => Array.from({ length: n }, (_, i) => `Track ${i}`)
+  const heard = (n: number) => ({ volumes: Object.fromEntries(names(n).map((t) => [t, 0.5])), muted: names(n), soloed: names(n) })
+  expect((await makeLink(owner, uid, { heard: heard(64) })).status).toBe(200)
+  expect((await makeLink(owner, uid, { heard: heard(65) })).status).toBe(400)
+  expect((await makeLink(owner, uid, { heard: { ...HEARD, muted: ["x".repeat(201)] } })).status).toBe(400)
+  expect((await makeLink(owner, uid, { peaks: [...PEAKS, 0] })).status).toBe(400)
+})
+
+test("a mix already on its way is not taken twice", async () => {
+  const owner = await signInOwner()
+  const uid = await shownTake()
+  const mix = await makeLink(owner, uid, { shows: "mix", heard: undefined, peaks: PEAKS })
+  // The first PUT has claimed the link and is still sending.
+  await database(bindings).update(shareLink).set({ sending: true }).where(eq(shareLink.id, mix.body.id))
+  expect((await putMix(owner, mix.body.id)).status).toBe(404)
+  expect(await filesOf(mix.body.id)).toEqual([`links/${mix.body.id}/mix.peaks`])
+})
+
+test("a link closed while its mix is on its way leaves no file behind", async () => {
+  const owner = await signInOwner()
+  const uid = await shownTake()
+  const { id } = (await makeLink(owner, uid, { shows: "mix", heard: undefined, peaks: PEAKS })).body
+  const { readable, writable } = new FixedLengthStream(MP3.length)
+  const sending = putMix(owner, id, readable as never)
+  const w = writable.getWriter()
+  await w.write(MP3.slice(0, 10))
+  // The second piece waits until the first was read: the PUT has claimed the link and is sending.
+  await w.write(MP3.slice(10, 20))
+  // The window closed: its Close link lands before the MP3 is all there.
+  await deleteLink(bindings, id)
+  await w.write(MP3.slice(20))
+  await w.close()
+  expect((await sending).status).toBe(404)
+  expect(await filesOf(id)).toEqual([])
 })

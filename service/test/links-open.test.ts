@@ -175,6 +175,7 @@ test("after a crop a tracks link plays the new generation and a mix link keeps i
   const uid = await takeWithFiles()
   const tracks = await makeLink(owner, uid)
   const mix = await mixLink(owner, uid)
+  const before = (await read(`/api/l/${mix}`)).duration_sec
   await putTake(bindings, uid, takeMeta({ gen: 2, cut_start: 10, duration_sec: 302.48 }) as never)
   await takeWithFiles(2, uid)
   expect(await ready(bindings, uid, 2, "mp3", ORIGIN)).toBe("done")
@@ -184,7 +185,11 @@ test("after a crop a tracks link plays the new generation and a mix link keeps i
   expect(page.link.heard).toEqual(HEARD)
   expect(await status(`/files/l/${tracks}/2/1.mp3`)).toBe(200)
   expect(await status(`/files/l/${tracks}/1/1.mp3`)).toBe(404)
+  expect(page.duration_sec).toBe(302.48)
   expect(await status(`/files/l/${mix}/mix.mp3`)).toBe(200)
+  // The mix keeps the length it was made with, so its clock and wave agree.
+  expect(before).not.toBe(302.48)
+  expect((await read(`/api/l/${mix}`)).duration_sec).toBe(before)
 })
 
 test("a play counts", async () => {
@@ -211,4 +216,37 @@ test("the take page answers as before", async () => {
   expect(page.marks[0].mine).toBe(true)
   expect(page.files.length).toBeGreaterThan(0)
   expect(page.link).toBeUndefined()
+})
+
+test("a writer who never gave a name is Band member, with B in the circle", async () => {
+  const owner = await signInOwner()
+  await named(owner, "Alex")
+  const vik = await member(owner, "vik@example.com")
+  const uid = await takeWithFiles()
+  const first = await markAt(vik.cookie, uid, 10, "The bridge drags here")
+  await commentOn(vik.cookie, first.id, "Agreed")
+  const id = await makeLink(owner, uid, { shows: "marks" })
+  const page = await read(`/api/l/${id}`)
+  expect([page.marks[0].author, page.marks[0].initial]).toEqual(["Band member", "B"])
+  expect([page.marks[0].comments[0].author, page.marks[0].comments[0].initial]).toEqual(["Band member", "B"])
+})
+
+test("a link reaches only the files РЭХА sends a take with, whatever else its list names", async () => {
+  const owner = await signInOwner()
+  const uid = await shownTake({ tracks: [{ position: 1, name: "Bass", icon: "bass", files: ["1.mp3", "1.wav", "1.peaks"] }], notes: [] })
+  await env.FILES.put(`takes/${uid}/1/1.wav`, bytes(100, 3))
+  const all = await makeLink(owner, uid, { download: "all" })
+  expect(await status(`/files/l/${all}/1/1.wav`)).toBe(404)
+})
+
+test("an address that is no link says the link no longer works, and a file a link does not reach is no such file", async () => {
+  const owner = await signInOwner()
+  const uid = await takeWithFiles()
+  const tracks = await makeLink(owner, uid)
+  const mix = await mixLink(owner, uid)
+  const NO_FILE = { status: 404, body: { error: "No such file" } }
+  expect(await answer(call(`/api/l/${"A".repeat(65)}`))).toEqual({ status: 404, body: GONE })
+  expect(await answer(call(`/files/l/${mix}/1/1.mp3`))).toEqual(NO_FILE)
+  expect(await answer(call(`/files/l/${tracks}/mix.mp3`))).toEqual(NO_FILE)
+  expect(await answer(call(`/files/l/${tracks}/one/1.mp3`))).toEqual(NO_FILE)
 })

@@ -17,7 +17,7 @@ description: Your band's own page for its takes, on your phone the same evening.
 
 # A band service of your own
 
-A band service is your band's own page for its takes. РЭХА sends them there from the rehearsal, and only the band gets in.
+A band service is your band's own page for its takes. РЭХА sends them there from the rehearsal, and only the band signs in.
 
 ## The takes are on your phone the same evening
 

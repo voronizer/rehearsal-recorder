@@ -437,6 +437,15 @@ export const useLinkPage = (id: string) =>
 /** One play through the link: its page's first ▶. */
 export const played = (id: string) => data(client.api.l[":id"].played.$post({ param: { id } }))
 
+/** Who wrote the link's marks and comments, by their stand-ins, so their circles read as for the band (“Iv”, “Ir”). */
+function writersOf(page: LinkPage): Person[] {
+  const writers = new Map<string, Person>()
+  for (const w of page.marks.flatMap((m) => [m, ...m.comments]))
+    if (w.member_id && w.author && w.initial && !writers.has(w.member_id))
+      writers.set(w.member_id, { id: w.member_id, name: w.author, initial: w.initial, me: false, owner: false })
+  return [...writers.values()]
+}
+
 export function seedLink(page: LinkPage): void {
   const heard = page.link.heard
   const backing = page.tracks.find((t) => t.kind === "backing")
@@ -444,7 +453,7 @@ export function seedLink(page: LinkPage): void {
     [takeQuery(page.uid).queryKey, page],
     [levelsQuery.queryKey, { levels: heard?.volumes ?? {} }],
     [["labels"], page.labels],
-    [["people"], []],
+    [["people"], writersOf(page)],
     [backingQuery.queryKey, { heard: page.song && backing ? { [String(page.song.id)]: !heard?.muted.includes(backing.name) } : {} }],
   ]
   for (const [key, value] of seeds) {

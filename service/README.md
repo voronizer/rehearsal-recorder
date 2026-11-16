@@ -106,13 +106,14 @@ that comes to about $3 a month. The domain you pay for to whoever sells it.
    code, press **Sign in**, and tell it what the band should call you. If
    no letter comes within a minute, press **Send code** once more.
 9. On **Members and links**, press **Add member** for each of the band's
-   addresses.
-   Cloudflare sends each of them its letter; once they have pressed the
-   button in it, they sign in the same way, with their own address.
+   addresses. Cloudflare sends each of them its letter; once they have
+   pressed the button in it, they sign in the same way, with their own
+   address.
 10. On **Members and links**, under **Keys for РЭХА**, type where the
-    laptop lives, such as “Rehearsal room”, press **Make a key for РЭХА** and copy the
-    key: it is shown only once. In РЭХА, open **Settings › Folders**, press
-    **I have a band service key**, paste it and press **Connect**.
+    laptop lives, such as “Rehearsal room”, press **Make a key for
+    РЭХА** and copy the key: it is shown only once. In РЭХА, open
+    **Settings › Folders**, press **I have a band service key**, paste it
+    and press **Connect**.
 
 From then on, takes go to the band service. **Send takes to** in
 **Settings › Folders** switches between the band service and the cloud
