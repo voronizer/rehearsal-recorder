@@ -280,7 +280,9 @@ the shared one when it is redone.
   (P3). The way out says "Cancel" in every dialog that has an action,
   except the two plain questions below, whose way out says what goes on:
   "Keep sending", "Keep writing". A dialog whose options act at once has
-  only "Close". The action is a verb: "Finish", "Remove", "Delete". Enter
+  only "Close". The link window's rows act at once ("Copy link", "Close
+  link") and "Make link" makes a new link, so its way out is "Close": what
+  it made stays. The action is a verb: "Finish", "Remove", "Delete". Enter
   presses the action, except in a question nothing can undo, where Enter
   presses Cancel and a stray key changes nothing; that question is
   `ConfirmDialog`, in `components/ConfirmDialog.tsx`, in РЭХА and in the

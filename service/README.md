@@ -2,7 +2,8 @@
 
 A private web page at the band's own address, where the band listens to its
 takes track by track, stars them and marks a moment to talk about. РЭХА
-sends the takes there with a key the owner makes on the **Members** page.
+sends the takes there with a key the owner makes on the **Members and
+links** page.
 
 It is one Cloudflare Worker: the pages and the API, with D1 (Cloudflare's
 database) for everything but audio and R2 (Cloudflare's file storage) for
@@ -83,7 +84,7 @@ that comes to about $3 a month. The domain you pay for to whoever sells it.
    for each of these:
    - `OWNER_EMAIL`: your own address. Whoever signs in with it is the
      owner: they add the band's members and make keys for РЭХА on
-     **Members**.
+     **Members and links**.
    - `LETTERS_FROM`: the address the letters come from, on your domain,
      such as band@example.com.
    - `SERVICE_DOMAIN`, if you want the service at an address on your
@@ -104,11 +105,12 @@ that comes to about $3 a month. The domain you pay for to whoever sells it.
    digits from the service's letter in the six boxes, or paste the whole
    code, press **Sign in**, and tell it what the band should call you. If
    no letter comes within a minute, press **Send code** once more.
-9. On **Members**, press **Add member** for each of the band's addresses.
+9. On **Members and links**, press **Add member** for each of the band's
+   addresses.
    Cloudflare sends each of them its letter; once they have pressed the
    button in it, they sign in the same way, with their own address.
-10. On **Members**, under **Keys for РЭХА**, type where the laptop lives,
-    such as “Rehearsal room”, press **Make a key for РЭХА** and copy the
+10. On **Members and links**, under **Keys for РЭХА**, type where the
+    laptop lives, such as “Rehearsal room”, press **Make a key for РЭХА** and copy the
     key: it is shown only once. In РЭХА, open **Settings › Folders**, press
     **I have a band service key**, paste it and press **Connect**.
 

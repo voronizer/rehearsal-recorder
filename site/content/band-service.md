@@ -69,6 +69,8 @@ At home, press **Download** on the take's page, then **Tracks in FLAC**: the tra
 
 If a track recorded MIDI too, the notes an electronic kit or keyboard sends, the player draws those notes without playing them, and **Tracks in FLAC** has them as a .mid file. In the DAW each note moves on its own, so a hit that ran ahead goes back into place without dragging the rest of the kit along.
 
+To let someone outside the band hear a take, press the chain button beside **Download** and then **Make link**. You choose whether they hear only the mix or the tracks too, whether they can download, and how long the link works; they open it without signing in.
+
 ![A take's page on a computer with the Download window open over РЭХА's own player: the mix, the tracks in MP3, and the tracks in FLAC, the full-quality files РЭХА recorded, with the kit's notes as MIDI](downloads)
 
 ## Make the set for a gig
