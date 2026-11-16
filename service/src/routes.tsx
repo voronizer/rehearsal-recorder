@@ -1,6 +1,7 @@
 import { createRootRoute, createRoute, createRouter, Outlet, redirect } from "@tanstack/react-router"
 import { meQuery, queryClient, whenSignedOut } from "./api"
 import { Home } from "./home/Home"
+import { LinkPage } from "./links/LinkPage"
 import { Marks } from "./marks/Marks"
 import { Members } from "./members/Members"
 import { Rehearsal } from "./rehearsals/Rehearsal"
@@ -16,9 +17,9 @@ import { Take } from "./takes/Take"
 import { Trash } from "./trash/Trash"
 
 /*
-  The pages' addresses, written out here. Sign-in, the name and a set's
-  stage view stand alone; the rest are inside the shell: the column of
-  sections, the panel and the player.
+  The pages' addresses, written out here. Sign-in, the name, a set's stage
+  view and a link's page stand alone; the rest are inside the shell: the
+  column of sections, the panel and the player.
 */
 
 /** Where to go back to after signing in: a path on this site, never another one. */
@@ -31,6 +32,8 @@ const root = createRootRoute({ component: Outlet })
 
 const signIn = createRoute({ getParentRoute: () => root, path: "/signin", validateSearch: back, component: SignIn })
 const name = createRoute({ getParentRoute: () => root, path: "/name", validateSearch: back, component: Name })
+/** A link to one take, for someone outside the band (#106): no sign-in. */
+const link = createRoute({ getParentRoute: () => root, path: "/l/$id", component: LinkPage })
 
 /**
  * A member with no name yet is asked for one first, then comes back here.
@@ -91,6 +94,7 @@ export const router = createRouter({
   routeTree: root.addChildren([
     signIn,
     name,
+    link,
     stage,
     shell.addChildren([home, rehearsals, rehearsal, songs, song, sets, set, marks, members, trash, take]),
   ]),
@@ -103,9 +107,10 @@ declare module "@tanstack/react-router" {
 }
 
 // A session that has ended sends the page to sign-in, and back here after.
+// A link's page has no session: it never goes to sign-in.
 whenSignedOut(() => {
   const { pathname, href } = router.state.location
-  if (pathname === "/signin") return
+  if (pathname === "/signin" || pathname.startsWith("/l/")) return
   queryClient.clear()
   void router.navigate({ to: "/signin", search: { redirect: href }, replace: true })
 })

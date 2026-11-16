@@ -7,7 +7,7 @@ import { SpeedButton } from "@/components/SpeedButton"
 import { Slider } from "@/components/ui/slider"
 import type { TakePage } from "../api"
 import { usePlayer, useTime } from "../takes/player/one"
-import { StarButton, TakeLink } from "../takes/parts"
+import { StarButton, TakeLink, TakeName } from "../takes/parts"
 import { usePanel } from "./panel"
 import { clock, day, quoted } from "./words"
 
@@ -162,8 +162,12 @@ export function PlayerBar() {
   )
 }
 
-/** On a phone: a thin line of where the take is, ▶, the take, the time, its speed as a number, **Mark**. */
-export function PhoneBar() {
+/**
+ * On a phone: a thin line of where the take is, ▶, the take, the time, its
+ * speed as a number, **Mark**. `outside`: on a link's page (#106), the
+ * take's name as words that open nothing, and no **Mark**.
+ */
+export function PhoneBar({ outside = false }: { outside?: boolean }) {
   const p = usePlayer()
   const take = p.take
   const at = useTime(p.uid)
@@ -183,7 +187,7 @@ export function PhoneBar() {
         <BarPlay take={take} />
         {take ? (
           <>
-            <TakeLink take={take} className="min-w-0" />
+            {outside ? <TakeName take={take} className="min-w-0" /> : <TakeLink take={take} className="min-w-0" />}
             <span className="tnum flex-1 text-xs text-muted-foreground" data-testid="bar-time">
               {clock(at)} / {clock(take.duration_sec)}
             </span>
@@ -192,7 +196,7 @@ export function PhoneBar() {
           <span className="flex-1 text-xs text-muted-foreground">{NOTHING}</span>
         )}
         <BarSpeed take={take} bare />
-        <MarkHere take={take} at={at} />
+        {!outside && <MarkHere take={take} at={at} />}
       </div>
     </footer>
   )

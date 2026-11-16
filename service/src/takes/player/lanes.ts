@@ -22,7 +22,8 @@ export function notesOf(take: TakePage): NotesFile[] {
     const icon = n.icon ?? sound?.icon
     return {
       name: n.name,
-      file: `/files/${take.uid}/${take.gen}/${n.position}.mid`,
+      // Where the take page says its files are: the band's, or a link's own (#106).
+      file: `${take.files_at}/${n.position}.mid`,
       ...(icon ? { icon } : {}),
       port: "",
       after: sound ? sound.name : last,

@@ -82,6 +82,7 @@ export type BandSet = InferResponseType<typeof client.api.sets.$get, 200>["sets"
 export type Show = "open" | "closed" | "all"
 export type LinkItem = InferResponseType<typeof client.api.links.$get, 200>[number]
 export type NewLink = Parameters<(typeof client.api.takes)[":uid"]["links"]["$post"]>[0]["json"]
+export type LinkPage = InferResponseType<(typeof client.api.l)[":id"]["$get"], 200>
 
 /** Where the page goes when the session is gone; set by routes.tsx. */
 let onSignedOut = () => {}
@@ -413,6 +414,44 @@ export function useCloseLink() {
 /** Closes a link at once, outside any page's state: a mix link left unsent when its window closes. */
 export const closeLinkNow = (link: string) =>
   data(client.api.links[":id"].$delete({ param: { id: link } })).then(() => queryClient.invalidateQueries({ queryKey: linksQuery.queryKey }))
+
+/*
+  The page a link opens (#106), for someone outside the band. It is read
+  once. Its answer is put where the take page's parts read theirs, kept for
+  the page's life, so none of them asks the members' routes: the take; the
+  maker's levels as "yours"; the band's labels; nobody's names; whether
+  Backing is heard, as the maker heard it.
+*/
+export const useLinkPage = (id: string) =>
+  useQuery({
+    queryKey: ["l", id],
+    staleTime: Infinity,
+    refetchOnWindowFocus: false,
+    queryFn: async () => {
+      const page = await data(client.api.l[":id"].$get({ param: { id } }))
+      seedLink(page)
+      return page
+    },
+  })
+
+/** One play through the link: its page's first ▶. */
+export const played = (id: string) => data(client.api.l[":id"].played.$post({ param: { id } }))
+
+export function seedLink(page: LinkPage): void {
+  const heard = page.link.heard
+  const backing = page.tracks.find((t) => t.kind === "backing")
+  const seeds: [readonly unknown[], unknown][] = [
+    [takeQuery(page.uid).queryKey, page],
+    [levelsQuery.queryKey, { levels: heard?.volumes ?? {} }],
+    [["labels"], page.labels],
+    [["people"], []],
+    [backingQuery.queryKey, { heard: page.song && backing ? { [String(page.song.id)]: !heard?.muted.includes(backing.name) } : {} }],
+  ]
+  for (const [key, value] of seeds) {
+    queryClient.setQueryDefaults(key, { staleTime: Infinity, gcTime: Infinity })
+    queryClient.setQueryData(key, value)
+  }
+}
 
 /** A mix link's MP3, sent as it is; the link opens once the service has it. */
 export async function putMix(link: string, mp3: Blob, signal: AbortSignal): Promise<LinkItem> {

@@ -7,6 +7,7 @@ import { notesAlone, notesOf } from "./lanes"
 const take = {
   uid: "t1",
   gen: 2,
+  files_at: "/files/t1/2",
   tracks: [
     { position: 1, name: "Drums", icon: "drums", mp3: "/files/t1/2/1.mp3", peaks: "/files/t1/2/1.peaks" },
     { position: 2, name: "Keys", icon: "keys", mp3: "/files/t1/2/2.mp3", peaks: "/files/t1/2/2.peaks" },
@@ -62,4 +63,9 @@ test("a track of notes alone goes before the Backing track, which stays last, ri
   // A take whose only sound is Backing has its notes at the top.
   const alone = { ...withBacking, tracks: [backing], notes: [{ position: 4, name: "Pads", icon: null }] } as unknown as TakePage
   expect(notesOf(alone)[0].after).toBeNull()
+})
+
+test("a .mid's address is where the take's page says its files are: a link's own, through a link", () => {
+  const through = { ...take, files_at: "/files/l/abc/2" } as unknown as TakePage
+  expect(notesOf(through).map((n) => n.file)).toEqual(["/files/l/abc/2/3.mid", "/files/l/abc/2/4.mid"])
 })

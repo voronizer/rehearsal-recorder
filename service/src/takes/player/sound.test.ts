@@ -456,3 +456,26 @@ test("a page opened on the take that plays starts at its speed", () => {
   const o = { ...one(player({ playing: true })), speedOf: () => 0.8 }
   expect(serviceSound(take, o).speed()).toBe(0.8)
 })
+
+test("a sound that does not keep never calls the band's levels", async () => {
+  const fetched = vi.fn(async () => new Response("{}"))
+  vi.stubGlobal("fetch", fetched)
+  const p = player()
+  const sound = serviceSound(withBacking, one(p), { keeps: false })
+  await sound.setVolume("Bass", 0.5)
+  expect(await sound.keepLevels({ Bass: 0.5 })).toEqual({ ok: true })
+  // The level is heard, and stays the hand's on this page.
+  expect(p.setGain).toHaveBeenCalledWith(0, 0.5)
+  expect(sound.setup().moved).toEqual({ Bass: 0.5 })
+  expect(await sound.keepBackingHeard!(3, true)).toEqual({ ok: true })
+  await sound.backToReha()
+  expect(api.keepLevels).not.toHaveBeenCalled()
+  expect(api.keepBackingHeard).not.toHaveBeenCalled()
+  expect(fetched).not.toHaveBeenCalled()
+})
+
+test("a sound starts at the desk it is given", async () => {
+  const sound = serviceSound(withBacking, one(null), { desk: { muted: [0], solo: [1] } })
+  expect(sound.setup()).toMatchObject({ muted: [0], solo: [1] })
+  expect(await sound.state()).toMatchObject({ muted: ["Bass"], soloed: ["Guitar"] })
+})
