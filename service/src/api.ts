@@ -80,6 +80,8 @@ export type TrashedSong = TrashList["songs"][number]
 export type TrashedSet = TrashList["sets"][number]
 export type BandSet = InferResponseType<typeof client.api.sets.$get, 200>["sets"][number]
 export type Show = "open" | "closed" | "all"
+export type LinkItem = InferResponseType<typeof client.api.links.$get, 200>[number]
+export type NewLink = Parameters<(typeof client.api.takes)[":uid"]["links"]["$post"]>[0]["json"]
 
 /** Where the page goes when the session is gone; set by routes.tsx. */
 let onSignedOut = () => {}
@@ -381,3 +383,41 @@ export const useRemoveMember = () => useChange((m: string) => data(client.api.me
 export const useSignOutMember = () => useChange((m: string) => data(client.api.members[":id"].signout.$post({ param: { id: m } })))
 export const useMakeKey = () => useChange((name: string) => data(client.api.keys.$post({ json: { name } })))
 export const useRemoveKey = () => useChange((k: string) => data(client.api.keys[":id"].$delete({ param: { id: k } })))
+
+/*
+  Links to a take for someone outside the band (#106). Making or closing
+  one reads only the band's links again: nothing else on a page changes.
+*/
+export const linksQuery = queryOptions({ queryKey: ["links"], queryFn: () => data(client.api.links.$get()) })
+export const useLinks = () => useQuery(linksQuery)
+
+/** A link's address, as the member sends it. */
+export const linkAddress = (id: string) => `${location.origin}/l/${id}`
+
+export function useMakeLink(uid: string) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (json: NewLink) => data(client.api.takes[":uid"].links.$post({ param: { uid }, json })),
+    onSuccess: () => qc.invalidateQueries({ queryKey: linksQuery.queryKey }),
+  })
+}
+
+export function useCloseLink() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (link: string) => data(client.api.links[":id"].$delete({ param: { id: link } })),
+    onSuccess: () => qc.invalidateQueries({ queryKey: linksQuery.queryKey }),
+  })
+}
+
+/** Closes a link at once, outside any page's state: a mix link left unsent when its window closes. */
+export const closeLinkNow = (link: string) =>
+  data(client.api.links[":id"].$delete({ param: { id: link } })).then(() => queryClient.invalidateQueries({ queryKey: linksQuery.queryKey }))
+
+/** A mix link's MP3, sent as it is; the link opens once the service has it. */
+export async function putMix(link: string, mp3: Blob, signal: AbortSignal): Promise<LinkItem> {
+  const sent = fetch(`/api/links/${encodeURIComponent(link)}/mix`, { method: "PUT", body: mp3, headers: { "Content-Type": "audio/mpeg" }, signal })
+  const item = (await data(sent as Promise<Answer & { ok: true; json(): Promise<LinkItem> }>)) as LinkItem
+  await queryClient.invalidateQueries({ queryKey: linksQuery.queryKey })
+  return item
+}

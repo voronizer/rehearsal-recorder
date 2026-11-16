@@ -7,8 +7,8 @@ test.describe("as Alex", () => {
 
   test("members show who has not confirmed or signed in yet", async ({ page }) => {
     await page.goto("/")
-    await page.getByRole("navigation", { name: "Sections" }).getByRole("link", { name: "Members" }).click()
-    await expect(page.getByRole("heading", { level: 1, name: "Members" })).toBeVisible()
+    await page.getByRole("navigation", { name: "Sections" }).getByRole("link", { name: "Members and links" }).click()
+    await expect(page.getByRole("heading", { level: 1, name: "Members and links" })).toBeVisible()
     const row = (email: string) => page.locator(`[data-member="${email}"]`)
     await expect(row("nina@example.com")).toContainText("Has not confirmed the address yet")
     await expect(row("ales@example.com")).toContainText("Has not signed in yet")
@@ -76,8 +76,8 @@ test.describe("as Ira", () => {
 
   test("a member sees who is in the band, names only", async ({ page }) => {
     await page.goto("/members")
-    await expect(page.getByRole("heading", { level: 1, name: "Members" })).toBeVisible()
-    const people = page.getByRole("region", { name: "People" })
+    await expect(page.getByRole("heading", { level: 1, name: "Members and links" })).toBeVisible()
+    const people = page.getByRole("region", { name: "People", exact: true })
     await expect(people).toContainText("Alex")
     // 24 px between rows, no lines.
     expect(new Set(await roomBetween(people.getByRole("list")))).toEqual(new Set([24]))

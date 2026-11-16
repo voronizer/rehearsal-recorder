@@ -23,6 +23,9 @@ type Line = { label: string; href: string }
 
 /** What the old group's line said while the FLAC files were on their way. */
 const COMING = "The originals are still coming from РЭХА."
+/** Said where a mix could not be made, here and in the link window. */
+export const MIX_FAILED = "Could not make the mix. Try again."
+export const MIX_SILENT = "Every track is muted, so the mix would be silent."
 
 /**
  * The files of one kind, a line each: a track's sound, then its notes under
@@ -160,7 +163,7 @@ function Choices({
             title="The mix"
             hint="One MP3 of the take as you hear it on this page: your levels, mute and solo."
             trouble={
-              failed ? "Could not make the mix. Try again." : silent ? "Every track is muted, so the mix would be silent." : null
+              failed ? MIX_FAILED : silent ? MIX_SILENT : null
             }
             busy={busy}
             progress={mixing === null ? null : `Mixing… ${mixing}%`}

@@ -9,7 +9,7 @@ export const SECTIONS: [SectionTo, string, LucideIcon][] = [
   ["/songs", "Songs", Music],
   ["/sets", "Sets", ListMusic],
   ["/marks", "Marks", Diamond],
-  ["/members", "Members", Users],
+  ["/members", "Members and links", Users],
   ["/trash", "Trash", Trash2],
 ]
 

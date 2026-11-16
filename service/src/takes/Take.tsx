@@ -17,6 +17,7 @@ import { clock, count, longDay, notKept, takeText } from "../shell/words"
 import { chipsOf } from "./chips"
 import { Desk } from "./Desk"
 import { Download } from "./Download"
+import { LinkButton } from "../links/LinkWindow"
 import { useBackingSong } from "./player/backing"
 import { notesAlone, notesOf } from "./player/lanes"
 import { levelOf } from "./player/levels"
@@ -290,6 +291,11 @@ function TakeView({ take }: { take: TakePage }) {
             </Badge>
           )}
           <span className="flex-1" />
+          {!take.trashed_at && (
+            <span className="text-sm font-normal">
+              <LinkButton take={take} sound={sound} phone={phone} />
+            </span>
+          )}
           <span className="text-sm font-normal">
             <Download take={take} sound={sound} phone={phone} />
           </span>
