@@ -9,6 +9,8 @@ test.describe("as Alex", () => {
     await page.goto("/")
     await page.getByRole("navigation", { name: "Sections" }).getByRole("link", { name: "Members and links" }).click()
     await expect(page.getByRole("heading", { level: 1, name: "Members and links" })).toBeVisible()
+    // Every member sees and closes the links; the rest of the page is the owner's.
+    await expect(page.getByText("Every member sees the links; only you see the addresses, the buttons and the keys.")).toBeVisible()
     const row = (email: string) => page.locator(`[data-member="${email}"]`)
     await expect(row("nina@example.com")).toContainText("Has not confirmed the address yet")
     await expect(row("ales@example.com")).toContainText("Has not signed in yet")

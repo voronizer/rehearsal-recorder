@@ -114,6 +114,9 @@ All on 15 November 2026, UTC.
   **Lasts** at **A month**, in place of **No end** from 22:32:32.
 - 23:44:13, «го» to the plan, sent with Claude doing it alone (one fresh
   review of the branch at the end) recommended over an agent per task.
+- 2026-11-16 08:19:34, card tap «Уточнить про ссылки»: the owner's line
+  under **Members and links** reads “Every member sees the links; only you
+  see the addresses, the buttons and the keys.”
 
 ## What a band member sees
 
@@ -432,8 +435,8 @@ All on 15 November 2026, UTC.
     there would need the Worker to answer `/l/*` first and write the title
     into the page.
 11. The mix link's wave is counted at **Make link** and kept beside its MP3.
-12. The owner's page keeps its line “Only you see the addresses, the buttons
-    and the keys.”; the links group is the same for every member.
+12. The owner's page line: settled by Alex on 2026-11-16 (see his picks).
+    The links group is the same for every member.
 13. The comments in РЭХА's code that name the **Members** page stay as they
     are: they name the page as the code knows it, and no person reads them.
     РЭХА's checks run anyway, because `service/openapi.json` changes.

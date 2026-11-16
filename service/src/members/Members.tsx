@@ -273,7 +273,7 @@ function OwnersPage({ me }: { me: string }) {
   if (members.error) return <Trouble error={members.error} retry={() => void members.refetch()} />
   if (!members.data || !keys.data || !(links.data || links.error)) return null
   return (
-    <Page title="Members and links" sub="Only you see the addresses, the buttons and the keys.">
+    <Page title="Members and links" sub="Every member sees the links; only you see the addresses, the buttons and the keys.">
       <Groups>
         <TheBand />
         <People members={members.data} me={me} />
