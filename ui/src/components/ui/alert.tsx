@@ -17,7 +17,10 @@ import { cn } from "@/lib/utils"
   the icon in the variant's colour and one line of 12 px words, cut with
   "…" where the room ends. It is 24 px tall whatever it says, so a place can
   hold that room before anything comes. A line cut shows whole through the
-  shared WholeTip, which the caller puts round the description.
+  shared WholeTip, which the caller puts round the description. `lines` is
+  `line` with room for two, 32 px tall, for words that tell what to do
+  next and must not be cut, where a phone has no tip to show them whole
+  (the band service's link window).
 */
 const alertVariants = cva("relative w-full [&>svg]:text-current", {
   variants: {
@@ -30,6 +33,8 @@ const alertVariants = cva("relative w-full [&>svg]:text-current", {
     size: {
       box: "grid grid-cols-[0_1fr] items-start gap-y-0.5 rounded-lg border px-4 py-3 text-sm has-[>svg]:grid-cols-[calc(var(--spacing)*4)_1fr] has-[>svg]:gap-x-3 [&>svg]:size-4 [&>svg]:translate-y-0.5",
       line: "flex h-6 items-center gap-x-2 bg-transparent text-xs [&>svg]:size-4 [&>svg]:shrink-0 *:data-[slot=alert-description]:block *:data-[slot=alert-description]:justify-items-normal *:data-[slot=alert-description]:min-w-0 *:data-[slot=alert-description]:truncate *:data-[slot=alert-description]:text-xs *:data-[slot=alert-description]:text-inherit",
+      lines:
+        "flex h-8 items-start gap-x-2 bg-transparent text-xs [&>svg]:size-4 [&>svg]:shrink-0 *:data-[slot=alert-description]:min-w-0 *:data-[slot=alert-description]:line-clamp-2 *:data-[slot=alert-description]:text-xs *:data-[slot=alert-description]:text-inherit",
     },
   },
   defaultVariants: {

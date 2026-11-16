@@ -11,6 +11,7 @@ import {
   useBand,
   useBandPicture,
   useKeys,
+  useLinks,
   useMakeKey,
   useMe,
   useMembers,
@@ -24,6 +25,7 @@ import {
 } from "../api"
 import { Avatar, Group, Groups, Logo, Page, Rows, Tile, Trouble, useFlash, useTitle } from "../shell/parts"
 import { count } from "../shell/words"
+import { BandLinks } from "../links/BandLinks"
 
 const letter = (s: string) => (Array.from(s.trim())[0] ?? "?").toUpperCase()
 
@@ -266,13 +268,16 @@ function Keys({ keys }: { keys: Key[] }) {
 function OwnersPage({ me }: { me: string }) {
   const members = useMembers()
   const keys = useKeys()
+  // Asked for with the others: the links come in above Add a member, which would move down after.
+  const links = useLinks()
   if (members.error) return <Trouble error={members.error} retry={() => void members.refetch()} />
-  if (!members.data || !keys.data) return null
+  if (!members.data || !keys.data || !(links.data || links.error)) return null
   return (
-    <Page title="Members" sub="Only you see the addresses, the buttons and the keys.">
+    <Page title="Members and links" sub="Every member sees the links; only you see the addresses, the buttons and the keys.">
       <Groups>
         <TheBand />
         <People members={members.data} me={me} />
+        <BandLinks />
         <AddMember />
         <Keys keys={keys.data} />
       </Groups>
@@ -280,33 +285,36 @@ function OwnersPage({ me }: { me: string }) {
   )
 }
 
-/** A member's page: who is in the band, names only. */
+/** A member's page: who is in the band, names only, and the band's links. */
 function MembersPage() {
   const people = usePeople()
   if (people.error) return <Trouble error={people.error} retry={() => void people.refetch()} />
   if (!people.data) return null
   return (
-    <Page title="Members" sub="Who is in the band.">
-      <Group title="People" hint={String(people.data.length)}>
-        <Rows>
-          {people.data.map((p) => (
-            <div key={p.id} className="flex items-center gap-3">
-              <Avatar letter={p.initial} />
-              <span className="min-w-0 flex-1 truncate">
-                {p.name}
-                {p.me && <span className="text-muted-foreground"> · you</span>}
-              </span>
-            </div>
-          ))}
-        </Rows>
-      </Group>
+    <Page title="Members and links" sub="Who is in the band, and the links for people outside it.">
+      <Groups>
+        <Group title="People" hint={String(people.data.length)}>
+          <Rows>
+            {people.data.map((p) => (
+              <div key={p.id} className="flex items-center gap-3">
+                <Avatar letter={p.initial} />
+                <span className="min-w-0 flex-1 truncate">
+                  {p.name}
+                  {p.me && <span className="text-muted-foreground"> · you</span>}
+                </span>
+              </div>
+            ))}
+          </Rows>
+        </Group>
+        <BandLinks />
+      </Groups>
     </Page>
   )
 }
 
-/** **Members**: everyone sees who is in the band; the owner also runs it from here. */
+/** **Members and links**: everyone sees who is in the band and its links; the owner also runs it from here. */
 export function Members() {
-  useTitle("Members")
+  useTitle("Members and links")
   const me = useMe().data
   if (!me) return null
   return me.owner ? <OwnersPage me={me.id} /> : <MembersPage />

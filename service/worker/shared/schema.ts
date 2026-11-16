@@ -376,6 +376,52 @@ export const take = sqliteTable(
   (table) => [index("take_rehearsal_idx").on(table.rehearsalUid), index("take_song_idx").on(table.songId)]
 )
 
+/** What a link to a take shows the person outside the band. */
+export type LinkShows = "mix" | "tracks" | "marks"
+/** What they can download: nothing, the mix, or the mix and the tracks. */
+export type LinkDownload = "none" | "mix" | "all"
+/** The levels, M and S the member heard when they made the link, by track name. */
+export type LinkHeard = { volumes: Record<string, number>; muted: string[]; soloed: string[] }
+
+/**
+ * A link to one take for someone outside the band (#106): whoever has its
+ * address opens the take without signing in, as much of it as `shows` and
+ * `download` say, until `until` (null: no end). Its id is the address, kept
+ * whole so a member can copy it again. A link that shows only the mix plays
+ * one MP3 the maker's page made, kept in R2 under `links/<id>/`; it is
+ * `ready` once that is up. Any member closes any link by deleting its row.
+ */
+export const shareLink = sqliteTable(
+  "share_link",
+  {
+    id: text("id").primaryKey(),
+    takeUid: text("take_uid")
+      .notNull()
+      .references(() => take.uid, { onDelete: "cascade" }),
+    madeBy: text("made_by")
+      .notNull()
+      .references(() => user.id),
+    madeAt: text("made_at").notNull(),
+    /** Who it is for, which only the band sees; may be empty. */
+    forWhom: text("for_whom").notNull().default(""),
+    shows: text("shows").$type<LinkShows>().notNull(),
+    download: text("download").$type<LinkDownload>().notNull(),
+    until: text("until"),
+    /** The maker's levels, M and S; null for a link that shows only the mix. */
+    heard: text("heard", { mode: "json" }).$type<LinkHeard>(),
+    /** The generation the mix was made from; null for a link with tracks. */
+    mixGen: integer("mix_gen"),
+    /** The mix's length, from the take as it was then: a crop later does not change it. */
+    mixSec: real("mix_sec"),
+    ready: integer("ready", { mode: "boolean" }).notNull(),
+    /** A mix on its way from the member's page: a second one is refused until it lands. */
+    sending: integer("sending", { mode: "boolean" }).notNull().default(false),
+    plays: integer("plays").notNull().default(0),
+    lastPlayedAt: text("last_played_at"),
+  },
+  (table) => [index("share_link_take_idx").on(table.takeUid)]
+)
+
 /**
  * Marks and the comments under them. A row with no parent is a mark: a
  * moment of a take with a label and a note, from РЭХА or set here. A row

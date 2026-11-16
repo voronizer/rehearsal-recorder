@@ -13,7 +13,7 @@ import {
 } from "../../api"
 import { firstDesk, keepHeard } from "./backing"
 import { levelOf } from "./levels"
-import { withMute, withSolo } from "./desk"
+import { withMute, withSolo, type Desk } from "./desk"
 import { keepMaster } from "./master"
 import { readNotes } from "./notes"
 import { useOne, type One, type Setup } from "./one"
@@ -43,13 +43,21 @@ export type ServiceSound = PlayerSound & {
 
 const yoursNow = () => queryClient.getQueryData(levelsQuery.queryKey)?.levels
 
+/** How a page's sound starts and what it keeps. */
+export type SoundOptions = {
+  /** false on a link's page (#106): levels, Backing's M and **РЭХА's levels** change that page only and send nothing. Master stays the device's. */
+  keeps?: boolean
+  /** M and S to start at, in place of the take's first desk. */
+  desk?: Desk
+}
+
 /**
  * РЭХА's player screen on the service's one player (one.tsx). While the
  * take is the one in the player, every call goes to its Player; while
  * another take plays, the page keeps its own playhead, repeat, M, S and
  * speed, and the take starts with them once its ▶ is pressed.
  */
-export function serviceSound(take: TakePage, one: One): ServiceSound {
+export function serviceSound(take: TakePage, one: One, { keeps = true, desk }: SoundOptions = {}): ServiceSound {
   const { uid, gen } = take
   const names = take.tracks.map((t) => t.name)
   /** The soloed tracks' names, in the take's order. */
@@ -64,7 +72,7 @@ export function serviceSound(take: TakePage, one: One): ServiceSound {
   let position = 0
   let loop: { a: number; b: number } | null = null
   // Backing muted, as every take starts until its page has opened it as you hear it (backing.ts).
-  let { muted, solo } = firstDesk(take)
+  let { muted, solo } = desk ?? firstDesk(take)
   /** Levels turned and not kept yet. */
   let moved: Record<string, number> = {}
   /** Levels sent to be kept, not answered yet: yours once they are; null forgets yours. */
@@ -300,7 +308,8 @@ export function serviceSound(take: TakePage, one: One): ServiceSound {
         else if (yours?.[n] !== undefined || n in sent) turned[n] = null
         else delete moved[n]
       }
-      if (!Object.keys(turned).length) return { ok: true }
+      // On a link's page the hand's levels stay the page's, heard and never sent.
+      if (!Object.keys(turned).length || !keeps) return { ok: true }
       Object.assign(sent, turned)
       try {
         await keepLevels(turned)
@@ -318,6 +327,7 @@ export function serviceSound(take: TakePage, one: One): ServiceSound {
 
     // M on the Backing track, kept for you and that song: every take of it opens so.
     async keepBackingHeard(songId, heard) {
+      if (!keeps) return { ok: true }
       try {
         await keepHeard(songId, heard)
         return { ok: true }
@@ -329,6 +339,7 @@ export function serviceSound(take: TakePage, one: One): ServiceSound {
     async backToReha() {
       moved = {}
       sent = {}
+      if (!keeps) return
       await keepLevels(Object.fromEntries(names.map((n) => [n, null])))
     },
 
@@ -357,11 +368,11 @@ export function serviceSound(take: TakePage, one: One): ServiceSound {
 }
 
 /** The take page's sound: one for each take and generation, so РЭХА's player opens it once. */
-export function useServiceSound(take: TakePage): ServiceSound {
+export function useServiceSound(take: TakePage, options?: SoundOptions): ServiceSound {
   const one = useOne()
-  // A new generation is new files; the rest of the take is read when it is made.
+  // A new generation is new files; the rest of the take, and how it starts, is read when it is made.
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  const sound = useMemo(() => serviceSound(take, one), [take.uid, take.gen, one])
+  const sound = useMemo(() => serviceSound(take, one, options), [take.uid, take.gen, one])
   useEffect(() => one.ready(take.uid, sound.setup), [one, take.uid, sound])
   useEffect(() => one.onSpeed((u, rate) => u === take.uid && sound.keepSpeed(rate)), [one, take.uid, sound])
   return sound

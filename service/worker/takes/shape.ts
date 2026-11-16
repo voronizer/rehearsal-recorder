@@ -24,7 +24,12 @@ export async function makeShape(files: R2Bucket, t: Tracked): Promise<number[]> 
         return Array.isArray(peaks) ? peaks.map((v) => (typeof v === "number" && v > 0 ? v : 0)) : null
       })
   )
-  const tracks = all.filter((p): p is number[] => p !== null && p.length > 0)
+  return shapeOf(all.filter((p): p is number[] => p !== null && p.length > 0))
+}
+
+/** The wave of `tracks`' peaks joined by the loudest at each moment, in 120
+ *  values scaled to their peak; none for no peaks. */
+export function shapeOf(tracks: number[][]): number[] {
   if (!tracks.length) return []
   const out: number[] = []
   for (let i = 0; i < SHAPE; i++) {

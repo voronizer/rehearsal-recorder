@@ -865,8 +865,8 @@ is a setting in РЭХА only.
 
 A key is one line of text: the service's address and a secret, such as
 `band.reha.stream:9fT2kQ…`. It is not a link to open in a browser. Whoever
-runs the service makes it on the service's **Members** page and gives it to
-you.
+runs the service makes it on the service's **Members and links** page and
+gives it to you.
 
 In **Settings › Folders**, press **I have a band service key** at the bottom
 of the **Cloud folder** group. A few words say what a band service is, and
@@ -889,8 +889,8 @@ and its own **Send saved takes automatically**. **Disconnect** removes the
 key and puts the group back as it was. Whatever is in the band service stays
 there, and РЭХА remembers which takes those are. Connect again with a key
 for the same service, such as a new one made after the old one was removed
-on **Members**: takes that were on their way carry on, and nothing goes up
-twice. A key for another service starts from nothing.
+on **Members and links**: takes that were on their way carry on, and
+nothing goes up twice. A key for another service starts from nothing.
 
 ### What goes up
 

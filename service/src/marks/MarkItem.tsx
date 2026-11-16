@@ -160,8 +160,8 @@ function Mine({ what, edit, remove }: { what: string; edit: () => void; remove: 
   )
 }
 
-/** One comment under a mark; yours you can change and delete, after a question. */
-function CommentLine({ comment }: { comment: MarkComment }) {
+/** One comment under a mark; yours you can change and delete, after a question. `readOnly`: to read only, on a link's page. */
+function CommentLine({ comment, readOnly }: { comment: MarkComment; readOnly?: boolean }) {
   const change = useChangeComment()
   const remove = useDeleteComment()
   const [edit, setEdit] = useState<string | null>(null)
@@ -172,7 +172,7 @@ function CommentLine({ comment }: { comment: MarkComment }) {
       initial={letters(comment.member_id, comment.author, comment.initial)}
       name={comment.author}
       when={day(localDay(comment.created_at))}
-      menu={comment.mine && edit === null && <Mine what="your comment" edit={() => setEdit(comment.text)} remove={() => setDeleting(true)} />}
+      menu={!readOnly && comment.mine && edit === null && <Mine what="your comment" edit={() => setEdit(comment.text)} remove={() => setDeleting(true)} />}
     >
       <KeepWriting dirty={edit !== null && edit.trim() !== comment.text} />
       {edit === null ? (
@@ -320,8 +320,10 @@ function MarkBrief({ mark, take }: { mark: Mark; take?: "full" | "short" }) {
  * mark's words and each comment as messages, who in a circle as on the
  * stars; then the box for your comment, always open. `compact` is for Home:
  * one line and the last comment, which open the mark with its talk.
+ * `readOnly` is for a link's page (#106): the mark and its talk to read,
+ * with no **Done**, no ⋯ and no box.
  */
-export function MarkItem({ mark, take, compact }: { mark: Mark; take?: "full" | "short"; compact?: boolean }) {
+export function MarkItem({ mark, take, compact, readOnly }: { mark: Mark; take?: "full" | "short"; compact?: boolean; readOnly?: boolean }) {
   const p = usePlayer()
   const label = useLabelOf()(mark.label_id)
   const close = useChangeMark()
@@ -361,12 +363,14 @@ export function MarkItem({ mark, take, compact }: { mark: Mark; take?: "full" | 
           <span className="tnum">{clock(mark.at)}</span>
         </Button>
         {take && <OnTake take={mark.take} short={take === "short"} />}
-        <span className="ml-auto flex items-center gap-1">
-          <Button variant="outline" size="row" disabled={close.isPending} onClick={() => close.mutate({ id: mark.id, closed: !mark.closed })}>
-            {mark.closed ? "Not done yet" : <><Check />Done</>}
-          </Button>
-          {mark.mine && <Mine what={`the mark at ${clock(mark.at)}`} edit={() => setEditing(true)} remove={() => setDeleting(true)} />}
-        </span>
+        {!readOnly && (
+          <span className="ml-auto flex items-center gap-1">
+            <Button variant="outline" size="row" disabled={close.isPending} onClick={() => close.mutate({ id: mark.id, closed: !mark.closed })}>
+              {mark.closed ? "Not done yet" : <><Check />Done</>}
+            </Button>
+            {mark.mine && <Mine what={`the mark at ${clock(mark.at)}`} edit={() => setEditing(true)} remove={() => setDeleting(true)} />}
+          </span>
+        )}
       </div>
       <div className={cn("flex flex-col gap-3", mark.closed && "opacity-60")}>
         <Message initial={who.member ? letters(who.member, who.name, who.initial) : who.initial} name={who.name} when={day(localDay(mark.created_at))}>
@@ -374,10 +378,10 @@ export function MarkItem({ mark, take, compact }: { mark: Mark; take?: "full" | 
           {mark.cut_off && <p className="text-xs text-muted-foreground">In the part a crop cut off.</p>}
         </Message>
         {mark.comments.map((c) => (
-          <CommentLine key={c.id} comment={c} />
+          <CommentLine key={c.id} comment={c} readOnly={readOnly} />
         ))}
       </div>
-      <CommentBox mark={mark} />
+      {!readOnly && <CommentBox mark={mark} />}
       <ConfirmDialog
         open={deleting}
         onOpenChange={setDeleting}

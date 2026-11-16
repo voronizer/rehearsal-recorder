@@ -14,7 +14,7 @@ const box = async (l: Locator) => {
 test("the frame has its sections, and a panel closes with its X, Esc and another section", async ({ page }) => {
   await page.goto("/")
   const sections = page.getByRole("navigation", { name: "Sections" })
-  await expect(sections.getByRole("link")).toHaveText(["Home", "Rehearsals", "Songs", "Sets", /^Marks\s*\d+$/, "Members", "Trash"])
+  await expect(sections.getByRole("link")).toHaveText(["Home", "Rehearsals", "Songs", "Sets", /^Marks\s*\d+$/, "Members and links", "Trash"])
   await expect(page.getByLabel("Player")).toBeVisible()
 
   // A mark's panel, from Latest marks.

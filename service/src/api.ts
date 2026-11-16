@@ -80,6 +80,9 @@ export type TrashedSong = TrashList["songs"][number]
 export type TrashedSet = TrashList["sets"][number]
 export type BandSet = InferResponseType<typeof client.api.sets.$get, 200>["sets"][number]
 export type Show = "open" | "closed" | "all"
+export type LinkItem = InferResponseType<typeof client.api.links.$get, 200>[number]
+export type NewLink = Parameters<(typeof client.api.takes)[":uid"]["links"]["$post"]>[0]["json"]
+export type LinkPage = InferResponseType<(typeof client.api.l)[":id"]["$get"], 200>
 
 /** Where the page goes when the session is gone; set by routes.tsx. */
 let onSignedOut = () => {}
@@ -381,3 +384,88 @@ export const useRemoveMember = () => useChange((m: string) => data(client.api.me
 export const useSignOutMember = () => useChange((m: string) => data(client.api.members[":id"].signout.$post({ param: { id: m } })))
 export const useMakeKey = () => useChange((name: string) => data(client.api.keys.$post({ json: { name } })))
 export const useRemoveKey = () => useChange((k: string) => data(client.api.keys[":id"].$delete({ param: { id: k } })))
+
+/*
+  Links to a take for someone outside the band (#106). Making or closing
+  one reads only the band's links again: nothing else on a page changes.
+*/
+export const linksQuery = queryOptions({ queryKey: ["links"], queryFn: () => data(client.api.links.$get()) })
+export const useLinks = () => useQuery(linksQuery)
+
+/** A link's address, as the member sends it. */
+export const linkAddress = (id: string) => `${location.origin}/l/${id}`
+
+export function useMakeLink(uid: string) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (json: NewLink) => data(client.api.takes[":uid"].links.$post({ param: { uid }, json })),
+    onSuccess: () => qc.invalidateQueries({ queryKey: linksQuery.queryKey }),
+  })
+}
+
+export function useCloseLink() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (link: string) => data(client.api.links[":id"].$delete({ param: { id: link } })),
+    onSuccess: () => qc.invalidateQueries({ queryKey: linksQuery.queryKey }),
+  })
+}
+
+/** Closes a link at once, outside any page's state: a mix link left unsent when its window closes. */
+export const closeLinkNow = (link: string) =>
+  data(client.api.links[":id"].$delete({ param: { id: link } })).then(() => queryClient.invalidateQueries({ queryKey: linksQuery.queryKey }))
+
+/*
+  The page a link opens (#106), for someone outside the band. It is read
+  once. Its answer is put where the take page's parts read theirs, kept for
+  the page's life, so none of them asks the members' routes: the take; the
+  maker's levels as "yours"; the band's labels; nobody's names; whether
+  Backing is heard, as the maker heard it.
+*/
+export const useLinkPage = (id: string) =>
+  useQuery({
+    queryKey: ["l", id],
+    staleTime: Infinity,
+    refetchOnWindowFocus: false,
+    queryFn: async () => {
+      const page = await data(client.api.l[":id"].$get({ param: { id } }))
+      seedLink(page)
+      return page
+    },
+  })
+
+/** One play through the link: its page's first ▶. */
+export const played = (id: string) => data(client.api.l[":id"].played.$post({ param: { id } }))
+
+/** Who wrote the link's marks and comments, by their stand-ins, so their circles read as for the band (“Iv”, “Ir”). */
+function writersOf(page: LinkPage): Person[] {
+  const writers = new Map<string, Person>()
+  for (const w of page.marks.flatMap((m) => [m, ...m.comments]))
+    if (w.member_id && w.author && w.initial && !writers.has(w.member_id))
+      writers.set(w.member_id, { id: w.member_id, name: w.author, initial: w.initial, me: false, owner: false })
+  return [...writers.values()]
+}
+
+export function seedLink(page: LinkPage): void {
+  const heard = page.link.heard
+  const backing = page.tracks.find((t) => t.kind === "backing")
+  const seeds: [readonly unknown[], unknown][] = [
+    [takeQuery(page.uid).queryKey, page],
+    [levelsQuery.queryKey, { levels: heard?.volumes ?? {} }],
+    [["labels"], page.labels],
+    [["people"], writersOf(page)],
+    [backingQuery.queryKey, { heard: page.song && backing ? { [String(page.song.id)]: !heard?.muted.includes(backing.name) } : {} }],
+  ]
+  for (const [key, value] of seeds) {
+    queryClient.setQueryDefaults(key, { staleTime: Infinity, gcTime: Infinity })
+    queryClient.setQueryData(key, value)
+  }
+}
+
+/** A mix link's MP3, sent as it is; the link opens once the service has it. */
+export async function putMix(link: string, mp3: Blob, signal: AbortSignal): Promise<LinkItem> {
+  const sent = fetch(`/api/links/${encodeURIComponent(link)}/mix`, { method: "PUT", body: mp3, headers: { "Content-Type": "audio/mpeg" }, signal })
+  const item = (await data(sent as Promise<Answer & { ok: true; json(): Promise<LinkItem> }>)) as LinkItem
+  await queryClient.invalidateQueries({ queryKey: linksQuery.queryKey })
+  return item
+}

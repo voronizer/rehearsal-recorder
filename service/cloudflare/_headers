@@ -16,3 +16,7 @@
   X-Content-Type-Options: nosniff
   Referrer-Policy: same-origin
 
+
+# A link's page, for someone outside the band (#106): search engines leave it out.
+/l/*
+  X-Robots-Tag: noindex

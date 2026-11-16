@@ -125,11 +125,17 @@ const stopped = () => new DOMException("The mix was stopped", "AbortError")
 /**
  * The take mixed as `heard` says, as an MP3 Blob. `progress` hears how far
  * along it is, 0 to 1: fetching and decoding the tracks, then encoding. `signal` stops it.
+ * `onMixed` gets the mixed sound, a Float32Array a side, before it is encoded.
  */
 export async function makeMix(
   take: Pick<TakePage, "tracks" | "gain">,
   heard: Heard,
-  { progress, signal, ways = browser }: { progress?: (done: number) => void; signal?: AbortSignal; ways?: MixWays } = {}
+  {
+    progress,
+    signal,
+    onMixed,
+    ways = browser,
+  }: { progress?: (done: number) => void; signal?: AbortSignal; onMixed?: (mix: Float32Array[]) => void; ways?: MixWays } = {}
 ): Promise<Blob> {
   const gains = gainsOf(
     take.tracks.map((t) => t.name),
@@ -150,6 +156,7 @@ export async function makeMix(
     progress?.((DECODING * (n + 1)) / tracks.length)
   }
   turnDown(mix)
+  onMixed?.(mix)
 
   const encoder = await ways.encoder()
   encoder.configure({ sampleRate, channels: 2, vbrQuality: 0 })

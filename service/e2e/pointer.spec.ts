@@ -24,7 +24,7 @@ test("the pointer is the hand over everything that presses, on every page", asyn
     ["A set", `/sets/${b.sets["Club gig"]}`],
     ["Marks", "/marks"],
     ["Marks, the labels' panel", "/marks?panel=labels"],
-    ["Members", "/members"],
+    ["Members and links", "/members"],
   ]
   const wrong: string[] = []
   for (const [label, path, act] of pages) {

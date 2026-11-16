@@ -126,3 +126,26 @@ test("with nothing heard there is no mix, and a stop stops it", async () => {
   const going = makeMix(take, heard(), { ways: ways(), signal: stop.signal, progress: () => stop.abort() })
   await expect(going).rejects.toThrow("The mix was stopped")
 })
+
+test("makeMix hands over the mixed sound before it encodes", async () => {
+  serve()
+  const handed: Float32Array[][] = []
+  let encodedFirst = false
+  const spy: MixWays = {
+    ...ways(),
+    encoder: async () => ({
+      configure() {},
+      encode() {
+        encodedFirst ||= handed.length === 0
+        return new Uint8Array()
+      },
+      finalize: () => new Uint8Array(),
+    }),
+  }
+  await makeMix({ ...take, gain: 4 }, heard({ soloed: ["Drums"] }), { ways: spy, onMixed: (mix) => handed.push(mix) })
+  expect(handed).toHaveLength(1)
+  expect(encodedFirst).toBe(false)
+  // One mono track, turned down to just under full scale.
+  expect(handed[0]).toHaveLength(1)
+  expect(Math.max(...handed[0][0].map(Math.abs))).toBeCloseTo(0.97, 3)
+})

@@ -7,8 +7,10 @@ test.describe("as Alex", () => {
 
   test("members show who has not confirmed or signed in yet", async ({ page }) => {
     await page.goto("/")
-    await page.getByRole("navigation", { name: "Sections" }).getByRole("link", { name: "Members" }).click()
-    await expect(page.getByRole("heading", { level: 1, name: "Members" })).toBeVisible()
+    await page.getByRole("navigation", { name: "Sections" }).getByRole("link", { name: "Members and links" }).click()
+    await expect(page.getByRole("heading", { level: 1, name: "Members and links" })).toBeVisible()
+    // Every member sees and closes the links; the rest of the page is the owner's.
+    await expect(page.getByText("Every member sees the links; only you see the addresses, the buttons and the keys.")).toBeVisible()
     const row = (email: string) => page.locator(`[data-member="${email}"]`)
     await expect(row("nina@example.com")).toContainText("Has not confirmed the address yet")
     await expect(row("ales@example.com")).toContainText("Has not signed in yet")
@@ -48,6 +50,25 @@ test.describe("as Alex", () => {
     await expect(keys.getByRole("listitem").filter({ hasText: "Rehearsal room" }).getByRole("button", { name: "Remove" })).toBeVisible()
   })
 
+  test("the owner's page waits for the links, so what is below them does not move", async ({ page }) => {
+    let release = () => {}
+    const held = new Promise<void>((go) => (release = go))
+    await page.route("**/api/links", async (route) => {
+      await held
+      await route.continue()
+    })
+    const members = page.waitForResponse("**/api/members")
+    const keys = page.waitForResponse("**/api/keys")
+    await page.goto("/members")
+    await Promise.all([members, keys])
+    await page.waitForTimeout(300)
+    await expect(page.getByRole("region", { name: "Add a member" })).toHaveCount(0)
+    release()
+    const links = page.getByRole("region", { name: "Links for people outside the band" })
+    await expect(page.getByRole("region", { name: "Add a member" })).toBeVisible()
+    await expect(links.locator("[data-link-row]").first().or(links.getByText("No links yet."))).toBeVisible()
+  })
+
   test("a key for REHA is shown once", async ({ page }) => {
     await page.goto("/members")
     const keys = page.getByRole("region", { name: "Keys for РЭХА" })
@@ -76,8 +97,8 @@ test.describe("as Ira", () => {
 
   test("a member sees who is in the band, names only", async ({ page }) => {
     await page.goto("/members")
-    await expect(page.getByRole("heading", { level: 1, name: "Members" })).toBeVisible()
-    const people = page.getByRole("region", { name: "People" })
+    await expect(page.getByRole("heading", { level: 1, name: "Members and links" })).toBeVisible()
+    const people = page.getByRole("region", { name: "People", exact: true })
     await expect(people).toContainText("Alex")
     // 24 px between rows, no lines.
     expect(new Set(await roomBetween(people.getByRole("list")))).toEqual(new Set([24]))

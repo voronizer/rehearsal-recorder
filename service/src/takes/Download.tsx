@@ -23,14 +23,18 @@ type Line = { label: string; href: string }
 
 /** What the old group's line said while the FLAC files were on their way. */
 const COMING = "The originals are still coming from РЭХА."
+/** Said where a mix could not be made, here and in the link window. */
+export const MIX_FAILED = "Could not make the mix. Try again."
+export const MIX_SILENT = "Every track is muted, so the mix would be silent."
 
 /**
  * The files of one kind, a line each: a track's sound, then its notes under
  * it, then the notes of a track that recorded notes alone. The .mid files
  * are in both lists: the same small file, and there before the FLAC files.
  */
-export function linesOf(take: Pick<TakePage, "uid" | "gen" | "files">, kind: Kind): Line[] {
-  const href = (position: number, ext: string) => `/files/${take.uid}/${take.gen}/${position}.${ext}?download=1`
+export function linesOf(take: Pick<TakePage, "files_at" | "files">, kind: Kind): Line[] {
+  // Where the take page says its files are: the band's, or a link's own (#106).
+  const href = (position: number, ext: string) => `${take.files_at}/${position}.${ext}?download=1`
   const sound = take.files.filter((f) => f[kind])
   const notes = take.files.filter((f) => f.mid)
   const notesLine = (f: (typeof notes)[number]) => ({ label: `${f.name}, notes (MIDI)`, href: href(f.position, "mid") })
@@ -57,7 +61,14 @@ function save(href: string, name = "") {
 /** How far apart the ticked files start: a browser may drop downloads asked for all at once. */
 const APART_MS = 300
 
-export function Download({ take, sound, phone }: { take: TakePage; sound: ServiceSound; phone: boolean }) {
+/**
+ * What a link's page lets download (#106). `mix`: a link that shows only
+ * the mix gives the MP3 the band made for it, at that address. `tracks`
+ * false: no tracks, only the mix.
+ */
+export type LinkDownload = { mix: string | null; tracks: boolean }
+
+export function Download({ take, sound, phone, link }: { take: TakePage; sound: ServiceSound; phone: boolean; link?: LinkDownload }) {
   const [open, setOpen] = useState(false)
   const [list, setList] = useState<Kind | null>(null)
   // Opened again, it starts from the three choices; closing leaves its words in place while it fades (C3).
@@ -88,7 +99,7 @@ export function Download({ take, sound, phone }: { take: TakePage; sound: Servic
           {list ? (
             <TrackList key={list} take={take} kind={list} onBack={() => setList(null)} onDone={() => setOpen(false)} />
           ) : (
-            <Choices take={take} sound={sound} open={open} onList={setList} onDone={() => setOpen(false)} />
+            <Choices take={take} sound={sound} link={link} open={open} onList={setList} onDone={() => setOpen(false)} />
           )}
         </DialogContent>
       </Dialog>
@@ -100,12 +111,14 @@ export function Download({ take, sound, phone }: { take: TakePage; sound: Servic
 function Choices({
   take,
   sound,
+  link,
   open,
   onList,
   onDone,
 }: {
   take: TakePage
   sound: ServiceSound
+  link?: LinkDownload
   open: boolean
   onList: (kind: Kind) => void
   onDone: () => void
@@ -121,6 +134,10 @@ function Choices({
   useEffect(() => () => stop.current?.abort(), [])
 
   const mix = async () => {
+    if (link?.mix) {
+      save(`${link.mix}?download=1`)
+      return onDone()
+    }
     const state = await sound.state()
     const heard: Heard = { volumes: state.volumes ?? {}, muted: state.muted ?? [], soloed: state.soloed ?? [] }
     const names = take.tracks.map((t) => t.name)
@@ -158,30 +175,32 @@ function Choices({
           <ShareOption
             icon={<Music4 />}
             title="The mix"
-            hint="One MP3 of the take as you hear it on this page: your levels, mute and solo."
-            trouble={
-              failed ? "Could not make the mix. Try again." : silent ? "Every track is muted, so the mix would be silent." : null
-            }
+            hint={link?.mix ? "The MP3 the band made for this link." : "One MP3 of the take as you hear it on this page: your levels, mute and solo."}
+            trouble={failed ? MIX_FAILED : silent ? MIX_SILENT : null}
             busy={busy}
             progress={mixing === null ? null : `Mixing… ${mixing}%`}
             disabled={busy}
             onClick={() => void mix()}
           />
         )}
-        <ShareOption
-          icon={<Layers />}
-          title="Tracks in MP3"
-          hint="Every track on its own, small files for a phone or a quick look."
-          disabled={busy || !linesOf(take, "mp3").length}
-          onClick={() => onList("mp3")}
-        />
-        <ShareOption
-          icon={<Layers />}
-          title="Tracks in FLAC"
-          hint={take.flac_coming ? COMING : "Every track as РЭХА recorded it, and the notes as .mid, to open in a DAW."}
-          disabled={busy || take.flac_coming || !linesOf(take, "flac").length}
-          onClick={() => onList("flac")}
-        />
+        {link?.tracks !== false && (
+          <>
+            <ShareOption
+              icon={<Layers />}
+              title="Tracks in MP3"
+              hint="Every track on its own, small files for a phone or a quick look."
+              disabled={busy || !linesOf(take, "mp3").length}
+              onClick={() => onList("mp3")}
+            />
+            <ShareOption
+              icon={<Layers />}
+              title="Tracks in FLAC"
+              hint={take.flac_coming ? COMING : "Every track as РЭХА recorded it, and the notes as .mid, to open in a DAW."}
+              disabled={busy || take.flac_coming || !linesOf(take, "flac").length}
+              onClick={() => onList("flac")}
+            />
+          </>
+        )}
       </div>
       <DialogButtons cancel="Close" />
     </>

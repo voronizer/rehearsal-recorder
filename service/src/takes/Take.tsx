@@ -17,6 +17,7 @@ import { clock, count, longDay, notKept, takeText } from "../shell/words"
 import { chipsOf } from "./chips"
 import { Desk } from "./Desk"
 import { Download } from "./Download"
+import { LinkButton } from "../links/LinkWindow"
 import { useBackingSong } from "./player/backing"
 import { notesAlone, notesOf } from "./player/lanes"
 import { levelOf } from "./player/levels"
@@ -92,7 +93,7 @@ function InTrash({ uid }: { uid: string }) {
 }
 
 /** The band's labels in РЭХА's own store, which its player draws the marks with. */
-function useRehaLabels() {
+export function useRehaLabels() {
   const labels = useLabels().data
   useEffect(() => {
     if (labels) labelsChanged(labels as RehaLabel[])
@@ -103,7 +104,7 @@ function useRehaLabels() {
  * The level РЭХА sent for each of the take's tracks, by name, for the notch on
  * a fader you moved: the way back to it (Alex, 2026-11-15).
  */
-function useReha(take: TakePage) {
+export function useReha(take: TakePage) {
   return useMemo(
     () => Object.fromEntries(take.tracks.map((t) => [t.name, levelOf(undefined, take, t.name)])),
     [take]
@@ -124,14 +125,14 @@ function useBackToReha(take: TakePage, sound: ServiceSound, reha: Record<string,
 }
 
 /** The take's lanes of notes, made again only when its files are. */
-function useNotes(take: TakePage) {
+export function useNotes(take: TakePage) {
   // The page is read again after every change; its files keep their identity unless they changed.
   // eslint-disable-next-line react-hooks/exhaustive-deps
   return useMemo(() => notesOf(take), [take.uid, take.gen, take.tracks, take.notes])
 }
 
 /** РЭХА's player for the take, opened once the take's song says how its Backing track opens. */
-function useTakePlayer(take: TakePage, sound: ServiceSound) {
+export function useTakePlayer(take: TakePage, sound: ServiceSound) {
   const song = useBackingSong(take)
   return useMultitrackPlayer(song === undefined ? null : sound.tracks, take.duration_sec, song ?? null, sound)
 }
@@ -141,7 +142,7 @@ function useTakePlayer(take: TakePage, sound: ServiceSound) {
  * with what keeps the key loading or failed; the page's own while another
  * take plays, heard from the take's ▶ (sound.ts).
  */
-function useSpeed(take: TakePage, sound: ServiceSound) {
+export function useSpeed(take: TakePage, sound: ServiceSound) {
   const p = usePlayer()
   const value = useSyncExternalStore(sound.onSpeed, sound.speed)
   const here = p.uid === take.uid
@@ -210,7 +211,7 @@ function Full({
  * The take's player on one line: ▶ on the wave's level, the wave with the
  * time in its corner (Alex, 2026-11-04: «На волне»).
  */
-function TakePlayer({ take, height = 64 }: { take: TakePage; height?: number }) {
+export function TakePlayer({ take, height = 64 }: { take: TakePage; height?: number }) {
   const at = useTime(take.uid)
   return (
     <div className="flex items-center gap-3">
@@ -290,6 +291,11 @@ function TakeView({ take }: { take: TakePage }) {
             </Badge>
           )}
           <span className="flex-1" />
+          {!take.trashed_at && (
+            <span className="text-sm font-normal">
+              <LinkButton take={take} sound={sound} phone={phone} />
+            </span>
+          )}
           <span className="text-sm font-normal">
             <Download take={take} sound={sound} phone={phone} />
           </span>

@@ -7,6 +7,12 @@ opening.
 
 ## Unreleased
 
+- **A link to a take for someone outside the band.** In the band service
+  press the chain button beside **Download** on a take's page, choose what
+  the link shows, what they can download and how long it works, and press
+  **Make link**. The person opens it without signing in. Every link of the
+  band is on **Members and links**, the **Members** page's new name, where
+  any member can close one.
 - **S on several tracks at once.** Press **S** on more than one track to
   hear them together, and press it again to take that track away. In
   РЭХА's player and in the band service, on a phone too.
