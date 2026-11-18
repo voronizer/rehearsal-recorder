@@ -5,7 +5,7 @@ versioning](https://semver.org/): until 1.0 the shape of things can still
 move, though recordings on disk are never left behind — old rehearsals keep
 opening.
 
-## Unreleased
+## 0.28.0
 
 - **A link to a take for someone outside the band.** In the band service
   press the chain button beside **Download** on a take's page, choose what
